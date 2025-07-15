@@ -152,7 +152,7 @@ export default function PropertyOwnerDashboard() {
                 <DollarSign size={20} />
                 Monthly Rent
               </h3>
-              <p className="text-3xl font-bold text-teal-700">${stats.totalMonthlyRent.toFixed(2)}</p>
+              <p className="text-3xl font-bold text-teal-700">Ksh.{stats.totalMonthlyRent.toFixed(2)}</p>
             </div>
             <div className="bg-yellow-100 border-l-4 border-yellow-500 p-5 rounded-lg shadow-md">
               <h3 className="text-lg font-semibold text-yellow-800 flex items-center gap-2">
@@ -202,7 +202,7 @@ export default function PropertyOwnerDashboard() {
                       <th className="px-6 py-4 font-semibold">Email</th>
                       <th className="px-6 py-4 font-semibold">Phone</th>
                       <th className="px-6 py-4 font-semibold">Property</th>
-                      <th className="px-6 py-4 font-semibold">Rent ($)</th>
+                      <th className="px-6 py-4 font-semibold">Rent (Ksh.)</th>
                       <th className="px-6 py-4 font-semibold">Status</th>
                     </tr>
                   </thead>

@@ -1,3 +1,4 @@
+// src/app/properties/page.tsx
 "use client";
 
 import Sidebar from "../components/Sidebar";
@@ -5,9 +6,15 @@ import Navbar from "../components/Navbar";
 import { useState, useEffect } from "react";
 import { Building2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Cookies from "js-cookie"; // Import js-cookie
 
 const useAuth = () => {
-  const userId = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
+  if (typeof window === "undefined") {
+    console.log("useAuth: Running server-side, returning null");
+    return { userId: null };
+  }
+  const userId = Cookies.get("userId") || null;
+  console.log("useAuth: Cookies read:", { userId });
   return { userId };
 };
 
@@ -42,6 +49,7 @@ export default function PropertiesPage() {
 
   const fetchProperties = async () => {
     if (!userId) {
+      console.log("fetchProperties: No userId, redirecting to /");
       setError("User not authenticated. Please log in.");
       setIsLoading(false);
       router.push("/");
@@ -53,11 +61,13 @@ export default function PropertiesPage() {
       const response = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // Include cookies for server-side validation
       });
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
       const data = await response.json();
+      console.log("fetchProperties response:", data); // Log response
       if (data.success) {
         data.properties?.forEach((property: Property) => {
           property.unitTypes.forEach((unit: UnitType, index: number) => {
@@ -79,6 +89,10 @@ export default function PropertiesPage() {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      console.log("useEffect: Skipping fetch during SSR");
+      return;
+    }
     fetchProperties();
   }, [userId, router]);
 
@@ -106,6 +120,7 @@ export default function PropertiesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) {
+      console.log("handleSubmit: No userId, redirecting to /");
       setError("User not authenticated. Please log in.");
       router.push("/");
       return;
@@ -123,6 +138,7 @@ export default function PropertiesPage() {
       const response = await fetch("/api/properties", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // Include cookies
         body: JSON.stringify({
           name: propertyName,
           address: propertyAddress,
@@ -132,6 +148,7 @@ export default function PropertiesPage() {
         }),
       });
       const data = await response.json();
+      console.log("Add property response:", data); // Log response
       if (data.success) {
         setIsModalOpen(false);
         setPropertyName("");
@@ -148,10 +165,6 @@ export default function PropertiesPage() {
       setIsLoading(false);
     }
   };
-
-  if (!userId) {
-    return null; // Redirect handled in fetchProperties
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,10 +12,32 @@ import {
   CreditCard,
   Settings,
 } from "lucide-react";
+import Cookies from "js-cookie";
+
+const useAuth = () => {
+  if (typeof window === "undefined") {
+    console.log("useAuth: Running server-side, returning null");
+    return { userId: null, role: null };
+  }
+  const userId = Cookies.get("userId") || null;
+  const role = Cookies.get("role") || null;
+  console.log("useAuth: Cookies read:", { userId, role });
+  return { userId, role };
+};
+
+interface UserResponse {
+  success: boolean;
+  user?: { name: string };
+  message?: string;
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { userId, role } = useAuth();
+  const [name, setname] = useState<string>("User");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const links = [
     {
@@ -23,7 +45,7 @@ export default function Sidebar() {
       label: "Dashboard",
       icon: <LayoutDashboard size={18} />,
     },
-        {
+    {
       href: "/property-owner-dashboard/properties",
       label: "Properties",
       icon: <Building2 size={18} />,
@@ -33,7 +55,6 @@ export default function Sidebar() {
       label: "Tenants",
       icon: <Users size={18} />,
     },
-
     {
       href: "/property-owner-dashboard/payments",
       label: "Payments",
@@ -45,6 +66,43 @@ export default function Sidebar() {
       icon: <Settings size={18} />,
     },
   ];
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !userId || role !== "propertyOwner") {
+      console.log("useEffect: Skipping user fetch during SSR or unauthorized", { userId, role });
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchUserName = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/user?userId=${encodeURIComponent(userId)}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data: UserResponse = await response.json();
+        console.log("fetchUserName response:", data);
+        if (data.success && data.user?.name) {
+          setname(data.user.name);
+        } else {
+          setError(data.message || "Failed to fetch user name");
+        }
+      } catch (err) {
+        console.error("Fetch user name error:", err);
+        setError("Failed to connect to the server");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserName();
+  }, [userId, role]);
 
   return (
     <>
@@ -69,7 +127,7 @@ export default function Sidebar() {
 
         {/* Title */}
         <h2 className="text-lg font-semibold text-center mb-6 text-gray-700 tracking-tight">
-          Owner Dashboard
+          {isLoading ? "Loading..." : error ? "Welcome PropertyOwner" : `Welcome ${name}`}
         </h2>
 
         {/* Navigation Links */}

@@ -1,3 +1,4 @@
+// src/app/tenants/page.tsx
 "use client";
 
 import Sidebar from "../components/Sidebar";
@@ -5,17 +6,50 @@ import Navbar from "../components/Navbar";
 import { useState, useEffect } from "react";
 import { Users } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Cookies from "js-cookie"; // Import js-cookie
 
 const useAuth = () => {
-  const userId = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
-  return { userId };
+  if (typeof window === "undefined") {
+    console.log("useAuth: Running server-side, returning null");
+    return { userId: null, role: null };
+  }
+  const userId = Cookies.get("userId") || null;
+  const role = Cookies.get("role") || null;
+  console.log("useAuth: Cookies read:", { userId, role });
+  return { userId, role };
 };
 
+interface UnitType {
+  type: string;
+  quantity: number;
+  price: number;
+  deposit: number;
+}
+
+interface Property {
+  _id: string;
+  name: string;
+  unitTypes: UnitType[];
+}
+
+interface Tenant {
+  _id: string;
+  name: string;
+  email: string;
+  phone: string;
+  propertyId: string;
+  unitType: string;
+  houseNumber: string;
+  price: number;
+  deposit: number;
+  status: string;
+}
+
 export default function TenantsPage() {
-  const { userId } = useAuth();
+  const { userId, role } = useAuth();
   const router = useRouter();
-  const [tenants, setTenants] = useState<any[]>([]);
-  const [properties, setProperties] = useState<{ _id: string; name: string; unitTypes?: any[] }[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -31,8 +65,9 @@ export default function TenantsPage() {
   const [houseNumber, setHouseNumber] = useState("");
 
   const fetchTenants = async () => {
-    if (!userId) {
-      setError("User not authenticated. Please log in.");
+    if (!userId || role !== "propertyOwner") {
+      console.log("fetchTenants: No userId or invalid role, redirecting to /", { userId, role });
+      setError("User not authenticated or not authorized. Please log in as a property owner.");
       setIsLoading(false);
       router.push("/");
       return;
@@ -42,11 +77,13 @@ export default function TenantsPage() {
       const response = await fetch(`/api/tenants?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // Include cookies
       });
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
       const data = await response.json();
+      console.log("fetchTenants response:", data);
       if (data.success) {
         setTenants(data.tenants || []);
       } else {
@@ -61,8 +98,9 @@ export default function TenantsPage() {
   };
 
   const fetchProperties = async () => {
-    if (!userId) {
-      setError("User not authenticated. Please log in.");
+    if (!userId || role !== "propertyOwner") {
+      console.log("fetchProperties: No userId or invalid role, redirecting to /", { userId, role });
+      setError("User not authenticated or not authorized. Please log in as a property owner.");
       router.push("/");
       return;
     }
@@ -70,11 +108,13 @@ export default function TenantsPage() {
       const response = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // Include cookies
       });
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
       const data = await response.json();
+      console.log("fetchProperties response:", data);
       if (data.success) {
         setProperties(data.properties || []);
       } else {
@@ -87,15 +127,19 @@ export default function TenantsPage() {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      console.log("useEffect: Skipping fetch during SSR");
+      return;
+    }
     fetchTenants();
     fetchProperties();
-  }, [userId, router]);
+  }, [userId, role, router]);
 
   useEffect(() => {
     if (selectedUnitType && selectedPropertyId) {
       const selectedProperty = properties.find((p) => p._id === selectedPropertyId);
       if (selectedProperty && selectedProperty.unitTypes) {
-        const unit = selectedProperty.unitTypes.find((u: any) => u.type === selectedUnitType);
+        const unit = selectedProperty.unitTypes.find((u) => u.type === selectedUnitType);
         if (unit) {
           setPrice(unit.price?.toString() || "");
           setDeposit(unit.deposit?.toString() || "");
@@ -106,8 +150,9 @@ export default function TenantsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userId) {
-      setError("User not authenticated. Please log in.");
+    if (!userId || role !== "propertyOwner") {
+      console.log("handleSubmit: No userId or invalid role, redirecting to /", { userId, role });
+      setError("User not authenticated or not authorized. Please log in as a property owner.");
       router.push("/");
       return;
     }
@@ -118,11 +163,12 @@ export default function TenantsPage() {
       const response = await fetch("/api/tenants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // Include cookies
         body: JSON.stringify({
           name: tenantName,
           email: tenantEmail,
           phone: tenantPhone,
-          password: tenantPassword,
+          password: tenantPassword, // Note: Should be hashed server-side
           role: "tenant",
           ownerId: userId,
           propertyId: selectedPropertyId,
@@ -133,8 +179,8 @@ export default function TenantsPage() {
         }),
       });
       const data = await response.json();
+      console.log("Add tenant response:", data);
       if (data.success) {
-        console.log(`Sending login credentials to ${tenantEmail}: Password: ${tenantPassword}`);
         setSuccessMessage(`Tenant added successfully! Login credentials sent to ${tenantEmail}.`);
         setIsModalOpen(false);
         setTenantName("");
@@ -158,12 +204,8 @@ export default function TenantsPage() {
     }
   };
 
-  const selectedProperty = properties.find((p: any) => p._id === selectedPropertyId);
+  const selectedProperty = properties.find((p) => p._id === selectedPropertyId);
   const unitTypes = selectedProperty?.unitTypes || [];
-
-  if (!userId) {
-    return null; // Redirect handled in fetchTenants/fetchProperties
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
@@ -178,7 +220,7 @@ export default function TenantsPage() {
           <div className="flex justify-end mb-4">
             <button
               onClick={() => setIsModalOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
               Add Tenant
             </button>
@@ -203,19 +245,19 @@ export default function TenantsPage() {
                       <th className="px-6 py-4 font-semibold">Property</th>
                       <th className="px-6 py-4 font-semibold">Unit Type</th>
                       <th className="px-6 py-4 font-semibold">House Number</th>
-                      <th className="px-6 py-4 font-semibold">Rent ($)</th>
-                      <th className="px-6 py-4 font-semibold">Deposit ($)</th>
+                      <th className="px-6 py-4 font-semibold">Rent (Ksh)</th>
+                      <th className="px-6 py-4 font-semibold">Deposit (Ksh)</th>
                       <th className="px-6 py-4 font-semibold">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {tenants.map((tenant: any) => (
-                      <tr key={tenant.id} className="border-t border-gray-200 hover:bg-gray-50">
+                    {tenants.map((tenant) => (
+                      <tr key={tenant._id} className="border-t border-gray-200 hover:bg-gray-50">
                         <td className="px-6 py-4">{tenant.name}</td>
                         <td className="px-6 py-4">{tenant.email}</td>
                         <td className="px-6 py-4">{tenant.phone}</td>
                         <td className="px-6 py-4">
-                          {properties.find((p: any) => p._id === tenant.propertyId)?.name || "Unassigned"}
+                          {properties.find((p) => p._id === tenant.propertyId)?.name || "Unassigned"}
                         </td>
                         <td className="px-6 py-4">{tenant.unitType || "N/A"}</td>
                         <td className="px-6 py-4">{tenant.houseNumber || "N/A"}</td>
@@ -250,7 +292,7 @@ export default function TenantsPage() {
                       type="text"
                       value={tenantName}
                       onChange={(e) => setTenantName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
@@ -260,7 +302,7 @@ export default function TenantsPage() {
                       type="email"
                       value={tenantEmail}
                       onChange={(e) => setTenantEmail(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
@@ -270,7 +312,7 @@ export default function TenantsPage() {
                       type="tel"
                       value={tenantPhone}
                       onChange={(e) => setTenantPhone(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
@@ -280,7 +322,7 @@ export default function TenantsPage() {
                       type="password"
                       value={tenantPassword}
                       onChange={(e) => setTenantPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
@@ -294,11 +336,11 @@ export default function TenantsPage() {
                         setPrice("");
                         setDeposit("");
                       }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                     >
                       <option value="">Select a property</option>
-                      {properties.map((property: any) => (
+                      {properties.map((property) => (
                         <option key={property._id} value={property._id}>
                           {property.name}
                         </option>
@@ -310,37 +352,37 @@ export default function TenantsPage() {
                     <select
                       value={selectedUnitType}
                       onChange={(e) => setSelectedUnitType(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                       disabled={!selectedPropertyId}
                     >
                       <option value="">Select a unit type</option>
-                      {unitTypes.map((unit: any, index: number) => (
+                      {unitTypes.map((unit, index) => (
                         <option key={index} value={unit.type}>
-                          {unit.type} (${unit.price?.toFixed(2) || "N/A"}/month, ${unit.deposit?.toFixed(2) || "N/A"} deposit, {unit.quantity} available)
+                          {unit.type} (Ksh.{unit.price?.toFixed(2) || "N/A"}/month, Ksh.{unit.deposit?.toFixed(2) || "N/A"} deposit, {unit.quantity} available)
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Monthly Rent ($)</label>
+                    <label className="block text-sm font-medium text-gray-700">Monthly Rent (Ksh.)</label>
                     <input
                       type="number"
                       value={price}
                       onChange={(e) => setPrice(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                       min="0"
                       step="0.01"
                     />
                   </div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Deposit ($)</label>
+                    <label className="block text-sm font-medium text-gray-700">Deposit (Ksh.)</label>
                     <input
                       type="number"
                       value={deposit}
                       onChange={(e) => setDeposit(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                       min="0"
                       step="0.01"
@@ -352,7 +394,7 @@ export default function TenantsPage() {
                       type="text"
                       value={houseNumber}
                       onChange={(e) => setHouseNumber(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
@@ -360,14 +402,14 @@ export default function TenantsPage() {
                     <button
                       type="button"
                       onClick={() => setIsModalOpen(false)}
-                      className="px-4 py-2 bg-gray-300 rounded-lg"
+                      className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 transition"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={isLoading || !userId}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-400"
+                      disabled={isLoading || !userId || role !== "propertyOwner"}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition"
                     >
                       {isLoading ? "Adding..." : "Add Tenant"}
                     </button>
