@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-white text-dark-blue font-sans antialiased;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  @layer base {
+    body {
+      @apply bg-dark-blue text-light-green;
+    }
+  }
+}
