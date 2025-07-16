@@ -7,12 +7,11 @@ import {
   Menu,
   X,
   LayoutDashboard,
-  Users,
   Building2,
   CreditCard,
+  Wrench,
   Settings,
-  Bell,
-  BarChart,
+  LogOut,
 } from "lucide-react";
 import Cookies from "js-cookie";
 
@@ -37,58 +36,58 @@ interface UserResponse {
     role: string;
     createdAt: string;
     userId: string;
+    propertyId?: string;
+    unitType?: string;
+    price?: number;
+    deposit?: number;
+    houseNumber?: string;
+    ownerId?: string;
   };
   message?: string;
 }
 
-export default function Sidebar() {
+export default function TenantDashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { userId, role } = useAuth();
-  const [name, setName] = useState<string>("User");
+  const [name, setName] = useState<string>("Tenant");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const links = [
     {
-      href: "/property-owner-dashboard",
+      href: "/tenant-dashboard",
       label: "Dashboard",
       icon: <LayoutDashboard size={18} />,
     },
     {
-      href: "/property-owner-dashboard/properties",
-      label: "Properties",
+      href: "/tenant-dashboard/leased-properties",
+      label: "Leased Properties",
       icon: <Building2 size={18} />,
     },
     {
-      href: "/property-owner-dashboard/tenants",
-      label: "Tenants",
-      icon: <Users size={18} />,
-    },
-    {
-      href: "/property-owner-dashboard/payments",
+      href: "/tenant-dashboard/payments",
       label: "Payments",
       icon: <CreditCard size={18} />,
     },
     {
-      href: "/property-owner-dashboard/notifications",
-      label: "Notifications",
-      icon: <Bell size={18} />,
+      href: "/tenant-dashboard/maintenance-requests",
+      label: "Maintenance Requests",
+      icon: <Wrench size={18} />,
     },
     {
-      href: "/property-owner-dashboard/reports",
-      label: "Reports",
-      icon: <BarChart size={18} />,
-    },
-    {
-      href: "/property-owner-dashboard/settings",
+      href: "/tenant-dashboard/settings",
       label: "Settings",
       icon: <Settings size={18} />,
     },
   ];
 
   useEffect(() => {
-    if (typeof window === "undefined" || !userId || role !== "propertyOwner") {
+    if (typeof window === "undefined" || !userId || role !== "tenant") {
       console.log("useEffect: Skipping user fetch during SSR or unauthorized", { userId, role });
       setIsLoading(false);
       return;
@@ -140,28 +139,54 @@ export default function Sidebar() {
     return () => clearTimeout(debounceFetch);
   }, [userId, role]);
 
-  return (
-    <>
-      <button
-        className="sm:hidden fixed top-4 right-4 z-40 text-[#0a0a23] bg-white p-2 shadow-md"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label="Toggle Sidebar"
-      >
-        {isOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+  const handleLogout = () => {
+    Cookies.remove("userId");
+    Cookies.remove("role");
+    window.location.href = "/"; // Redirect to login page
+  };
 
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-100">
+      {/* Navbar */}
+      <header className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 shadow-md px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button
+            className="sm:hidden text-[#0a0a23] p-2"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label="Toggle Sidebar"
+          >
+            {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+          <h1 className="text-xl font-semibold text-[#0a0a23]">
+            Tenant Dashboard
+          </h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-gray-700">
+            {isLoading ? "Loading..." : error ? "Tenant" : name}
+          </span>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-gray-700 hover:text-[#03a678] p-2"
+            aria-label="Log out"
+          >
+            <LogOut size={18} />
+            <span>Log Out</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-30 h-screen w-64 bg-white text-[#0a0a23] px-6 py-6 border-r border-gray-200 shadow-md transition-transform duration-300 ease-in-out
-        ${isOpen ? "translate-x-0" : "-translate-x-full"} sm:translate-x-0 sm:block`}
+        className={`fixed top-16 left-0 z-30 h-[calc(100vh-4rem)] w-64 bg-white text-[#0a0a23] px-6 py-6 border-r border-gray-200 shadow-md transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} sm:translate-x-0 sm:block`}
       >
         <div className="flex items-center justify-center mb-6">
           <img src="/logo.png" alt="Logo" className="w-14 h-14 object-contain" />
         </div>
-
         <h2 className="text-lg font-semibold text-center mb-6 text-gray-700 tracking-tight">
-          {isLoading ? "Loading..." : error ? `Error: ${error}` : `Welcome ${name}`}
+          {isLoading ? "Loading..." : error ? "Error: Tenant" : `Welcome ${name}`}
         </h2>
-
         <nav className="flex flex-col space-y-2">
           {links.map(({ href, label, icon }) => {
             const isActive = pathname === href;
@@ -169,7 +194,7 @@ export default function Sidebar() {
               <Link
                 key={href}
                 href={href}
-                onClick={() => setIsOpen(false)}
+                onClick={() => setIsSidebarOpen(false)}
                 className={`flex items-center gap-3 px-4 py-2 rounded-md font-medium transition-colors text-sm ${
                   isActive
                     ? "bg-[#03a678] text-white shadow"
@@ -184,12 +209,16 @@ export default function Sidebar() {
         </nav>
       </aside>
 
-      {isOpen && (
+      {/* Main Content */}
+      <main className="flex-1 p-6 mt-16 sm:ml-64">{children}</main>
+
+      {/* Overlay for Mobile Sidebar */}
+      {isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-20 sm:hidden"
-          onClick={() => setIsOpen(false)}
+          onClick={() => setIsSidebarOpen(false)}
         />
       )}
-    </>
+    </div>
   );
 }

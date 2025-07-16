@@ -3,7 +3,7 @@
 :root {
   --background: #ffffff;             /* Always white background */
   --foreground: #1E3A8A;             /* Default text: Dark blue */
-  --accent: #41df7e;                 /* Accent color: Light green */
+  --accent: #42c775;                 /* Accent color: Light green */
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

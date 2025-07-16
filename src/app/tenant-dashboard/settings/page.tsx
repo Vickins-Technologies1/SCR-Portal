@@ -2,14 +2,14 @@
 
 import React from "react";
 
-export default function TenantDashboardPage() {
+export default function SettingsPage() {
   return (
     <div className="bg-white p-6 rounded-md shadow-md border border-gray-200">
       <h1 className="text-2xl font-semibold text-[#0a0a23] mb-6">
-        Tenant Dashboard
+        Settings
       </h1>
       <p className="text-gray-700">
-        Welcome to your tenant dashboard. View your leased properties, payments, or submit maintenance requests.
+        Manage your account settings here.
       </p>
     </div>
   );
