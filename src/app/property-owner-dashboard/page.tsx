@@ -1,4 +1,3 @@
-// src/app/property-owner-dashboard/page.tsx
 "use client";
 
 import Sidebar from "./components/Sidebar";
@@ -116,99 +115,99 @@ export default function PropertyOwnerDashboard() {
       <Navbar />
       <Sidebar />
       <div className="lg:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 min-h-screen transition-all duration-300">
+        <main className="px-4 sm:px-6 lg:px-8 py-6 min-h-screen transition-all duration-300">
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-2">
-              <AlertCircle size={20} />
+            <div className="mb-4 p-3 sm:p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-2 text-sm sm:text-base">
+              <AlertCircle size={18} />
               {error}
             </div>
           )}
           {successMessage && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2">
+            <div className="mb-4 p-3 sm:p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2 text-sm sm:text-base">
               {successMessage}
             </div>
           )}
           {isLoading && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg flex items-center gap-2">
+            <div className="mb-4 p-3 sm:p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg flex items-center gap-2 text-sm sm:text-base">
               <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600"></div>
               Loading dashboard...
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {[
               {
                 title: "Active Properties",
                 value: stats.activeProperties,
-                icon: <Building2 size={20} />,
+                icon: <Building2 size={18} />,
                 color: "blue",
               },
               {
                 title: "Total Tenants",
                 value: stats.totalTenants,
-                icon: <Users size={20} />,
+                icon: <Users size={18} />,
                 color: "green",
               },
               {
                 title: "Total Units",
                 value: stats.totalUnits,
-                icon: <Building2 size={20} />,
+                icon: <Building2 size={18} />,
                 color: "purple",
               },
               {
                 title: "Occupied Units",
                 value: stats.occupiedUnits,
-                icon: <Building2 size={20} />,
+                icon: <Building2 size={18} />,
                 color: "indigo",
               },
               {
                 title: "Monthly Rent",
                 value: `Ksh. ${stats.totalMonthlyRent.toFixed(2)}`,
-                icon: <DollarSign size={20} />,
+                icon: <DollarSign size={18} />,
                 color: "teal",
               },
               {
                 title: "Overdue Payments",
                 value: stats.overduePayments,
-                icon: <AlertCircle size={20} />,
+                icon: <AlertCircle size={18} />,
                 color: "yellow",
               },
             ].map((stat, index) => (
               <div
                 key={index}
-                className={`bg-white border-l-4 border-${stat.color}-500 p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200`}
+                className={`bg-white border-l-4 border-${stat.color}-500 p-4 sm:p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200`}
               >
-                <h3 className={`text-lg font-medium text-${stat.color}-800 flex items-center gap-2`}>
+                <h3 className={`text-base sm:text-lg font-medium text-${stat.color}-800 flex items-center gap-2`}>
                   {stat.icon}
                   {stat.title}
                 </h3>
-                <p className={`text-2xl font-bold text-${stat.color}-900 mt-2`}>{stat.value}</p>
+                <p className={`text-xl sm:text-2xl font-bold text-${stat.color}-900 mt-2`}>{stat.value}</p>
               </div>
             ))}
           </div>
 
-          <section className="mb-12">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">Your Properties</h2>
+          <section className="mb-8">
+            <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Your Properties</h2>
             {properties.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-gray-600">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 shadow-sm text-gray-600 text-sm sm:text-base">
                 You currently have no active properties. Add properties to see them here.
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {properties.map((property) => (
                   <div
                     key={property._id}
-                    className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow duration-200"
+                    className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-md transition-shadow duration-200"
                   >
-                    <h3 className="text-lg font-semibold text-gray-800">{property.name}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{property.address}</p>
-                    <p className="text-sm text-gray-500 mt-2">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-800">{property.name}</h3>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1">{property.address}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-2">
                       Total Units: {property.unitTypes.reduce((sum: number, unit: any) => sum + unit.quantity, 0)}
                     </p>
-                    <p className="text-sm text-gray-500 mt-2">
+                    <p className="text-xs sm:text-sm text-gray-500 mt-2">
                       Status:{" "}
                       <span
-                        className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
+                        className={`inline-block px-2 sm:px-3 py-1 text-xs font-medium rounded-full ${
                           property.status === "occupied"
                             ? "bg-green-100 text-green-800"
                             : "bg-yellow-100 text-yellow-800"
@@ -223,23 +222,23 @@ export default function PropertyOwnerDashboard() {
             )}
           </section>
 
-          <section className="mb-12">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">Tenant Summary</h2>
+          <section className="mb-8">
+            <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Tenant Summary</h2>
             {tenants.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-gray-600">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 shadow-sm text-gray-600 text-sm sm:text-base">
                 No tenants found. Add tenants to see their activity and rent status here.
               </div>
             ) : (
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <table className="w-full text-left">
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-x-auto">
+                <table className="w-full text-left min-w-[640px]">
                   <thead>
-                    <tr className="bg-gray-50 text-gray-700 text-sm">
-                      <th className="px-6 py-4 font-medium">Name</th>
-                      <th className="px-6 py-4 font-medium">Email</th>
-                      <th className="px-6 py-4 font-medium">Phone</th>
-                      <th className="px-6 py-4 font-medium">Property</th>
-                      <th className="px-6 py-4 font-medium">Rent (Ksh.)</th>
-                      <th className="px-6 py-4 font-medium">Status</th>
+                    <tr className="bg-gray-50 text-gray-700 text-xs sm:text-sm">
+                      <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium">Name</th>
+                      <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium">Email</th>
+                      <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium">Phone</th>
+                      <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium">Property</th>
+                      <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium">Rent (Ksh.)</th>
+                      <th className="px-4 sm:px-6 py-3 sm:py-4 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -248,16 +247,18 @@ export default function PropertyOwnerDashboard() {
                         key={tenant._id}
                         className="border-t border-gray-200 hover:bg-gray-50 transition-colors duration-150"
                       >
-                        <td className="px-6 py-4 text-gray-700">{tenant.name}</td>
-                        <td className="px-6 py-4 text-gray-700">{tenant.email}</td>
-                        <td className="px-6 py-4 text-gray-700">{tenant.phone}</td>
-                        <td className="px-6 py-4 text-gray-700">
+                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-700 text-xs sm:text-sm">{tenant.name}</td>
+                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-700 text-xs sm:text-sm">{tenant.email}</td>
+                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-700 text-xs sm:text-sm">{tenant.phone}</td>
+                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-700 text-xs sm:text-sm">
                           {properties.find((p) => p._id === tenant.propertyId)?.name || "Unassigned"}
                         </td>
-                        <td className="px-6 py-4 text-gray-700">{tenant.price ? tenant.price.toFixed(2) : "N/A"}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-700 text-xs sm:text-sm">
+                          {tenant.price ? tenant.price.toFixed(2) : "N/A"}
+                        </td>
+                        <td className="px-4 sm:px-6 py-3 sm:py-4">
                           <span
-                            className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
+                            className={`inline-block px-2 sm:px-3 py-1 text-xs font-medium rounded-full ${
                               tenant.status === "active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                             }`}
                           >

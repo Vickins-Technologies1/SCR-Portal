@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import {
   Menu,
   X,
@@ -155,8 +156,8 @@ export default function Sidebar() {
         ${isOpen ? "translate-x-0" : "-translate-x-full"} sm:translate-x-0 sm:block`}
       >
         <div className="flex items-center justify-center mb-6">
-          <img src="/logo.png" alt="Logo" className="w-14 h-14 object-contain" />
-        </div>
+  <Image src="/logo.png" alt="Logo" width={56} height={56} className="object-contain" />
+</div>
 
         <h2 className="text-lg font-semibold text-center mb-6 text-gray-700 tracking-tight">
           {isLoading ? "Loading..." : error ? `Error: ${error}` : `Welcome ${name}`}
