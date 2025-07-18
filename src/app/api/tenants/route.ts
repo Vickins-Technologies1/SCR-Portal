@@ -190,8 +190,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
 
     // Generate login URL
     const loginUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}/login`
-      : "http://localhost:3000/login";
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
 
     // Send welcome email
     await sendWelcomeEmail({
