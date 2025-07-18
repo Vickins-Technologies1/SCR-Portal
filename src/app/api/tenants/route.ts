@@ -5,6 +5,7 @@ import { ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 import { TenantRequest, UnitType } from "../../../types/tenant";
 import { sendWelcomeEmail } from "../../../lib/email";
+export const runtime = "nodejs";
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
