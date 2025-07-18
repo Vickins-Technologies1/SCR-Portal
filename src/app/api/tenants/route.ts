@@ -1,44 +1,93 @@
-// src/app/api/tenants/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
+import { cookies } from "next/headers";
 import { TenantRequest, UnitType } from "../../../types/tenant";
 import { sendWelcomeEmail } from "../../../lib/email";
 
-function isValidEmail(email: string) {
+function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function isValidPhone(phone: string) {
+function isValidPhone(phone: string): boolean {
   return /^\+?\d{10,15}$/.test(phone);
 }
 
-export async function GET(request: Request) {
-  const cookies = request.headers.get("cookie");
-  const userId = cookies?.match(/userId=([^;]+)/)?.[1];
-  const role = cookies?.match(/role=([^;]+)/)?.[1];
-
-  if (!userId || role !== "propertyOwner") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
-
-  const { db } = await connectToDatabase();
-  const tenants = await db.collection("tenants").find({ ownerId: userId }).toArray();
-  return NextResponse.json({ success: true, tenants });
+interface Tenant {
+  _id: string;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  role: string;
+  ownerId: string;
+  propertyId: string;
+  unitType: string;
+  price: number;
+  deposit: number;
+  houseNumber: string;
+  status: string;
+  paymentStatus: string;
+  createdAt: string;
 }
 
-export async function POST(request: Request) {
+interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  tenants?: T[];
+  tenant?: T;
+}
+
+export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
   try {
-    const cookies = request.headers.get("cookie");
-    const userId = cookies?.match(/userId=([^;]+)/)?.[1];
-    const role = cookies?.match(/role=([^;]+)/)?.[1];
+    const cookieStore = await cookies();
+    const userId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
 
     if (!userId || role !== "propertyOwner") {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const body: TenantRequest = await request.json();
+    const { db } = await connectToDatabase();
+    const tenants = await db.collection<Tenant>("tenants").find({ ownerId: userId }).toArray();
+
+    const formattedTenants: Tenant[] = tenants.map((tenant) => ({
+      _id: tenant._id.toString(),
+      name: tenant.name,
+      email: tenant.email,
+      phone: tenant.phone,
+      password: tenant.password,
+      role: tenant.role,
+      ownerId: tenant.ownerId,
+      propertyId: tenant.propertyId.toString(),
+      unitType: tenant.unitType,
+      price: tenant.price,
+      deposit: tenant.deposit,
+      houseNumber: tenant.houseNumber,
+      status: tenant.status,
+      paymentStatus: tenant.paymentStatus || "current", // Default to "current" if missing
+      createdAt: tenant.createdAt,
+    }));
+
+    return NextResponse.json({ success: true, tenants: formattedTenants });
+  } catch (error) {
+    console.error("Error in GET /api/tenants:", error);
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
+  try {
+    const cookieStore = await cookies();
+    const userId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
+
+    if (!userId || role !== "propertyOwner") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const body: TenantRequest = await req.json();
     const {
       name,
       email,
@@ -54,9 +103,16 @@ export async function POST(request: Request) {
 
     // Validate required fields
     if (
-      !name || !email || !phone || !password || !tenantRole ||
-      !propertyId || !unitType || !houseNumber ||
-      price === undefined || deposit === undefined
+      !name ||
+      !email ||
+      !phone ||
+      !password ||
+      !tenantRole ||
+      !propertyId ||
+      !unitType ||
+      !houseNumber ||
+      price === undefined ||
+      deposit === undefined
     ) {
       return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 });
     }
@@ -98,7 +154,7 @@ export async function POST(request: Request) {
 
     // Check if house number already exists
     const existingHouseNumber = await db.collection("tenants").findOne({
-      propertyId,
+      propertyId: new ObjectId(propertyId),
       houseNumber,
     });
     if (existingHouseNumber) {
@@ -108,7 +164,8 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const tenant = {
+    const tenant: Tenant = {
+      _id: new ObjectId().toString(),
       name,
       email,
       phone,
@@ -121,16 +178,40 @@ export async function POST(request: Request) {
       deposit: parseFloat(deposit.toString()),
       houseNumber,
       status: "active",
+      paymentStatus: "current",
       createdAt: new Date().toISOString(),
     };
 
-    const result = await db.collection("tenants").insertOne(tenant);
+    const result = await db.collection("tenants").insertOne({
+      ...tenant,
+      _id: new ObjectId(tenant._id),
+      propertyId: new ObjectId(propertyId),
+    });
+
+    // Generate login URL
+    const loginUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}/login`
+      : "http://localhost:3000/login";
 
     // Send welcome email
-    await sendWelcomeEmail(email, name, email, password, propertyId, houseNumber);
+    await sendWelcomeEmail({
+      to: email,
+      name,
+      email,
+      loginUrl,
+      propertyId,
+      houseNumber,
+    });
 
     return NextResponse.json(
-      { success: true, tenant: { ...tenant, _id: result.insertedId } },
+      {
+        success: true,
+        tenant: {
+          ...tenant,
+          _id: result.insertedId.toString(),
+          propertyId: propertyId.toString(),
+        },
+      },
       { status: 201 }
     );
   } catch (error) {
@@ -138,5 +219,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
-
-
