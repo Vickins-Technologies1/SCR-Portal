@@ -7,19 +7,15 @@ import { useRouter } from "next/navigation";
 import { Building2, Users, DollarSign, AlertCircle } from "lucide-react";
 import Cookies from "js-cookie";
 
-interface UnitType {
-  type: string;
-  quantity: number;
-  price: number;
-  deposit: number;
-}
-
 interface Property {
   _id: string;
+  id: string;
   name: string;
   address: string;
-  unitTypes: UnitType[];
+  unitTypes: { type: string; price: number; deposit: number; quantity: number }[];
   status: string;
+  ownerId: string;
+  createdAt: string;
 }
 
 interface Tenant {
@@ -28,19 +24,18 @@ interface Tenant {
   email: string;
   phone: string;
   propertyId: string;
+  price: number;
   status: string;
   paymentStatus: string;
-  price?: number;
 }
 
-interface MaintenanceRequest {
-  _id: string;
-  title: string;
-  description: string;
-  status: string;
-  tenantId: string;
-  propertyId: string;
-  date: string;
+interface Stats {
+  activeProperties: number;
+  totalTenants: number;
+  totalUnits: number;
+  occupiedUnits: number;
+  totalMonthlyRent: number;
+  overduePayments: number;
 }
 
 export default function PropertyOwnerDashboard() {
@@ -51,8 +46,7 @@ export default function PropertyOwnerDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     activeProperties: 0,
     totalTenants: 0,
     totalUnits: 0,
@@ -82,7 +76,7 @@ export default function PropertyOwnerDashboard() {
       setError(null);
 
       try {
-        const [propertiesRes, tenantsRes, maintenanceRes] = await Promise.all([
+        const [propertiesRes, tenantsRes] = await Promise.all([
           fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
             headers: { "Content-Type": "application/json" },
             credentials: "include",
@@ -91,46 +85,36 @@ export default function PropertyOwnerDashboard() {
             headers: { "Content-Type": "application/json" },
             credentials: "include",
           }),
-          fetch(`/api/tenant/maintenance`, {
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-          }),
         ]);
 
-        const [propertiesData, tenantsData, maintenanceData] = await Promise.all([
+        const [propertiesData, tenantsData] = await Promise.all([
           propertiesRes.json(),
           tenantsRes.json(),
-          maintenanceRes.json(),
         ]);
 
         console.log("Properties response:", propertiesData);
         console.log("Tenants response:", tenantsData);
-        console.log("Maintenance response:", maintenanceData);
 
-        if (!propertiesData.success || !tenantsData.success || !maintenanceData.success) {
+        if (!propertiesData.success || !tenantsData.success) {
           throw new Error("Failed to fetch data");
         }
 
-        const propertiesList: Property[] = propertiesData.data || [];
-        const tenantsList: Tenant[] = tenantsData.data || [];
-        const maintenanceList: MaintenanceRequest[] = maintenanceData.data || [];
+        const propertiesList: Property[] = propertiesData.properties || [];
+        const tenantsList: Tenant[] = tenantsData.tenants || [];
 
         const activeProperties = propertiesList.length;
         const totalTenants = tenantsList.length;
         const totalUnits = propertiesList.reduce((sum: number, property: Property) => {
-          return sum + (property.unitTypes?.reduce((s: number, unit: UnitType) => s + unit.quantity, 0) || 0);
+          return sum + (property.unitTypes?.reduce((s: number, unit: { quantity: number }) => s + unit.quantity, 0) || 0);
         }, 0);
         const occupiedUnits = tenantsList.filter((t: Tenant) => t.status === "active").length;
         const totalMonthlyRent = tenantsList.reduce((sum: number, t: Tenant) => {
           return sum + (t.status === "active" && t.price ? t.price : 0);
         }, 0);
-        const overduePayments = tenantsList.filter(
-          (t: Tenant) => t.status === "active" && t.paymentStatus === "overdue"
-        ).length;
+        const overduePayments = tenantsList.filter((t: Tenant) => t.status === "active" && t.paymentStatus === "overdue").length;
 
         setProperties(propertiesList);
         setTenants(tenantsList);
-        setMaintenanceRequests(maintenanceList);
         setStats({
           activeProperties,
           totalTenants,
@@ -237,7 +221,7 @@ export default function PropertyOwnerDashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-                {properties.map((property) => (
+                {properties.map((property: Property) => (
                   <div
                     key={property._id}
                     className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow duration-200"
@@ -245,7 +229,7 @@ export default function PropertyOwnerDashboard() {
                     <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-800">{property.name}</h3>
                     <p className="text-xs sm:text-sm text-gray-500 mt-1">{property.address}</p>
                     <p className="text-xs sm:text-sm text-gray-500 mt-1 sm:mt-2">
-                      Total Units: {property.unitTypes.reduce((sum: number, unit: UnitType) => sum + unit.quantity, 0)}
+                      Total Units: {property.unitTypes.reduce((sum: number, unit: { quantity: number }) => sum + unit.quantity, 0)}
                     </p>
                     <p className="text-xs sm:text-sm text-gray-500 mt-1 sm:mt-2">
                       Status:{" "}
@@ -285,11 +269,11 @@ export default function PropertyOwnerDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {tenants.map((tenant) => (
+                    {tenants.map((tenant: Tenant) => (
                       <tr
                         key={tenant._id}
                         className="border-t border-gray-200 hover:bg-gray-50 transition-colors duration-150 cursor-pointer"
-                        onClick={() => router.push(`/property-owner-dashboard/tenants/${tenant._id}`)}
+                        onClick={() => router.push(`property-owner-dashboard/tenants/${tenant._id}`)}
                       >
                         <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-gray-700 text-xs sm:text-sm min-w-0 truncate">
                           {tenant.name}
@@ -313,67 +297,6 @@ export default function PropertyOwnerDashboard() {
                             }`}
                           >
                             {tenant.status || "N/A"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          <section className="mb-6 sm:mb-8">
-            <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-3 sm:mb-4">Maintenance Requests</h2>
-            {maintenanceRequests.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 md:p-6 shadow-sm text-gray-600 text-xs sm:text-sm md:text-base">
-                No maintenance requests found. Tenants will submit requests as needed.
-              </div>
-            ) : (
-              <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-x-auto">
-                <table className="w-full text-left min-w-[640px] sm:min-w-[768px]">
-                  <thead className="sticky top-0 bg-gray-50 text-gray-700">
-                    <tr className="text-xs sm:text-sm">
-                      <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 font-medium min-w-0">Date</th>
-                      <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 font-medium min-w-0">Title</th>
-                      <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 font-medium min-w-0">Description</th>
-                      <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 font-medium min-w-0">Tenant</th>
-                      <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 font-medium min-w-0">Property</th>
-                      <th className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 font-medium min-w-0">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {maintenanceRequests.map((request) => (
-                      <tr
-                        key={request._id}
-                        className="border-t border-gray-200 hover:bg-gray-50 transition-colors duration-150"
-                      >
-                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-gray-700 text-xs sm:text-sm min-w-0">
-                          {new Date(request.date).toLocaleDateString()}
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-gray-700 text-xs sm:text-sm min-w-0 truncate">
-                          {request.title}
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-gray-700 text-xs sm:text-sm min-w-0 truncate">
-                          {request.description}
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-gray-700 text-xs sm:text-sm min-w-0 truncate">
-                          {tenants.find((t) => t._id === request.tenantId)?.name || "Unknown"}
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3 text-gray-700 text-xs sm:text-sm min-w-0 truncate">
-                          {properties.find((p) => p._id === request.propertyId)?.name || "Unknown"}
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-2 sm:py-3">
-                          <span
-                            className={`inline-block px-2 py-0.5 sm:px-3 sm:py-1 text-xs sm:text-sm font-medium rounded-full ${
-                              request.status === "Pending"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : request.status === "In Progress"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-green-100 text-green-800"
-                            }`}
-                          >
-                            {request.status}
                           </span>
                         </td>
                       </tr>
