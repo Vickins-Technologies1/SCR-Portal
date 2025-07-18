@@ -1,3 +1,4 @@
+// src/app/api/tenants/[tenantId]/route.ts
 import { NextResponse, NextRequest } from "next/server";
 import { Db, MongoClient, ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
@@ -6,8 +7,15 @@ import { cookies } from "next/headers";
 // Database connection
 const connectToDatabase = async (): Promise<Db> => {
   const client = new MongoClient(process.env.MONGODB_URI || "mongodb://localhost:27017");
-  await client.connect();
-  return client.db("rentaldb");
+  try {
+    await client.connect();
+    const db = client.db("rentaldb");
+    console.log("Connected to MongoDB database:", db.databaseName);
+    return db;
+  } catch (error) {
+    console.error("Failed to connect to MongoDB:", error);
+    throw error;
+  }
 };
 
 // Types
@@ -60,20 +68,77 @@ const sendUpdateEmail = async (email: string, name: string): Promise<void> => {
   console.log(`Sending update email to ${email} for tenant ${name}`);
 };
 
-// PUT Handler
-export async function PUT(req: NextRequest) {
+// GET Handler
+export async function GET(request: Request, context: { params: Promise<{ tenantId: string }> }) {
   try {
-    const params = req.nextUrl.pathname.split("/").pop();
-    const tenantId = params || "";
+    const params = await context.params; // Await params to resolve Promise
+    const { tenantId } = params;
+    console.log("GET /api/tenants/[tenantId] - Tenant ID:", tenantId);
+
     if (!ObjectId.isValid(tenantId)) {
+      console.log("Invalid tenant ID:", tenantId);
       return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
+    const cookieStore = await cookies(); // Await cookies to resolve Promise
     const userId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
+    console.log("Cookies - userId:", userId, "role:", role);
+
+    if (!userId || (role !== "tenant" && role !== "propertyOwner")) {
+      console.log("Unauthorized - userId:", userId, "role:", role);
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const db = await connectToDatabase();
+    let tenant;
+
+    if (role === "tenant" && userId === tenantId) {
+      // Tenant accessing their own data
+      tenant = await db.collection<Tenant>("tenants").findOne({
+        _id: new ObjectId(tenantId),
+      });
+    } else if (role === "propertyOwner") {
+      // Property owner accessing tenant under their property
+      tenant = await db.collection<Tenant>("tenants").findOne({
+        _id: new ObjectId(tenantId),
+        ownerId: userId,
+      });
+    }
+
+    console.log("Tenant query result:", tenant);
+
+    if (!tenant) {
+      console.log("Tenant not found or not authorized for ID:", tenantId);
+      return NextResponse.json({ success: false, message: "Tenant not found or not authorized" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, tenant });
+  } catch (error) {
+    console.error("Error in GET /api/tenants/[tenantId]:", error);
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+  }
+}
+
+// PUT Handler
+export async function PUT(req: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
+  try {
+    const params = await context.params; // Await params
+    const { tenantId } = params;
+    console.log("PUT /api/tenants/[tenantId] - Tenant ID:", tenantId);
+
+    if (!ObjectId.isValid(tenantId)) {
+      console.log("Invalid tenant ID:", tenantId);
+      return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
+    }
+
+    const cookieStore = await cookies(); // Await cookies to resolve Promise
+    const userId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
+    console.log("Cookies - userId:", userId, "role:", role);
 
     if (!userId || role !== "propertyOwner") {
+      console.log("Unauthorized - userId:", userId, "role:", role);
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
@@ -85,6 +150,7 @@ export async function PUT(req: NextRequest) {
       .findOne({ _id: new ObjectId(tenantId), ownerId: userId });
 
     if (!existingTenant) {
+      console.log("Tenant not found for ID:", tenantId);
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
@@ -93,11 +159,13 @@ export async function PUT(req: NextRequest) {
       .findOne({ _id: new ObjectId(body.propertyId), ownerId: userId });
 
     if (!property) {
+      console.log("Invalid property ID:", body.propertyId);
       return NextResponse.json({ success: false, message: "Invalid property" }, { status: 400 });
     }
 
     const unit = property.unitTypes.find((u) => u.type === body.unitType);
     if (!unit || unit.price !== body.price || unit.deposit !== body.deposit) {
+      console.log("Invalid unit or price/deposit mismatch:", body.unitType);
       return NextResponse.json({ success: false, message: "Invalid unit or price/deposit mismatch" }, { status: 400 });
     }
 
@@ -134,29 +202,34 @@ export async function PUT(req: NextRequest) {
 }
 
 // DELETE Handler
-export async function DELETE(req: NextRequest) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
   try {
-    const params = req.nextUrl.pathname.split("/").pop();
-    const tenantId = params || "";
+    const params = await context.params; // Await params
+    const { tenantId } = params;
+    console.log("DELETE /api/tenants/[tenantId] - Tenant ID:", tenantId);
+
     if (!ObjectId.isValid(tenantId)) {
+      console.log("Invalid tenant ID:", tenantId);
       return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
+    const cookieStore = await cookies(); // Await cookies to resolve Promise
     const userId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
+    console.log("Cookies - userId:", userId, "role:", role);
 
     if (!userId || role !== "propertyOwner") {
+      console.log("Unauthorized - userId:", userId, "role:", role);
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     const db = await connectToDatabase();
-
     const tenant = await db
       .collection<Tenant>("tenants")
       .findOne({ _id: new ObjectId(tenantId), ownerId: userId });
 
     if (!tenant) {
+      console.log("Tenant not found or not authorized for ID:", tenantId);
       return NextResponse.json({ success: false, message: "Not authorized or tenant not found" }, { status: 403 });
     }
 

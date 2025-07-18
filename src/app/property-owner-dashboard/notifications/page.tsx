@@ -1,413 +1,296 @@
-
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { Bell, AlertCircle, Send, Trash2 } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
-import Sidebar from "../components/Sidebar";
+import { useRouter } from "next/navigation";
+import { Bell, ArrowUpDown } from "lucide-react";
 import Navbar from "../components/Navbar";
-
-// TypeScript Interfaces
-interface Tenant {
-  _id: string;
-  name: string;
-  propertyId: string;
-  ownerId: string;
-}
+import Sidebar from "../components/Sidebar";
+import Modal from "../components/Modal";
 
 interface Notification {
   _id: string;
+  userId: string;
   message: string;
-  type: "payment" | "maintenance" | "tenant" | "other";
-  date: string;
-  status: "read" | "unread";
-  tenantId: string;
-  tenantName: string;
-  ownerId: string;
-  deliveryMethod?: "app" | "sms"; // Placeholder for SMS integration
+  type: "Payment" | "Maintenance" | "Tenant" | "Other";
+  createdAt: string;
+  read: boolean;
 }
 
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  message?: string;
+interface SortConfig {
+  key: keyof Notification;
+  direction: "asc" | "desc";
 }
 
-// Reusable Components
-/** Notification Card Component */
-const NotificationCard = ({
-  notification,
-  onMarkAsRead,
-  onDelete,
-}: {
-  notification: Notification;
-  onMarkAsRead: (id: string) => void;
-  onDelete: (id: string) => void;
-}) => {
-  const typeStyles = {
-    payment: { bg: "bg-green-50", text: "text-green-700", border: "border-green-200" },
-    maintenance: { bg: "bg-yellow-50", text: "text-yellow-700", border: "border-yellow-200" },
-    tenant: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-    other: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200" },
-  };
-
-  const style = typeStyles[notification.type];
-
-  return (
-    <div
-      className={`p-4 mb-4 rounded-lg shadow-sm border ${style.border} ${style.bg} flex justify-between items-center animate-fade-in-up transition-all hover:shadow-md`}
-    >
-      <div className="flex items-center gap-3">
-        <Bell size={20} className={style.text} />
-        <div>
-          <p className={`text-sm font-medium ${style.text}`}>
-            {notification.message} <span className="text-gray-500">({notification.tenantName})</span>
-          </p>
-          <p className="text-xs text-gray-500">
-            {new Date(notification.date).toLocaleString()} • {notification.deliveryMethod || "App"}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {notification.status === "unread" && (
-          <button
-            onClick={() => onMarkAsRead(notification._id)}
-            className="text-xs font-semibold text-[#03a678] hover:text-[#028a5f] transition-colors"
-          >
-            Mark as Read
-          </button>
-        )}
-        <button
-          onClick={() => onDelete(notification._id)}
-          className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors"
-        >
-          <Trash2 size={16} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-/** NotificationsPage Component */
 export default function NotificationsPage() {
   const router = useRouter();
-  const [propertyOwnerId, setPropertyOwnerId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [newNotification, setNewNotification] = useState({
-    message: "",
-    tenantId: "all",
-    type: "other" as Notification["type"],
-    sendViaSms: false, // Placeholder for SMS integration
-  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
 
-  /** Load authentication from cookies */
   useEffect(() => {
-    const ownerId = Cookies.get("userId"); // Cookie name set by /api/signin
-    const r = Cookies.get("role");
-    if (!ownerId || r !== "propertyOwner") {
-      router.replace("/");
-      return;
+    const uid = Cookies.get("userId");
+    const userRole = Cookies.get("role");
+    setUserId(uid || null);
+    setRole(userRole || null);
+    if (!uid || userRole !== "propertyOwner") {
+      setError("Unauthorized. Please log in as a property owner.");
+      router.push("/");
     }
-    setPropertyOwnerId(ownerId);
-    setRole(r);
   }, [router]);
 
-  /** Fetch tenants and notifications */
+  const fetchNotifications = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId!)}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.notifications || []);
+      } else {
+        setError(data.message || "Failed to fetch notifications.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
+
   useEffect(() => {
-    if (!propertyOwnerId || role !== "propertyOwner") return;
+    if (userId && role === "propertyOwner") {
+      fetchNotifications();
+    }
+  }, [userId, role, fetchNotifications]);
 
-    const fetchData = async () => {
+  const markAsRead = useCallback(
+    async (notificationId: string) => {
       setIsLoading(true);
-      setError(null);
-
       try {
-        const [tenantsRes, notificationsRes] = await Promise.all([
-          fetch(`/api/tenants?userId=${encodeURIComponent(propertyOwnerId)}`, {
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-          }),
-          fetch("/api/notifications", {
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-          }),
-        ]);
-
-        if (!tenantsRes.ok || !notificationsRes.ok) {
-          throw new Error(`HTTP error! Tenants: ${tenantsRes.status}, Notifications: ${notificationsRes.status}`);
+        const res = await fetch(`/api/notifications/${notificationId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ read: true }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setNotifications((prev) =>
+            prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n))
+          );
+        } else {
+          setError(data.message || "Failed to mark notification as read.");
         }
-
-        const [tenantsData, notificationsData] = await Promise.all([
-          tenantsRes.json() as Promise<ApiResponse<Tenant[]>>,
-          notificationsRes.json() as Promise<ApiResponse<Notification[]>>,
-        ]);
-
-        if (!tenantsData.success || !notificationsData.success) {
-          throw new Error(tenantsData.message || notificationsData.message || "Failed to fetch data");
-        }
-
-        setTenants(tenantsData.data || []);
-        setNotifications(notificationsData.data || []);
-      } catch (err) {
-        console.error("Fetch data error:", err);
-        setError("Failed to load data. Please try again.");
+      } catch {
+        setError("Failed to connect to the server.");
       } finally {
         setIsLoading(false);
       }
-    };
-
-    fetchData();
-  }, [propertyOwnerId, role]);
-
-  /** Handle sending new notification */
-  const sendNotification = async () => {
-    if (!newNotification.message.trim()) {
-      setError("Message cannot be empty");
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          message: newNotification.message,
-          tenantId: newNotification.tenantId,
-          type: newNotification.type,
-          deliveryMethod: newNotification.sendViaSms ? "sms" : "app", // Placeholder for SMS
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const data: ApiResponse<Notification> = await response.json();
-      if (!data.success) {
-        throw new Error(data.message || "Failed to send notification");
-      }
-
-      setNotifications((prev) => [data.data!, ...prev]);
-      setNewNotification({ message: "", tenantId: "all", type: "other", sendViaSms: false });
-    } catch (err) {
-      console.error("Send notification error:", err);
-      setError("Failed to send notification. Please try again.");
-    }
-  };
-
-  /** Mark notification as read */
-  const markAsRead = async (notificationId: string) => {
-    try {
-      const response = await fetch("/api/notifications/mark-read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ notificationId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const data: ApiResponse<void> = await response.json();
-      if (!data.success) {
-        throw new Error(data.message || "Failed to mark notification as read");
-      }
-
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n._id === notificationId ? { ...n, status: "read" } : n
-        )
-      );
-    } catch (err) {
-      console.error("Mark as read error:", err);
-      setError("Failed to mark notification as read. Please try again.");
-    }
-  };
-
-  /** Delete notification */
-  const deleteNotification = async (notificationId: string) => {
-    try {
-      const response = await fetch(`/api/notifications?notificationId=${notificationId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const data: ApiResponse<void> = await response.json();
-      if (!data.success) {
-        throw new Error(data.message || "Failed to delete notification");
-      }
-
-      setNotifications((prev) => prev.filter((n) => n._id !== notificationId));
-    } catch (err) {
-      console.error("Delete notification error:", err);
-      setError("Failed to delete notification. Please try again.");
-    }
-  };
-
-  // Memoize notification cards to prevent unnecessary re-renders
-  const notificationCards = useMemo(
-    () =>
-      notifications.map((notification) => (
-        <NotificationCard
-          key={notification._id}
-          notification={notification}
-          onMarkAsRead={markAsRead}
-          onDelete={deleteNotification}
-        />
-      )),
-    [notifications]
+    },
+    []
   );
 
-  if (!propertyOwnerId || role !== "propertyOwner") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-[#03a678] border-solid"></div>
-      </div>
+  const handleSort = useCallback((key: keyof Notification) => {
+    setSortConfig((prev) => {
+      const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
+      const sortedNotifications = [...notifications].sort((a, b) => {
+        if (key === "createdAt") {
+          return direction === "asc"
+            ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
+            : new Date(b[key]).getTime() - new Date(a[key]).getTime();
+        }
+        if (key === "read") {
+          return direction === "asc"
+            ? Number(a[key]) - Number(b[key])
+            : Number(b[key]) - Number(a[key]);
+        }
+        return direction === "asc"
+          ? a[key].localeCompare(b[key])
+          : b[key].localeCompare(a[key]);
+      });
+      setNotifications(sortedNotifications);
+      return { key, direction };
+    });
+  }, [notifications]);
+
+  const getSortIcon = useCallback((key: keyof Notification) => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
+    return sortConfig.direction === "asc" ? (
+      <span className="inline ml-1">↑</span>
+    ) : (
+      <span className="inline ml-1">↓</span>
     );
-  }
+  }, [sortConfig]);
+
+  const openNotificationDetails = useCallback((notification: Notification) => {
+    setSelectedNotification(notification);
+    setIsModalOpen(true);
+    if (!notification.read) {
+      markAsRead(notification._id);
+    }
+  }, [markAsRead]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen bg-gray-100">
       <Navbar />
       <Sidebar />
       <div className="sm:ml-64 mt-16">
-        <main className="px-6 sm:px-8 lg:px-12 py-8 bg-gray-50 min-h-screen overflow-y-auto transition-all duration-300">
-          {/* Header */}
-          <h1 className="text-3xl font-semibold text-gray-800 mb-8 flex items-center gap-2 animate-fade-in">
-            <Bell size={28} className="text-[#03a678]" />
-            Tenant Notifications
+        <main className="px-6 sm:px-8 md:px-10 lg:px-12 py-8 bg-gray-50 min-h-screen">
+          <h1 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+            <Bell className="text-[#1e3a8a]" />
+            Notifications
           </h1>
-
-          {/* Status Messages */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg shadow-sm flex items-center gap-2 animate-fade-in">
-              <AlertCircle className="text-red-600" size={20} />
-              <p className="text-red-600 text-sm">{error}</p>
+            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+              {error}
             </div>
           )}
-          {isLoading && (
-            <div className="mb-6 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#03a678] border-solid"></div>
+          {isLoading ? (
+            <div className="text-center text-gray-600">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1e3a8a]"></div>
+              <span className="ml-2">Loading notifications...</span>
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
+              No notifications found.
+            </div>
+          ) : (
+            <div className="overflow-x-auto bg-white shadow rounded-lg">
+              <table className="min-w-full table-auto text-sm md:text-base">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("message")}
+                    >
+                      Message {getSortIcon("message")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("type")}
+                    >
+                      Type {getSortIcon("type")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("createdAt")}
+                    >
+                      Date {getSortIcon("createdAt")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("read")}
+                    >
+                      Status {getSortIcon("read")}
+                    </th>
+                    <th className="px-4 py-3 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notifications.map((n) => (
+                    <tr
+                      key={n._id}
+                      className={`border-t hover:bg-gray-50 transition cursor-pointer ${
+                        n.read ? "bg-gray-50" : "bg-white font-semibold"
+                      }`}
+                      onClick={() => openNotificationDetails(n)}
+                    >
+                      <td className="px-4 py-3">{n.message}</td>
+                      <td className="px-4 py-3">{n.type}</td>
+                      <td className="px-4 py-3">{new Date(n.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            n.read ? "bg-gray-100 text-gray-700" : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {n.read ? "Read" : "Unread"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openNotificationDetails(n);
+                          }}
+                          className="text-[#1e3a8a] hover:text-[#1e40af] transition"
+                          title="View Notification Details"
+                          aria-label={`View details for notification ${n._id}`}
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-
-          {/* Send Notification Form */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-semibold mb-6 text-gray-800">Send New Notification</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm animate-fade-in">
-              <div className="grid grid-cols-1 gap-4">
+          <Modal
+            title="Notification Details"
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              setSelectedNotification(null);
+            }}
+          >
+            {selectedNotification && (
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
-                  <select
-                    value={newNotification.tenantId}
-                    onChange={(e) =>
-                      setNewNotification({ ...newNotification, tenantId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+                  <label className="block text-sm font-medium text-gray-700">Message</label>
+                  <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                    {selectedNotification.message}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Type</label>
+                  <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                    {selectedNotification.type}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Date</label>
+                  <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                    {new Date(selectedNotification.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Status</label>
+                  <p
+                    className={`w-full border px-3 py-2 rounded-lg ${
+                      selectedNotification.read
+                        ? "bg-gray-100 text-gray-700"
+                        : "bg-blue-100 text-blue-700"
+                    }`}
                   >
-                    <option value="all">All Tenants</option>
-                    {tenants.map((tenant) => (
-                      <option key={tenant._id} value={tenant._id}>
-                        {tenant.name}
-                      </option>
-                    ))}
-                  </select>
+                    {selectedNotification.read ? "Read" : "Unread"}
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select
-                    value={newNotification.type}
-                    onChange={(e) =>
-                      setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setSelectedNotification(null);
+                    }}
+                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                    aria-label="Close notification details"
                   >
-                    <option value="payment">Payment Reminder</option>
-                    <option value="maintenance">Maintenance Alert</option>
-                    <option value="tenant">Tenant Issue</option>
-                    <option value="other">Other</option>
-                  </select>
+                    Close
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                  <textarea
-                    value={newNotification.message}
-                    onChange={(e) =>
-                      setNewNotification({ ...newNotification, message: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-                    rows={4}
-                    placeholder="Enter your message..."
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={newNotification.sendViaSms}
-                    onChange={(e) =>
-                      setNewNotification({ ...newNotification, sendViaSms: e.target.checked })
-                    }
-                    className="h-4 w-4 text-[#03a678] border-gray-300 rounded focus:ring-[#03a678]"
-                    disabled // Placeholder for future SMS integration
-                  />
-                  <label className="text-sm text-gray-700">Send via SMS (Coming Soon)</label>
-                </div>
-                <button
-                  onClick={sendNotification}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-[#03a678] text-white rounded-lg hover:bg-[#028a5f] transition-colors"
-                >
-                  <Send size={16} />
-                  Send Notification
-                </button>
               </div>
-            </div>
-          </section>
-
-          {/* Notifications List */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-semibold mb-6 text-gray-800">Sent Notifications</h2>
-            {notifications.length === 0 && !isLoading ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-gray-600 text-center animate-fade-in">
-                No notifications sent. Start by sending a new notification above.
-              </div>
-            ) : (
-              <div className="space-y-4">{notificationCards}</div>
             )}
-          </section>
+          </Modal>
         </main>
       </div>
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body {
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out;
-        }
-        .animate-fade-in-up {
-          animation: fadeInUp 0.5s ease-out;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }

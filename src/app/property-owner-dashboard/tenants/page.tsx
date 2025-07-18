@@ -56,8 +56,8 @@ export default function TenantsPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
 
   useEffect(() => {
     const uid = Cookies.get("userId");
@@ -69,13 +69,6 @@ export default function TenantsPage() {
       router.push("/");
     }
   }, [router]);
-
-  useEffect(() => {
-    if (userId && role === "propertyOwner") {
-      fetchTenants();
-      fetchProperties();
-    }
-  }, [userId, role]);
 
   const fetchTenants = useCallback(async () => {
     setIsLoading(true);
@@ -115,6 +108,13 @@ export default function TenantsPage() {
       setError("Failed to connect to the server.");
     }
   }, [userId]);
+
+  useEffect(() => {
+    if (userId && role === "propertyOwner") {
+      fetchTenants();
+      fetchProperties();
+    }
+  }, [userId, role, fetchTenants, fetchProperties]);
 
   const resetForm = useCallback(() => {
     setTenantName("");
@@ -292,8 +292,8 @@ export default function TenantsPage() {
       <Navbar />
       <Sidebar />
       <div className="sm:ml-64 mt-16">
-        <main className="px-6 sm:px-8 lg:px-12 py-8 bg-gray-50 min-h-screen">
-          <h1 className="text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+        <main className="px-6 sm:px-8 md:px-10 lg:px-12 py-8 bg-gray-50 min-h-screen">
+          <h1 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800">
             <Users className="text-[#1e3a8a]" />
             Manage Tenants
           </h1>
@@ -330,7 +330,7 @@ export default function TenantsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto bg-white shadow rounded-lg">
-              <table className="min-w-full table-auto text-sm">
+              <table className="min-w-full table-auto text-sm md:text-base">
                 <thead className="bg-gray-200">
                   <tr>
                     <th
@@ -386,7 +386,11 @@ export default function TenantsPage() {
                 </thead>
                 <tbody>
                   {tenants.map((t) => (
-                    <tr key={t._id} className="border-t hover:bg-gray-50 transition">
+                    <tr
+                      key={t._id}
+                      className="border-t hover:bg-gray-50 transition cursor-pointer"
+                      onClick={() => router.push(`/property-owner-dashboard/tenants/${t._id}`)}
+                    >
                       <td className="px-4 py-3">{t.name}</td>
                       <td className="px-4 py-3">{t.email}</td>
                       <td className="px-4 py-3">{t.phone}</td>
@@ -397,7 +401,10 @@ export default function TenantsPage() {
                       <td className="px-4 py-3">Ksh.{t.price.toFixed(2)}</td>
                       <td className="px-4 py-3">Ksh.{t.deposit.toFixed(2)}</td>
                       <td className="px-4 py-3">{t.houseNumber}</td>
-                      <td className="px-4 py-3 flex gap-2">
+                      <td
+                        className="px-4 py-3 flex gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           onClick={() => openEditModal(t)}
                           className="text-[#1e3a8a] hover:text-[#1e40af] transition"
@@ -517,8 +524,7 @@ export default function TenantsPage() {
                     }}
                     type="password"
                     required
-                    className={`w-full border px-3 py-2 rounded-lg focusvores
-                    focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
                       formErrors.tenantPassword ? "border-red-500" : "border-gray-300"
                     }`}
                   />

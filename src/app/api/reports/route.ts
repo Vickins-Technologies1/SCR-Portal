@@ -1,4 +1,4 @@
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { Db, MongoClient, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 

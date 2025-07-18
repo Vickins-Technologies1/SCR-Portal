@@ -1,213 +1,210 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Building2, Plus, ArrowUpDown } from "lucide-react";
+import { Home, Pencil, Trash2, Plus, ArrowUpDown } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
 
-type UnitType = {
-  type: string;
-  quantity: number;
-  price: number;
-  deposit: number;
-};
-
-type Property = {
+interface Property {
   _id: string;
   name: string;
   address: string;
-  unitTypes: UnitType[];
-  status: string;
-  ownerId: string;
+  unitTypes: { type: string; price: number; deposit: number }[];
   createdAt: string;
-};
+}
 
 interface SortConfig {
-  key: "name" | "address" | "createdAt";
+  key: "name" | "address" | "createdAt"; // Restrict to string properties
   direction: "asc" | "desc";
 }
 
-const useAuth = () => {
-  if (typeof window === "undefined") {
-    console.log("useAuth: Running server-side, returning null");
-    return { userId: null, role: null };
-  }
-  const userId = Cookies.get("userId") || null;
-  const role = Cookies.get("role") || null;
-  console.log("useAuth: Cookies read:", { userId, role });
-  return { userId, role };
-};
-
 export default function PropertiesPage() {
-  const { userId, role } = useAuth();
   const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
   const [propertyName, setPropertyName] = useState("");
-  const [propertyAddress, setPropertyAddress] = useState("");
-  const [unitTypes, setUnitTypes] = useState<UnitType[]>([{ type: "", quantity: 0, price: 0, deposit: 0 }]);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
+  const [address, setAddress] = useState("");
+  const [unitTypes, setUnitTypes] = useState<{ type: string; price: string; deposit: string }[]>([
+    { type: "", price: "", deposit: "" },
+  ]);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
 
   useEffect(() => {
-    if (!userId || role !== "propertyOwner") {
-      console.log("useEffect: Unauthorized, redirecting to /");
+    const uid = Cookies.get("userId");
+    const userRole = Cookies.get("role");
+    setUserId(uid || null);
+    setRole(userRole || null);
+    if (!uid || userRole !== "propertyOwner") {
       setError("Unauthorized. Please log in as a property owner.");
       router.push("/");
-      return;
     }
-    fetchProperties();
-  }, [userId, role, router]);
+  }, [router]);
 
-  const fetchProperties = async () => {
+  const fetchProperties = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
     try {
-      const response = await fetch(`/api/properties?userId=${encodeURIComponent(userId!)}`, {
+      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId!)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      const data = await response.json();
-      console.log("fetchProperties response:", data);
+      const data = await res.json();
       if (data.success) {
-        const validProperties = data.properties?.map((property: Property) => ({
-          ...property,
-          unitTypes: property.unitTypes.map((unit: UnitType) => ({
-            ...unit,
-            price: unit.price ?? 0,
-            deposit: unit.deposit ?? 0,
-          })),
-        })) || [];
-        setProperties(validProperties);
+        setProperties(data.properties || []);
       } else {
-        setError(data.message || "Failed to fetch properties");
+        setError(data.message || "Failed to fetch properties.");
       }
-    } catch (err) {
-      console.error("Fetch properties error:", err);
-      setError("Failed to connect to the server");
+    } catch {
+      setError("Failed to connect to the server.");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId]);
 
-  const validateForm = () => {
+  useEffect(() => {
+    if (userId && role === "propertyOwner") {
+      fetchProperties();
+    }
+  }, [userId, role, fetchProperties]);
+
+  const resetForm = useCallback(() => {
+    setPropertyName("");
+    setAddress("");
+    setUnitTypes([{ type: "", price: "", deposit: "" }]);
+    setFormErrors({});
+  }, []);
+
+  const openAddModal = useCallback(() => {
+    resetForm();
+    setModalMode("add");
+    setEditingPropertyId(null);
+    setIsModalOpen(true);
+  }, [resetForm]);
+
+  const openEditModal = useCallback(
+    (property: Property) => {
+      setModalMode("edit");
+      setEditingPropertyId(property._id);
+      setPropertyName(property.name);
+      setAddress(property.address);
+      setUnitTypes(
+        property.unitTypes.map((u) => ({
+          type: u.type,
+          price: u.price.toString(),
+          deposit: u.deposit.toString(),
+        }))
+      );
+      setFormErrors({});
+      setIsModalOpen(true);
+    },
+    []
+  );
+
+  const handleDelete = useCallback((id: string) => {
+    setPropertyToDelete(id);
+    setIsDeleteModalOpen(true);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!propertyToDelete) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/properties/${propertyToDelete}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchProperties();
+      } else {
+        setError(data.message || "Failed to delete property.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    } finally {
+      setIsLoading(false);
+      setIsDeleteModalOpen(false);
+      setPropertyToDelete(null);
+    }
+  }, [propertyToDelete, fetchProperties]);
+
+  const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
     if (!propertyName.trim()) errors.propertyName = "Property name is required";
-    if (!propertyAddress.trim()) errors.propertyAddress = "Property address is required";
+    if (!address.trim()) errors.address = "Address is required";
     unitTypes.forEach((unit, index) => {
-      if (!unit.type.trim()) errors[`unitType${index}`] = `Unit type ${index + 1} name is required`;
-      if (unit.quantity < 0) errors[`unitQuantity${index}`] = `Unit ${index + 1} quantity must be non-negative`;
-      if (unit.price < 0) errors[`unitPrice${index}`] = `Unit ${index + 1} price must be non-negative`;
-      if (unit.deposit < 0) errors[`unitDeposit${index}`] = `Unit ${index + 1} deposit must be non-negative`;
+      if (!unit.type.trim()) errors[`unitType_${index}`] = `Unit type ${index + 1} is required`;
+      if (!unit.price || isNaN(parseFloat(unit.price)) || parseFloat(unit.price) < 0)
+        errors[`unitPrice_${index}`] = `Price for unit ${index + 1} must be a non-negative number`;
+      if (!unit.deposit || isNaN(parseFloat(unit.deposit)) || parseFloat(unit.deposit) < 0)
+        errors[`unitDeposit_${index}`] = `Deposit for unit ${index + 1} must be a non-negative number`;
     });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  };
+  }, [propertyName, address, unitTypes]);
 
-  const handleUnitTypeChange = (index: number, field: keyof UnitType, value: string | number) => {
-    const updatedUnitTypes = [...unitTypes];
-    let parsedValue: string | number;
-    
-    if (field === "type") {
-      parsedValue = typeof value === "string" ? value : "";
-    } else {
-      // For quantity, price, deposit: ensure value is a number
-      parsedValue = typeof value === "string" ? (parseFloat(value) || 0) : value;
-      if (isNaN(parsedValue)) parsedValue = 0;
-    }
-
-    updatedUnitTypes[index] = {
-      ...updatedUnitTypes[index],
-      [field]: parsedValue,
-    };
-    setUnitTypes(updatedUnitTypes);
-
-    // Validate immediately
-    const errors = { ...formErrors };
-    const key = `unit${field.charAt(0).toUpperCase() + field.slice(1)}${index}`;
-    if (field === "type" && typeof parsedValue === "string" && !parsedValue.trim()) {
-      errors[key] = `Unit type ${index + 1} name is required`;
-    } else if (field !== "type" && typeof parsedValue === "number" && parsedValue < 0) {
-      errors[key] = `Unit ${index + 1} ${field} must be non-negative`;
-    } else {
-      delete errors[key];
-    }
-    setFormErrors(errors);
-  };
-
-  const addUnitType = () => {
-    setUnitTypes([...unitTypes, { type: "", quantity: 0, price: 0, deposit: 0 }]);
-  };
-
-  const removeUnitType = (index: number) => {
-    if (unitTypes.length > 1) {
-      setUnitTypes(unitTypes.filter((_, i) => i !== index));
-      const errors = { ...formErrors };
-      ["type", "quantity", "price", "deposit"].forEach((field) => {
-        delete errors[`unit${field.charAt(0).toUpperCase() + field.slice(1)}${index}`];
-      });
-      setFormErrors(errors);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) {
-      setError("User not authenticated. Please log in.");
-      router.push("/");
-      return;
-    }
-    if (!validateForm()) {
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-    try {
-      const response = await fetch("/api/properties", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          name: propertyName,
-          address: propertyAddress,
-          unitTypes,
-          status: "vacant",
-          ownerId: userId,
-        }),
-      });
-      const data = await response.json();
-      console.log("Add property response:", data);
-      if (data.success) {
-        setSuccessMessage("Property added successfully!");
-        setIsModalOpen(false);
-        setPropertyName("");
-        setPropertyAddress("");
-        setUnitTypes([{ type: "", quantity: 0, price: 0, deposit: 0 }]);
-        setFormErrors({});
-        fetchProperties();
-      } else {
-        setError(data.message || "Failed to add property");
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!validateForm()) return;
+      if (!userId) {
+        setError("User ID is missing.");
+        return;
       }
-    } catch (err) {
-      console.error("Add property error:", err);
-      setError("Failed to connect to the server");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      setIsLoading(true);
+      setError(null);
 
-  const handleSort = (key: "name" | "address" | "createdAt") => {
+      const propertyData = {
+        name: propertyName,
+        address,
+        unitTypes: unitTypes.map((u) => ({
+          type: u.type,
+          price: parseFloat(u.price) || 0,
+          deposit: parseFloat(u.deposit) || 0,
+        })),
+        ownerId: userId,
+      };
+
+      try {
+        const url = modalMode === "add" ? "/api/properties" : `/api/properties/${editingPropertyId}`;
+        const method = modalMode === "add" ? "POST" : "PUT";
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(propertyData),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setIsModalOpen(false);
+          resetForm();
+          fetchProperties();
+        } else {
+          setError(data.message || `Failed to ${modalMode === "add" ? "add" : "update"} property.`);
+        }
+      } catch {
+        setError("Failed to connect to the server.");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [userId, modalMode, editingPropertyId, propertyName, address, unitTypes, fetchProperties, resetForm, validateForm]
+  );
+
+  const handleSort = useCallback((key: "name" | "address" | "createdAt") => {
     setSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
       const sortedProperties = [...properties].sort((a, b) => {
@@ -223,25 +220,41 @@ export default function PropertiesPage() {
       setProperties(sortedProperties);
       return { key, direction };
     });
-  };
+  }, [properties]);
 
-  const getSortIcon = (key: "name" | "address" | "createdAt") => {
+  const getSortIcon = useCallback((key: "name" | "address" | "createdAt") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
       <span className="inline ml-1">↑</span>
     ) : (
       <span className="inline ml-1">↓</span>
     );
-  };
+  }, [sortConfig]);
+
+  const addUnitType = useCallback(() => {
+    setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "" }]);
+  }, []);
+
+  const updateUnitType = useCallback((index: number, field: string, value: string) => {
+    setUnitTypes((prev) =>
+      prev.map((unit, i) =>
+        i === index ? { ...unit, [field]: value } : unit
+      )
+    );
+  }, []);
+
+  const removeUnitType = useCallback((index: number) => {
+    setUnitTypes((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar />
       <Sidebar />
       <div className="sm:ml-64 mt-16">
-        <main className="px-6 sm:px-8 lg:px-12 py-8 bg-gray-50 min-h-screen">
-          <h1 className="text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800">
-            <Building2 className="text-[#1e3a8a]" />
+        <main className="px-6 sm:px-8 md:px-10 lg:px-12 py-8 bg-gray-50 min-h-screen">
+          <h1 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+            <Home className="text-[#1e3a8a]" />
             Manage Properties
           </h1>
           {error && (
@@ -249,16 +262,14 @@ export default function PropertiesPage() {
               {error}
             </div>
           )}
-          {successMessage && (
-            <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg shadow animate-pulse">
-              {successMessage}
-            </div>
-          )}
           <div className="flex justify-end mb-6">
             <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 bg-[#1e3a8a] text-white px-4 py-2 rounded-lg hover:bg-[#1e40af] transition shadow"
+              onClick={openAddModal}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${
+                isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#1e3a8a] hover:bg-[#1e40af]"
+              }`}
               disabled={isLoading}
+              aria-label="Add new property"
             >
               <Plus className="h-5 w-5" />
               Add Property
@@ -275,7 +286,7 @@ export default function PropertiesPage() {
             </div>
           ) : (
             <div className="overflow-x-auto bg-white shadow rounded-lg">
-              <table className="min-w-full table-auto text-sm">
+              <table className="min-w-full table-auto text-sm md:text-base">
                 <thead className="bg-gray-200">
                   <tr>
                     <th
@@ -291,50 +302,49 @@ export default function PropertiesPage() {
                       Address {getSortIcon("address")}
                     </th>
                     <th className="px-4 py-3 text-left">Unit Types</th>
-                    <th className="px-4 py-3 text-left">Total Units</th>
-                    <th className="px-4 py-3 text-left">Status</th>
                     <th
                       className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
                       onClick={() => handleSort("createdAt")}
                     >
                       Created At {getSortIcon("createdAt")}
                     </th>
+                    <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {properties.map((property) => (
-                    <tr key={property._id} className="border-t hover:bg-gray-50">
-                      <td className="px-4 py-3">{property.name}</td>
-                      <td className="px-4 py-3">{property.address}</td>
+                  {properties.map((p) => (
+                    <tr
+                      key={p._id}
+                      className="border-t hover:bg-gray-50 transition cursor-pointer"
+                      onClick={() => router.push(`/property-owner-dashboard/properties/${p._id}`)}
+                    >
+                      <td className="px-4 py-3">{p.name}</td>
+                      <td className="px-4 py-3">{p.address}</td>
                       <td className="px-4 py-3">
-                        {property.unitTypes.length > 0 ? (
-                          <ul className="list-disc ml-4">
-                            {property.unitTypes.map((unit, index) => (
-                              <li key={index}>
-                                {unit.type}: {unit.quantity} units at Ksh.{unit.price.toFixed(2)}/month, Ksh.
-                                {unit.deposit.toFixed(2)} deposit
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          "N/A"
-                        )}
+                        {p.unitTypes.map((u) => u.type).join(", ") || "N/A"}
                       </td>
-                      <td className="px-4 py-3">
-                        {property.unitTypes.reduce((sum, unit) => sum + unit.quantity, 0)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                            property.status === "occupied"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }`}
+                      <td className="px-4 py-3">{new Date(p.createdAt).toLocaleDateString()}</td>
+                      <td
+                        className="px-4 py-3 flex gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => openEditModal(p)}
+                          className="text-[#1e3a8a] hover:text-[#1e40af] transition"
+                          title="Edit Property"
+                          aria-label={`Edit property ${p.name}`}
                         >
-                          {property.status}
-                        </span>
+                          <Pencil className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p._id)}
+                          className="text-red-600 hover:text-red-800 transition"
+                          title="Delete Property"
+                          aria-label={`Delete property ${p.name}`}
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
                       </td>
-                      <td className="px-4 py-3">{new Date(property.createdAt).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -342,171 +352,179 @@ export default function PropertiesPage() {
             </div>
           )}
           <Modal
-  title="Add Property"
-  isOpen={isModalOpen}
-  onClose={() => {
-    setIsModalOpen(false);
-    setPropertyName("");
-    setPropertyAddress("");
-    setUnitTypes([{ type: "", quantity: 0, price: 0, deposit: 0 }]);
-    setFormErrors({});
-  }}
->
-  <form onSubmit={handleSubmit} className="space-y-4">
-    <div>
-      <label className="block text-sm font-semibold text-gray-700">Property Name</label>
-<input
-  type="text"
-  value={propertyName}
-  onChange={(e) => setPropertyName(e.target.value)}
-  className={`w-full border px-3 py-2 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition ${
-    formErrors.propertyName ? "border-red-500" : "border-gray-300"
-  }`}
-  required
-  placeholder="e.g., Green Valley Apartments"
-/>
-{formErrors.propertyName && (
-  <p className="text-red-500 text-xs mt-1">{formErrors.propertyName}</p>
-)}
-
-    </div>
-
-    <div>
-      <label className="block text-sm font-semibold text-gray-700">Property Address</label>
-<input
-  type="text"
-  value={propertyAddress}
-  onChange={(e) => setPropertyAddress(e.target.value)}
-  className={`w-full border px-3 py-2 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition ${
-    formErrors.propertyAddress ? "border-red-500" : "border-gray-300"
-  }`}
-  required
-  placeholder="e.g., 123 Main St, Nairobi"
-/>
-{formErrors.propertyAddress && (
-  <p className="text-red-500 text-xs mt-1">{formErrors.propertyAddress}</p>
-)}
-
-    </div>
-
-    <div>
-      <label className="block text-sm font-semibold text-gray-700">Unit Types</label>
-      {unitTypes.map((unit, index) => (
-        <div key={index} className="grid grid-cols-1 sm:grid-cols-5 gap-2 mb-2 items-end">
-          <div>
-            <input
-              type="text"
-              placeholder="Unit Type"
-              value={unit.type}
-              onChange={(e) => handleUnitTypeChange(index, "type", e.target.value)}
-              className={`w-full border px-3 py-2 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-600 transition ${
-                formErrors[`unitType${index}`] ? "border-red-500" : "border-gray-300"
-              }`}
-              required
-            />
-            {formErrors[`unitType${index}`] && (
-              <p className="text-red-500 text-xs mt-1">{formErrors[`unitType${index}`]}</p>
-            )}
-          </div>
-
-          <div>
-            <input
-              type="number"
-              placeholder="Quantity"
-              value={unit.quantity || ""}
-              onChange={(e) => handleUnitTypeChange(index, "quantity", e.target.value)}
-              className={`w-full border px-3 py-2 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-600 transition ${
-                formErrors[`unitQuantity${index}`] ? "border-red-500" : "border-gray-300"
-              }`}
-              required
-              min="0"
-            />
-          </div>
-
-          <div>
-            <input
-              type="number"
-              placeholder="Price ($/month)"
-              value={unit.price || ""}
-              onChange={(e) => handleUnitTypeChange(index, "price", e.target.value)}
-              className={`w-full border px-3 py-2 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-600 transition ${
-                formErrors[`unitPrice${index}`] ? "border-red-500" : "border-gray-300"
-              }`}
-              required
-              min="0"
-              step="0.01"
-            />
-          </div>
-
-          <div>
-            <input
-              type="number"
-              placeholder="Deposit ($)"
-              value={unit.deposit || ""}
-              onChange={(e) => handleUnitTypeChange(index, "deposit", e.target.value)}
-              className={`w-full border px-3 py-2 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-600 transition ${
-                formErrors[`unitDeposit${index}`] ? "border-red-500" : "border-gray-300"
-              }`}
-              required
-              min="0"
-              step="0.01"
-            />
-          </div>
-
-          {unitTypes.length > 1 && (
-            <button
-              type="button"
-              onClick={() => removeUnitType(index)}
-              className="text-red-600 hover:text-red-800 transition"
-              aria-label={`Remove unit type ${index + 1}`}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
-      ))}
-
-      <button
-        type="button"
-        onClick={addUnitType}
-        className="text-blue-700 hover:underline text-sm mt-2 flex items-center gap-1 font-medium"
-      >
-        <Plus className="h-4 w-4" />
-        Add Another Unit Type
-      </button>
-    </div>
-
-    <div className="flex justify-end gap-3 pt-4">
-      <button
-        type="button"
-        onClick={() => {
-          setIsModalOpen(false);
-          setPropertyName("");
-          setPropertyAddress("");
-          setUnitTypes([{ type: "", quantity: 0, price: 0, deposit: 0 }]);
-          setFormErrors({});
-        }}
-        className="px-4 py-2 rounded-lg bg-gray-300 text-gray-800 hover:bg-gray-400 transition"
-      >
-        Cancel
-      </button>
-
-      <button
-        type="submit"
-        disabled={isLoading || Object.keys(formErrors).length > 0}
-        className="px-6 py-2 bg-gradient-to-r from-blue-700 to-blue-900 text-white rounded-lg font-medium hover:from-blue-800 hover:to-blue-950 transition flex items-center gap-2 disabled:opacity-50"
-      >
-        {isLoading && (
-          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-        )}
-        Add Property
-      </button>
-    </div>
-  </form>
-</Modal>
-
+            title={modalMode === "add" ? "Add Property" : "Edit Property"}
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              resetForm();
+            }}
+          >
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Property Name</label>
+                <input
+                  placeholder="Enter property name"
+                  value={propertyName}
+                  onChange={(e) => {
+                    setPropertyName(e.target.value);
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      propertyName: e.target.value.trim() ? undefined : "Property name is required",
+                    }));
+                  }}
+                  required
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                    formErrors.propertyName ? "border-red-500" : "border-gray-300"
+                  }`}
+                />
+                {formErrors.propertyName && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.propertyName}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Address</label>
+                <input
+                  placeholder="Enter address"
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      address: e.target.value.trim() ? undefined : "Address is required",
+                    }));
+                  }}
+                  required
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                    formErrors.address ? "border-red-500" : "border-gray-300"
+                  }`}
+                />
+                {formErrors.address && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Unit Types</label>
+                {unitTypes.map((unit, index) => (
+                  <div key={index} className="flex gap-2 mb-2">
+                    <input
+                      placeholder="Unit type (e.g., 1-Bedroom)"
+                      value={unit.type}
+                      onChange={(e) => updateUnitType(index, "type", e.target.value)}
+                      className={`flex-1 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                        formErrors[`unitType_${index}`] ? "border-red-500" : "border-gray-300"
+                      }`}
+                    />
+                    <input
+                      placeholder="Price ($/month)"
+                      value={unit.price}
+                      onChange={(e) => updateUnitType(index, "price", e.target.value)}
+                      type="number"
+                      className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                        formErrors[`unitPrice_${index}`] ? "border-red-500" : "border-gray-300"
+                      }`}
+                    />
+                    <input
+                      placeholder="Deposit ($)"
+                      value={unit.deposit}
+                      onChange={(e) => updateUnitType(index, "deposit", e.target.value)}
+                      type="number"
+                      className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                        formErrors[`unitDeposit_${index}`] ? "border-red-500" : "border-gray-300"
+                      }`}
+                    />
+                    {unitTypes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeUnitType(index)}
+                        className="text-red-600 hover:text-red-800 transition"
+                        aria-label={`Remove unit type ${index + 1}`}
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {unitTypes.map((_, index) => (
+                  <div key={index} className="space-y-1">
+                    {formErrors[`unitType_${index}`] && (
+                      <p className="text-red-500 text-xs">{formErrors[`unitType_${index}`]}</p>
+                    )}
+                    {formErrors[`unitPrice_${index}`] && (
+                      <p className="text-red-500 text-xs">{formErrors[`unitPrice_${index}`]}</p>
+                    )}
+                    {formErrors[`unitDeposit_${index}`] && (
+                      <p className="text-red-500 text-xs">{formErrors[`unitDeposit_${index}`]}</p>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addUnitType}
+                  className="text-[#1e3a8a] hover:text-[#1e40af] transition text-sm"
+                  aria-label="Add another unit type"
+                >
+                  + Add Unit Type
+                </button>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    resetForm();
+                  }}
+                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                  aria-label="Cancel property form"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined)}
+                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 ${
+                    isLoading || Object.values(formErrors).some((v) => v !== undefined)
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-[#1e3a8a] hover:bg-[#1e40af]"
+                  }`}
+                  aria-label={modalMode === "add" ? "Add property" : "Update property"}
+                >
+                  {isLoading && (
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                  )}
+                  {modalMode === "add" ? "Add Property" : "Update Property"}
+                </button>
+              </div>
+            </form>
+          </Modal>
+          <Modal
+            title="Confirm Delete"
+            isOpen={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+          >
+            <p className="mb-6 text-gray-700">
+              Are you sure you want to delete this property? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                aria-label="Cancel delete property"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
+                disabled={isLoading}
+                aria-label="Confirm delete property"
+              >
+                {isLoading && (
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                )}
+                Delete
+              </button>
+            </div>
+          </Modal>
         </main>
       </div>
     </div>

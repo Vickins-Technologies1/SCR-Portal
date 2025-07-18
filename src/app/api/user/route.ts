@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
     if (user) {
       // Exclude password from response
-      const { password, ...userData } = user;
+      const { ...userData } = user;
       return NextResponse.json(
         { success: true, user: { ...userData, userId: user._id.toString() } },
         { status: 200 }
