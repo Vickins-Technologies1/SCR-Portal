@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    serverComponentsExternalPackages: ['nodemailer'],
+    serverExternalPackages: ['nodemailer'],
   },
 };
 

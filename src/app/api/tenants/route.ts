@@ -40,7 +40,7 @@ interface ApiResponse<T> {
   tenant?: T;
 }
 
-export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
+export async function GET(): Promise<NextResponse<ApiResponse<Tenant>>> {
   try {
     const cookieStore = await cookies();
     const userId = cookieStore.get("userId")?.value;
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Te
   }
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
+export async function POST(_: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
   try {
     const cookieStore = await cookies();
     const userId = cookieStore.get("userId")?.value;
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const body: TenantRequest = await req.json();
+    const body: TenantRequest = await _.json();
     const {
       name,
       email,
