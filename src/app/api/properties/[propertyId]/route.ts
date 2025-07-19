@@ -1,22 +1,15 @@
-import { NextResponse } from "next/server";
-import { Db, MongoClient, ObjectId } from "mongodb";
+import { NextRequest, NextResponse } from "next/server";
+import { MongoClient, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 
-// Database connection
-const connectToDatabase = async (): Promise<Db> => {
+// DB Connection
+const connectToDatabase = async () => {
   const client = new MongoClient(process.env.MONGODB_URI || "mongodb://localhost:27017");
-  try {
-    await client.connect();
-    const db = client.db("rentaldb");
-    console.log("Connected to MongoDB database:", db.databaseName);
-    return db;
-  } catch (error) {
-    console.error("Failed to connect to MongoDB:", error);
-    throw error;
-  }
+  await client.connect();
+  return client.db("rentaldb");
 };
 
-// Types
+// Interfaces
 interface UnitType {
   type: string;
   quantity: number;
@@ -34,65 +27,66 @@ interface Property {
 
 interface Tenant {
   _id: ObjectId;
-  propertyId: string;
+  propertyId: ObjectId | string; // Allow for ObjectId or string to handle conversion
 }
 
-// GET Handler
-export async function GET(request: Request, context: { params: Promise<{ propertyId: string }> }) {
+// GET /api/properties/[propertyId]
+export async function GET(request: NextRequest, { params }: { params: Promise<{ propertyId: string }> }) {
   try {
-    const params = await context.params; // Await params to resolve Promise
-    const { propertyId } = params;
-    console.log("GET /api/properties/[propertyId] - Property ID:", propertyId);
+    // Await params to resolve the dynamic route parameter
+    const { propertyId } = await params;
+    console.log("GET /api/properties/[propertyId] - propertyId:", propertyId);
 
     if (!ObjectId.isValid(propertyId)) {
-      console.log("Invalid property ID:", propertyId);
+      console.log("Invalid ObjectId:", propertyId);
       return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
     }
 
-    const cookieStore = await cookies(); // Await cookies to resolve Promise
+    const cookieStore = await cookies();
     const userId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
-    console.log("Cookies - userId:", userId, "role:", role);
+    console.log("Cookies => userId:", userId, "role:", role);
 
     if (!userId || (role !== "tenant" && role !== "propertyOwner")) {
-      console.log("Unauthorized - userId:", userId, "role:", role);
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     const db = await connectToDatabase();
-    let property;
+
+    let property: Property | null = null;
 
     if (role === "tenant") {
-      // Tenant accessing their leased property
-      const tenant = await db.collection<Tenant>("tenants").findOne({
-        _id: new ObjectId(userId),
-        propertyId: propertyId,
-      });
-      if (!tenant) {
-        console.log("Tenant not associated with property ID:", propertyId);
-        return NextResponse.json({ success: false, message: "Not authorized for this property" }, { status: 403 });
+      console.log("Tenant access attempt:", { userId, propertyId });
+
+      const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(userId) });
+
+      console.log("Tenant lookup result:", tenant);
+
+      // Convert propertyId to ObjectId for comparison
+      const propertyIdObj = new ObjectId(propertyId);
+      if (!tenant || !tenant.propertyId || tenant.propertyId.toString() !== propertyIdObj.toString()) {
+        return NextResponse.json({ success: false, message: "Tenant not associated with this property" }, { status: 403 });
       }
+
       property = await db.collection<Property>("properties").findOne({
-        _id: new ObjectId(propertyId),
+        _id: propertyIdObj,
       });
+
     } else if (role === "propertyOwner") {
-      // Property owner accessing their property
       property = await db.collection<Property>("properties").findOne({
         _id: new ObjectId(propertyId),
         ownerId: userId,
       });
     }
 
-    console.log("Property query result:", property);
-
     if (!property) {
-      console.log("Property not found or not authorized for ID:", propertyId);
-      return NextResponse.json({ success: false, message: "Property not found or not authorized" }, { status: 404 });
+      return NextResponse.json({ success: false, message: "Property not found or access denied" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, property });
+    return NextResponse.json({ success: true, property }, { status: 200 });
+
   } catch (error) {
-    console.error("Error in GET /api/properties/[propertyId]:", error);
+    console.error("Server error in GET /api/properties/[propertyId]:", error);
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }

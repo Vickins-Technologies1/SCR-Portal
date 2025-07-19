@@ -27,7 +27,7 @@ export default function Navbar() {
         {/* Right Side Items */}
         <div className="flex items-center gap-4">
           <Link
-            href="/smartchoicerentalmanagement.com"
+            href="https://www.smartchoicerentalmanagement.com/"
             className={`text-sm font-medium text-[#0a0a23] hover:text-[#03a678] transition-colors ${
               pathname === "/" ? "text-[#03a678]" : ""
             }`}

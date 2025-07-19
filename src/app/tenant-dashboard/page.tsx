@@ -62,7 +62,7 @@ export default function TenantDashboardPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const tenantRes = await fetch(`/api/tenants/${userId}?userId=${encodeURIComponent(userId)}`, {
+        const tenantRes = await fetch(`/api/tenants/${userId}`, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -77,7 +77,7 @@ export default function TenantDashboardPage() {
         setTenant(tenantData.tenant);
 
         if (tenantData.tenant?.propertyId) {
-          const propertyRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}?userId=${encodeURIComponent(userId)}`, {
+          const propertyRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
             method: "GET",
             headers: { "Content-Type": "application/json" },
             credentials: "include",

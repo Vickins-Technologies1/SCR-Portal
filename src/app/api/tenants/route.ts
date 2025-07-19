@@ -194,13 +194,14 @@ export async function POST(_: NextRequest): Promise<NextResponse<ApiResponse<Ten
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000";
 
-    // Send welcome email
+    // Send welcome email with password
     await sendWelcomeEmail({
       to: email,
       name,
       email,
+      password,
       loginUrl,
-      propertyId,
+      propertyName: property.name,
       houseNumber,
     });
 
