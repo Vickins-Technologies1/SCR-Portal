@@ -322,171 +322,177 @@ export default function NotificationsPage() {
               Sort by Status {getSortIcon("read")}
             </button>
           </div>
-          <Modal
-            title="Notification Details"
-            isOpen={isModalOpen}
-            onClose={() => {
-              setIsModalOpen(false);
-              setSelectedNotification(null);
-            }}
-          >
-            {selectedNotification && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Message</label>
-                  <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
-                    {selectedNotification.message}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Type</label>
-                  <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
-                    {selectedNotification.type}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Tenant</label>
-                  <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
-                    {selectedNotification.tenantName}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Date</label>
-                  <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
-                    {new Date(selectedNotification.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Status</label>
-                  <p
-                    className={`w-full border px-3 py-2 rounded-lg ${
-                      selectedNotification.read
-                        ? "bg-gray-100 text-gray-700"
-                        : "bg-blue-100 text-blue-700"
-                    }`}
-                  >
-                    {selectedNotification.read ? "Read" : "Unread"}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Delivery Method</label>
-                  <p className="w-full border px-3 py-2 rounded-lg bg-gray-100">
-                    {selectedNotification.deliveryMethod === "sms"
-                      ? `SMS (${selectedNotification.deliveryStatus || "Pending"})`
-                      : "App"}
-                  </p>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setSelectedNotification(null);
-                    }}
-                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            )}
-          </Modal>
-          <Modal
-            title="Create Notification"
-            isOpen={isCreateModalOpen}
-            onClose={() => {
-              setIsCreateModalOpen(false);
-              setNewNotification({ message: "", tenantId: "all", type: "Other", deliveryMethod: "app" });
-            }}
-          >
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Message</label>
-                <textarea
-                  value={newNotification.message}
-                  onChange={(e) =>
-                    setNewNotification({ ...newNotification, message: e.target.value })
-                  }
-                  className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
-                  placeholder="Enter notification message"
-                  rows={4}
-                  maxLength={160}
-                  disabled={newNotification.type === "Payment"}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Tenant</label>
-                <select
-                  value={newNotification.tenantId}
-                  onChange={(e) =>
-                    setNewNotification({ ...newNotification, tenantId: e.target.value })
-                  }
-                  className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
-                >
-                  <option value="all">All Tenants</option>
-                  {tenants.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>
-                      {tenant.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Type</label>
-                <select
-                  value={newNotification.type}
-                  onChange={(e) =>
-                    setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })
-                  }
-                  className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
-                >
-                  <option value="Payment">Payment</option>
-                  <option value="Maintenance">Maintenance</option>
-                  <option value="Tenant">Tenant</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Delivery Method</label>
-                <div className="flex items-center gap-4 mt-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">App</span>
-                    <div
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-                        newNotification.deliveryMethod === "app" ? "bg-[#03a678]" : "bg-gray-300"
-                      }`}
-                      onClick={() => setNewNotification({ ...newNotification, deliveryMethod: "app" })}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                          newNotification.deliveryMethod === "app" ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
+          <AnimatePresence>
+            {isModalOpen && (
+              <Modal
+                title="Notification Details"
+                isOpen={isModalOpen}
+                onClose={() => {
+                  setIsModalOpen(false);
+                  setSelectedNotification(null);
+                }}
+              >
+                {selectedNotification && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Message</label>
+                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                        {selectedNotification.message}
+                      </p>
                     </div>
-                    <span className="text-sm text-gray-600">SMS</span>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Type</label>
+                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                        {selectedNotification.type}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Tenant</label>
+                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                        {selectedNotification.tenantName}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Date</label>
+                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                        {new Date(selectedNotification.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Status</label>
+                      <p
+                        className={`w-full border px-3 py-2 rounded-lg ${
+                          selectedNotification.read
+                            ? "bg-gray-100 text-gray-700"
+                            : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {selectedNotification.read ? "Read" : "Unread"}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Delivery Method</label>
+                      <p className="w-full border px-3 py-2 rounded-lg bg-gray-100">
+                        {selectedNotification.deliveryMethod === "sms"
+                          ? `SMS (${selectedNotification.deliveryStatus || "Pending"})`
+                          : "App"}
+                      </p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          setIsModalOpen(false);
+                          setSelectedNotification(null);
+                        }}
+                        className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </Modal>
+            )}
+            {isCreateModalOpen && (
+              <Modal
+                title="Create Notification"
+                isOpen={isCreateModalOpen}
+                onClose={() => {
+                  setIsCreateModalOpen(false);
+                  setNewNotification({ message: "", tenantId: "all", type: "Other", deliveryMethod: "app" });
+                }}
+              >
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Message</label>
+                    <textarea
+                      value={newNotification.message}
+                      onChange={(e) =>
+                        setNewNotification({ ...newNotification, message: e.target.value })
+                      }
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                      placeholder="Enter notification message"
+                      rows={4}
+                      maxLength={160}
+                      disabled={newNotification.type === "Payment"}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Tenant</label>
+                    <select
+                      value={newNotification.tenantId}
+                      onChange={(e) =>
+                        setNewNotification({ ...newNotification, tenantId: e.target.value })
+                      }
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                    >
+                      <option value="all">All Tenants</option>
+                      {tenants.map((tenant) => (
+                        <option key={tenant._id} value={tenant._id}>
+                          {tenant.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Type</label>
+                    <select
+                      value={newNotification.type}
+                      onChange={(e) =>
+                        setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })
+                      }
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                    >
+                      <option value="Payment">Payment</option>
+                      <option value="Maintenance">Maintenance</option>
+                      <option value="Tenant">Tenant</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Delivery Method</label>
+                    <div className="flex items-center gap-4 mt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">App</span>
+                        <div
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                            newNotification.deliveryMethod === "app" ? "bg-[#03a678]" : "bg-gray-300"
+                          }`}
+                          onClick={() => setNewNotification({ ...newNotification, deliveryMethod: "app" })}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                              newNotification.deliveryMethod === "app" ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </div>
+                        <span className="text-sm text-gray-600">SMS</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setIsCreateModalOpen(false);
+                        setNewNotification({ message: "", tenantId: "all", type: "Other", deliveryMethod: "app" });
+                      }}
+                      className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={createNotification}
+                      className="px-4 py-2 bg-[#03a678] hover:bg-[#02956a] text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+                      disabled={isLoading || (newNotification.deliveryMethod === "sms" && !tenants.length)}
+                    >
+                      <Send size={16} />
+                      {isLoading ? "Sending..." : "Send Notification"}
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setIsCreateModalOpen(false);
-                    setNewNotification({ message: "", tenantId: "all", type: "Other", deliveryMethod: "app" });
-                  }}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={createNotification}
-                  className="px-4 py-2 bg-[#03a678] hover:bg-[#02956a] text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
-                  disabled={isLoading || (newNotification.deliveryMethod === "sms" && !tenants.length)}
-                >
-                  <Send size={16} />
-                  {isLoading ? "Sending..." : "Send Notification"}
-                </button>
-              </div>
-            </div>
-          </Modal>
+              </Modal>
+            )}
+          </AnimatePresence>
         </main>
       </div>
       <style jsx global>{`

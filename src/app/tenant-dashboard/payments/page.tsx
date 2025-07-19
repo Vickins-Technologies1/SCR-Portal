@@ -97,11 +97,15 @@ export default function TenantPaymentsPage() {
 
   const getSortIcon = useCallback(
     (key: keyof Payment | "propertyName") =>
-      sortConfig.key === key
-        ? sortConfig.direction === "asc"
-          ? <span className="inline ml-1">↑</span>
-          : <span className="inline ml-1">↓</span>
-        : <ArrowUpDown className="inline ml-1 h-4 w-4" />,
+      sortConfig.key === key ? (
+        sortConfig.direction === "asc" ? (
+          <span className="inline ml-1">↑</span>
+        ) : (
+          <span className="inline ml-1">↓</span>
+        )
+      ) : (
+        <ArrowUpDown className="inline ml-1 h-4 w-4" />
+      ),
     [sortConfig]
   );
 
@@ -184,9 +188,9 @@ export default function TenantPaymentsPage() {
                     <th
                       key={key}
                       className="px-4 py-2 text-left cursor-pointer hover:bg-gray-200 whitespace-nowrap"
-                      onClick={() => handleSort(key as any)}
+                      onClick={() => handleSort(key as keyof Payment | "propertyName")}
                     >
-                      {key[0].toUpperCase() + key.slice(1).replace("Name", "")} {getSortIcon(key as any)}
+                      {key[0].toUpperCase() + key.slice(1).replace("Name", "")} {getSortIcon(key as keyof Payment | "propertyName")}
                     </th>
                   ))}
                   <th className="px-4 py-2 text-left">Actions</th>
