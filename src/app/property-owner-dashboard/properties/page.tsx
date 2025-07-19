@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Home, Pencil, Trash2, Plus, ArrowUpDown } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
@@ -12,12 +13,13 @@ interface Property {
   _id: string;
   name: string;
   address: string;
-  unitTypes: { type: string; price: number; deposit: number }[];
+  unitTypes: { type: string; price: number; deposit: number; quantity: number }[];
+  status: "Active" | "Inactive";
   createdAt: string;
 }
 
 interface SortConfig {
-  key: "name" | "address" | "createdAt"; // Restrict to string properties
+  key: "name" | "address" | "createdAt" | "status";
   direction: "asc" | "desc";
 }
 
@@ -33,9 +35,10 @@ export default function PropertiesPage() {
   const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
   const [propertyName, setPropertyName] = useState("");
   const [address, setAddress] = useState("");
-  const [unitTypes, setUnitTypes] = useState<{ type: string; price: string; deposit: string }[]>([
-    { type: "", price: "", deposit: "" },
-  ]);
+  const [status, setStatus] = useState<"Active" | "Inactive">("Active");
+  const [unitTypes, setUnitTypes] = useState<
+    { type: string; price: string; deposit: string; quantity: string }[]
+  >([{ type: "", price: "", deposit: "", quantity: "" }]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
@@ -82,14 +85,15 @@ export default function PropertiesPage() {
   const resetForm = useCallback(() => {
     setPropertyName("");
     setAddress("");
-    setUnitTypes([{ type: "", price: "", deposit: "" }]);
+    setStatus("Active");
+    setUnitTypes([{ type: "", price: "", deposit: "", quantity: "" }]);
     setFormErrors({});
+    setEditingPropertyId(null);
   }, []);
 
   const openAddModal = useCallback(() => {
     resetForm();
     setModalMode("add");
-    setEditingPropertyId(null);
     setIsModalOpen(true);
   }, [resetForm]);
 
@@ -99,11 +103,13 @@ export default function PropertiesPage() {
       setEditingPropertyId(property._id);
       setPropertyName(property.name);
       setAddress(property.address);
+      setStatus(property.status);
       setUnitTypes(
         property.unitTypes.map((u) => ({
           type: u.type,
           price: u.price.toString(),
           deposit: u.deposit.toString(),
+          quantity: u.quantity.toString(),
         }))
       );
       setFormErrors({});
@@ -145,12 +151,20 @@ export default function PropertiesPage() {
     const errors: { [key: string]: string | undefined } = {};
     if (!propertyName.trim()) errors.propertyName = "Property name is required";
     if (!address.trim()) errors.address = "Address is required";
+    const unitTypeSet = new Set();
     unitTypes.forEach((unit, index) => {
       if (!unit.type.trim()) errors[`unitType_${index}`] = `Unit type ${index + 1} is required`;
+      else if (unitTypeSet.has(unit.type.trim())) {
+        errors[`unitType_${index}`] = `Unit type ${index + 1} must be unique`;
+      } else {
+        unitTypeSet.add(unit.type.trim());
+      }
       if (!unit.price || isNaN(parseFloat(unit.price)) || parseFloat(unit.price) < 0)
         errors[`unitPrice_${index}`] = `Price for unit ${index + 1} must be a non-negative number`;
       if (!unit.deposit || isNaN(parseFloat(unit.deposit)) || parseFloat(unit.deposit) < 0)
         errors[`unitDeposit_${index}`] = `Deposit for unit ${index + 1} must be a non-negative number`;
+      if (!unit.quantity || isNaN(parseInt(unit.quantity)) || parseInt(unit.quantity) < 0)
+        errors[`unitQuantity_${index}`] = `Quantity for unit ${index + 1} must be a non-negative integer`;
     });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -170,10 +184,12 @@ export default function PropertiesPage() {
       const propertyData = {
         name: propertyName,
         address,
+        status,
         unitTypes: unitTypes.map((u) => ({
           type: u.type,
           price: parseFloat(u.price) || 0,
           deposit: parseFloat(u.deposit) || 0,
+          quantity: parseInt(u.quantity) || 0,
         })),
         ownerId: userId,
       };
@@ -201,28 +217,33 @@ export default function PropertiesPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingPropertyId, propertyName, address, unitTypes, fetchProperties, resetForm, validateForm]
+    [userId, modalMode, editingPropertyId, propertyName, address, status, unitTypes, fetchProperties, resetForm, validateForm]
   );
 
-  const handleSort = useCallback((key: "name" | "address" | "createdAt") => {
-    setSortConfig((prev) => {
-      const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      const sortedProperties = [...properties].sort((a, b) => {
-        if (key === "createdAt") {
-          return direction === "asc"
-            ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
-            : new Date(b[key]).getTime() - new Date(a[key]).getTime();
-        }
+  const sortedProperties = useMemo(() => {
+    const sorted = [...properties];
+    const { key, direction } = sortConfig;
+    sorted.sort((a, b) => {
+      if (key === "createdAt") {
         return direction === "asc"
-          ? a[key].localeCompare(b[key])
-          : b[key].localeCompare(a[key]);
-      });
-      setProperties(sortedProperties);
-      return { key, direction };
+          ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
+          : new Date(b[key]).getTime() - new Date(a[key]).getTime();
+      }
+      return direction === "asc"
+        ? a[key].localeCompare(b[key])
+        : b[key].localeCompare(a[key]);
     });
-  }, [properties]);
+    return sorted;
+  }, [properties, sortConfig]);
 
-  const getSortIcon = useCallback((key: "name" | "address" | "createdAt") => {
+  const handleSort = useCallback((key: "name" | "address" | "createdAt" | "status") => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  }, []);
+
+  const getSortIcon = useCallback((key: "name" | "address" | "createdAt" | "status") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
       <span className="inline ml-1">↑</span>
@@ -232,7 +253,7 @@ export default function PropertiesPage() {
   }, [sortConfig]);
 
   const addUnitType = useCallback(() => {
-    setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "" }]);
+    setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "", quantity: "" }]);
   }, []);
 
   const updateUnitType = useCallback((index: number, field: string, value: string) => {
@@ -248,25 +269,25 @@ export default function PropertiesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
       <Sidebar />
       <div className="sm:ml-64 mt-16">
-        <main className="px-6 sm:px-8 md:px-10 lg:px-12 py-8 bg-gray-50 min-h-screen">
-          <h1 className="text-2xl md:text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800">
-            <Home className="text-[#1e3a8a]" />
-            Manage Properties
-          </h1>
-          {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
-              {error}
-            </div>
-          )}
-          <div className="flex justify-end mb-6">
+        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
+          <motion.div
+            className="flex justify-between items-center mb-6"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
+              <Home className="text-[#012a4a]" />
+              Manage Properties
+            </h1>
             <button
               onClick={openAddModal}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${
-                isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#1e3a8a] hover:bg-[#1e40af]"
+                isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
               }`}
               disabled={isLoading}
               aria-label="Add new property"
@@ -274,63 +295,86 @@ export default function PropertiesPage() {
               <Plus className="h-5 w-5" />
               Add Property
             </button>
-          </div>
+          </motion.div>
+          {error && (
+            <motion.div
+              className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {error}
+            </motion.div>
+          )}
           {isLoading ? (
-            <div className="text-center text-gray-600">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1e3a8a]"></div>
+            <motion.div
+              className="text-center text-gray-600"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
               <span className="ml-2">Loading properties...</span>
-            </div>
-          ) : properties.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
+            </motion.div>
+          ) : sortedProperties.length === 0 ? (
+            <motion.div
+              className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
               No properties found. Add a property to get started.
-            </div>
+            </motion.div>
           ) : (
             <div className="overflow-x-auto bg-white shadow rounded-lg">
               <table className="min-w-full table-auto text-sm md:text-base">
                 <thead className="bg-gray-200">
                   <tr>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("name")}
-                    >
-                      Name {getSortIcon("name")}
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("address")}
-                    >
-                      Address {getSortIcon("address")}
-                    </th>
+                    {["name", "address", "status", "createdAt"].map((key) => (
+                      <th
+                        key={key}
+                        className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                        onClick={() => handleSort(key as "name" | "address" | "createdAt" | "status")}
+                      >
+                        {key[0].toUpperCase() + key.slice(1)} {getSortIcon(key as "name" | "address" | "createdAt" | "status")}
+                      </th>
+                    ))}
                     <th className="px-4 py-3 text-left">Unit Types</th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("createdAt")}
-                    >
-                      Created At {getSortIcon("createdAt")}
-                    </th>
                     <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {properties.map((p) => (
-                    <tr
+                  {sortedProperties.map((p, index) => (
+                    <motion.tr
                       key={p._id}
                       className="border-t hover:bg-gray-50 transition cursor-pointer"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: index * 0.1 }}
                       onClick={() => router.push(`/property-owner-dashboard/properties/${p._id}`)}
                     >
                       <td className="px-4 py-3">{p.name}</td>
                       <td className="px-4 py-3">{p.address}</td>
                       <td className="px-4 py-3">
-                        {p.unitTypes.map((u) => u.type).join(", ") || "N/A"}
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            p.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {p.status}
+                        </span>
                       </td>
                       <td className="px-4 py-3">{new Date(p.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">
+                        {p.unitTypes.map((u) => `${u.type} (x${u.quantity})`).join(", ") || "N/A"}
+                      </td>
                       <td
                         className="px-4 py-3 flex gap-2"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
                           onClick={() => openEditModal(p)}
-                          className="text-[#1e3a8a] hover:text-[#1e40af] transition"
+                          className="text-[#012a4a] hover:text-[#014a7a] transition"
                           title="Edit Property"
                           aria-label={`Edit property ${p.name}`}
                         >
@@ -345,188 +389,229 @@ export default function PropertiesPage() {
                           <Trash2 className="h-5 w-5" />
                         </button>
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-          <Modal
-            title={modalMode === "add" ? "Add Property" : "Edit Property"}
-            isOpen={isModalOpen}
-            onClose={() => {
-              setIsModalOpen(false);
-              resetForm();
-            }}
-          >
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Property Name</label>
-                <input
-                  placeholder="Enter property name"
-                  value={propertyName}
-                  onChange={(e) => {
-                    setPropertyName(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      propertyName: e.target.value.trim() ? undefined : "Property name is required",
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
-                    formErrors.propertyName ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-                {formErrors.propertyName && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.propertyName}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Address</label>
-                <input
-                  placeholder="Enter address"
-                  value={address}
-                  onChange={(e) => {
-                    setAddress(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      address: e.target.value.trim() ? undefined : "Address is required",
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
-                    formErrors.address ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-                {formErrors.address && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Unit Types</label>
-                {unitTypes.map((unit, index) => (
-                  <div key={index} className="flex gap-2 mb-2">
+          <AnimatePresence>
+            {isModalOpen && (
+              <Modal
+                title={modalMode === "add" ? "Add Property" : "Edit Property"}
+                isOpen={isModalOpen}
+                onClose={() => {
+                  setIsModalOpen(false);
+                  resetForm();
+                }}
+              >
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Property Name</label>
                     <input
-                      placeholder="Unit type (e.g., 1-Bedroom)"
-                      value={unit.type}
-                      onChange={(e) => updateUnitType(index, "type", e.target.value)}
-                      className={`flex-1 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
-                        formErrors[`unitType_${index}`] ? "border-red-500" : "border-gray-300"
+                      placeholder="Enter property name"
+                      value={propertyName}
+                      onChange={(e) => {
+                        setPropertyName(e.target.value);
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          propertyName: e.target.value.trim() ? undefined : "Property name is required",
+                        }));
+                      }}
+                      required
+                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                        formErrors.propertyName ? "border-red-500" : "border-gray-300"
                       }`}
                     />
-                    <input
-                      placeholder="Price ($/month)"
-                      value={unit.price}
-                      onChange={(e) => updateUnitType(index, "price", e.target.value)}
-                      type="number"
-                      className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
-                        formErrors[`unitPrice_${index}`] ? "border-red-500" : "border-gray-300"
-                      }`}
-                    />
-                    <input
-                      placeholder="Deposit ($)"
-                      value={unit.deposit}
-                      onChange={(e) => updateUnitType(index, "deposit", e.target.value)}
-                      type="number"
-                      className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
-                        formErrors[`unitDeposit_${index}`] ? "border-red-500" : "border-gray-300"
-                      }`}
-                    />
-                    {unitTypes.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeUnitType(index)}
-                        className="text-red-600 hover:text-red-800 transition"
-                        aria-label={`Remove unit type ${index + 1}`}
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
+                    {formErrors.propertyName && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.propertyName}</p>
                     )}
                   </div>
-                ))}
-                {unitTypes.map((_, index) => (
-                  <div key={index} className="space-y-1">
-                    {formErrors[`unitType_${index}`] && (
-                      <p className="text-red-500 text-xs">{formErrors[`unitType_${index}`]}</p>
-                    )}
-                    {formErrors[`unitPrice_${index}`] && (
-                      <p className="text-red-500 text-xs">{formErrors[`unitPrice_${index}`]}</p>
-                    )}
-                    {formErrors[`unitDeposit_${index}`] && (
-                      <p className="text-red-500 text-xs">{formErrors[`unitDeposit_${index}`]}</p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Address</label>
+                    <input
+                      placeholder="Enter address"
+                      value={address}
+                      onChange={(e) => {
+                        setAddress(e.target.value);
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          address: e.target.value.trim() ? undefined : "Address is required",
+                        }));
+                      }}
+                      required
+                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                        formErrors.address ? "border-red-500" : "border-gray-300"
+                      }`}
+                    />
+                    {formErrors.address && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
                     )}
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addUnitType}
-                  className="text-[#1e3a8a] hover:text-[#1e40af] transition text-sm"
-                  aria-label="Add another unit type"
-                >
-                  + Add Unit Type
-                </button>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
-                  aria-label="Cancel property form"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined)}
-                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 ${
-                    isLoading || Object.values(formErrors).some((v) => v !== undefined)
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-[#1e3a8a] hover:bg-[#1e40af]"
-                  }`}
-                  aria-label={modalMode === "add" ? "Add property" : "Update property"}
-                >
-                  {isLoading && (
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                  )}
-                  {modalMode === "add" ? "Add Property" : "Update Property"}
-                </button>
-              </div>
-            </form>
-          </Modal>
-          <Modal
-            title="Confirm Delete"
-            isOpen={isDeleteModalOpen}
-            onClose={() => setIsDeleteModalOpen(false)}
-          >
-            <p className="mb-6 text-gray-700">
-              Are you sure you want to delete this property? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
-                aria-label="Cancel delete property"
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Status</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as "Active" | "Inactive")}
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition border-gray-300"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Unit Types</label>
+                    {unitTypes.map((unit, index) => (
+                      <div key={index} className="flex gap-2 mb-2">
+                        <input
+                          placeholder="Unit type (e.g., 1-Bedroom)"
+                          value={unit.type}
+                          onChange={(e) => updateUnitType(index, "type", e.target.value)}
+                          className={`flex-1 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                            formErrors[`unitType_${index}`] ? "border-red-500" : "border-gray-300"
+                          }`}
+                        />
+                        <input
+                          placeholder="Price (Ksh/month)"
+                          value={unit.price}
+                          onChange={(e) => updateUnitType(index, "price", e.target.value)}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                            formErrors[`unitPrice_${index}`] ? "border-red-500" : "border-gray-300"
+                          }`}
+                        />
+                        <input
+                          placeholder="Deposit (Ksh)"
+                          value={unit.deposit}
+                          onChange={(e) => updateUnitType(index, "deposit", e.target.value)}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                            formErrors[`unitDeposit_${index}`] ? "border-red-500" : "border-gray-300"
+                          }`}
+                        />
+                        <input
+                          placeholder="Quantity"
+                          value={unit.quantity}
+                          onChange={(e) => updateUnitType(index, "quantity", e.target.value)}
+                          type="number"
+                          min="0"
+                          step="1"
+                          className={`w-20 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                            formErrors[`unitQuantity_${index}`] ? "border-red-500" : "border-gray-300"
+                          }`}
+                        />
+                        {unitTypes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeUnitType(index)}
+                            className="text-red-600 hover:text-red-800 transition"
+                            aria-label={`Remove unit type ${index + 1}`}
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {unitTypes.map((_, index) => (
+                      <div key={index} className="space-y-1">
+                        {formErrors[`unitType_${index}`] && (
+                          <p className="text-red-500 text-xs">{formErrors[`unitType_${index}`]}</p>
+                        )}
+                        {formErrors[`unitPrice_${index}`] && (
+                          <p className="text-red-500 text-xs">{formErrors[`unitPrice_${index}`]}</p>
+                        )}
+                        {formErrors[`unitDeposit_${index}`] && (
+                          <p className="text-red-500 text-xs">{formErrors[`unitDeposit_${index}`]}</p>
+                        )}
+                        {formErrors[`unitQuantity_${index}`] && (
+                          <p className="text-red-500 text-xs">{formErrors[`unitQuantity_${index}`]}</p>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addUnitType}
+                      className="text-[#012a4a] hover:text-[#014a7a] transition text-sm"
+                      aria-label="Add another unit type"
+                    >
+                      + Add Unit Type
+                    </button>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsModalOpen(false);
+                        resetForm();
+                      }}
+                      className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                      aria-label="Cancel property form"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined)}
+                      className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 ${
+                        isLoading || Object.values(formErrors).some((v) => v !== undefined)
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : "bg-[#012a4a] hover:bg-[#014a7a]"
+                      }`}
+                      aria-label={modalMode === "add" ? "Add property" : "Update property"}
+                    >
+                      {isLoading && (
+                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                      )}
+                      {modalMode === "add" ? "Add Property" : "Update Property"}
+                    </button>
+                  </div>
+                </form>
+              </Modal>
+            )}
+            {isDeleteModalOpen && (
+              <Modal
+                title="Confirm Delete"
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
               >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
-                disabled={isLoading}
-                aria-label="Confirm delete property"
-              >
-                {isLoading && (
-                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                )}
-                Delete
-              </button>
-            </div>
-          </Modal>
+                <p className="mb-6 text-gray-700">
+                  Are you sure you want to delete this property? This action cannot be undone.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setIsDeleteModalOpen(false)}
+                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                    aria-label="Cancel delete property"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
+                    disabled={isLoading}
+                    aria-label="Confirm delete property"
+                  >
+                    {isLoading && (
+                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                    )}
+                    Delete
+                  </button>
+                </div>
+              </Modal>
+            )}
+          </AnimatePresence>
         </main>
       </div>
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+          font-family: 'Inter', sans-serif;
+        }
+      `}</style>
     </div>
   );
 }
