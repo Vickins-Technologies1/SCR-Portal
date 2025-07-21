@@ -12,6 +12,7 @@ export interface TenantRequest {
   leaseStartDate: string;
   leaseEndDate: string;
   ownerId?: string;
+  walletBalance?: number;
 }
 
 export interface Tenant {

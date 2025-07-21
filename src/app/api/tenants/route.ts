@@ -63,7 +63,7 @@ interface ApiResponse<T> {
   tenant?: T;
 }
 
-export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
+export async function GET(): Promise<NextResponse<ApiResponse<Tenant>>> {
   try {
     const cookieStore = await cookies();
     const userId = cookieStore.get("userId")?.value;
