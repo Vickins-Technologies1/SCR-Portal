@@ -1,16 +1,9 @@
-export interface UnitType {
-  type: string;
-  quantity: number;
-  price: number;
-  deposit: number;
-}
-
 export interface TenantRequest {
   name: string;
   email: string;
   phone: string;
   password?: string;
-  role: string;
+  role?: string;
   propertyId: string;
   unitType: string;
   price: number;
@@ -18,5 +11,27 @@ export interface TenantRequest {
   houseNumber: string;
   leaseStartDate: string;
   leaseEndDate: string;
+  ownerId?: string;
+}
+
+export interface Tenant {
+  _id: string;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  role: string;
   ownerId: string;
+  propertyId: string;
+  unitType: string;
+  price: number;
+  deposit: number;
+  houseNumber: string;
+  leaseStartDate: string;
+  leaseEndDate: string;
+  status: string;
+  paymentStatus: string;
+  createdAt: string;
+  updatedAt?: string;
+  walletBalance: number;
 }

@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { Db, MongoClient, ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
 import { cookies } from "next/headers";
-import { TenantRequest, UnitType } from "../../../types/tenant";
+import { TenantRequest } from "../../../types/tenant";
 import { sendWelcomeEmail } from "../../../lib/email";
 export const runtime = "nodejs";
 
@@ -28,6 +28,12 @@ const connectToDatabase = async (): Promise<{ db: Db; client: MongoClient }> => 
   }
 };
 
+interface UnitType {
+  type: string;
+  price: number;
+  deposit: number;
+}
+
 interface Tenant {
   _id: string;
   name: string;
@@ -46,6 +52,8 @@ interface Tenant {
   status: string;
   paymentStatus: string;
   createdAt: string;
+  updatedAt?: string;
+  walletBalance: number;
 }
 
 interface ApiResponse<T> {
@@ -88,6 +96,8 @@ export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Te
         status: tenant.status,
         paymentStatus: tenant.paymentStatus || "current",
         createdAt: tenant.createdAt,
+        updatedAt: tenant.updatedAt,
+        walletBalance: tenant.walletBalance || 0,
       }));
 
       return NextResponse.json({ success: true, tenants: formattedTenants });
@@ -97,7 +107,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<ApiResponse<Te
     }
   } catch (error) {
     console.error("Error in GET /api/tenants:", error);
-    const errorMessage = (error instanceof Error) ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ success: false, message: `Server error: ${errorMessage}` }, { status: 500 });
   }
 }
@@ -226,6 +236,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
         status: "active",
         paymentStatus: "current",
         createdAt: new Date().toISOString(),
+        walletBalance: 0,
       };
 
       const result = await db.collection("tenants").insertOne({
@@ -267,7 +278,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
     }
   } catch (error) {
     console.error("Error in POST /api/tenants:", error);
-    const errorMessage = (error instanceof Error) ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ success: false, message: `Server error: ${errorMessage}` }, { status: 500 });
   }
 }

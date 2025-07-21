@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@types/bcrypt": "^5.0.2",
+    "axios": "^1.10.0",
     "bcrypt": "^6.0.0",
     "framer-motion": "^12.23.6",
     "js-cookie": "^3.0.5",

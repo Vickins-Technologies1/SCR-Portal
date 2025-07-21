@@ -3,7 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import { Home, DollarSign, Wrench, User, Send, AlertCircle } from "lucide-react";
+import {
+  Home,
+  DollarSign,
+  Wrench,
+  User,
+  Send,
+  AlertCircle,
+  Wallet,
+} from "lucide-react";
 
 interface Tenant {
   _id: string;
@@ -19,6 +27,7 @@ interface Tenant {
   paymentStatus: string;
   createdAt: string;
   updatedAt: string;
+  wallet: number;
 }
 
 interface Property {
@@ -137,125 +146,101 @@ export default function TenantDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      <main className="p-4">
-        {/* Hero Section */}
+    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-white">
+      <main className="p-4 max-w-7xl mx-auto">
         <section className="mb-6 bg-blue-900 text-white rounded-xl p-6 shadow-lg">
           <h1 className="text-2xl font-bold mb-2">Welcome, {tenant?.name || "Tenant"}!</h1>
           <p>Manage your lease, track payments, and submit maintenance requests with ease.</p>
         </section>
 
-        {/* Alerts */}
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-2">
+          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg flex items-center gap-2">
             <AlertCircle size={20} />
             {error}
           </div>
         )}
         {successMessage && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+          <div className="mb-4 p-4 bg-green-100 text-green-800 rounded-lg">
             {successMessage}
           </div>
         )}
         {isLoading && (
-          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg flex items-center gap-2">
+          <div className="mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg flex items-center gap-2">
             <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600"></div>
             Loading dashboard...
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Property Card */}
-          <div className="bg-white rounded-lg shadow-md p-5 border border-gray-100">
-            <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-              <Home size={20} className="text-teal-600" />
-              Leased Property
-            </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Leased Property */}
+          <Card icon={<Home />} title="Leased Property">
             {property ? (
-              <div className="text-gray-700 text-sm">
+              <>
                 <p className="font-medium">{property.name}</p>
                 <p className="text-gray-500">{property.address}</p>
                 <p className="mt-2">Unit: {tenant?.houseNumber} ({tenant?.unitType})</p>
-                <p>Rent: Ksh. {tenant?.price ? tenant.price.toFixed(2) : "N/A"}</p>
-                <p>Deposit: Ksh. {tenant?.deposit ? tenant.deposit.toFixed(2) : "N/A"}</p>
-              </div>
+                <p>Rent: Ksh. {tenant?.price?.toFixed(2)}</p>
+                <p>Deposit: Ksh. {tenant?.deposit?.toFixed(2)}</p>
+              </>
             ) : (
-              <p className="text-sm text-gray-500">No leased property assigned.</p>
+              <p className="text-sm text-gray-500">No property assigned.</p>
             )}
-          </div>
+          </Card>
 
-          {/* Payment Card */}
-          <div className="bg-white rounded-lg shadow-md p-5 border border-gray-100">
-            <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-              <DollarSign size={20} className="text-teal-600" />
-              Payment Status
-            </h2>
+          {/* Payment Status */}
+          <Card icon={<DollarSign />} title="Payment Status">
             {tenant ? (
-              <div className="text-sm">
-                <p>Rent: Ksh. {tenant.price ? tenant.price.toFixed(2) : "N/A"}</p>
+              <>
+                <p>Rent: Ksh. {tenant.price?.toFixed(2)}</p>
                 <p className="mt-2">
-                  Status:{" "}
-                  <span
-                    className={`inline-block px-3 py-1 text-sm font-medium rounded-full ${
-                      tenant.paymentStatus === "paid"
-                        ? "bg-green-100 text-green-800"
-                        : tenant.paymentStatus === "overdue"
-                        ? "bg-red-100 text-red-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }`}
-                  >
+                  Status:
+                  <span className={`ml-2 inline-block px-3 py-1 text-sm font-medium rounded-full ${
+                    tenant.paymentStatus === "paid"
+                      ? "bg-green-100 text-green-800"
+                      : tenant.paymentStatus === "overdue"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }`}>
                     {tenant.paymentStatus || "N/A"}
                   </span>
                 </p>
-                <div className="mt-3">
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div
-                      className={`h-2.5 rounded-full ${
-                        tenant.paymentStatus === "paid" ? "bg-teal-600" : "bg-red-600"
-                      }`}
-                      style={{ width: tenant.paymentStatus === "paid" ? "100%" : "50%" }}
-                    ></div>
-                  </div>
-                  <p className="text-gray-500 mt-1">
-                    {tenant.paymentStatus === "paid" ? "Fully Paid" : "Payment Due"}
-                  </p>
-                </div>
-              </div>
+              </>
             ) : (
-              <p className="text-sm text-gray-500">No payment information available.</p>
+              <p className="text-sm text-gray-500">No payment info.</p>
             )}
-          </div>
+          </Card>
 
-          {/* Profile Card */}
-          <div className="bg-white rounded-lg shadow-md p-5 border border-gray-100">
-            <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-              <User size={20} className="text-teal-600" />
-              Your Profile
-            </h2>
+          {/* Wallet */}
+          <Card icon={<Wallet />} title="Wallet Balance">
             {tenant ? (
-              <div className="text-sm text-gray-700">
+              <>
+                <p className="text-2xl font-bold text-teal-700">Ksh. {tenant.wallet?.toFixed(2)}</p>
+                <p className="text-sm text-gray-500 mt-1">Use wallet for quick rent payments.</p>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">Wallet not available.</p>
+            )}
+          </Card>
+
+          {/* Profile */}
+          <Card icon={<User />} title="Your Profile">
+            {tenant ? (
+              <>
                 <p className="font-medium">{tenant.name}</p>
                 <p className="text-gray-500">{tenant.email}</p>
                 <p className="mt-2">{tenant.phone || "No phone provided"}</p>
-                <button
-                  className="mt-4 bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700"
-                  onClick={() => alert("Profile editing coming soon!")}
-                >
-                  Edit Profile
-                </button>
-              </div>
+              </>
             ) : (
-              <p className="text-sm text-gray-500">No profile information available.</p>
+              <p className="text-sm text-gray-500">No profile info.</p>
             )}
-          </div>
+          </Card>
         </div>
 
         {/* Maintenance Section */}
         <section className="mt-10">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Wrench size={20} className="text-teal-600" />
-              Maintenance Requests
+              <Wrench size={20} className="text-teal-600" /> Maintenance Requests
             </h2>
             <button
               className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700"
@@ -310,8 +295,7 @@ export default function TenantDashboardPage() {
                     disabled={isLoading}
                     className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 flex items-center gap-2"
                   >
-                    <Send size={18} />
-                    Submit
+                    <Send size={18} /> Submit
                   </button>
                 </div>
               </form>
@@ -319,6 +303,18 @@ export default function TenantDashboardPage() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function Card({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100">
+      <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
+        <span className="text-teal-600">{icon}</span>
+        {title}
+      </h2>
+      <div className="text-sm text-gray-700 space-y-1">{children}</div>
     </div>
   );
 }

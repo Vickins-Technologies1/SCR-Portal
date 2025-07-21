@@ -41,6 +41,7 @@ interface TenantRequest {
   status?: string;
   paymentStatus?: string;
   ownerId?: string;
+  walletBalance?: number;
 }
 
 interface Tenant {
@@ -61,6 +62,7 @@ interface Tenant {
   ownerId: string;
   createdAt: string;
   updatedAt?: string;
+  walletBalance: number;
 }
 
 interface Property {
@@ -119,16 +121,19 @@ export async function GET(request: Request, context: { params: Promise<{ tenantI
           _id: tenant._id.toString(),
           propertyId: tenant.propertyId.toString(),
           createdAt: tenant.createdAt,
-          leaseStartDate: tenant.leaseStartDate,
-          leaseEndDate: tenant.leaseEndDate,
+          leaseStartDate: tenant.leaseStartDate || "",
+          leaseEndDate: tenant.leaseEndDate || "",
+          walletBalance: tenant.walletBalance || 0,
         },
       });
     } finally {
       await client.close();
+      console.log("MongoDB connection closed");
     }
   } catch (error) {
     console.error("Error in GET /api/tenants/[tenantId]:", error);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, message: `Server error: ${errorMessage}` }, { status: 500 });
   }
 }
 
@@ -191,6 +196,12 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       if (new Date(body.leaseEndDate) <= new Date(body.leaseStartDate)) {
         console.log("Invalid lease dates:", body.leaseStartDate, body.leaseEndDate);
         return NextResponse.json({ success: false, message: "Lease end date must be after start date" }, { status: 400 });
+      }
+
+      // Validate walletBalance if provided
+      if (body.walletBalance !== undefined && (typeof body.walletBalance !== "number" || body.walletBalance < 0)) {
+        console.log("Invalid wallet balance:", body.walletBalance);
+        return NextResponse.json({ success: false, message: "Wallet balance must be a non-negative number" }, { status: 400 });
       }
 
       // Check if tenant exists and belongs to the owner
@@ -259,10 +270,23 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
         ownerId: userId,
         createdAt: existingTenant.createdAt,
         updatedAt: new Date().toISOString(),
+        walletBalance: body.walletBalance !== undefined ? body.walletBalance : existingTenant.walletBalance,
       };
 
       if (body.password) {
         updateData.password = await bcrypt.hash(body.password, 10);
+      }
+
+      // Log wallet balance change if applicable
+      if (body.walletBalance !== undefined && body.walletBalance !== existingTenant.walletBalance) {
+        console.log(`Wallet balance updated for tenant ${tenantId}: ${existingTenant.walletBalance} -> ${body.walletBalance}`);
+        await db.collection("walletTransactions").insertOne({
+          tenantId,
+          type: body.walletBalance > existingTenant.walletBalance ? "credit" : "debit",
+          amount: Math.abs(body.walletBalance - existingTenant.walletBalance),
+          createdAt: new Date().toISOString(),
+          description: `Wallet balance updated via tenant update`,
+        });
       }
 
       // Update tenant
@@ -281,7 +305,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
         to: body.email,
         name: body.name,
         email: body.email,
-        propertyName: body.propertyId,
+        propertyName: property.name,
         houseNumber: body.houseNumber,
       });
 
@@ -291,14 +315,17 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
           ...updateData,
           _id: tenantId,
           propertyId: body.propertyId,
+          walletBalance: updateData.walletBalance || 0,
         },
       });
     } finally {
       await client.close();
+      console.log("MongoDB connection closed");
     }
   } catch (error) {
     console.error("Error in PUT /api/tenants/[tenantId]:", error);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, message: `Server error: ${errorMessage}` }, { status: 500 });
   }
 }
 
@@ -349,12 +376,20 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ tena
         return NextResponse.json({ success: false, message: "Tenant not found or not authorized" }, { status: 404 });
       }
 
-      return NextResponse.json({ success: true, message: "Tenant deleted successfully" });
+      // Delete related wallet transactions
+      const walletDeleteResult = await db.collection("walletTransactions").deleteMany({
+        tenantId,
+      });
+      console.log(`Deleted ${walletDeleteResult.deletedCount} wallet transactions for tenant ${tenantId}`);
+
+      return NextResponse.json({ success: true, message: "Tenant and related wallet transactions deleted successfully" });
     } finally {
       await client.close();
+      console.log("MongoDB connection closed");
     }
   } catch (error) {
     console.error("Error in DELETE /api/tenants/[tenantId]:", error);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, message: `Server error: ${errorMessage}` }, { status: 500 });
   }
 }

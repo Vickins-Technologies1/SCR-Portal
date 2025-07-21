@@ -23,6 +23,7 @@ interface Tenant {
   paymentStatus: string;
   createdAt: string;
   updatedAt?: string;
+  walletBalance: number;
 }
 
 interface Property {
@@ -66,15 +67,22 @@ export default function TenantDetailsPage() {
         });
         const data = await res.json();
         if (data.success) {
-          setTenant(data.tenant);
+          if (!data.tenant.walletBalance && data.tenant.walletBalance !== 0) {
+            console.warn("Wallet balance missing for tenant:", tenantId);
+            setError("Wallet balance data is unavailable.");
+            setTenant({ ...data.tenant, walletBalance: 0 });
+          } else {
+            setTenant(data.tenant);
+          }
           if (data.tenant?.propertyId) {
             fetchProperty(data.tenant.propertyId);
           }
         } else {
           setError(data.message || "Failed to fetch tenant details.");
         }
-      } catch {
-        setError("Failed to connect to the server.");
+      } catch (error) {
+        console.error("Error fetching tenant:", error);
+        setError("Failed to connect to the server. Please try again later.");
       } finally {
         setIsLoading(false);
       }
@@ -94,8 +102,9 @@ export default function TenantDetailsPage() {
         } else {
           setError(data.message || "Failed to fetch property details.");
         }
-      } catch {
-        setError("Failed to fetch property details.");
+      } catch (error) {
+        console.error("Error fetching property:", error);
+        setError("Failed to fetch property details. Please try again later.");
       } finally {
         setIsPropertyLoading(false);
       }
@@ -123,8 +132,9 @@ export default function TenantDetailsPage() {
       } else {
         setError(data.message || "Failed to impersonate tenant.");
       }
-    } catch {
-      setError("Failed to connect to the server.");
+    } catch (error) {
+      console.error("Error impersonating tenant:", error);
+      setError("Failed to connect to the server. Please try again later.");
     } finally {
       setIsLoading(false);
     }
@@ -266,6 +276,10 @@ export default function TenantDetailsPage() {
                 <p className={`text-lg font-medium capitalize ${tenant.paymentStatus === "overdue" ? "text-red-600" : "text-green-600"}`}>
                   {tenant.paymentStatus}
                 </p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Wallet Balance (Ksh)</h3>
+                <p className="text-lg text-gray-900 font-medium">{tenant.walletBalance.toFixed(2)}</p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Created At</h3>
