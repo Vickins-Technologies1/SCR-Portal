@@ -77,7 +77,7 @@ export default function PaymentsPage() {
 
       try {
         const [paymentsRes, propertiesRes] = await Promise.all([
-          fetch("/api/payments", {
+          fetch(`/api/payments?propertyOwnerId=${encodeURIComponent(propertyOwnerId)}`, {
             method: "GET",
             headers: { "Content-Type": "application/json" },
             credentials: "include",

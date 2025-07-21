@@ -1,3 +1,4 @@
+// src/app/api/properties/route.ts
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { cookies } from "next/headers";
