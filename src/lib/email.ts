@@ -23,7 +23,7 @@ interface UpdateEmailOptions {
   to: string;
   name: string;
   email: string;
-  propertyId?: string;
+  propertyName?: string;
   houseNumber?: string;
 }
 
@@ -134,7 +134,7 @@ export async function sendUpdateEmail({
   to,
   name,
   email,
-  propertyId,
+  propertyName,
   houseNumber,
 }: UpdateEmailOptions): Promise<void> {
   try {
@@ -144,7 +144,7 @@ export async function sendUpdateEmail({
 
     const detailItems = [
       `<li><strong>Email:</strong> ${email}</li>`,
-      propertyId ? `<li><strong>Property ID:</strong> ${propertyId}</li>` : "",
+      propertyName ? `<li><strong>Property ID:</strong> ${propertyName}</li>` : "",
       houseNumber ? `<li><strong>House Number:</strong> ${houseNumber}</li>` : "",
     ].filter(Boolean).join("");
 

@@ -19,6 +19,8 @@ interface Tenant {
   price: number;
   deposit: number;
   houseNumber: string;
+  leaseStartDate: string;
+  leaseEndDate: string;
   createdAt: string;
 }
 
@@ -53,6 +55,8 @@ export default function TenantsPage() {
   const [price, setPrice] = useState("");
   const [deposit, setDeposit] = useState("");
   const [houseNumber, setHouseNumber] = useState("");
+  const [leaseStartDate, setLeaseStartDate] = useState("");
+  const [leaseEndDate, setLeaseEndDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -126,6 +130,8 @@ export default function TenantsPage() {
     setPrice("");
     setDeposit("");
     setHouseNumber("");
+    setLeaseStartDate("");
+    setLeaseEndDate("");
     setFormErrors({});
   }, []);
 
@@ -147,6 +153,8 @@ export default function TenantsPage() {
     setPrice(tenant.price.toString());
     setDeposit(tenant.deposit.toString());
     setHouseNumber(tenant.houseNumber);
+    setLeaseStartDate(tenant.leaseStartDate);
+    setLeaseEndDate(tenant.leaseEndDate);
     setTenantPassword("");
     setFormErrors({});
     setIsModalOpen(true);
@@ -195,9 +203,12 @@ export default function TenantsPage() {
     if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0) errors.price = "Price must be a non-negative number";
     if (!deposit || isNaN(parseFloat(deposit)) || parseFloat(deposit) < 0) errors.deposit = "Deposit must be a non-negative number";
     if (!houseNumber.trim()) errors.houseNumber = "House number is required";
+    if (!leaseStartDate) errors.leaseStartDate = "Lease start date is required";
+    if (!leaseEndDate) errors.leaseEndDate = "Lease end date is required";
+    else if (new Date(leaseEndDate) <= new Date(leaseStartDate)) errors.leaseEndDate = "Lease end date must be after start date";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, modalMode]);
+  }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, modalMode]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -222,6 +233,8 @@ export default function TenantsPage() {
         price: parseFloat(price) || 0,
         deposit: parseFloat(deposit) || 0,
         houseNumber,
+        leaseStartDate,
+        leaseEndDate,
         ownerId: userId,
       };
 
@@ -249,7 +262,7 @@ export default function TenantsPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, fetchTenants, resetForm, validateForm]
+    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, fetchTenants, resetForm, validateForm]
   );
 
   const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
@@ -259,7 +272,7 @@ export default function TenantsPage() {
         if (key === "price" || key === "deposit") {
           return direction === "asc" ? a[key] - b[key] : b[key] - a[key];
         }
-        if (key === "createdAt") {
+        if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
           return direction === "asc"
             ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
             : new Date(b[key]).getTime() - new Date(a[key]).getTime();
@@ -381,6 +394,18 @@ export default function TenantsPage() {
                     >
                       House # {getSortIcon("houseNumber")}
                     </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("leaseStartDate")}
+                    >
+                      Lease Start {getSortIcon("leaseStartDate")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("leaseEndDate")}
+                    >
+                      Lease End {getSortIcon("leaseEndDate")}
+                    </th>
                     <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
@@ -401,6 +426,8 @@ export default function TenantsPage() {
                       <td className="px-4 py-3">Ksh.{t.price.toFixed(2)}</td>
                       <td className="px-4 py-3">Ksh.{t.deposit.toFixed(2)}</td>
                       <td className="px-4 py-3">{t.houseNumber}</td>
+                      <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
                       <td
                         className="px-4 py-3 flex gap-2"
                         onClick={(e) => e.stopPropagation()}
@@ -675,6 +702,56 @@ export default function TenantsPage() {
                 />
                 {formErrors.houseNumber && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Lease Start Date</label>
+                <input
+                  type="date"
+                  value={leaseStartDate}
+                  onChange={(e) => {
+                    setLeaseStartDate(e.target.value);
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      leaseStartDate: e.target.value ? undefined : "Lease start date is required",
+                      leaseEndDate:
+                        e.target.value && leaseEndDate && new Date(leaseEndDate) <= new Date(e.target.value)
+                          ? "Lease end date must be after start date"
+                          : prev.leaseEndDate,
+                    }));
+                  }}
+                  required
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                    formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"
+                  }`}
+                />
+                {formErrors.leaseStartDate && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Lease End Date</label>
+                <input
+                  type="date"
+                  value={leaseEndDate}
+                  onChange={(e) => {
+                    setLeaseEndDate(e.target.value);
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      leaseEndDate: e.target.value
+                        ? new Date(e.target.value) <= new Date(leaseStartDate)
+                          ? "Lease end date must be after start date"
+                          : undefined
+                        : "Lease end date is required",
+                    }));
+                  }}
+                  required
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition ${
+                    formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"
+                  }`}
+                />
+                {formErrors.leaseEndDate && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
                 )}
               </div>
               <div className="flex justify-end gap-3">
