@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { cookies } from 'next/headers';
 import { sendUpdateEmail } from '../../../../lib/email';
 import { ObjectId } from 'mongodb';
-import { Tenant, TenantRequest, UnitType, ApiResponse } from '../../../../types/tenant';
+import { Tenant, TenantRequest, UnitType } from '../../../../types/tenant';
 
 // Validation functions
 function isValidEmail(email: string): boolean {

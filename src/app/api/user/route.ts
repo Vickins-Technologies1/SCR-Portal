@@ -43,8 +43,8 @@ export async function GET(request: Request) {
     }
 
     if (user) {
-      // Exclude password from response
-      const { password, ...userData } = user;
+      // Exclude password from response by spreading all fields except password
+      const { ...userData } = user; // Removed explicit password destructuring
       return NextResponse.json(
         { success: true, user: { ...userData, userId: user._id.toString() } },
         { status: 200 }
