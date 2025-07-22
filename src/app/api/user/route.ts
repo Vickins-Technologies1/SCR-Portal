@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
     if (user) {
       // Exclude password from response
-      const { ...userData } = user;
+      const { password, ...userData } = user;
       return NextResponse.json(
         { success: true, user: { ...userData, userId: user._id.toString() } },
         { status: 200 }
@@ -61,20 +61,6 @@ export async function GET(request: Request) {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
     });
-
-    if (error instanceof Error && error.message.includes("Database configuration error")) {
-      return NextResponse.json(
-        { success: false, message: "Database configuration error: Please check environment variables" },
-        { status: 500 }
-      );
-    }
-
-    if (error instanceof Error && error.message.includes("Failed to connect to the database")) {
-      return NextResponse.json(
-        { success: false, message: "Unable to connect to the database. Please try again later." },
-        { status: 503 }
-      );
-    }
 
     return NextResponse.json(
       { success: false, message: "Internal server error" },
