@@ -1,13 +1,37 @@
-import { NextResponse } from 'next/server';
+// src/app/api/properties/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
 import { ObjectId } from 'mongodb';
+import { UNIT_TYPES, getManagementFee } from '../../../lib/unitTypes';
+import { Property, UnitType } from '../../../types/property';
+import { Tenant } from '../../../types/tenant';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     console.log('Handling GET request to /api/properties');
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId') || searchParams.get('tenantId');
+    const cookieStore = await cookies();
+    const role = cookieStore.get('role')?.value;
+
+    const { db } = await connectToDatabase();
+
+    if (role === 'admin') {
+      const properties = await db.collection<Property>('properties').find().toArray();
+      return NextResponse.json(
+        {
+          success: true,
+          properties: properties.map((p) => ({
+            ...p,
+            _id: p._id.toString(),
+            createdAt: p.createdAt.toISOString(),
+            updatedAt: p.updatedAt.toISOString(),
+          })),
+        },
+        { status: 200 }
+      );
+    }
 
     if (!userId || !ObjectId.isValid(userId)) {
       console.log('Invalid or missing user ID:', userId);
@@ -17,9 +41,6 @@ export async function GET(request: Request) {
       );
     }
 
-    const cookieStore = await cookies();
-    const role = cookieStore.get('role')?.value;
-
     if (!role || (role !== 'propertyOwner' && role !== 'tenant')) {
       console.log('Unauthorized: Invalid role:', role);
       return NextResponse.json(
@@ -28,21 +49,27 @@ export async function GET(request: Request) {
       );
     }
 
-    const { db } = await connectToDatabase();
-
     if (role === 'propertyOwner') {
       const properties = await db
-        .collection('properties')
+        .collection<Property>('properties')
         .find({ ownerId: userId })
         .toArray();
-
-      console.log(`Properties fetched for ownerId ${userId}:`, properties);
-
-      return NextResponse.json({ success: true, properties }, { status: 200 });
+      return NextResponse.json(
+        {
+          success: true,
+          properties: properties.map((p) => ({
+            ...p,
+            _id: p._id.toString(),
+            createdAt: p.createdAt.toISOString(),
+            updatedAt: p.updatedAt.toISOString(),
+          })),
+        },
+        { status: 200 }
+      );
     }
 
     if (role === 'tenant') {
-      const tenant = await db.collection('tenants').findOne({
+      const tenant = await db.collection<Tenant>('tenants').findOne({
         _id: new ObjectId(userId),
       });
 
@@ -54,7 +81,7 @@ export async function GET(request: Request) {
         );
       }
 
-      const property = await db.collection('properties').findOne({
+      const property = await db.collection<Property>('properties').findOne({
         _id: new ObjectId(tenant.propertyId),
       });
 
@@ -66,7 +93,18 @@ export async function GET(request: Request) {
         );
       }
 
-      return NextResponse.json({ success: true, property }, { status: 200 });
+      return NextResponse.json(
+        {
+          success: true,
+          property: {
+            ...property,
+            _id: property._id.toString(),
+            createdAt: property.createdAt.toISOString(),
+            updatedAt: property.updatedAt.toISOString(),
+          },
+        },
+        { status: 200 }
+      );
     }
   } catch (error) {
     console.error('Error fetching properties:', {
@@ -80,64 +118,83 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     console.log('Handling POST request to /api/properties');
+    const cookieStore = await cookies();
+    const role = cookieStore.get('role')?.value;
+    const ownerId = cookieStore.get('userId')?.value;
+
+    if (role !== 'propertyOwner' || !ownerId || !ObjectId.isValid(ownerId)) {
+      console.log('Unauthorized or invalid ownerId:', { role, ownerId });
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized or invalid owner ID' },
+        { status: 401 }
+      );
+    }
+
     const { db } = await connectToDatabase();
+    const { name, address, unitTypes, status } = await request.json();
 
-    const { name, address, unitTypes, status, ownerId } = await request.json();
-
-    // Validate required fields
     if (
       !name ||
       !address ||
       !unitTypes ||
       !Array.isArray(unitTypes) ||
       unitTypes.length === 0 ||
-      !status ||
-      !ownerId ||
-      !ObjectId.isValid(ownerId)
+      !status
     ) {
-      console.log('Missing or invalid required fields:', { name, address, unitTypes, status, ownerId });
+      console.log('Missing or invalid required fields:', { name, address, unitTypes, status });
       return NextResponse.json(
         { success: false, message: 'Missing or invalid required fields' },
         { status: 400 }
       );
     }
 
-    // Validate unitTypes
     for (const unit of unitTypes) {
       if (
         !unit.type ||
+        !UNIT_TYPES.find((ut) => ut.type === unit.type) ||
         typeof unit.quantity !== 'number' ||
         unit.quantity < 0 ||
         typeof unit.price !== 'number' ||
         unit.price < 0 ||
         typeof unit.deposit !== 'number' ||
-        unit.deposit < 0
+        unit.deposit < 0 ||
+        !['RentCollection', 'FullManagement'].includes(unit.managementType)
       ) {
         console.log('Invalid unit type:', unit);
         return NextResponse.json(
-          { success: false, message: 'Invalid unit type, quantity, price, or deposit' },
+          { success: false, message: 'Invalid unit type, quantity, price, deposit, or management type' },
           { status: 400 }
         );
       }
+      unit.managementFee = getManagementFee(unit);
     }
 
-    const newProperty = {
+    const newProperty: Property = {
+      _id: new ObjectId(),
       name,
       address,
-      unitTypes,
+      unitTypes: unitTypes as UnitType[],
       status,
       ownerId,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    const result = await db.collection('properties').insertOne(newProperty);
+    const result = await db.collection<Property>('properties').insertOne(newProperty);
 
     return NextResponse.json(
-      { success: true, property: { ...newProperty, _id: result.insertedId } },
+      {
+        success: true,
+        property: {
+          ...newProperty,
+          _id: result.insertedId.toString(),
+          createdAt: newProperty.createdAt.toISOString(),
+          updatedAt: newProperty.updatedAt.toISOString(),
+        },
+      },
       { status: 201 }
     );
   } catch (error) {

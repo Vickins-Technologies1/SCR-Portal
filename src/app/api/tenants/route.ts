@@ -1,13 +1,21 @@
-import { NextResponse, NextRequest } from 'next/server';
+// src/app/api/tenants/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import bcrypt from 'bcrypt';
 import { cookies } from 'next/headers';
-import { TenantRequest } from '../../../types/tenant';
 import { sendWelcomeEmail } from '../../../lib/email';
-export const runtime = 'nodejs';
 import { ObjectId } from 'mongodb';
+import { Tenant, TenantRequest, ResponseTenant } from '../../../types/tenant';
+import { Property } from '../../../types/property';
+import { getManagementFee } from '../../../lib/unitTypes';
 
-// Validation functions
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  tenants?: ResponseTenant[];
+  tenant?: ResponseTenant;
+}
+
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -16,79 +24,52 @@ function isValidPhone(phone: string): boolean {
   return /^\+?\d{10,15}$/.test(phone);
 }
 
-interface UnitType {
-  type: string;
-  price: number;
-  deposit: number;
-}
-
-interface Tenant {
-  _id: string;
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  role: 'tenant';
-  ownerId: string;
-  propertyId: string;
-  unitType: string;
-  price: number;
-  deposit: number;
-  houseNumber: string;
-  leaseStartDate: string;
-  leaseEndDate: string;
-  status: string;
-  paymentStatus: string;
-  createdAt: string;
-  updatedAt?: string;
-  walletBalance: number;
-}
-
-interface ApiResponse<T> {
-  success: boolean;
-  message?: string;
-  tenants?: T[];
-  tenant?: T;
-}
-
-export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
+export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const cookieStore = await cookies();
     const role = cookieStore.get('role')?.value;
 
+    const { db } = await connectToDatabase();
+
+    if (role === 'admin') {
+      const tenants = await db.collection<Tenant>('tenants').find().toArray();
+      return NextResponse.json({
+        success: true,
+        tenants: tenants.map((tenant) => ({
+          ...tenant,
+          _id: tenant._id.toString(),
+          propertyId: tenant.propertyId.toString(),
+          leaseStartDate: tenant.leaseStartDate || '',
+          leaseEndDate: tenant.leaseEndDate || '',
+          walletBalance: tenant.walletBalance || 0,
+          createdAt: tenant.createdAt.toISOString(),
+          updatedAt: tenant.updatedAt?.toISOString(),
+        })),
+      }, { status: 200 });
+    }
+
     if (!userId || !ObjectId.isValid(userId) || role !== 'propertyOwner') {
       console.log('Unauthorized - userId:', userId, 'role:', role);
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { db } = await connectToDatabase();
     const tenants = await db.collection<Tenant>('tenants').find({ ownerId: userId }).toArray();
 
-    const formattedTenants: Tenant[] = tenants.map((tenant) => ({
-      _id: tenant._id.toString(),
-      name: tenant.name,
-      email: tenant.email,
-      phone: tenant.phone,
-      password: tenant.password,
-      role: tenant.role,
-      ownerId: tenant.ownerId,
-      propertyId: tenant.propertyId.toString(),
-      unitType: tenant.unitType,
-      price: tenant.price,
-      deposit: tenant.deposit,
-      houseNumber: tenant.houseNumber,
-      leaseStartDate: tenant.leaseStartDate || '',
-      leaseEndDate: tenant.leaseEndDate || '',
-      status: tenant.status,
-      paymentStatus: tenant.paymentStatus || 'current',
-      createdAt: tenant.createdAt,
-      updatedAt: tenant.updatedAt,
-      walletBalance: tenant.walletBalance || 0,
-    }));
-
-    return NextResponse.json({ success: true, tenants: formattedTenants }, { status: 200 });
+    return NextResponse.json({
+      success: true,
+      tenants: tenants.map((tenant) => ({
+        ...tenant,
+        _id: tenant._id.toString(),
+        propertyId: tenant.propertyId.toString(),
+        leaseStartDate: tenant.leaseStartDate || '',
+        leaseEndDate: tenant.leaseEndDate || '',
+        walletBalance: tenant.walletBalance || 0,
+        createdAt: tenant.createdAt.toISOString(),
+        updatedAt: tenant.updatedAt?.toISOString(),
+      })),
+    }, { status: 200 });
   } catch (error) {
     console.error('Error in GET /api/tenants:', {
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -98,7 +79,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   }
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<Tenant>>> {
+export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse>> {
   try {
     const cookieStore = await cookies();
     const userId = cookieStore.get('userId')?.value;
@@ -125,7 +106,6 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
       leaseEndDate,
     } = body;
 
-    // Validate required fields
     if (
       !name ||
       !email ||
@@ -171,15 +151,19 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
 
     const { db } = await connectToDatabase();
 
-    // Check duplicate email
+    const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+    if (!user || user.paymentStatus !== 'active' || user.walletBalance < 1000) {
+      console.log('Invalid payment status or insufficient wallet balance:', { paymentStatus: user?.paymentStatus, walletBalance: user?.walletBalance });
+      return NextResponse.json({ success: false, message: 'Active payment status and minimum wallet balance of Ksh 1,000 required' }, { status: 402 });
+    }
+
     const existing = await db.collection('tenants').findOne({ email });
     if (existing) {
       console.log('Email already exists:', email);
       return NextResponse.json({ success: false, message: 'Email already exists' }, { status: 400 });
     }
 
-    // Validate property ownership
-    const property = await db.collection('properties').findOne({
+    const property = await db.collection<Property>('properties').findOne({
       _id: new ObjectId(propertyId),
       ownerId: userId,
     });
@@ -188,14 +172,22 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
       return NextResponse.json({ success: false, message: 'Invalid property' }, { status: 400 });
     }
 
-    // Validate unitType
-    const unit = property.unitTypes.find((u: UnitType) => u.type === unitType);
+    const unit = property.unitTypes.find((u) => u.type === unitType);
     if (!unit || unit.price !== price || unit.deposit !== deposit) {
       console.log('Invalid unit or price/deposit mismatch:', unitType);
       return NextResponse.json({ success: false, message: 'Invalid unit or price/deposit mismatch' }, { status: 400 });
     }
 
-    // Check if house number already exists
+    const managementFee = getManagementFee({ type: unitType, managementType: unit.managementType, quantity: unit.quantity });
+    if (managementFee === "Call for pricing") {
+      console.log('Cannot add tenant due to undefined management fee:', unitType);
+      return NextResponse.json({ success: false, message: 'Cannot add tenant: Management fee requires pricing confirmation. Please contact support.' }, { status: 400 });
+    }
+    if (typeof managementFee === "number" && user.walletBalance < managementFee) {
+      console.log('Insufficient wallet balance for management fee:', { walletBalance: user.walletBalance, managementFee });
+      return NextResponse.json({ success: false, message: `Insufficient wallet balance. Required: Ksh ${managementFee}` }, { status: 402 });
+    }
+
     const existingHouseNumber = await db.collection('tenants').findOne({
       propertyId: new ObjectId(propertyId),
       houseNumber,
@@ -205,17 +197,17 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
       return NextResponse.json({ success: false, message: 'House number already in use for this property' }, { status: 400 });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const tenant: Omit<Tenant, '_id'> = {
+    const tenant: Tenant = {
+      _id: new ObjectId(),
       name,
       email,
       phone,
       password: hashedPassword,
       role: 'tenant',
       ownerId: userId,
-      propertyId,
+      propertyId: new ObjectId(propertyId),
       unitType,
       price: parseFloat(price.toString()),
       deposit: parseFloat(deposit.toString()),
@@ -224,21 +216,30 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
       leaseEndDate,
       status: 'active',
       paymentStatus: 'current',
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
       walletBalance: 0,
     };
 
-    const result = await db.collection('tenants').insertOne({
-      ...tenant,
-      propertyId: new ObjectId(propertyId),
-    });
+    if (typeof managementFee === "number") {
+      await db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { $inc: { walletBalance: -managementFee } }
+      );
+      await db.collection('walletTransactions').insertOne({
+        userId,
+        type: 'debit',
+        amount: managementFee,
+        createdAt: new Date().toISOString(),
+        description: `Tenant addition fee for ${unitType} in property ${property.name}`,
+      });
+    }
 
-    // Generate login URL
+    const result = await db.collection('tenants').insertOne(tenant);
+
     const loginUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000';
 
-    // Send welcome email with password
     await sendWelcomeEmail({
       to: email,
       name,
@@ -256,6 +257,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<T
           ...tenant,
           _id: result.insertedId.toString(),
           propertyId,
+          createdAt: tenant.createdAt.toISOString(),
+          updatedAt: tenant.updatedAt?.toISOString(),
         },
       },
       { status: 201 }

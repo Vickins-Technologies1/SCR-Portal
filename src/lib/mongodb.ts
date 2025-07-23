@@ -1,3 +1,4 @@
+// src/lib/mongodb.ts
 import { MongoClient } from 'mongodb';
 
 declare global {

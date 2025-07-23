@@ -21,6 +21,10 @@ export async function POST(request: Request) {
     const { db } = await connectToDatabase();
     console.log("Connected to database");
 
+    // Log all collections in the database
+    const collections = await db.listCollections().toArray();
+    console.log("Database collections in rentaldb:", collections.map(c => c.name));
+
     // Handle userId-based authentication (for session validation)
     if (userId) {
       if (typeof userId !== "string") {

@@ -13,10 +13,94 @@ interface Property {
   _id: string;
   name: string;
   address: string;
-  unitTypes: { type: string; price: number; deposit: number; quantity: number }[];
+  unitTypes: { type: string; price: number; deposit: number; quantity: number; managementType: "RentCollection" | "FullManagement"; managementFee: number | string }[];
   status: "Active" | "Inactive";
   createdAt: string;
 }
+
+// Predefined unit types and pricing
+const UNIT_TYPES = [
+  {
+    type: "Single",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 5000 },
+        { range: [51, 100], fee: 8000 },
+        { range: [101, Infinity], fee: "Call for pricing" },
+      ],
+      FullManagement: "Call for pricing",
+    },
+  },
+  {
+    type: "Studio",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 5000 },
+        { range: [51, 100], fee: 8000 },
+        { range: [101, Infinity], fee: "Call for pricing" },
+      ],
+      FullManagement: "Call for pricing",
+    },
+  },
+  {
+    type: "1-Bedroom",
+    pricing: {
+      RentCollection: [
+        { range: [1, 15], fee: 5000 },
+        { range: [16, 25], fee: 8000 },
+        { range: [26, Infinity], fee: 15000 },
+      ],
+      FullManagement: "Call for pricing",
+    },
+  },
+  {
+    type: "2-Bedroom",
+    pricing: {
+      RentCollection: [
+        { range: [1, 15], fee: 5000 },
+        { range: [16, 25], fee: 8000 },
+        { range: [26, Infinity], fee: 15000 },
+      ],
+      FullManagement: "Call for pricing",
+    },
+  },
+  {
+    type: "3-Bedroom",
+    pricing: {
+      RentCollection: [
+        { range: [1, 15], fee: 5000 },
+        { range: [16, 25], fee: 8000 },
+        { range: [26, Infinity], fee: 15000 },
+      ],
+      FullManagement: "Call for pricing",
+    },
+  },
+
+  {
+    type: "Duplex",
+    pricing: {
+      RentCollection: [
+        { range: [1, 15], fee: 5000 },
+        { range: [16, 25], fee: 8000 },
+        { range: [26, Infinity], fee: 15000 },
+      ],
+      FullManagement: "Call for pricing",
+    },
+  },
+  {
+    type: "Commercial",
+    pricing: {
+      RentCollection: [
+        { range: [1, 15], fee: 5000 },
+        { range: [16, 25], fee: 8000 },
+        { range: [26, Infinity], fee: 15000 },
+      ],
+      FullManagement: "Call for pricing",
+    },
+  },
+];
 
 interface SortConfig {
   key: "name" | "address" | "createdAt" | "status";
@@ -37,8 +121,8 @@ export default function PropertiesPage() {
   const [address, setAddress] = useState("");
   const [status, setStatus] = useState<"Active" | "Inactive">("Active");
   const [unitTypes, setUnitTypes] = useState<
-    { type: string; price: string; deposit: string; quantity: string }[]
-  >([{ type: "", price: "", deposit: "", quantity: "" }]);
+    { type: string; price: string; deposit: string; quantity: string; managementType: "RentCollection" | "FullManagement" }[]
+  >([{ type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
@@ -86,7 +170,7 @@ export default function PropertiesPage() {
     setPropertyName("");
     setAddress("");
     setStatus("Active");
-    setUnitTypes([{ type: "", price: "", deposit: "", quantity: "" }]);
+    setUnitTypes([{ type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
     setFormErrors({});
     setEditingPropertyId(null);
   }, []);
@@ -110,6 +194,7 @@ export default function PropertiesPage() {
           price: u.price.toString(),
           deposit: u.deposit.toString(),
           quantity: u.quantity.toString(),
+          managementType: u.managementType,
         }))
       );
       setFormErrors({});
@@ -153,11 +238,12 @@ export default function PropertiesPage() {
     if (!address.trim()) errors.address = "Address is required";
     const unitTypeSet = new Set();
     unitTypes.forEach((unit, index) => {
-      if (!unit.type.trim()) errors[`unitType_${index}`] = `Unit type ${index + 1} is required`;
-      else if (unitTypeSet.has(unit.type.trim())) {
+      if (!unit.type || !UNIT_TYPES.find((ut) => ut.type === unit.type)) {
+        errors[`unitType_${index}`] = `Unit type ${index + 1} must be selected from the list`;
+      } else if (unitTypeSet.has(unit.type)) {
         errors[`unitType_${index}`] = `Unit type ${index + 1} must be unique`;
       } else {
-        unitTypeSet.add(unit.type.trim());
+        unitTypeSet.add(unit.type);
       }
       if (!unit.price || isNaN(parseFloat(unit.price)) || parseFloat(unit.price) < 0)
         errors[`unitPrice_${index}`] = `Price for unit ${index + 1} must be a non-negative number`;
@@ -165,10 +251,29 @@ export default function PropertiesPage() {
         errors[`unitDeposit_${index}`] = `Deposit for unit ${index + 1} must be a non-negative number`;
       if (!unit.quantity || isNaN(parseInt(unit.quantity)) || parseInt(unit.quantity) < 0)
         errors[`unitQuantity_${index}`] = `Quantity for unit ${index + 1} must be a non-negative integer`;
+      if (!unit.managementType)
+        errors[`unitManagementType_${index}`] = `Management type for unit ${index + 1} is required`;
     });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }, [propertyName, address, unitTypes]);
+
+  const getManagementFee = (unitType: string, managementType: "RentCollection" | "FullManagement", quantity: string) => {
+    const unit = UNIT_TYPES.find((ut) => ut.type === unitType);
+    if (!unit) return "Call for pricing";
+    const parsedQuantity = parseInt(quantity) || 0;
+    const pricing = unit.pricing[managementType];
+    if (pricing === "Call for pricing") return "Call for pricing";
+    if (Array.isArray(pricing)) {
+      for (const tier of pricing) {
+        const [min, max] = tier.range;
+        if (parsedQuantity >= min && parsedQuantity <= max) {
+          return `Ksh ${tier.fee}/mo`;
+        }
+      }
+    }
+    return "Call for pricing";
+  };
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -190,6 +295,8 @@ export default function PropertiesPage() {
           price: parseFloat(u.price) || 0,
           deposit: parseFloat(u.deposit) || 0,
           quantity: parseInt(u.quantity) || 0,
+          managementType: u.managementType,
+          managementFee: getManagementFee(u.type, u.managementType, u.quantity),
         })),
         ownerId: userId,
       };
@@ -253,7 +360,7 @@ export default function PropertiesPage() {
   }, [sortConfig]);
 
   const addUnitType = useCallback(() => {
-    setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "", quantity: "" }]);
+    setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
   }, []);
 
   const updateUnitType = useCallback((index: number, field: string, value: string) => {
@@ -299,7 +406,8 @@ export default function PropertiesPage() {
           {error && (
             <motion.div
               className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow"
-              initial={{ opacity: 0 }}
+              initial={{ 
+                opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
             >
@@ -421,7 +529,7 @@ export default function PropertiesPage() {
                       required
                       className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                         formErrors.propertyName ? "border-red-500" : "border-gray-300"
-                      }`}
+                      } text-sm sm:text-base`}
                     />
                     {formErrors.propertyName && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.propertyName}</p>
@@ -442,7 +550,7 @@ export default function PropertiesPage() {
                       required
                       className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                         formErrors.address ? "border-red-500" : "border-gray-300"
-                      }`}
+                      } text-sm sm:text-base`}
                     />
                     {formErrors.address && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
@@ -453,7 +561,7 @@ export default function PropertiesPage() {
                     <select
                       value={status}
                       onChange={(e) => setStatus(e.target.value as "Active" | "Inactive")}
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition border-gray-300"
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition border-gray-300 text-sm sm:text-base"
                     >
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
@@ -462,15 +570,26 @@ export default function PropertiesPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Unit Types</label>
                     {unitTypes.map((unit, index) => (
-                      <div key={index} className="flex gap-2 mb-2">
-                        <input
-                          placeholder="Unit type (e.g., 1-Bedroom)"
+                      <div
+                        key={index}
+                        className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4 sm:mb-2"
+                      >
+                        <select
                           value={unit.type}
                           onChange={(e) => updateUnitType(index, "type", e.target.value)}
-                          className={`flex-1 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                          className={`w-full sm:flex-1 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                             formErrors[`unitType_${index}`] ? "border-red-500" : "border-gray-300"
-                          }`}
-                        />
+                          } text-sm sm:text-base`}
+                        >
+                          <option value="" disabled>
+                            Select unit type
+                          </option>
+                          {UNIT_TYPES.map((ut) => (
+                            <option key={ut.type} value={ut.type}>
+                              {ut.type}
+                            </option>
+                          ))}
+                        </select>
                         <input
                           placeholder="Price (Ksh/month)"
                           value={unit.price}
@@ -478,9 +597,9 @@ export default function PropertiesPage() {
                           type="number"
                           min="0"
                           step="0.01"
-                          className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                             formErrors[`unitPrice_${index}`] ? "border-red-500" : "border-gray-300"
-                          }`}
+                          } text-sm sm:text-base`}
                         />
                         <input
                           placeholder="Deposit (Ksh)"
@@ -489,9 +608,9 @@ export default function PropertiesPage() {
                           type="number"
                           min="0"
                           step="0.01"
-                          className={`w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                             formErrors[`unitDeposit_${index}`] ? "border-red-500" : "border-gray-300"
-                          }`}
+                          } text-sm sm:text-base`}
                         />
                         <input
                           placeholder="Quantity"
@@ -500,18 +619,32 @@ export default function PropertiesPage() {
                           type="number"
                           min="0"
                           step="1"
-                          className={`w-20 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                          className={`w-full sm:w-20 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                             formErrors[`unitQuantity_${index}`] ? "border-red-500" : "border-gray-300"
-                          }`}
+                          } text-sm sm:text-base`}
                         />
+                        <select
+                          value={unit.managementType}
+                          onChange={(e) => updateUnitType(index, "managementType", e.target.value)}
+                          className={`w-full sm:w-40 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                            formErrors[`unitManagementType_${index}`] ? "border-red-500" : "border-gray-300"
+                          } text-sm sm:text-base`}
+                        >
+                          <option value="RentCollection">
+                            Rent Collection ({getManagementFee(unit.type, "RentCollection", unit.quantity)})
+                          </option>
+                          <option value="FullManagement">
+                            Full Management ({getManagementFee(unit.type, "FullManagement", unit.quantity)})
+                          </option>
+                        </select>
                         {unitTypes.length > 1 && (
                           <button
                             type="button"
                             onClick={() => removeUnitType(index)}
-                            className="text-red-600 hover:text-red-800 transition"
+                            className="text-red-600 hover:text-red-800 transition self-start sm:self-center"
                             aria-label={`Remove unit type ${index + 1}`}
                           >
-                            <Trash2 className="h-5 w-5" />
+                            <Trash2 className="h-6 w-6 sm:h-5 sm:w-5" />
                           </button>
                         )}
                       </div>
@@ -530,6 +663,9 @@ export default function PropertiesPage() {
                         {formErrors[`unitQuantity_${index}`] && (
                           <p className="text-red-500 text-xs">{formErrors[`unitQuantity_${index}`]}</p>
                         )}
+                        {formErrors[`unitManagementType_${index}`] && (
+                          <p className="text-red-500 text-xs">{formErrors[`unitManagementType_${index}`]}</p>
+                        )}
                       </div>
                     ))}
                     <button
@@ -541,14 +677,14 @@ export default function PropertiesPage() {
                       + Add Unit Type
                     </button>
                   </div>
-                  <div className="flex justify-end gap-3">
+                  <div className="flex flex-col sm:flex-row justify-end gap-3">
                     <button
                       type="button"
                       onClick={() => {
                         setIsModalOpen(false);
                         resetForm();
                       }}
-                      className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                      className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
                       aria-label="Cancel property form"
                     >
                       Cancel
@@ -556,7 +692,7 @@ export default function PropertiesPage() {
                     <button
                       type="submit"
                       disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined)}
-                      className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 ${
+                      className={`px-4 py-2 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base ${
                         isLoading || Object.values(formErrors).some((v) => v !== undefined)
                           ? "bg-gray-400 cursor-not-allowed"
                           : "bg-[#012a4a] hover:bg-[#014a7a]"
@@ -578,20 +714,20 @@ export default function PropertiesPage() {
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
               >
-                <p className="mb-6 text-gray-700">
+                <p className="mb-6 text-gray-700 text-sm sm:text-base">
                   Are you sure you want to delete this property? This action cannot be undone.
                 </p>
-                <div className="flex justify-end gap-3">
+                <div className="flex flex-col sm:flex-row justify-end gap-3">
                   <button
                     onClick={() => setIsDeleteModalOpen(false)}
-                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
                     aria-label="Cancel delete property"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={confirmDelete}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2 text-sm sm:text-base"
                     disabled={isLoading}
                     aria-label="Confirm delete property"
                   >

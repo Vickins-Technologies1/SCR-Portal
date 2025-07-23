@@ -1,41 +1,12 @@
+// src/app/api/properties/[propertyId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../../lib/mongodb';
 import { cookies } from 'next/headers';
 import { ObjectId } from 'mongodb';
+import { UNIT_TYPES, getManagementFee } from '../../../../lib/unitTypes';
+import { Property, UnitType } from '../../../../types/property';
+import { Tenant, ResponseTenant } from '../../../../types/tenant';
 
-// Interfaces
-interface UnitType {
-  type: string;
-  quantity: number;
-  price: number;
-  deposit: number;
-}
-
-interface Property {
-  _id: ObjectId;
-  name: string;
-  address: string;
-  ownerId: string;
-  unitTypes: UnitType[];
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Tenant {
-  _id: ObjectId;
-  propertyId: ObjectId | string;
-  name: string;
-  email: string;
-  phone: string;
-  price: number;
-  status: string;
-  paymentStatus: string;
-  leaseStartDate: string;
-  walletBalance: number;
-}
-
-// GET /api/properties/[propertyId]
 export async function GET(request: NextRequest, context: { params: Promise<{ propertyId: string }> }) {
   try {
     const { propertyId } = await context.params;
@@ -51,7 +22,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
     const role = cookieStore.get('role')?.value;
     console.log('Cookies - userId:', userId, 'role:', role);
 
-    if (!userId || (role !== 'tenant' && role !== 'propertyOwner')) {
+    if (!userId || (role !== 'tenant' && role !== 'propertyOwner' && role !== 'admin')) {
       console.log('Unauthorized - userId:', userId, 'role:', role);
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
@@ -59,7 +30,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
     const { db } = await connectToDatabase();
     let property: Property | null = null;
 
-    if (role === 'tenant') {
+    if (role === 'admin') {
+      property = await db.collection<Property>('properties').findOne({
+        _id: new ObjectId(propertyId),
+      });
+    } else if (role === 'tenant') {
       const tenant = await db.collection<Tenant>('tenants').findOne({ _id: new ObjectId(userId) });
       if (!tenant || !tenant.propertyId || tenant.propertyId.toString() !== propertyId) {
         console.log('Tenant not associated with property:', propertyId);
@@ -68,7 +43,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
           { status: 403 }
         );
       }
-
       property = await db.collection<Property>('properties').findOne({
         _id: new ObjectId(propertyId),
       });
@@ -87,9 +61,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
       );
     }
 
-    // For property owners, include associated tenants with walletBalance
     let tenants: Tenant[] = [];
-    if (role === 'propertyOwner') {
+    if (role === 'propertyOwner' || role === 'admin') {
       tenants = await db
         .collection<Tenant>('tenants')
         .find({ propertyId: new ObjectId(propertyId) })
@@ -102,13 +75,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
         ...property,
         _id: property._id.toString(),
         ownerId: property.ownerId,
-        createdAt: property.createdAt,
+        createdAt: property.createdAt.toISOString(),
+        updatedAt: property.updatedAt.toISOString(),
       },
       tenants: tenants.map((tenant) => ({
         ...tenant,
         _id: tenant._id.toString(),
         propertyId: tenant.propertyId.toString(),
         walletBalance: tenant.walletBalance || 0,
+        createdAt: tenant.createdAt.toISOString(),
+        updatedAt: tenant.updatedAt?.toISOString(),
       })),
     }, { status: 200 });
   } catch (error) {
@@ -123,7 +99,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
   }
 }
 
-// PUT /api/properties/[propertyId]
 export async function PUT(request: NextRequest, context: { params: Promise<{ propertyId: string }> }) {
   try {
     const { propertyId } = await context.params;
@@ -147,7 +122,6 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pro
     const body = await request.json();
     const { name, address, unitTypes, status } = body;
 
-    // Validate request body
     if (!name || !address || !unitTypes || !status) {
       console.log('Missing required fields:', { name, address, unitTypes, status });
       return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 });
@@ -164,16 +138,19 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pro
     for (const unit of unitTypes) {
       if (
         !unit.type ||
+        !UNIT_TYPES.find((ut) => ut.type === unit.type) ||
         typeof unit.quantity !== 'number' ||
         unit.quantity < 0 ||
         typeof unit.price !== 'number' ||
         unit.price < 0 ||
         typeof unit.deposit !== 'number' ||
-        unit.deposit < 0
+        unit.deposit < 0 ||
+        !['RentCollection', 'FullManagement'].includes(unit.managementType)
       ) {
         console.log('Invalid unit type:', unit);
         return NextResponse.json({ success: false, message: 'Invalid unit type data' }, { status: 400 });
       }
+      unit.managementFee = getManagementFee(unit);
     }
 
     const { db } = await connectToDatabase();
@@ -193,12 +170,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pro
     const updateDoc: Partial<Property> = {
       name,
       address,
-      unitTypes,
+      unitTypes: unitTypes as UnitType[],
       status,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
     };
-
-    console.log('Updating property with unitTypes:', unitTypes);
 
     const result = await db.collection<Property>('properties').updateOne(
       { _id: new ObjectId(propertyId) },
@@ -230,7 +205,6 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pro
   }
 }
 
-// DELETE /api/properties/[propertyId]
 export async function DELETE(request: NextRequest, context: { params: Promise<{ propertyId: string }> }) {
   try {
     const { propertyId } = await context.params;
@@ -252,7 +226,6 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     }
 
     const { db } = await connectToDatabase();
-    // Check for associated tenants
     const tenants = await db
       .collection<Tenant>('tenants')
       .find({ propertyId: new ObjectId(propertyId) })

@@ -1,12 +1,19 @@
-import { NextResponse, NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../../lib/mongodb';
 import bcrypt from 'bcrypt';
 import { cookies } from 'next/headers';
 import { sendUpdateEmail } from '../../../../lib/email';
 import { ObjectId } from 'mongodb';
-import { Tenant, TenantRequest, UnitType } from '../../../../types/tenant';
+import { Tenant, TenantRequest, ResponseTenant } from '../../../../types/tenant';
+import { Property } from '../../../../types/property';
+import { UNIT_TYPES, getManagementFee } from '../../../../lib/unitTypes';
 
-// Validation functions
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  tenant?: ResponseTenant;
+}
+
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -15,14 +22,6 @@ function isValidPhone(phone: string): boolean {
   return /^\+?\d{10,15}$/.test(phone);
 }
 
-interface Property {
-  _id: ObjectId;
-  name: string;
-  ownerId: string;
-  unitTypes: UnitType[];
-}
-
-// GET Handler
 export async function GET(request: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
   try {
     const { tenantId } = await context.params;
@@ -38,7 +37,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ten
     const role = cookieStore.get('role')?.value;
     console.log('Cookies - userId:', userId, 'role:', role);
 
-    if (!userId || (role !== 'tenant' && role !== 'propertyOwner')) {
+    if (!userId || (role !== 'tenant' && role !== 'propertyOwner' && role !== 'admin')) {
       console.log('Unauthorized - userId:', userId, 'role:', role);
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
@@ -46,7 +45,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ten
     const { db } = await connectToDatabase();
     let tenant;
 
-    if (role === 'tenant' && userId === tenantId) {
+    if (role === 'admin') {
+      tenant = await db.collection<Tenant>('tenants').findOne({
+        _id: new ObjectId(tenantId),
+      });
+    } else if (role === 'tenant' && userId === tenantId) {
       tenant = await db.collection<Tenant>('tenants').findOne({
         _id: new ObjectId(tenantId),
       });
@@ -72,7 +75,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ten
           leaseStartDate: tenant.leaseStartDate || '',
           leaseEndDate: tenant.leaseEndDate || '',
           walletBalance: tenant.walletBalance || 0,
-          updatedAt: tenant.updatedAt || new Date().toISOString(),
+          createdAt: tenant.createdAt.toISOString(),
+          updatedAt: tenant.updatedAt?.toISOString(),
         },
       },
       { status: 200 }
@@ -86,7 +90,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ten
   }
 }
 
-// PUT Handler
 export async function PUT(req: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
   try {
     const { tenantId } = await context.params;
@@ -110,7 +113,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
     const body: TenantRequest = await req.json();
     const { db } = await connectToDatabase();
 
-    // Validate required fields
     if (
       !body.name ||
       !body.email ||
@@ -152,7 +154,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       return NextResponse.json({ success: false, message: 'Wallet balance must be a non-negative number' }, { status: 400 });
     }
 
-    // Check if tenant exists and belongs to the owner
     const existingTenant = await db.collection<Tenant>('tenants').findOne({
       _id: new ObjectId(tenantId),
       ownerId: userId,
@@ -163,7 +164,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       return NextResponse.json({ success: false, message: 'Tenant not found or not authorized' }, { status: 404 });
     }
 
-    // Check for email uniqueness (excluding current tenant)
     const emailExists = await db.collection<Tenant>('tenants').findOne({
       email: body.email,
       _id: { $ne: new ObjectId(tenantId) },
@@ -173,7 +173,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       return NextResponse.json({ success: false, message: 'Email already exists' }, { status: 400 });
     }
 
-    // Validate property ownership
     const property = await db.collection<Property>('properties').findOne({
       _id: new ObjectId(body.propertyId),
       ownerId: userId,
@@ -183,25 +182,46 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       return NextResponse.json({ success: false, message: 'Invalid property' }, { status: 400 });
     }
 
-    // Validate unit type and price/deposit
     const unit = property.unitTypes.find((u) => u.type === body.unitType);
     if (!unit || unit.price !== body.price || unit.deposit !== body.deposit) {
       console.log('Invalid unit or price/deposit mismatch:', body.unitType);
       return NextResponse.json({ success: false, message: 'Invalid unit or price/deposit mismatch' }, { status: 400 });
     }
 
-    // Check for house number uniqueness (excluding current tenant)
-    const houseNumberExists = await db.collection<Tenant>('tenants').findOne({
-      propertyId: new ObjectId(body.propertyId),
-      houseNumber: body.houseNumber,
-      _id: { $ne: new ObjectId(tenantId) },
-    });
-    if (houseNumberExists) {
-      console.log('House number already in use:', body.houseNumber);
-      return NextResponse.json({ success: false, message: 'House number already in use for this property' }, { status: 400 });
+    let managementFee: number | string | undefined;
+    if (
+      existingTenant.unitType !== body.unitType ||
+      existingTenant.propertyId.toString() !== body.propertyId
+    ) {
+      const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+      if (!user || user.paymentStatus !== 'active' || user.walletBalance < 1000) {
+        console.log('Invalid payment status or insufficient wallet balance:', {
+          paymentStatus: user?.paymentStatus,
+          walletBalance: user?.walletBalance,
+        });
+        return NextResponse.json(
+          { success: false, message: 'Active payment status and minimum wallet balance of Ksh 1,000 required' },
+          { status: 402 }
+        );
+      }
+
+      managementFee = getManagementFee({ type: body.unitType, managementType: unit.managementType, quantity: unit.quantity });
+      if (managementFee === "Call for pricing") {
+        console.log('Cannot update tenant due to undefined management fee:', body.unitType);
+        return NextResponse.json(
+          { success: false, message: 'Cannot update tenant: Management fee requires pricing confirmation. Please contact support.' },
+          { status: 400 }
+        );
+      }
+      if (typeof managementFee === "number" && user.walletBalance < managementFee) {
+        console.log('Insufficient wallet balance for management fee:', { walletBalance: user.walletBalance, managementFee });
+        return NextResponse.json(
+          { success: false, message: `Insufficient wallet balance. Required: Ksh ${managementFee}` },
+          { status: 402 }
+        );
+      }
     }
 
-    // Prepare update data
     const updateData: Partial<Tenant> = {
       name: body.name,
       email: body.email,
@@ -217,7 +237,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       paymentStatus: body.paymentStatus ?? existingTenant.paymentStatus,
       ownerId: userId,
       createdAt: existingTenant.createdAt,
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date(),
       walletBalance: body.walletBalance !== undefined ? body.walletBalance : existingTenant.walletBalance,
     };
 
@@ -225,7 +245,20 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       updateData.password = await bcrypt.hash(body.password, 10);
     }
 
-    // Log wallet balance change if applicable
+    if (managementFee && typeof managementFee === "number") {
+      await db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
+        { $inc: { walletBalance: -managementFee } }
+      );
+      await db.collection('walletTransactions').insertOne({
+        userId,
+        type: 'debit',
+        amount: managementFee,
+        createdAt: new Date().toISOString(),
+        description: `Tenant update fee for ${body.unitType} in property ${property.name}`,
+      });
+    }
+
     if (body.walletBalance !== undefined && body.walletBalance !== existingTenant.walletBalance) {
       console.log(`Wallet balance updated for tenant ${tenantId}: ${existingTenant.walletBalance} -> ${body.walletBalance}`);
       await db.collection('walletTransactions').insertOne({
@@ -237,7 +270,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       });
     }
 
-    // Update tenant
     const result = await db.collection<Tenant>('tenants').updateOne(
       { _id: new ObjectId(tenantId) },
       { $set: updateData }
@@ -248,7 +280,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
       return NextResponse.json({ success: false, message: 'Tenant not found' }, { status: 404 });
     }
 
-    // Send update email
     await sendUpdateEmail({
       to: body.email,
       name: body.name,
@@ -264,6 +295,8 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
           ...updateData,
           _id: tenantId,
           propertyId: body.propertyId,
+          createdAt: (updateData.createdAt as Date).toISOString(), // Assert createdAt is defined
+          updatedAt: (updateData.updatedAt as Date).toISOString(), // Assert updatedAt is defined
           walletBalance: updateData.walletBalance || 0,
         },
       },
@@ -278,7 +311,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ tenantI
   }
 }
 
-// DELETE Handler
 export async function DELETE(req: NextRequest, context: { params: Promise<{ tenantId: string }> }) {
   try {
     const { tenantId } = await context.params;
@@ -301,7 +333,6 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ tena
 
     const { db } = await connectToDatabase();
 
-    // Check if tenant exists and belongs to the owner
     const tenant = await db.collection<Tenant>('tenants').findOne({
       _id: new ObjectId(tenantId),
       ownerId: userId,
@@ -312,7 +343,6 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ tena
       return NextResponse.json({ success: false, message: 'Tenant not found or not authorized' }, { status: 404 });
     }
 
-    // Delete tenant
     const result = await db.collection<Tenant>('tenants').deleteOne({
       _id: new ObjectId(tenantId),
       ownerId: userId,
@@ -323,7 +353,6 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ tena
       return NextResponse.json({ success: false, message: 'Tenant not found or not authorized' }, { status: 404 });
     }
 
-    // Delete related wallet transactions
     const walletDeleteResult = await db.collection('walletTransactions').deleteMany({
       tenantId,
     });
