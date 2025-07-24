@@ -2,29 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 
-// Explicitly define the context type for dynamic routes
-type RouteContext = {
-  params: {
-    id: string;
-  };
-};
-
-export async function GET(request: NextRequest, context: RouteContext) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function GET(request: NextRequest, context: any) {
+  const { id } = context.params as { id: string };
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // Validate ObjectId
-    if (!ObjectId.isValid(context.params.id)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
     }
 
     const { db }: { db: Db } = await connectToDatabase();
     const property = await db
       .collection("properties")
-      .findOne({ _id: new ObjectId(context.params.id) });
+      .findOne({ _id: new ObjectId(id) });
 
     if (!property) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
@@ -43,15 +37,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function PUT(request: NextRequest, context: RouteContext) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function PUT(request: NextRequest, context: any) {
+  const { id } = context.params as { id: string };
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // Validate ObjectId
-    if (!ObjectId.isValid(context.params.id)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
     }
 
@@ -67,7 +62,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const result = await db
       .collection("properties")
       .findOneAndUpdate(
-        { _id: new ObjectId(context.params.id) },
+        { _id: new ObjectId(id) },
         { $set: updateData },
         { returnDocument: "after" }
       );
@@ -89,22 +84,23 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function DELETE(request: NextRequest, context: any) {
+  const { id } = context.params as { id: string };
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // Validate ObjectId
-    if (!ObjectId.isValid(context.params.id)) {
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
     }
 
     const { db }: { db: Db } = await connectToDatabase();
     const result = await db
       .collection("properties")
-      .deleteOne({ _id: new ObjectId(context.params.id) });
+      .deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });

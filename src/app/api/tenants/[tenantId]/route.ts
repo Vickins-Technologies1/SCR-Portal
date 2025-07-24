@@ -40,12 +40,14 @@ interface Tenant {
   walletBalance: number;
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { tenantId: string } }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function PUT(request: NextRequest, context: any) {
   try {
+    const { tenantId } = context.params as { tenantId: string };
     const cookieStore = request.cookies;
     const userId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
-    console.log("PUT /api/tenants/[tenantId] - Cookies - userId:", userId, "role:", role, "tenantId:", params.tenantId);
+    console.log("PUT /api/tenants/[tenantId] - Cookies - userId:", userId, "role:", role, "tenantId:", tenantId);
 
     if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
       console.log("Unauthorized - userId:", userId, "role:", role);
@@ -55,7 +57,6 @@ export async function PUT(request: NextRequest, { params }: { params: { tenantId
       );
     }
 
-    const tenantId = params.tenantId;
     if (!tenantId || !ObjectId.isValid(tenantId)) {
       console.log("Validation failed - Invalid or missing tenantId:", tenantId);
       return NextResponse.json(
@@ -101,30 +102,26 @@ export async function PUT(request: NextRequest, { params }: { params: { tenantId
     const updateData: Partial<Tenant> = {};
 
     // Define this before the loop
-function setUpdateField<K extends keyof Tenant>(field: K, value: Tenant[K]) {
-  updateData[field] = value;
-}
-
-for (const field of updatableFields) {
-  const value = requestData[field];
-
-  if (value !== undefined) {
-    if (field === "price" || field === "deposit") {
-      const numericValue = typeof value === "number" ? value : Number(value);
-      if (!isNaN(numericValue)) {
-        setUpdateField(field, numericValue as Tenant[typeof field]);
-      }
-    } else if (field === "password" && value === "") {
-      continue; // Skip empty passwords
-    } else {
-      setUpdateField(field, value as Tenant[typeof field]);
+    function setUpdateField<K extends keyof Tenant>(field: K, value: Tenant[K]) {
+      updateData[field] = value;
     }
-  }
-}
 
+    for (const field of updatableFields) {
+      const value = requestData[field];
 
-
-
+      if (value !== undefined) {
+        if (field === "price" || field === "deposit") {
+          const numericValue = typeof value === "number" ? value : Number(value);
+          if (!isNaN(numericValue)) {
+            setUpdateField(field, numericValue as Tenant[typeof field]);
+          }
+        } else if (field === "password" && value === "") {
+          continue; // Skip empty passwords
+        } else {
+          setUpdateField(field, value as Tenant[typeof field]);
+        }
+      }
+    }
 
     // Validate email format if provided
     if (updateData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updateData.email)) {

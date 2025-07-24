@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 import { Property } from '@/types/property';
 import { Tenant } from '@/types/tenant';
 
-// Utility to parse cookies manually (simulates js-cookie behavior on server)
+// Utility to parse cookies manually
 function parseCookies(req: NextRequest) {
   const cookie = req.headers.get('cookie') || '';
   const cookieObj: Record<string, string> = {};
@@ -15,14 +15,12 @@ function parseCookies(req: NextRequest) {
   return cookieObj;
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function GET(request: NextRequest, context: any) {
   try {
-    const { id } = params;
+    const { propertyId } = context.params as { propertyId: string };
 
-    if (!ObjectId.isValid(id)) {
+    if (!ObjectId.isValid(propertyId)) {
       return NextResponse.json({ success: false, message: 'Invalid property ID' }, { status: 400 });
     }
 
@@ -34,7 +32,7 @@ export async function GET(
     }
 
     const { db } = await connectToDatabase();
-    const property = await db.collection<Property>('properties').findOne({ _id: new ObjectId(id) });
+    const property = await db.collection<Property>('properties').findOne({ _id: new ObjectId(propertyId) });
 
     if (!property) {
       return NextResponse.json({ success: false, message: 'Property not found' }, { status: 404 });
@@ -42,7 +40,7 @@ export async function GET(
 
     const tenants = await db
       .collection<Tenant>('tenants')
-      .find({ propertyId: new ObjectId(id) })
+      .find({ propertyId: new ObjectId(propertyId) })
       .toArray();
 
     return NextResponse.json({
@@ -64,7 +62,7 @@ export async function GET(
       })),
     });
   } catch (error) {
-    console.error('GET /api/admin/properties/[id] error:', error);
+    console.error('GET /api/properties/[propertyId] error:', error);
     return NextResponse.json({ success: false, message: 'Internal server error' }, { status: 500 });
   }
 }

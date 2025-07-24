@@ -2,17 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function GET(request: NextRequest, context: any) {
+  const { id } = context.params as { id: string };
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ success: false, message: "Invalid user ID" }, { status: 400 });
+    }
+
     const { db }: { db: Db } = await connectToDatabase();
     const owner = await db
       .collection("propertyOwners")
-      .findOne({ _id: new ObjectId(params.id) });
+      .findOne({ _id: new ObjectId(id) });
 
     if (!owner) {
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
@@ -32,13 +38,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function PUT(request: NextRequest, context: any) {
+  const { id } = context.params as { id: string };
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ success: false, message: "Invalid user ID" }, { status: 400 });
+    }
+
     const { name, email, phone } = await request.json();
     const { db }: { db: Db } = await connectToDatabase();
 
@@ -52,7 +64,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const result = await db
       .collection("propertyOwners")
       .findOneAndUpdate(
-        { _id: new ObjectId(params.id) },
+        { _id: new ObjectId(id) },
         { $set: updateData },
         { returnDocument: "after" }
       );
@@ -75,17 +87,23 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function DELETE(request: NextRequest, context: any) {
+  const { id } = context.params as { id: string };
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ success: false, message: "Invalid user ID" }, { status: 400 });
+    }
+
     const { db }: { db: Db } = await connectToDatabase();
     const result = await db
       .collection("propertyOwners")
-      .deleteOne({ _id: new ObjectId(params.id) });
+      .deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
