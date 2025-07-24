@@ -1,30 +1,114 @@
-// src/app/api/admin/properties/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
-import { Db } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 
-export async function GET(request: NextRequest) {
+type RouteContext = {
+  params: {
+    id: string;
+  };
+};
+
+export async function GET(request: NextRequest, context: RouteContext) {
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    if (!ObjectId.isValid(context.params.id)) {
+      return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
+    }
+
     const { db }: { db: Db } = await connectToDatabase();
-    const properties = await db.collection("properties").find().toArray();
-    const count = await db.collection("properties").countDocuments();
+    const property = await db
+      .collection("properties")
+      .findOne({ _id: new ObjectId(context.params.id) });
+
+    if (!property) {
+      return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
+    }
+
     return NextResponse.json({
       success: true,
-      properties: properties.map((p) => ({
-        ...p,
-        _id: p._id.toString(),
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-      })),
-      count,
+      property: {
+        ...property,
+        _id: property._id.toString(),
+      },
     });
-  } catch (error: any) {
-    console.error("Properties fetch error:", error);
-    return NextResponse.json({ success: false, message: "Failed to fetch properties" }, { status: 500 });
+  } catch (error: unknown) {
+    console.error("Property fetch error:", error);
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest, context: RouteContext) {
+  const role = request.cookies.get("role")?.value;
+  if (role !== "admin") {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    if (!ObjectId.isValid(context.params.id)) {
+      return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
+    }
+
+    const { name, ownerId } = await request.json();
+    const { db }: { db: Db } = await connectToDatabase();
+
+    const updateData = {
+      ...(name && { name }),
+      ...(ownerId && { ownerId }),
+      updatedAt: new Date(),
+    };
+
+    const result = await db
+      .collection("properties")
+      .findOneAndUpdate(
+        { _id: new ObjectId(context.params.id) },
+        { $set: updateData },
+        { returnDocument: "after" }
+      );
+
+    if (!result) {
+      return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      property: {
+        ...result,
+        _id: result._id.toString(),
+      },
+    });
+  } catch (error: unknown) {
+    console.error("Property update error:", error);
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const role = request.cookies.get("role")?.value;
+  if (role !== "admin") {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    if (!ObjectId.isValid(context.params.id)) {
+      return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
+    }
+
+    const { db }: { db: Db } = await connectToDatabase();
+    const result = await db
+      .collection("properties")
+      .deleteOne({ _id: new ObjectId(context.params.id) });
+
+    if (result.deletedCount === 0) {
+      return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: "Property deleted successfully" });
+  } catch (error: unknown) {
+    console.error("Property delete error:", error);
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }

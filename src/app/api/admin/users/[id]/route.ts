@@ -26,8 +26,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         createdAt: owner.createdAt instanceof Date ? owner.createdAt.toISOString() : String(owner.createdAt),
       },
     });
-  } catch (error: any) {
-    console.error("User fetch error:", error);
+  } catch (error: unknown) {
+    console.error("User fetch error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
@@ -69,8 +69,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         createdAt: result.createdAt instanceof Date ? result.createdAt.toISOString() : String(result.createdAt),
       },
     });
-  } catch (error: any) {
-    console.error("User update error:", error);
+  } catch (error: unknown) {
+    console.error("User update error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
@@ -92,8 +92,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     return NextResponse.json({ success: true, message: "User deleted successfully" });
-  } catch (error: any) {
-    console.error("User delete error:", error);
+  } catch (error: unknown) {
+    console.error("User delete error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }

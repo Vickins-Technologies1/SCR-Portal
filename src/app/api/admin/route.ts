@@ -7,14 +7,6 @@ interface User {
   name: string;
   email: string;
   role: string;
-  // Add other fields as needed based on your users collection schema
-}
-
-interface AdminResponse {
-  success: boolean;
-  admins?: { _id: string; name: string; email: string }[];
-  count?: number;
-  message?: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -42,9 +34,9 @@ export async function GET(request: NextRequest) {
       })),
       count,
     }, { status: 200 });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Admins fetch error:", {
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
     return NextResponse.json({ success: false, message: "Failed to fetch admins" }, { status: 500 });

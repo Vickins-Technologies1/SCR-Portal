@@ -174,8 +174,8 @@ export default function ReportsAndInvoicesPage() {
             : new Date(b[key]).getTime() - new Date(a[key]).getTime();
         }
         return direction === "asc"
-          ? a[key].localeCompare(b[key])
-          : b[key].localeCompare(a[key]);
+          ? String(a[key]).localeCompare(String(b[key]))
+          : String(b[key]).localeCompare(String(a[key]));
       });
       setReports(sortedReports);
       return { key, direction };
@@ -196,8 +196,8 @@ export default function ReportsAndInvoicesPage() {
             : new Date(b[key]).getTime() - new Date(a[key]).getTime();
         }
         return direction === "asc"
-          ? a[key].localeCompare(b[key])
-          : b[key].localeCompare(a[key]);
+          ? String(a[key]).localeCompare(String(b[key]))
+          : String(b[key]).localeCompare(String(a[key]));
       });
       setInvoices(sortedInvoices);
       return { key, direction };
@@ -205,7 +205,7 @@ export default function ReportsAndInvoicesPage() {
   }, [invoices]);
 
   // Get sort icon for table headers
-  const getSortIcon = useCallback((key: string, sortConfig: SortConfig<any>) => {
+  const getSortIcon = useCallback(<T extends Report | Invoice>(key: keyof T, sortConfig: SortConfig<T>) => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
       <span className="inline ml-1">↑</span>

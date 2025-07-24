@@ -1,15 +1,7 @@
-// src/app/api/admin/tenants/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
-import { Db, ObjectId } from "mongodb";
-import { Tenant, ResponseTenant } from "../../../../types/tenant";
-
-interface ApiResponse {
-  success: boolean;
-  message?: string;
-  tenants?: ResponseTenant[];
-  count?: number;
-}
+import { Db } from "mongodb";
+import { Tenant } from "../../../../types/tenant";
 
 export async function GET(request: NextRequest) {
   const role = request.cookies.get("role")?.value;
@@ -34,10 +26,10 @@ export async function GET(request: NextRequest) {
       })),
       count: tenants.length,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Tenants fetch error:", {
-      message: error.message,
-      stack: error.stack,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     });
     return NextResponse.json({ success: false, message: "Failed to fetch tenants" }, { status: 500 });
   }

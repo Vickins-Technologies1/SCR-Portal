@@ -74,10 +74,10 @@ export async function GET(request: NextRequest) {
       },
       { status: 200 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/tenants:", {
-      message: error.message || "Unknown error",
-      stack: error.stack,
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
     });
     return NextResponse.json(
       { success: false, message: "Internal server error" },
@@ -336,10 +336,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in POST /api/tenants:", {
-      message: error.message || "Unknown error",
-      stack: error.stack,
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
     });
     return NextResponse.json(
       { success: false, message: "Internal server error" },

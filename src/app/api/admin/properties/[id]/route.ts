@@ -2,17 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+// Explicitly define the context type for dynamic routes
+type RouteContext = {
+  params: {
+    id: string;
+  };
+};
+
+export async function GET(request: NextRequest, context: RouteContext) {
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    // Validate ObjectId
+    if (!ObjectId.isValid(context.params.id)) {
+      return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
+    }
+
     const { db }: { db: Db } = await connectToDatabase();
     const property = await db
       .collection("properties")
-      .findOne({ _id: new ObjectId(params.id) });
+      .findOne({ _id: new ObjectId(context.params.id) });
 
     if (!property) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
@@ -25,19 +37,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         _id: property._id.toString(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Property fetch error:", error);
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, context: RouteContext) {
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    // Validate ObjectId
+    if (!ObjectId.isValid(context.params.id)) {
+      return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
+    }
+
     const { name, ownerId } = await request.json();
     const { db }: { db: Db } = await connectToDatabase();
 
@@ -50,7 +67,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const result = await db
       .collection("properties")
       .findOneAndUpdate(
-        { _id: new ObjectId(params.id) },
+        { _id: new ObjectId(context.params.id) },
         { $set: updateData },
         { returnDocument: "after" }
       );
@@ -66,30 +83,35 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         _id: result._id.toString(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Property update error:", error);
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   const role = request.cookies.get("role")?.value;
   if (role !== "admin") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    // Validate ObjectId
+    if (!ObjectId.isValid(context.params.id)) {
+      return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
+    }
+
     const { db }: { db: Db } = await connectToDatabase();
     const result = await db
       .collection("properties")
-      .deleteOne({ _id: new ObjectId(params.id) });
+      .deleteOne({ _id: new ObjectId(context.params.id) });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, message: "Property deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Property delete error:", error);
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -162,6 +161,29 @@ export default function InvoicesPage() {
     }
   }, [propertyOwners, properties]);
 
+  const handleStatusChange = useCallback(async (invoiceId: string, newStatus: "pending" | "paid" | "overdue") => {
+    try {
+      const res = await fetch("/api/invoices/update-status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ invoiceId, status: newStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setInvoices((prev) =>
+          prev.map((invoice) =>
+            invoice._id === invoiceId ? { ...invoice, status: newStatus } : invoice
+          )
+        );
+      } else {
+        setError(data.message || "Failed to update invoice status.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -212,13 +234,19 @@ export default function InvoicesPage() {
                     <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("unitType")}>
                       <span className="font-medium">Unit:</span> {i.unitType} {getSortIcon("unitType")}
                     </p>
-                    <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("status")}>
-                      <span className="font-medium">Status:</span>{" "}
-                      <span className={i.status === "paid" ? "text-green-600" : i.status === "overdue" ? "text-red-600" : "text-yellow-600"}>
-                        {i.status}
-                      </span>{" "}
+                    <div className="text-sm text-gray-600 mb-1 flex items-center">
+                      <span className="font-medium mr-2">Status:</span>
+                      <select
+                        value={i.status}
+                        onChange={(e) => handleStatusChange(i._id, e.target.value as "pending" | "paid" | "overdue")}
+                        className={`text-sm p-1 rounded border ${i.status === "paid" ? "text-green-600 border-green-600" : i.status === "overdue" ? "text-red-600 border-red-600" : "text-yellow-600 border-yellow-600"} bg-white`}
+                      >
+                        <option value="pending" className="text-yellow-600">pending</option>
+                        <option value="paid" className="text-green-600">paid</option>
+                        <option value="overdue" className="text-red-600">overdue</option>
+                      </select>
                       {getSortIcon("status")}
-                    </p>
+                    </div>
                     <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("createdAt")}>
                       <span className="font-medium">Created:</span> {new Date(i.createdAt).toLocaleDateString()} {getSortIcon("createdAt")}
                     </p>

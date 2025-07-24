@@ -24,40 +24,39 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-useEffect(() => {
-  const checkCookies = () => {
-    const uid = Cookies.get("userId");
-    const userRole = Cookies.get("role");
-    console.log("Checking cookies in AdminDashboard:", { userId: uid, role: userRole });
+  useEffect(() => {
+    const checkCookies = () => {
+      const uid = Cookies.get("userId");
+      const userRole = Cookies.get("role");
+      console.log("Checking cookies in AdminDashboard:", { userId: uid, role: userRole });
 
-    if (!uid || userRole !== "admin") {
-      console.log("Redirecting to /admin/login due to invalid cookies:", { userId: uid, role: userRole });
-      setError("Unauthorized. Please log in as an admin.");
-      router.push("/admin/login");
-    } else {
-      setUserId(uid);
-      setRole(userRole);
-    }
-  };
+      if (!uid || userRole !== "admin") {
+        console.log("Redirecting to /admin/login due to invalid cookies:", { userId: uid, role: userRole });
+        setError("Unauthorized. Please log in as an admin.");
+        router.push("/admin/login");
+      } else {
+        setUserId(uid);
+        setRole(userRole);
+      }
+    };
 
-  checkCookies();
+    checkCookies();
 
-  // Poll for cookies in case they are set asynchronously
-  const cookiePoll = setInterval(() => {
-    const uid = Cookies.get("userId");
-    const userRole = Cookies.get("role");
-    if (uid && userRole === "admin") {
-      console.log("Cookies detected on poll:", { userId: uid, role: userRole });
-      setUserId(uid);
-      setRole(userRole);
-      clearInterval(cookiePoll);
-    }
-  }, 100);
+    // Poll for cookies in case they are set asynchronously
+    const cookiePoll = setInterval(() => {
+      const uid = Cookies.get("userId");
+      const userRole = Cookies.get("role");
+      if (uid && userRole === "admin") {
+        console.log("Cookies detected on poll:", { userId: uid, role: userRole });
+        setUserId(uid);
+        setRole(userRole);
+        clearInterval(cookiePoll);
+      }
+    }, 100);
 
-  // Cleanup interval on unmount
-  return () => clearInterval(cookiePoll);
-}, [router]);
-
+    // Cleanup interval on unmount
+    return () => clearInterval(cookiePoll);
+  }, [router]);
 
   const fetchCounts = useCallback(async () => {
     setIsLoading(true);
@@ -70,7 +69,7 @@ useEffect(() => {
       ]);
 
       const responses = [usersRes, propertiesRes, paymentsRes, invoicesRes];
-      const endpoints = ["/api/admin/users", "/api/admin/properties", "/api/admin/payments", "/api/admin/invoices"];
+      const endpoints = ["/api/admin/users", "/api/admin/properties", "/api/payments", "/api/invoices"];
       responses.forEach((res, index) => {
         if (!res.ok) {
           console.error(`Failed to fetch ${endpoints[index]}: ${res.status} ${res.statusText}`);
@@ -104,8 +103,8 @@ useEffect(() => {
         ].filter(msg => msg).join("; ");
         setError(`Failed to fetch dashboard data: ${errors || "Unknown error"}`);
       }
-    } catch (error: any) {
-      console.error("Fetch counts error:", error);
+    } catch (error: unknown) {
+      console.error("Fetch counts error:", error instanceof Error ? error.message : String(error));
       setError("Failed to connect to the server. Please try again later.");
     } finally {
       setIsLoading(false);
@@ -166,7 +165,7 @@ useEffect(() => {
                 <h3 className="text-lg font-semibold">Invoices</h3>
                 <p className="text-2xl font-bold">{counts.invoices}</p>
               </div>
-               <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in" style={{ animationDelay: "500ms" }}>
+              <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in" style={{ animationDelay: "500ms" }}>
                 <Shield className="h-8 w-8 mb-2" />
                 <h3 className="text-lg font-semibold">Admins</h3>
                 <p className="text-2xl font-bold">{counts.admins}</p>

@@ -128,10 +128,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     console.log("GET /api/reports - Completed in", Date.now() - startTime, "ms");
 
     return NextResponse.json({ success: true, data: reports }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching reports:", {
-      message: error?.message || "Unknown error",
-      stack: error?.stack,
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
     });
 
     return NextResponse.json(

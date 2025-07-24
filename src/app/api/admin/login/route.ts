@@ -82,10 +82,10 @@ export async function POST(request: Request) {
     console.log("Cookies set in response:", { userId: user._id.toString(), role: user.role, options: cookieOptions });
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Login error:", {
-      message: error.message,
-      stack: error.stack,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
       email: email ? email.trim().toLowerCase() : "Not provided"
     });
     return NextResponse.json({ success: false, message: "Server error. Please try again later." }, { status: 500 });

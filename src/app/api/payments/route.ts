@@ -17,6 +17,15 @@ const connectToDatabase = async () => {
 };
 
 // Interfaces
+interface UnitType {
+  type: string;
+  managementFee: number;
+  price?: number;
+  deposit?: number;
+  managementType?: "RentCollection" | "FullManagement";
+  quantity?: number;
+}
+
 interface Tenant {
   _id: ObjectId;
   name: string;
@@ -198,7 +207,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: false, message: "Property not found or not authorized" }, { status: 404 });
         }
 
-        const unit = property.unitTypes.find((u: any) => u.type === unitType);
+        const unit = property.unitTypes.find((u: UnitType) => u.type === unitType);
         if (!unit || typeof unit.managementFee !== "number" || unit.managementFee !== amount) {
           console.log("Invalid unit type or management fee:", { unitType, amount });
           return NextResponse.json({ success: false, message: "Invalid unit type or management fee" }, { status: 400 });

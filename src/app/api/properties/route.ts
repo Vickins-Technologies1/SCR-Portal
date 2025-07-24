@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
         { status: 200 }
       );
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching properties:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate unit types and assign management fees
-    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: any) => {
+    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: UnitType) => {
       const validUnitType = UNIT_TYPES.find((ut) => ut.type === unit.type);
       if (
         !unit.type ||
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error creating property:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,

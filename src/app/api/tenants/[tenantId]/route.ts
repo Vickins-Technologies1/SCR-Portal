@@ -40,141 +40,6 @@ interface Tenant {
   walletBalance: number;
 }
 
-export async function GET(request: NextRequest, { params }: { params: { tenantId: string } }) {
-  try {
-    const cookieStore = request.cookies;
-    const userId = cookieStore.get("userId")?.value;
-    const role = cookieStore.get("role")?.value;
-    console.log("GET /api/tenants/[tenantId] - Cookies - userId:", userId, "role:", role, "tenantId:", params.tenantId);
-
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
-      console.log("Unauthorized - userId:", userId, "role:", role);
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in as a property owner." },
-        { status: 401 }
-      );
-    }
-
-    const tenantId = params.tenantId;
-    if (!tenantId || !ObjectId.isValid(tenantId)) {
-      console.log("Validation failed - Invalid or missing tenantId:", tenantId);
-      return NextResponse.json(
-        { success: false, message: "Invalid or missing tenant ID" },
-        { status: 400 }
-      );
-    }
-
-    const { db }: { db: Db } = await connectToDatabase();
-    console.log("GET /api/tenants/[tenantId] - Connected to database: rentaldb, collection: tenants");
-
-    const tenant = await db.collection<Tenant>("tenants").findOne({
-      _id: new ObjectId(tenantId),
-      ownerId: userId,
-    });
-
-    if (!tenant) {
-      console.log("Tenant not found or not owned by user:", tenantId);
-      return NextResponse.json(
-        { success: false, message: "Tenant not found or not owned by user" },
-        { status: 404 }
-      );
-    }
-
-    console.log("Tenant fetched:", tenantId);
-    return NextResponse.json(
-      {
-        success: true,
-        tenant: {
-          ...tenant,
-          _id: tenant._id.toString(),
-          createdAt: tenant.createdAt.toISOString(),
-          updatedAt: tenant.updatedAt?.toISOString(),
-          walletBalance: tenant.walletBalance ?? 0,
-        },
-      },
-      { status: 200 }
-    );
-  } catch (error: any) {
-    console.error("Error in GET /api/tenants/[tenantId]:", {
-      message: error.message || "Unknown error",
-      stack: error.stack,
-    });
-    return NextResponse.json(
-      { success: false, message: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(request: NextRequest, { params }: { params: { tenantId: string } }) {
-  try {
-    const cookieStore = request.cookies;
-    const userId = cookieStore.get("userId")?.value;
-    const role = cookieStore.get("role")?.value;
-    console.log("DELETE /api/tenants/[tenantId] - Cookies - userId:", userId, "role:", role, "tenantId:", params.tenantId);
-
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
-      console.log("Unauthorized - userId:", userId, "role:", role);
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in as a property owner." },
-        { status: 401 }
-      );
-    }
-
-    const tenantId = params.tenantId;
-    if (!tenantId || !ObjectId.isValid(tenantId)) {
-      console.log("Validation failed - Invalid or missing tenantId:", tenantId);
-      return NextResponse.json(
-        { success: false, message: "Invalid or missing tenant ID" },
-        { status: 400 }
-      );
-    }
-
-    const { db }: { db: Db } = await connectToDatabase();
-    console.log("DELETE /api/tenants/[tenantId] - Connected to database: rentaldb, collection: tenants");
-
-    const tenant = await db.collection<Tenant>("tenants").findOne({
-      _id: new ObjectId(tenantId),
-      ownerId: userId,
-    });
-
-    if (!tenant) {
-      console.log("Tenant not found or not owned by user:", tenantId);
-      return NextResponse.json(
-        { success: false, message: "Tenant not found or not owned by user" },
-        { status: 404 }
-      );
-    }
-
-    const result = await db.collection<Tenant>("tenants").deleteOne({
-      _id: new ObjectId(tenantId),
-    });
-
-    if (result.deletedCount === 0) {
-      console.log("Failed to delete tenant:", tenantId);
-      return NextResponse.json(
-        { success: false, message: "Failed to delete tenant" },
-        { status: 500 }
-      );
-    }
-
-    console.log("Tenant deleted:", { tenantId });
-    return NextResponse.json(
-      { success: true, message: "Tenant deleted successfully" },
-      { status: 200 }
-    );
-  } catch (error: any) {
-    console.error("Error in DELETE /api/tenants/[tenantId]:", {
-      message: error.message || "Unknown error",
-      stack: error.stack,
-    });
-    return NextResponse.json(
-      { success: false, message: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
-
 export async function PUT(request: NextRequest, { params }: { params: { tenantId: string } }) {
   try {
     const cookieStore = request.cookies;
@@ -218,8 +83,8 @@ export async function PUT(request: NextRequest, { params }: { params: { tenantId
       );
     }
 
-    // Validate updated fields
-    const updatableFields = [
+    // Define updatable fields that exist in both Tenant and TenantRequest
+    const updatableFields: Array<keyof Tenant & keyof TenantRequest> = [
       "name",
       "email",
       "phone",
@@ -234,11 +99,32 @@ export async function PUT(request: NextRequest, { params }: { params: { tenantId
     ];
 
     const updateData: Partial<Tenant> = {};
-    for (const field of updatableFields) {
-      if (requestData[field as keyof TenantRequest] !== undefined) {
-        updateData[field as keyof Tenant] = requestData[field as keyof TenantRequest] as any;
+
+    // Define this before the loop
+function setUpdateField<K extends keyof Tenant>(field: K, value: Tenant[K]) {
+  updateData[field] = value;
+}
+
+for (const field of updatableFields) {
+  const value = requestData[field];
+
+  if (value !== undefined) {
+    if (field === "price" || field === "deposit") {
+      const numericValue = typeof value === "number" ? value : Number(value);
+      if (!isNaN(numericValue)) {
+        setUpdateField(field, numericValue as Tenant[typeof field]);
       }
+    } else if (field === "password" && value === "") {
+      continue; // Skip empty passwords
+    } else {
+      setUpdateField(field, value as Tenant[typeof field]);
     }
+  }
+}
+
+
+
+
 
     // Validate email format if provided
     if (updateData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updateData.email)) {
@@ -322,8 +208,8 @@ export async function PUT(request: NextRequest, { params }: { params: { tenantId
     }
 
     // Ensure role remains "tenant" if provided
-    if (updateData.role && updateData.role !== "tenant") {
-      console.log("Validation failed - Invalid role:", updateData.role);
+    if (requestData.role && requestData.role !== "tenant") {
+      console.log("Validation failed - Invalid role:", requestData.role);
       return NextResponse.json(
         { success: false, message: "Role must be 'tenant'" },
         { status: 400 }
@@ -369,10 +255,10 @@ export async function PUT(request: NextRequest, { params }: { params: { tenantId
       },
       { status: 200 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in PUT /api/tenants/[tenantId]:", {
-      message: error.message || "Unknown error",
-      stack: error.stack,
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
     });
     return NextResponse.json(
       { success: false, message: "Internal server error" },

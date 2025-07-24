@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
       })),
       count,
     });
-  } catch (error: any) {
-    console.error("Property owners fetch error:", error);
+  } catch (error: unknown) {
+    console.error("Property owners fetch error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ success: false, message: "Failed to fetch property owners" }, { status: 500 });
   }
 }

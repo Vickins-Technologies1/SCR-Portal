@@ -101,7 +101,7 @@ export default function PaymentsPage() {
       ]);
 
       const responses = [paymentsRes, usersRes, propertiesRes];
-      const endpoints = ["/api/admin/payments", "/api/admin/users", "/api/admin/properties"];
+      const endpoints = ["/api/payments", "/api/admin/users", "/api/admin/properties"];
       responses.forEach((res, index) => {
         if (!res.ok) {
           console.error(`Failed to fetch ${endpoints[index]}: ${res.status} ${res.statusText}`);
@@ -128,8 +128,8 @@ export default function PaymentsPage() {
         ].filter((msg) => msg).join("; ");
         setError(`Failed to fetch data: ${errors || "Unknown error"}`);
       }
-    } catch (error: any) {
-      console.error("Fetch data error:", error);
+    } catch (error: unknown) {
+      console.error("Fetch data error:", error instanceof Error ? error.message : String(error));
       setError("Failed to connect to the server. Please try again later.");
     } finally {
       setIsLoading(false);

@@ -87,7 +87,7 @@ export default function TenantsPage() {
     setRole(userRole || null);
     if (!uid || userRole !== "propertyOwner") {
       setError("Unauthorized. Please log in as a property owner.");
-      router.push("/login");
+      router.push("/");
     }
   }, [router]);
 
@@ -111,7 +111,7 @@ export default function TenantsPage() {
           setError("User account not found. Please log in again.");
           Cookies.remove("userId");
           Cookies.remove("role");
-          router.push("/login");
+          router.push("/");
         } else {
           setError(data.message || "Failed to fetch user data.");
         }
@@ -201,7 +201,7 @@ export default function TenantsPage() {
       fetchPendingInvoices();
       console.log("Payment status:", paymentStatus, "Wallet balance:", walletBalance, "Tenants count:", tenants.length, "Pending invoices:", pendingInvoices);
     }
-  }, [userId, role, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
+  }, [userId, role, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices, paymentStatus, walletBalance, tenants, pendingInvoices]);
 
   // Reset tenant form
   const resetForm = useCallback(() => {
@@ -264,7 +264,7 @@ export default function TenantsPage() {
       setLeaseEndDate(pendingTenantData.leaseEndDate || "");
     }
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, tenants.length, pendingInvoices, properties, selectedUnitType, pendingTenantData, resetForm]);
+  }, [paymentStatus, walletBalance, tenants, pendingInvoices, properties, selectedUnitType, pendingTenantData, resetForm]);
 
   // Open payment modal
   const openPaymentModal = useCallback(() => {
@@ -1264,7 +1264,7 @@ export default function TenantsPage() {
                         ))}
                     </select>
                     {paymentFormErrors.paymentUnitType && (
-                      <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentUnitType}</p>
+                      <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>
                     )}
                   </div>
                 )}
