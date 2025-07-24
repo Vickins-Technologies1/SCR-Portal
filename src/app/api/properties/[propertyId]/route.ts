@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { ObjectId } from 'mongodb';
 import { UNIT_TYPES, getManagementFee } from '../../../../lib/unitTypes';
 import { Property, UnitType } from '../../../../types/property';
-import { Tenant, ResponseTenant } from '../../../../types/tenant';
+import { Tenant } from '../../../../types/tenant';
 
 export async function GET(request: NextRequest, context: { params: Promise<{ propertyId: string }> }) {
   try {

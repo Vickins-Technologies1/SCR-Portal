@@ -1,19 +1,17 @@
-import { ObjectId } from 'mongodb';
-
 export interface UnitType {
   type: string;
-  quantity: number;
   price: number;
   deposit: number;
-  managementType: 'RentCollection' | 'FullManagement';
-  managementFee: number | string;
+  managementType: "RentCollection" | "FullManagement";
+  managementFee: number; // Changed from string | number to number
+  quantity: number;
 }
 
 export interface Property {
-  _id: ObjectId;
+  _id: import("mongodb").ObjectId;
+  ownerId: string;
   name: string;
   address: string;
-  ownerId: string;
   unitTypes: UnitType[];
   status: string;
   createdAt: Date;

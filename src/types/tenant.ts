@@ -60,4 +60,5 @@ export interface TenantRequest {
   status?: string;
   paymentStatus?: string;
   walletBalance?: number;
+  ownerId: string;
 }

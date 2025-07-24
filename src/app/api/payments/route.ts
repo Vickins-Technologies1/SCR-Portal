@@ -58,6 +58,18 @@ interface Payment {
   status: string;
 }
 
+interface Invoice {
+  _id?: ObjectId;
+  userId: string;
+  role: "propertyOwner";
+  amount: number;
+  propertyId: string;
+  unitType: string;
+  invoiceDate: string;
+  transactionId: string;
+  status: string;
+}
+
 interface WalletTransaction {
   userId: string;
   type: "credit" | "debit";
@@ -66,7 +78,74 @@ interface WalletTransaction {
   description: string;
 }
 
-// POST /api/payments (unchanged)
+export async function GET(request: NextRequest) {
+  const startTime = Date.now();
+
+  try {
+    console.log('Handling GET request to /api/payments');
+
+    // Read cookies from client request
+    const userId = request.cookies.get('userId')?.value;
+    const role = request.cookies.get('role')?.value;
+
+    console.log('Cookies from request:', { userId, role });
+
+    // Validate userId
+    if (!userId || !ObjectId.isValid(userId)) {
+      console.log('Invalid or missing user ID:', userId);
+      return NextResponse.json(
+        { success: false, message: 'Valid user ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Allow both propertyOwner and admin roles
+    if (!['propertyOwner', 'admin'].includes(role || '')) {
+      console.log('Unauthorized role:', role);
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized: Only property owners or admins can access payments' },
+        { status: 401 }
+      );
+    }
+
+    const { db } = await connectToDatabase();
+    console.log('Connected to MongoDB');
+
+    // For admins, fetch all payments; for property owners, fetch only their payments
+    const query = role === 'admin' ? {} : { userId };
+    const payments = await db
+      .collection('payments')
+      .find(query)
+      .sort({ paymentDate: -1 })
+      .toArray();
+
+    console.log(`Fetched ${payments.length} payments for userId: ${userId}, role: ${role}`);
+    console.log('GET /api/payments - Completed in', Date.now() - startTime, 'ms');
+
+    return NextResponse.json(
+      {
+        success: true,
+        payments: payments.map((payment) => ({
+          ...payment,
+          _id: payment._id.toString(),
+          paymentDate: payment.paymentDate?.toISOString?.(),
+        })),
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error fetching payments:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { userId, propertyId, unitType, amount, role } = await req.json();
@@ -93,7 +172,7 @@ export async function POST(req: NextRequest) {
     const { db, client } = await connectToDatabase();
     try {
       if (role === "propertyOwner") {
-        // Property Owner Payment Logic
+        // Property Owner Payment Logic (Save as Invoice)
         if (!unitType) {
           console.log("Unit type required for property owner payment");
           return NextResponse.json({ success: false, message: "Unit type is required" }, { status: 400 });
@@ -167,27 +246,25 @@ export async function POST(req: NextRequest) {
           { returnDocument: "after" }
         );
 
-        const updatedUser = (updateResult as { value?: User }).value;
-
-        if (!updatedUser) {
+        if (!updateResult) {
           console.log("Failed to update user:", userId);
           return NextResponse.json({ success: false, message: "Failed to update user" }, { status: 500 });
         }
 
-        // Record payment
-        const payment: Payment = {
+        // Record invoice
+        const invoice: Invoice = {
           userId,
           role: "propertyOwner",
           amount,
           propertyId,
           unitType,
-          paymentDate: new Date().toISOString(),
+          invoiceDate: new Date().toISOString(),
           transactionId: mpesaResponse.data.transaction_id,
           status: "completed",
         };
 
-        await db.collection<Payment>("payments").insertOne(payment);
-        console.log("Payment recorded:", payment);
+        await db.collection<Invoice>("invoices").insertOne(invoice);
+        console.log("Invoice recorded:", invoice);
 
         // Record wallet transaction
         const walletTransaction: WalletTransaction = {
@@ -202,14 +279,14 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: "Payment processed successfully",
+          message: "Invoice processed successfully",
           user: {
-            paymentStatus: updatedUser.paymentStatus,
-            walletBalance: updatedUser.walletBalance,
+            paymentStatus: updateResult.paymentStatus,
+            walletBalance: updateResult.walletBalance,
           },
         }, { status: 200 });
       } else {
-        // Tenant Payment Logic
+        // Tenant Payment Logic (Save as Payment)
         const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(userId) });
         if (!tenant) {
           console.log("Tenant not found:", userId);
@@ -324,98 +401,6 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error("Error processing payment:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ success: false, message: `Server error: ${errorMessage}` }, { status: 500 });
-  }
-}
-
-// GET /api/payments
-export async function GET(req: NextRequest) {
-  try {
-    const tenantId = req.nextUrl.searchParams.get("tenantId");
-    const userId = req.nextUrl.searchParams.get("userId");
-    const role = req.nextUrl.searchParams.get("role");
-    console.log("GET /api/payments - Query params:", { tenantId, userId, role });
-
-    const { db, client } = await connectToDatabase();
-    try {
-      // Check for admin role from cookies
-      const cookieRole = req.cookies.get("role")?.value;
-      console.log("Cookie role:", cookieRole);
-
-      if (cookieRole === "admin") {
-        // Admins can fetch all payments
-        const payments = await db.collection<Payment>("payments").find({}).toArray();
-        const count = await db.collection<Payment>("payments").countDocuments({});
-        console.log(`Found ${payments.length} payments for admin`);
-
-        return NextResponse.json({
-          success: true,
-          payments: payments.map((payment) => ({
-            ...payment,
-            _id: payment._id?.toString(),
-            userId: payment.userId,
-            propertyId: payment.propertyId,
-            paymentDate: payment.paymentDate,
-            transactionId: payment.transactionId,
-            status: payment.status,
-          })),
-          count,
-        }, { status: 200 });
-      }
-
-      // Non-admin requests require tenantId, userId, and role
-      if (!tenantId || !ObjectId.isValid(tenantId) || !userId || !ObjectId.isValid(userId) || !role || !["tenant", "propertyOwner"].includes(role)) {
-        console.log("Invalid parameters for non-admin:", { tenantId, userId, role });
-        return NextResponse.json({ success: false, message: "Invalid parameters: tenantId, userId, and role are required for non-admin users" }, { status: 400 });
-      }
-
-      const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
-
-      if (!tenant) {
-        console.log("Tenant not found:", tenantId);
-        return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
-      }
-
-      if (role === "tenant" && tenant._id.toString() !== userId) {
-        console.log("Unauthorized access - tenantId:", tenantId, "userId:", userId);
-        return NextResponse.json({ success: false, message: "Unauthorized access" }, { status: 403 });
-      }
-
-      if (role === "propertyOwner") {
-        const property = await db.collection("properties").findOne({
-          _id: new ObjectId(tenant.propertyId),
-          ownerId: userId,
-        });
-        if (!property) {
-          console.log("Unauthorized access to tenant - tenantId:", tenantId, "userId:", userId);
-          return NextResponse.json({ success: false, message: "Unauthorized access to tenant" }, { status: 403 });
-        }
-      }
-
-      const payments = await db.collection<Payment>("payments").find({ userId: tenantId, role: "tenant" }).toArray();
-      const count = await db.collection<Payment>("payments").countDocuments({ userId: tenantId, role: "tenant" });
-      console.log(`Found ${payments.length} payments for tenant:`, tenantId);
-
-      return NextResponse.json({
-        success: true,
-        payments: payments.map((payment) => ({
-          ...payment,
-          _id: payment._id?.toString(),
-          userId: payment.userId,
-          propertyId: payment.propertyId,
-          paymentDate: payment.paymentDate,
-          transactionId: payment.transactionId,
-          status: payment.status,
-        })),
-        count,
-      }, { status: 200 });
-    } finally {
-      await client.close();
-      console.log("MongoDB connection closed");
-    }
-  } catch (error) {
-    console.error("Error fetching payments:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ success: false, message: `Server error: ${errorMessage}` }, { status: 500 });
   }

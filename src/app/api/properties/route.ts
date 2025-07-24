@@ -1,4 +1,3 @@
-// src/app/api/properties/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
@@ -16,6 +15,7 @@ export async function GET(request: NextRequest) {
     const role = cookieStore.get('role')?.value;
 
     const { db } = await connectToDatabase();
+    console.log('Connected to MongoDB database: rentaldb');
 
     if (role === 'admin') {
       const properties = await db.collection<Property>('properties').find().toArray();
@@ -134,6 +134,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
+    console.log('Connected to MongoDB database: rentaldb');
     const { name, address, unitTypes, status } = await request.json();
 
     if (
@@ -151,10 +152,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    for (const unit of unitTypes) {
+    // Validate unit types and assign management fees
+    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: any) => {
+      const validUnitType = UNIT_TYPES.find((ut) => ut.type === unit.type);
       if (
         !unit.type ||
-        !UNIT_TYPES.find((ut) => ut.type === unit.type) ||
+        !validUnitType ||
         typeof unit.quantity !== 'number' ||
         unit.quantity < 0 ||
         typeof unit.price !== 'number' ||
@@ -163,20 +166,34 @@ export async function POST(request: NextRequest) {
         unit.deposit < 0 ||
         !['RentCollection', 'FullManagement'].includes(unit.managementType)
       ) {
-        console.log('Invalid unit type:', unit);
-        return NextResponse.json(
-          { success: false, message: 'Invalid unit type, quantity, price, deposit, or management type' },
-          { status: 400 }
-        );
+        throw new Error(`Invalid unit type: ${JSON.stringify(unit)}`);
       }
-      unit.managementFee = getManagementFee(unit);
-    }
+      const managementFee = getManagementFee({
+        type: unit.type,
+        managementType: unit.managementType,
+        quantity: unit.quantity,
+      });
+      return {
+        type: unit.type,
+        quantity: unit.quantity,
+        price: unit.price,
+        deposit: unit.deposit,
+        managementType: unit.managementType,
+        managementFee,
+      };
+    });
+
+    const totalManagementFee = validatedUnitTypes.reduce((sum: number, unit: UnitType) => {
+      const fee = typeof unit.managementFee === 'number' ? unit.managementFee : 0;
+      return sum + fee;
+    }, 0);
+    console.log('POST /api/properties - Total management fee for ownerId:', ownerId, 'amount:', totalManagementFee);
 
     const newProperty: Property = {
       _id: new ObjectId(),
       name,
       address,
-      unitTypes: unitTypes as UnitType[],
+      unitTypes: validatedUnitTypes,
       status,
       ownerId,
       createdAt: new Date(),
@@ -184,6 +201,22 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await db.collection<Property>('properties').insertOne(newProperty);
+
+    // Generate invoice for total management fee if applicable
+    if (totalManagementFee > 0) {
+      const invoice = {
+        userId: ownerId,
+        amount: totalManagementFee,
+        reference: `PROPERTY-INVOICE-${ownerId}-${Date.now()}`,
+        status: 'pending',
+        createdAt: new Date(),
+        description: `Property creation fee for ${name}`,
+      };
+      await db.collection('invoices').insertOne(invoice);
+      console.log('Generated invoice for property creation:', invoice);
+    } else {
+      console.log('No management fees for unit types, skipping invoice generation');
+    }
 
     return NextResponse.json(
       {

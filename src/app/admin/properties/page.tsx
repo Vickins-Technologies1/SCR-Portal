@@ -1,17 +1,16 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Building2, ArrowUpDown } from "lucide-react";
+import { Building2, ArrowUpDown, Edit, Trash2 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
 interface User {
   _id: string;
   email: string;
-  role: "tenant" | "propertyOwner" | "admin"; // Added role
+  role: "tenant" | "propertyOwner" | "admin";
 }
 
 interface Property {
@@ -35,6 +34,8 @@ export default function PropertiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
+  const [editProperty, setEditProperty] = useState<Property | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     const uid = Cookies.get("userId");
@@ -101,6 +102,62 @@ export default function PropertiesPage() {
     );
   }, [sortConfig]);
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this property?")) return;
+    
+    try {
+      const res = await fetch(`/api/admin/properties/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProperties(properties.filter((property) => property._id !== id));
+      } else {
+        setError(data.message || "Failed to delete property.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  };
+
+  const handleEdit = (property: Property) => {
+    setEditProperty(property);
+    setShowEditModal(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editProperty) return;
+
+    try {
+      const res = await fetch(`/api/admin/properties/${editProperty._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: editProperty.name,
+          ownerId: editProperty.ownerId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProperties(
+          properties.map((property) =>
+            property._id === editProperty._id ? { ...property, ...editProperty } : property
+          )
+        );
+        setShowEditModal(false);
+        setEditProperty(null);
+      } else {
+        setError(data.message || "Failed to update property.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -134,11 +191,21 @@ export default function PropertiesPage() {
                     className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform transition-all duration-300 hover:-translate-y-1 animate-fade-in"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <div className="flex items-center gap-2 mb-4">
-                      <Building2 className="text-[#012a4a] h-5 w-5" />
-                      <h3 className="text-lg font-semibold text-[#012a4a] cursor-pointer" onClick={() => handleSort("name")}>
-                        {p.name} {getSortIcon("name")}
-                      </h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="text-[#012a4a] h-5 w-5" />
+                        <h3 className="text-lg font-semibold text-[#012a4a] cursor-pointer" onClick={() => handleSort("name")}>
+                          {p.name} {getSortIcon("name")}
+                        </h3>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleEdit(p)} className="text-blue-600 hover:text-blue-800">
+                          <Edit className="h-5 w-5" />
+                        </button>
+                        <button onClick={() => handleDelete(p._id)} className="text-red-600 hover:text-red-800">
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                      </div>
                     </div>
                     <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("ownerEmail")}>
                       <span className="font-medium">Owner:</span>{" "}
@@ -157,6 +224,54 @@ export default function PropertiesPage() {
                   </div>
                 ))
               )}
+            </div>
+          )}
+          {showEditModal && editProperty && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full">
+                <h2 className="text-xl font-bold mb-4">Edit Property</h2>
+                <form onSubmit={handleUpdate}>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Property Name</label>
+                    <input
+                      type="text"
+                      value={editProperty.name}
+                      onChange={(e) => setEditProperty({ ...editProperty, name: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Owner</label>
+                    <select
+                      value={editProperty.ownerId}
+                      onChange={(e) => setEditProperty({ ...editProperty, ownerId: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                    >
+                      <option value="">Select Owner</option>
+                      {propertyOwners.map((owner) => (
+                        <option key={owner._id} value={owner._id}>
+                          {owner.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowEditModal(false)}
+                      className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </main>

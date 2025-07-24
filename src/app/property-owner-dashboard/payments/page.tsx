@@ -103,7 +103,7 @@ export default function PaymentsPage() {
         setIsLoading(false);
       }
     };
-
+    
     fetchData();
   }, [userId, role, router]);
 

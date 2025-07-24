@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Db, MongoClient, ObjectId } from "mongodb";
-import { cookies } from "next/headers";
 
 // Database connection
 const connectToDatabase = async (): Promise<Db> => {
@@ -9,7 +8,7 @@ const connectToDatabase = async (): Promise<Db> => {
   return client.db("rentaldb");
 };
 
-// TypeScript Interfaces
+// Interfaces
 interface Payment {
   _id: ObjectId;
   tenantId: string;
@@ -54,33 +53,52 @@ interface ApiResponse<T> {
 }
 
 // GET /api/reports
-export async function GET(): Promise<NextResponse<ApiResponse<Report[]>>> {
+export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Report[]>>> {
+  const startTime = Date.now();
   try {
-    // Authenticate user from cookies
-    const cookieStore = await cookies();
-    const userId = cookieStore.get("userId")?.value;
-    const role = cookieStore.get("role")?.value;
+    // ✅ Read cookies from client request
+    const userId = request.cookies.get("userId")?.value;
+    const role = request.cookies.get("role")?.value;
+    console.log("GET /api/reports - Cookies - userId:", userId, "role:", role);
 
-    if (!userId || role !== "propertyOwner") {
+    if (!userId || !ObjectId.isValid(userId)) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        { success: false, message: "Valid user ID is required" },
+        { status: 400 }
+      );
+    }
+
+    if (role !== "propertyOwner") {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized. Please log in as a property owner." },
         { status: 401 }
       );
     }
 
-    // Connect to MongoDB
+    // ✅ Get propertyId from query params
+    const { searchParams } = new URL(request.url);
+    const propertyId = searchParams.get("propertyId");
+    if (propertyId && !ObjectId.isValid(propertyId)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid property ID" },
+        { status: 400 }
+      );
+    }
+
+    // ✅ DB Connection
     const db = await connectToDatabase();
     const paymentsCollection = db.collection<Payment>("payments");
     const tenantsCollection = db.collection<Tenant>("tenants");
     const propertiesCollection = db.collection<Property>("properties");
 
-    // Fetch payments for the property owner
+    const paymentQuery: { ownerId: string; propertyId?: string } = { ownerId: userId };
+    if (propertyId) paymentQuery.propertyId = propertyId;
+
     const payments = await paymentsCollection
-      .find({ ownerId: userId })
+      .find(paymentQuery)
       .sort({ date: -1 })
       .toArray();
 
-    // Fetch tenants and properties for mapping
     const tenantIds = [...new Set(payments.map((p) => p.tenantId))];
     const propertyIds = [...new Set(payments.map((p) => p.propertyId))];
 
@@ -92,11 +110,9 @@ export async function GET(): Promise<NextResponse<ApiResponse<Report[]>>> {
       .find({ _id: { $in: propertyIds.map((id) => new ObjectId(id)) }, ownerId: userId })
       .toArray();
 
-    // Create maps for efficient lookup
-    const tenantMap = new Map<string, Tenant>(tenants.map((t) => [t._id.toString(), t]));
-    const propertyMap = new Map<string, Property>(properties.map((p) => [p._id.toString(), p]));
+    const tenantMap = new Map(tenants.map((t) => [t._id.toString(), t]));
+    const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
 
-    // Generate reports
     const reports: Report[] = payments.map((payment) => ({
       _id: payment._id.toString(),
       propertyId: payment.propertyId,
@@ -109,12 +125,15 @@ export async function GET(): Promise<NextResponse<ApiResponse<Report[]>>> {
       ownerId: payment.ownerId,
     }));
 
-    return NextResponse.json(
-      { success: true, data: reports },
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error("Error fetching reports:", error);
+    console.log("GET /api/reports - Completed in", Date.now() - startTime, "ms");
+
+    return NextResponse.json({ success: true, data: reports }, { status: 200 });
+  } catch (error: any) {
+    console.error("Error fetching reports:", {
+      message: error?.message || "Unknown error",
+      stack: error?.stack,
+    });
+
     return NextResponse.json(
       { success: false, message: "Failed to fetch reports" },
       { status: 500 }

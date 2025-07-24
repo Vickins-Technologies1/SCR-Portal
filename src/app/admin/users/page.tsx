@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Users, ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, ArrowUpDown, ChevronDown, ChevronUp, Edit, Trash2 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -33,6 +33,8 @@ export default function UsersPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [editUser, setEditUser] = useState<PropertyOwner | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     const uid = Cookies.get("userId");
@@ -96,6 +98,63 @@ export default function UsersPage() {
     setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    
+    try {
+      const res = await fetch(`/api/admin/property-owners/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPropertyOwners(propertyOwners.filter((owner) => owner._id !== id));
+      } else {
+        setError(data.message || "Failed to delete user.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  };
+
+  const handleEdit = (owner: PropertyOwner) => {
+    setEditUser(owner);
+    setShowEditModal(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editUser) return;
+
+    try {
+      const res = await fetch(`/api/admin/users/${editUser._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: editUser.name,
+          email: editUser.email,
+          phone: editUser.phone,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPropertyOwners(
+          propertyOwners.map((owner) =>
+            owner._id === editUser._id ? { ...owner, ...editUser } : owner
+          )
+        );
+        setShowEditModal(false);
+        setEditUser(null);
+      } else {
+        setError(data.message || "Failed to update user.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -139,13 +198,21 @@ export default function UsersPage() {
                           {owner.name} {getSortIcon("name")}
                         </h3>
                       </div>
-                      <button onClick={() => toggleExpand(owner._id)}>
-                        {expanded.includes(owner._id) ? (
-                          <ChevronUp className="h-5 w-5 text-[#012a4a]" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5 text-[#012a4a]" />
-                        )}
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleEdit(owner)} className="text-blue-600 hover:text-blue-800">
+                          <Edit className="h-5 w-5" />
+                        </button>
+                        <button onClick={() => handleDelete(owner._id)} className="text-red-600 hover:text-red-800">
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                        <button onClick={() => toggleExpand(owner._id)}>
+                          {expanded.includes(owner._id) ? (
+                            <ChevronUp className="h-5 w-5 text-[#012a4a]" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-[#012a4a]" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                     <p
                       className="text-sm text-gray-600 mb-1 cursor-pointer"
@@ -208,6 +275,57 @@ export default function UsersPage() {
                   </div>
                 ))
               )}
+            </div>
+          )}
+          {showEditModal && editUser && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full">
+                <h2 className="text-xl font-bold mb-4">Edit User</h2>
+                <form onSubmit={handleUpdate}>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Name</label>
+                    <input
+                      type="text"
+                      value={editUser.name}
+                      onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      value={editUser.email}
+                      onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">Phone</label>
+                    <input
+                      type="tel"
+                      value={editUser.phone}
+                      onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowEditModal(false)}
+                      className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </main>

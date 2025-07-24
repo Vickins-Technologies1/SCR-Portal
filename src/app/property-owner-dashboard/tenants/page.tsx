@@ -27,7 +27,7 @@ interface Tenant {
 interface Property {
   _id: string;
   name: string;
-  unitTypes: { type: string; price: number; deposit: number; managementType: "RentCollection" | "FullManagement"; managementFee: number | string }[];
+  unitTypes: { type: string; price: number; deposit: number; managementType: "RentCollection" | "FullManagement"; managementFee: number }[];
 }
 
 interface SortConfig {
@@ -43,9 +43,11 @@ export default function TenantsPage() {
   const [role, setRole] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"active" | "inactive" | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [pendingInvoices, setPendingInvoices] = useState<number>(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPaymentPromptOpen, setIsPaymentPromptOpen] = useState(false);
+  const [isPaymentLoadingModalOpen, setIsPaymentLoadingModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<string | null>(null);
@@ -69,10 +71,18 @@ export default function TenantsPage() {
   const [paymentUnitType, setPaymentUnitType] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentFormErrors, setPaymentFormErrors] = useState<{ [key: string]: string | undefined }>({});
+  const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
 
+  // UMS Pay API configuration (replace with secure storage in production)
+  const UMS_PAY_API_KEY = "your_api_key_here"; // Store in env variables
+  const UMS_PAY_EMAIL = "merchant@example.com"; // Store in env variables
+  const UMS_PAY_ACCOUNT_ID = "ACC-7890"; // Store in env variables
+
+  // Check cookies and redirect if unauthorized
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
+    console.log("Cookies - userId:", uid, "role:", userRole);
     setUserId(uid || null);
     setRole(userRole || null);
     if (!uid || userRole !== "propertyOwner") {
@@ -81,6 +91,7 @@ export default function TenantsPage() {
     }
   }, [router]);
 
+  // Fetch user data (paymentStatus, walletBalance)
   const fetchUserData = useCallback(async () => {
     if (!userId || !role) return;
     try {
@@ -90,9 +101,11 @@ export default function TenantsPage() {
         credentials: "include",
       });
       const data = await res.json();
+      console.log("fetchUserData response:", data);
       if (data.success) {
         setPaymentStatus(data.user.paymentStatus || "inactive");
         setWalletBalance(data.user.walletBalance || 0);
+        console.log("Set paymentStatus:", data.user.paymentStatus, "walletBalance:", data.user.walletBalance);
       } else {
         if (res.status === 404) {
           setError("User account not found. Please log in again.");
@@ -108,10 +121,12 @@ export default function TenantsPage() {
     }
   }, [userId, role, router]);
 
+  // Fetch tenants
   const fetchTenants = useCallback(async () => {
+    if (!userId) return;
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/tenants?userId=${encodeURIComponent(userId!)}`, {
+      const res = await fetch(`/api/tenants?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -129,16 +144,25 @@ export default function TenantsPage() {
     }
   }, [userId]);
 
+  // Fetch properties
   const fetchProperties = useCallback(async () => {
+    if (!userId) return;
     try {
-      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId!)}`, {
+      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
-        setProperties(data.properties || []);
+        const properties = data.properties.map((p: Property) => ({
+          ...p,
+          unitTypes: p.unitTypes.map((u: Property["unitTypes"][0]) => ({
+            ...u,
+            managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
+          })),
+        }));
+        setProperties(properties || []);
       } else {
         setError(data.message || "Failed to fetch properties.");
       }
@@ -147,14 +171,39 @@ export default function TenantsPage() {
     }
   }, [userId]);
 
+  // Fetch pending invoices
+  const fetchPendingInvoices = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/invoices`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      console.log("fetchPendingInvoices response:", data);
+      if (data.success) {
+        setPendingInvoices(data.pendingInvoices || 0);
+      } else {
+        setError(data.message || "Failed to fetch invoice status.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  }, [userId]);
+
+  // Fetch data when userId and role are set
   useEffect(() => {
     if (userId && role === "propertyOwner") {
       fetchUserData();
       fetchTenants();
       fetchProperties();
+      fetchPendingInvoices();
+      console.log("Payment status:", paymentStatus, "Wallet balance:", walletBalance, "Tenants count:", tenants.length, "Pending invoices:", pendingInvoices);
     }
-  }, [userId, role, fetchUserData, fetchTenants, fetchProperties]);
+  }, [userId, role, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
+  // Reset tenant form
   const resetForm = useCallback(() => {
     setTenantName("");
     setTenantEmail("");
@@ -170,6 +219,7 @@ export default function TenantsPage() {
     setFormErrors({});
   }, []);
 
+  // Reset payment form
   const resetPaymentForm = useCallback(() => {
     setPaymentPropertyId("");
     setPaymentUnitType("");
@@ -177,28 +227,63 @@ export default function TenantsPage() {
     setPaymentFormErrors({});
   }, []);
 
+  // Open add tenant modal
   const openAddModal = useCallback(() => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
       return;
     }
-    if (paymentStatus !== "active" || walletBalance < 1000) {
-      setError("You need an active payment status and a minimum wallet balance of Ksh 1,000 to add a tenant. Please complete the payment process.");
+    if (tenants.length >= 3 && pendingInvoices > 0) {
+      setError("Cannot add more tenants until all pending invoices are paid.");
       setIsPaymentPromptOpen(true);
       return;
+    }
+    if (tenants.length >= 3) {
+      const unit = properties.find((p) => p.unitTypes.some((u) => u.type === selectedUnitType))?.unitTypes.find((u) => u.type === selectedUnitType);
+      const requiredFee = unit ? unit.managementFee : 1000; // Fallback to 1000 if unit not selected
+      if (paymentStatus !== "active" || walletBalance < requiredFee) {
+        setError(`You need an active payment status and a minimum wallet balance of Ksh ${requiredFee} to add more than 2 tenants.`);
+        setIsPaymentPromptOpen(true);
+        return;
+      }
     }
     resetForm();
     setModalMode("add");
     setEditingTenantId(null);
+    if (pendingTenantData) {
+      setTenantName(pendingTenantData.name || "");
+      setTenantEmail(pendingTenantData.email || "");
+      setTenantPhone(pendingTenantData.phone || "");
+      setTenantPassword(pendingTenantData.password || "");
+      setSelectedPropertyId(pendingTenantData.propertyId || "");
+      setSelectedUnitType(pendingTenantData.unitType || "");
+      setPrice(pendingTenantData.price?.toString() || "");
+      setDeposit(pendingTenantData.deposit?.toString() || "");
+      setHouseNumber(pendingTenantData.houseNumber || "");
+      setLeaseStartDate(pendingTenantData.leaseStartDate || "");
+      setLeaseEndDate(pendingTenantData.leaseEndDate || "");
+    }
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, resetForm]);
+  }, [paymentStatus, walletBalance, tenants.length, pendingInvoices, properties, selectedUnitType, pendingTenantData, resetForm]);
 
+  // Open payment modal
   const openPaymentModal = useCallback(() => {
-    setError(null); // Clear any existing error when opening payment modal
+    setError(null);
     resetPaymentForm();
+    if (pendingTenantData) {
+      setPaymentPropertyId(pendingTenantData.propertyId || "");
+      setPaymentUnitType(pendingTenantData.unitType || "");
+      const unit = properties
+        .find((p) => p._id === pendingTenantData.propertyId)
+        ?.unitTypes.find((u) => u.type === pendingTenantData.unitType);
+      if (unit) {
+        setPaymentAmount(unit.managementFee.toString());
+      }
+    }
     setIsPaymentPromptOpen(true);
-  }, [resetPaymentForm]);
+  }, [resetPaymentForm, pendingTenantData, properties]);
 
+  // Open edit tenant modal
   const openEditModal = useCallback((tenant: Tenant) => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
@@ -221,11 +306,13 @@ export default function TenantsPage() {
     setIsModalOpen(true);
   }, [paymentStatus, walletBalance]);
 
+  // Handle tenant deletion
   const handleDelete = useCallback((id: string) => {
     setTenantToDelete(id);
     setIsDeleteModalOpen(true);
   }, []);
 
+  // Confirm tenant deletion
   const confirmDelete = useCallback(async () => {
     if (!tenantToDelete) return;
     setIsLoading(true);
@@ -251,6 +338,7 @@ export default function TenantsPage() {
     }
   }, [tenantToDelete, fetchTenants]);
 
+  // Validate payment form
   const validatePaymentForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
     if (!paymentPropertyId) {
@@ -265,14 +353,18 @@ export default function TenantsPage() {
       const unit = properties
         .find((p) => p._id === paymentPropertyId)
         ?.unitTypes.find((u) => u.type === paymentUnitType);
-      if (unit && typeof unit.managementFee === "number" && parseFloat(paymentAmount) < unit.managementFee) {
+      if (unit && parseFloat(paymentAmount) < unit.managementFee) {
         errors.paymentAmount = `Payment amount is insufficient. Expected Ksh ${unit.managementFee} for ${paymentUnitType}.`;
       }
     }
+    if (!tenantPhone || !/^\+?\d{10,15}$/.test(tenantPhone)) {
+      errors.tenantPhone = "Valid phone number is required (10-15 digits, optional +)";
+    }
     setPaymentFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [paymentPropertyId, paymentUnitType, paymentAmount, properties]);
+  }, [paymentPropertyId, paymentUnitType, paymentAmount, tenantPhone, properties]);
 
+  // Validate tenant form
   const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
     if (!tenantName.trim()) errors.tenantName = "Full name is required";
@@ -293,46 +385,127 @@ export default function TenantsPage() {
     return Object.keys(errors).length === 0;
   }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, modalMode]);
 
-  const handlePayment = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validatePaymentForm()) return;
-    if (!userId) {
-      setError("User ID is missing.");
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
+  // Poll transaction status
+  const pollTransactionStatus = useCallback(
+    async (transactionRequestId: string, maxAttempts = 6, interval = 5000) => {
+      let attempts = 0;
+      const checkStatus = async (): Promise<boolean> => {
+        try {
+          const res = await fetch("https://api.umspay.co.ke/api/v1/transactionstatus", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              api_key: UMS_PAY_API_KEY,
+              email: UMS_PAY_EMAIL,
+              transaction_request_id: transactionRequestId,
+            }),
+          });
+          const data = await res.json();
+          console.log("Transaction status response:", data);
 
-    try {
-      const res = await fetch("/api/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          userId,
-          propertyId: paymentPropertyId,
-          unitType: paymentUnitType,
-          amount: parseFloat(paymentAmount),
-          role: "propertyOwner",
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSuccessMessage("Payment processed successfully!");
-        setIsPaymentPromptOpen(false);
-        resetPaymentForm();
-        fetchUserData(); // Refresh paymentStatus and walletBalance
-      } else {
-        setError(data.message || `Failed to process payment for ${paymentUnitType}. Expected Ksh ${data.expectedAmount || "unknown"}.`);
+          if (data.ResultCode === "200") {
+            if (data.TransactionStatus === "Completed") {
+              setSuccessMessage("Payment processed successfully!");
+              await fetchUserData();
+              await fetchPendingInvoices();
+              if (pendingTenantData) {
+                setIsPaymentPromptOpen(false);
+                setIsModalOpen(true);
+              }
+              return true;
+            } else if (["Failed", "Cancelled", "Timeout"].includes(data.TransactionStatus)) {
+              setError(
+                data.ResultDesc ||
+                  `Payment ${data.TransactionStatus.toLowerCase()}: ${
+                    data.TransactionStatus === "Failed"
+                      ? "Insufficient balance"
+                      : data.TransactionStatus === "Cancelled"
+                      ? "User cancelled payment"
+                      : "User not reachable"
+                  }`
+              );
+              return true;
+            }
+          } else {
+            setError(data.errorMessage || "Failed to check transaction status.");
+            return true;
+          }
+        } catch {
+          setError("Failed to connect to UMS Pay API.");
+          return true;
+        }
+        return false;
+      };
+
+      const poll = async () => {
+        while (attempts < maxAttempts) {
+          const done = await checkStatus();
+          if (done) break;
+          await new Promise((resolve) => setTimeout(resolve, interval));
+          attempts++;
+        }
+        if (attempts >= maxAttempts) {
+          setError("Payment processing timed out. Please check the transaction status later.");
+        }
+        setIsPaymentLoadingModalOpen(false);
+      };
+
+      poll();
+    },
+    [fetchUserData, fetchPendingInvoices, pendingTenantData]
+  );
+
+  // Handle payment submission
+  const handlePayment = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!validatePaymentForm()) return;
+      if (!userId) {
+        setError("User ID is missing.");
+        return;
       }
-    } catch {
-      setError("Failed to connect to the server.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId, paymentPropertyId, paymentUnitType, paymentAmount, validatePaymentForm, resetPaymentForm, fetchUserData]);
+      setIsLoading(true);
+      setError(null);
+      setSuccessMessage(null);
+      setIsPaymentPromptOpen(false);
+      setIsPaymentLoadingModalOpen(true);
 
+      const reference = `INVOICE-${userId}-${Date.now()}`;
+      console.log("Sending payment request with amount:", paymentAmount, "reference:", reference);
+
+      try {
+        const res = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            api_key: UMS_PAY_API_KEY,
+            email: UMS_PAY_EMAIL,
+            amount: parseFloat(paymentAmount),
+            msisdn: tenantPhone,
+            reference,
+            account_id: UMS_PAY_ACCOUNT_ID,
+          }),
+        });
+        const data = await res.json();
+        console.log("initiateStkPush response:", data);
+
+        if (data.success === "200") {
+          pollTransactionStatus(data.transaction_request_id);
+        } else {
+          setError(data.errorMessage || "Failed to initiate payment.");
+          setIsPaymentLoadingModalOpen(false);
+          setIsLoading(false);
+        }
+      } catch {
+        setError("Failed to connect to UMS Pay API.");
+        setIsPaymentLoadingModalOpen(false);
+        setIsLoading(false);
+      }
+    },
+    [userId, tenantPhone, paymentAmount, validatePaymentForm, pollTransactionStatus]
+  );
+
+  // Handle tenant form submission
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -372,13 +545,25 @@ export default function TenantsPage() {
         });
         const data = await res.json();
         if (data.success) {
-          setSuccessMessage(`Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`);
+          setSuccessMessage(
+            modalMode === "add" && data.invoice?.amount
+              ? `Tenant ${tenantName} added successfully. An invoice of Ksh ${data.invoice.amount} has been generated.`
+              : `Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`
+          );
           setIsModalOpen(false);
+          setPendingTenantData(null);
           resetForm();
           fetchTenants();
           fetchUserData();
+          fetchPendingInvoices();
         } else {
-          setError(data.message || `Failed to ${modalMode === "add" ? "add" : "update"} tenant.`);
+          if (data.message === "Cannot add more tenants until all pending invoices are paid.") {
+            setPendingTenantData(tenantData);
+            setError(data.message);
+            setIsPaymentPromptOpen(true);
+          } else {
+            setError(data.message || `Failed to ${modalMode === "add" ? "add" : "update"} tenant.`);
+          }
         }
       } catch {
         setError("Failed to connect to the server.");
@@ -386,9 +571,10 @@ export default function TenantsPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, fetchTenants, fetchUserData, resetForm, validateForm]
+    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm]
   );
 
+  // Handle table sorting
   const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
     setSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
@@ -415,6 +601,7 @@ export default function TenantsPage() {
     });
   }, [tenants, properties]);
 
+  // Get sort icon for table headers
   const getSortIcon = useCallback((key: keyof Tenant | "propertyName") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
@@ -435,19 +622,7 @@ export default function TenantsPage() {
               <Users className="text-[#012a4a]" />
               Manage Tenants
             </h1>
-            {paymentStatus === "active" && walletBalance !== null && walletBalance >= 1000 ? (
-              <button
-                onClick={openAddModal}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium text-sm sm:text-base ${
-                  isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
-                }`}
-                disabled={isLoading}
-                aria-label="Add new tenant"
-              >
-                <Plus className="h-5 w-5" />
-                Add Tenant
-              </button>
-            ) : (
+            {tenants.length >= 3 && pendingInvoices > 0 ? (
               <button
                 onClick={openPaymentModal}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium text-sm sm:text-base ${
@@ -459,8 +634,25 @@ export default function TenantsPage() {
                 <Plus className="h-5 w-5" />
                 Make Payment
               </button>
+            ) : (
+              <button
+                onClick={openAddModal}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium text-sm sm:text-base ${
+                  isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
+                }`}
+                disabled={isLoading}
+                aria-label="Add new tenant"
+              >
+                <Plus className="h-5 w-5" />
+                Add Tenant
+              </button>
             )}
           </div>
+          {tenants.length >= 3 && (
+            <div className="bg-yellow-100 text-yellow-700 p-4 mb-4 rounded-lg shadow">
+              Note: Adding more tenants will require payment of a management fee if there are pending invoices or insufficient wallet balance.
+            </div>
+          )}
           {error && (
             <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
               {error}
@@ -600,6 +792,7 @@ export default function TenantsPage() {
             onClose={() => {
               setIsModalOpen(false);
               resetForm();
+              setPendingTenantData(null);
             }}
           >
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -785,7 +978,7 @@ export default function TenantsPage() {
                       .find((p) => p._id === selectedPropertyId)
                       ?.unitTypes.map((u) => (
                         <option key={u.type} value={u.type}>
-                          {u.type} ({u.managementType}: {typeof u.managementFee === "number" ? `Ksh ${u.managementFee}/mo` : u.managementFee})
+                          {u.type} ({u.managementType}: Ksh {u.managementFee}/mo)
                         </option>
                       ))}
                   </select>
@@ -899,6 +1092,7 @@ export default function TenantsPage() {
                   onClick={() => {
                     setIsModalOpen(false);
                     resetForm();
+                    setPendingTenantData(null);
                   }}
                   className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
                   aria-label="Cancel tenant form"
@@ -966,20 +1160,20 @@ export default function TenantsPage() {
             onClose={() => {
               setIsPaymentPromptOpen(false);
               resetPaymentForm();
-              setError(null); // Clear error when closing payment modal
+              setError(null);
             }}
           >
             {properties.length === 0 ? (
               <>
                 <p className="mb-6 text-gray-700 text-sm sm:text-base">
-                  You need an active payment status and a minimum wallet balance of Ksh 1,000 to add a tenant. Please complete the payment process.
+                  You need an active payment status and a minimum wallet balance to add a tenant. Please complete the payment process.
                 </p>
                 <div className="flex flex-col sm:flex-row justify-end gap-3">
                   <button
                     onClick={() => {
                       setIsPaymentPromptOpen(false);
                       resetPaymentForm();
-                      setError(null); // Clear error when canceling
+                      setError(null);
                     }}
                     className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
                     aria-label="Cancel payment prompt"
@@ -1039,12 +1233,12 @@ export default function TenantsPage() {
                         const unit = properties
                           .find((p) => p._id === paymentPropertyId)
                           ?.unitTypes.find((u) => u.type === unitType);
-                        if (unit && typeof unit.managementFee === "number") {
+                        if (unit) {
                           setPaymentAmount(unit.managementFee.toString());
                           setPaymentFormErrors((prev) => ({
                             ...prev,
                             paymentUnitType: undefined,
-                            paymentAmount: typeof unit.managementFee === "number" && unit.managementFee > 0 ? undefined : "Payment amount must be a positive number",
+                            paymentAmount: unit.managementFee >= 10 ? undefined : "Payment amount must be at least Ksh 10",
                           }));
                         } else {
                           setPaymentAmount("");
@@ -1065,7 +1259,7 @@ export default function TenantsPage() {
                         .find((p) => p._id === paymentPropertyId)
                         ?.unitTypes.map((u) => (
                           <option key={u.type} value={u.type}>
-                            {u.type} ({u.managementType}: {typeof u.managementFee === "number" ? `Ksh ${u.managementFee}/mo` : u.managementFee})
+                            {u.type} ({u.managementType}: Ksh {u.managementFee}/mo)
                           </option>
                         ))}
                     </select>
@@ -1088,13 +1282,38 @@ export default function TenantsPage() {
                     <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentAmount}</p>
                   )}
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Phone Number</label>
+                  <input
+                    placeholder="Enter phone number (e.g., +254123456789)"
+                    value={tenantPhone}
+                    onChange={(e) => {
+                      setTenantPhone(e.target.value);
+                      setFormErrors((prev) => ({
+                        ...prev,
+                        tenantPhone: e.target.value.trim()
+                          ? /^\+?\d{10,15}$/.test(e.target.value)
+                            ? undefined
+                            : "Invalid phone number (10-15 digits, optional +)"
+                          : "Phone number is required",
+                      }));
+                    }}
+                    required
+                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
+                      formErrors.tenantPhone ? "border-red-500" : "border-gray-300"
+                    }`}
+                  />
+                  {formErrors.tenantPhone && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>
+                  )}
+                </div>
                 <div className="flex flex-col sm:flex-row justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       setIsPaymentPromptOpen(false);
                       resetPaymentForm();
-                      setError(null); // Clear error when canceling
+                      setError(null);
                     }}
                     className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
                     aria-label="Cancel payment"
@@ -1108,14 +1327,16 @@ export default function TenantsPage() {
                       Object.values(paymentFormErrors).some((v) => v !== undefined) ||
                       !paymentPropertyId ||
                       !paymentUnitType ||
-                      !paymentAmount
+                      !paymentAmount ||
+                      !tenantPhone
                     }
                     className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
                       isLoading ||
                       Object.values(paymentFormErrors).some((v) => v !== undefined) ||
                       !paymentPropertyId ||
                       !paymentUnitType ||
-                      !paymentAmount
+                      !paymentAmount ||
+                      !tenantPhone
                         ? "bg-gray-400 cursor-not-allowed"
                         : "bg-[#012a4a] hover:bg-[#014a7a]"
                     }`}
@@ -1129,6 +1350,18 @@ export default function TenantsPage() {
                 </div>
               </form>
             )}
+          </Modal>
+          <Modal
+            title="Processing Payment"
+            isOpen={isPaymentLoadingModalOpen}
+            onClose={() => {}}
+          >
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a] mb-4"></div>
+              <p className="text-gray-700 text-sm sm:text-base">
+                Processing your payment. Please wait...
+              </p>
+            </div>
           </Modal>
         </main>
       </div>

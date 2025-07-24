@@ -13,35 +13,34 @@ interface Property {
   _id: string;
   name: string;
   address: string;
-  unitTypes: { type: string; price: number; deposit: number; quantity: number; managementType: "RentCollection" | "FullManagement"; managementFee: number | string }[];
+  unitTypes: { type: string; price: number; deposit: number; quantity: number; managementType: "RentCollection" | "FullManagement"; managementFee: number }[];
   status: "Active" | "Inactive";
   createdAt: string;
 }
 
-// Predefined unit types and pricing
 const UNIT_TYPES = [
   {
     type: "Single",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [5, 20], fee: 1 },
         { range: [21, 50], fee: 5000 },
         { range: [51, 100], fee: 8000 },
-        { range: [101, Infinity], fee: "Call for pricing" },
+        { range: [101, Infinity], fee: 0 },
       ],
-      FullManagement: "Call for pricing",
+      FullManagement: 0,
     },
   },
   {
     type: "Studio",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [5, 20], fee: 1 },
         { range: [21, 50], fee: 5000 },
         { range: [51, 100], fee: 8000 },
-        { range: [101, Infinity], fee: "Call for pricing" },
+        { range: [101, Infinity], fee: 0 },
       ],
-      FullManagement: "Call for pricing",
+      FullManagement: 0,
     },
   },
   {
@@ -52,7 +51,7 @@ const UNIT_TYPES = [
         { range: [16, 25], fee: 8000 },
         { range: [26, Infinity], fee: 15000 },
       ],
-      FullManagement: "Call for pricing",
+      FullManagement: 0,
     },
   },
   {
@@ -63,7 +62,7 @@ const UNIT_TYPES = [
         { range: [16, 25], fee: 8000 },
         { range: [26, Infinity], fee: 15000 },
       ],
-      FullManagement: "Call for pricing",
+      FullManagement: 0,
     },
   },
   {
@@ -74,10 +73,9 @@ const UNIT_TYPES = [
         { range: [16, 25], fee: 8000 },
         { range: [26, Infinity], fee: 15000 },
       ],
-      FullManagement: "Call for pricing",
+      FullManagement: 0,
     },
   },
-
   {
     type: "Duplex",
     pricing: {
@@ -86,7 +84,7 @@ const UNIT_TYPES = [
         { range: [16, 25], fee: 8000 },
         { range: [26, Infinity], fee: 15000 },
       ],
-      FullManagement: "Call for pricing",
+      FullManagement: 0,
     },
   },
   {
@@ -97,7 +95,7 @@ const UNIT_TYPES = [
         { range: [16, 25], fee: 8000 },
         { range: [26, Infinity], fee: 15000 },
       ],
-      FullManagement: "Call for pricing",
+      FullManagement: 0,
     },
   },
 ];
@@ -258,21 +256,19 @@ export default function PropertiesPage() {
     return Object.keys(errors).length === 0;
   }, [propertyName, address, unitTypes]);
 
-  const getManagementFee = (unitType: string, managementType: "RentCollection" | "FullManagement", quantity: string) => {
+  const getManagementFee = (unitType: string, managementType: "RentCollection" | "FullManagement", quantity: string): string => {
     const unit = UNIT_TYPES.find((ut) => ut.type === unitType);
-    if (!unit) return "Call for pricing";
+    if (!unit) return "0 Ksh/mo";
     const parsedQuantity = parseInt(quantity) || 0;
     const pricing = unit.pricing[managementType];
-    if (pricing === "Call for pricing") return "Call for pricing";
-    if (Array.isArray(pricing)) {
-      for (const tier of pricing) {
-        const [min, max] = tier.range;
-        if (parsedQuantity >= min && parsedQuantity <= max) {
-          return `Ksh ${tier.fee}/mo`;
-        }
+    if (typeof pricing === "number") return `${pricing} Ksh/mo`;
+    for (const tier of pricing) {
+      const [min, max] = tier.range;
+      if (parsedQuantity >= min && parsedQuantity <= max) {
+        return `${tier.fee} Ksh/mo`;
       }
     }
-    return "Call for pricing";
+    return "0 Ksh/mo";
   };
 
   const handleSubmit = useCallback(
@@ -296,7 +292,6 @@ export default function PropertiesPage() {
           deposit: parseFloat(u.deposit) || 0,
           quantity: parseInt(u.quantity) || 0,
           managementType: u.managementType,
-          managementFee: getManagementFee(u.type, u.managementType, u.quantity),
         })),
         ownerId: userId,
       };
@@ -406,8 +401,7 @@ export default function PropertiesPage() {
           {error && (
             <motion.div
               className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow"
-              initial={{ 
-                opacity: 0 }}
+              initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
             >
@@ -474,7 +468,7 @@ export default function PropertiesPage() {
                       </td>
                       <td className="px-4 py-3">{new Date(p.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
-                        {p.unitTypes.map((u) => `${u.type} (x${u.quantity})`).join(", ") || "N/A"}
+                        {p.unitTypes.map((u) => `${u.type} (x${u.quantity}, ${u.managementFee} Ksh/mo)`).join(", ") || "N/A"}
                       </td>
                       <td
                         className="px-4 py-3 flex gap-2"
