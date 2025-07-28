@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
+import { v4 as uuidv4 } from "uuid";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     console.log("Received signin request:", body);
@@ -20,10 +21,6 @@ export async function POST(request: Request) {
 
     const { db } = await connectToDatabase();
     console.log("Connected to database");
-
-    // Log all collections in the database
-    const collections = await db.listCollections().toArray();
-    console.log("Database collections in rentaldb:", collections.map(c => c.name));
 
     // Handle userId-based authentication (for session validation)
     if (userId) {
@@ -77,6 +74,13 @@ export async function POST(request: Request) {
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
           maxAge: 7 * 24 * 60 * 60, // 7 days
+          path: "/",
+        });
+
+        response.cookies.set("csrf-token", uuidv4(), {
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          maxAge: 60 * 60, // 1 hour
           path: "/",
         });
 
@@ -145,6 +149,13 @@ export async function POST(request: Request) {
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
           maxAge: 7 * 24 * 60 * 60, // 7 days
+          path: "/",
+        });
+
+        response.cookies.set("csrf-token", uuidv4(), {
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          maxAge: 60 * 60, // 1 hour
           path: "/",
         });
 

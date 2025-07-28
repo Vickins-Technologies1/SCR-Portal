@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Allow both propertyOwner and admin roles
-    if (!['propertyOwner', 'admin'].includes(role || '')) {
+    if (!['propertyOwner', 'admin', 'tenant'].includes(role || '')) {
       console.log('Unauthorized role:', role);
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Only property owners or admins can access payments' },

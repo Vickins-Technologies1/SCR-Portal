@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import { Save, User, Lock, CreditCard, Settings, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import toast, { Toaster } from "react-hot-toast"; // Import react-hot-toast
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 
@@ -35,59 +36,70 @@ export default function OwnerSettingsPage() {
   useEffect(() => {
     const id = Cookies.get("userId");
     const role = Cookies.get("role");
-    if (!id || role !== "propertyOwner") return;
+    if (!id || role !== "propertyOwner") {
+      console.log("[OwnerSettingsPage] Invalid userId or role:", { id, role });
+      toast.error("Unauthorized access. Please log in as a property owner.");
+      return;
+    }
     setOwnerId(id);
 
-    const fetchProfile = async () => {
-      const res = await fetch(`/api/owner/profile?ownerId=${id}`);
-      const data = await res.json();
-      if (data.success) {
-        setProfile(data.owner);
-        setPaymentSettings((prev) => ({ ...prev, umsPayEmail: data.owner.email || "" }));
+    const fetchData = async () => {
+      try {
+        const res = await fetch(`/api/settings?ownerId=${id}`);
+        const data = await res.json();
+        console.log("[OwnerSettingsPage] Fetch data response:", data);
+        if (data.success) {
+          setProfile(data.owner);
+          setPaymentSettings({
+            umsPayEnabled: data.paymentSettings?.umsPayEnabled || false,
+            umsPayApiKey: data.paymentSettings?.umsPayApiKey || "",
+            umsPayEmail: data.paymentSettings?.umsPayEmail || data.owner?.email || "",
+            umsPayAccountId: data.paymentSettings?.umsPayAccountId || "",
+            umsCommsEnabled: data.paymentSettings?.umsCommsEnabled || false,
+            umsCommsApiKey: data.paymentSettings?.umsCommsApiKey || "",
+            umsCommsAppId: data.paymentSettings?.umsCommsAppId || "",
+            umsCommsSenderId: data.paymentSettings?.umsCommsSenderId || "UMS_SMS",
+            stripeEnabled: data.paymentSettings?.stripeEnabled || false,
+            stripeApiKey: data.paymentSettings?.stripeApiKey || "",
+            paypalEnabled: data.paymentSettings?.paypalEnabled || false,
+            paypalClientId: data.paymentSettings?.paypalClientId || "",
+            bankTransferEnabled: data.paymentSettings?.bankTransferEnabled || false,
+            bankAccountDetails: data.paymentSettings?.bankAccountDetails || "",
+          });
+          toast.success("Profile and settings loaded successfully!");
+        } else {
+          console.error("[OwnerSettingsPage] Failed to fetch data:", data.message);
+          toast.error(`Failed to load profile: ${data.message}`);
+        }
+      } catch (err) {
+        console.error("[OwnerSettingsPage] Error fetching data:", err);
+        toast.error("An error occurred while loading profile.");
       }
     };
 
-    const fetchPaymentSettings = async () => {
-      const res = await fetch(`/api/owner/payment-settings?ownerId=${id}`);
-      const data = await res.json();
-      if (data.success) {
-        setPaymentSettings({
-          umsPayEnabled: data.paymentSettings?.umsPayEnabled || false,
-          umsPayApiKey: data.paymentSettings?.umsPayApiKey || "",
-          umsPayEmail: data.paymentSettings?.umsPayEmail || data.owner?.email || "",
-          umsPayAccountId: data.paymentSettings?.umsPayAccountId || "",
-          umsCommsEnabled: data.paymentSettings?.umsCommsEnabled || false,
-          umsCommsApiKey: data.paymentSettings?.umsCommsApiKey || "",
-          umsCommsAppId: data.paymentSettings?.umsCommsAppId || "",
-          umsCommsSenderId: data.paymentSettings?.umsCommsSenderId || "UMS_SMS",
-          stripeEnabled: data.paymentSettings?.stripeEnabled || false,
-          stripeApiKey: data.paymentSettings?.stripeApiKey || "",
-          paypalEnabled: data.paymentSettings?.paypalEnabled || false,
-          paypalClientId: data.paymentSettings?.paypalClientId || "",
-          bankTransferEnabled: data.paymentSettings?.bankTransferEnabled || false,
-          bankAccountDetails: data.paymentSettings?.bankAccountDetails || "",
-        });
-      }
-    };
-
-    fetchProfile();
-    fetchPaymentSettings();
+    fetchData();
   }, []);
 
   const updateProfile = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/owner/profile", {
+      const payload = { ownerId, ...profile };
+      console.log("[OwnerSettingsPage] Updating profile with payload:", payload);
+      const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ownerId, ...profile }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!data.success) alert("Failed to update profile.");
-      else alert("Profile updated successfully.");
+      console.log("[OwnerSettingsPage] Update profile response:", data);
+      if (data.success) {
+        toast.success("Profile updated successfully!");
+      } else {
+        toast.error(`Failed to update profile: ${data.message}`);
+      }
     } catch (err) {
-      console.error(err);
-      alert("An error occurred while updating profile.");
+      console.error("[OwnerSettingsPage] Error updating profile:", err);
+      toast.error("An error occurred while updating profile.");
     } finally {
       setLoading(false);
     }
@@ -95,26 +107,29 @@ export default function OwnerSettingsPage() {
 
   const changePassword = async () => {
     if (!password || password !== confirmPassword) {
-      alert("Passwords do not match or are empty.");
+      toast.error("Passwords do not match or are empty.");
       return;
     }
     try {
-      const res = await fetch("/api/owner/change-password", {
-        method: "POST",
+      const payload = { ownerId, password };
+      console.log("[OwnerSettingsPage] Changing password with payload:", payload);
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ownerId, password }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
+      console.log("[OwnerSettingsPage] Change password response:", data);
       if (data.success) {
-        alert("Password updated successfully.");
+        toast.success("Password updated successfully!");
         setPassword("");
         setConfirmPassword("");
       } else {
-        alert("Failed to update password.");
+        toast.error(`Failed to update password: ${data.message}`);
       }
     } catch (err) {
-      console.error(err);
-      alert("An error occurred while updating password.");
+      console.error("[OwnerSettingsPage] Error changing password:", err);
+      toast.error("An error occurred while updating password.");
     }
   };
 
@@ -127,7 +142,7 @@ export default function OwnerSettingsPage() {
           !paymentSettings.umsPayEmail ||
           !paymentSettings.umsPayAccountId)
       ) {
-        alert("Please provide all UMS Pay details (API Key, Email, Account ID).");
+        toast.error("Please provide all UMS Pay details (API Key, Email, Account ID).");
         return;
       }
       if (
@@ -136,36 +151,39 @@ export default function OwnerSettingsPage() {
           !paymentSettings.umsCommsAppId ||
           !paymentSettings.umsCommsSenderId)
       ) {
-        alert("Please provide all UMSComms details (API Key, App ID, Sender ID).");
+        toast.error("Please provide all UMSComms details (API Key, App ID, Sender ID).");
         return;
       }
       if (paymentSettings.stripeEnabled && !paymentSettings.stripeApiKey) {
-        alert("Please provide a Stripe API key.");
+        toast.error("Please provide a Stripe API key.");
         return;
       }
       if (paymentSettings.paypalEnabled && !paymentSettings.paypalClientId) {
-        alert("Please provide a PayPal Client ID.");
+        toast.error("Please provide a PayPal Client ID.");
         return;
       }
       if (paymentSettings.bankTransferEnabled && !paymentSettings.bankAccountDetails) {
-        alert("Please provide bank account details.");
+        toast.error("Please provide bank account details.");
         return;
       }
 
-      const res = await fetch("/api/owner/payment-settings", {
-        method: "PUT",
+      const payload = { ownerId, ...paymentSettings };
+      console.log("[OwnerSettingsPage] Updating payment settings with payload:", payload);
+      const res = await fetch("/api/settings", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ownerId, ...paymentSettings }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
+      console.log("[OwnerSettingsPage] Update payment settings response:", data);
       if (data.success) {
-        alert("Payment settings updated successfully.");
+        toast.success("Payment settings updated successfully!");
       } else {
-        alert("Failed to update payment settings.");
+        toast.error(`Failed to update payment settings: ${data.message}`);
       }
     } catch (err) {
-      console.error(err);
-      alert("An error occurred while updating payment settings.");
+      console.error("[OwnerSettingsPage] Error updating payment settings:", err);
+      toast.error("An error occurred while updating payment settings.");
     } finally {
       setPaymentLoading(false);
     }
@@ -177,6 +195,7 @@ export default function OwnerSettingsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} /> {/* Add Toaster component */}
       <Navbar />
       <Sidebar />
       <div className="sm:ml-64 mt-16">
@@ -301,7 +320,7 @@ export default function OwnerSettingsPage() {
                   onClick={() => toggleGateway("umsPay")}
                 >
                   <div className="flex items-center gap-3">
-                   <span className="text-sm font-medium text-gray-700">UMS Pay (M-Pesa)</span>
+                    <span className="text-sm font-medium text-gray-700">UMS Pay (M-Pesa)</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div
@@ -373,7 +392,7 @@ export default function OwnerSettingsPage() {
                       <p className="text-xs text-gray-500 mt-1">
                         Find your API key and Account ID in the{" "}
                         <a
-                          href="https://api.umspay.co.ke/dashboard"
+                          href="https://umspay.co.ke/dashboard"
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[#03a678] hover:underline"

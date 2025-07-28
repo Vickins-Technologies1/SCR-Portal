@@ -39,11 +39,38 @@ export default function TenantDetailsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPropertyLoading, setIsPropertyLoading] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTenant, setEditTenant] = useState<Partial<Tenant> | null>(null);
+  const [csrfToken, setCsrfToken] = useState<string>("");
 
+  // Fetch CSRF token
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const res = await fetch("/api/csrf-token", {
+          method: "GET",
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (data.csrfToken) {
+          setCsrfToken(data.csrfToken);
+          console.log("CSRF token fetched successfully");
+        } else {
+          setError("Failed to fetch CSRF token.");
+          console.log("CSRF token fetch failed - Response:", data);
+        }
+      } catch (err) {
+        setError("Failed to connect to server for CSRF token.");
+        console.log("CSRF token fetch error:", err instanceof Error ? err.message : "Unknown error");
+      }
+    };
+    fetchCsrfToken();
+  }, []);
+
+  // Check cookies and redirect if unauthorized
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
@@ -55,8 +82,9 @@ export default function TenantDetailsPage() {
     }
   }, [router]);
 
+  // Fetch tenant and property data
   useEffect(() => {
-    if (!userId || !tenantId || role !== "propertyOwner") return;
+    if (!userId || !tenantId || role !== "propertyOwner" || !csrfToken) return;
 
     const fetchTenant = async () => {
       setIsLoading(true);
@@ -79,6 +107,7 @@ export default function TenantDetailsPage() {
           }
         } else {
           setError(data.message || "Tenant not found.");
+          console.log(`Failed to fetch tenant - Error: ${data.message || "Unknown error"}`);
         }
       } catch (error) {
         console.error("Error fetching tenant:", error);
@@ -101,6 +130,7 @@ export default function TenantDetailsPage() {
           setProperty(data.property);
         } else {
           setError(data.message || "Failed to fetch property details.");
+          console.log(`Failed to fetch property - Error: ${data.message || "Unknown error"}`);
         }
       } catch (error) {
         console.error("Error fetching property:", error);
@@ -111,26 +141,38 @@ export default function TenantDetailsPage() {
     };
 
     fetchTenant();
-  }, [userId, tenantId, role]);
+  }, [userId, tenantId, role, csrfToken]);
 
   const handleImpersonate = async () => {
-    if (!tenant) return;
+    if (!tenant || !userId || !csrfToken) {
+      setError("Missing tenant, user ID, or CSRF token.");
+      console.log("Impersonation failed - Missing data", { tenantId: tenant?._id, userId, csrfToken });
+      return;
+    }
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       const res = await fetch("/api/impersonate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ tenantId: tenant._id, userId }),
+        body: JSON.stringify({ tenantId: tenant._id, userId, csrfToken }),
       });
       const data = await res.json();
       if (data.success) {
-        Cookies.set("userId", tenant._id, { path: "/", expires: 1 });
-        Cookies.set("role", "tenant", { path: "/", expires: 1 });
-        router.push("/tenant-dashboard");
+        setSuccessMessage("Impersonation successful! Redirecting to tenant dashboard...");
+        console.log(`Impersonation successful - tenantId: ${tenant._id}, userId: ${userId}`);
+        setTimeout(() => {
+          Cookies.set("userId", tenant._id, { path: "/", expires: 1 });
+          Cookies.set("role", "tenant", { path: "/", expires: 1 });
+          Cookies.set("originalUserId", userId, { path: "/", expires: 1 });
+          Cookies.set("originalRole", "propertyOwner", { path: "/", expires: 1 });
+          router.push("/tenant-dashboard");
+        }, 1000);
       } else {
         setError(data.message || "Failed to impersonate tenant.");
+        console.log(`Impersonation failed - Error: ${data.message}`);
       }
     } catch (error) {
       console.error("Error impersonating tenant:", error);
@@ -141,20 +183,27 @@ export default function TenantDetailsPage() {
   };
 
   const handleDelete = async () => {
-    if (!tenant || !confirm("Are you sure you want to delete this tenant?")) return;
+    if (!tenant || !confirm("Are you sure you want to delete this tenant? This action cannot be undone.") || !csrfToken) {
+      setError("Missing tenant or CSRF token.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       const res = await fetch(`/api/tenants/${tenant._id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ csrfToken, userId }),
       });
       const data = await res.json();
       if (data.success) {
-        router.push("/property-owner-dashboard/tenants");
+        setSuccessMessage("Tenant deleted successfully!");
+        setTimeout(() => router.push("/property-owner-dashboard/tenants"), 1000);
       } else {
         setError(data.message || "Failed to delete tenant.");
+        console.log(`Delete tenant failed - Error: ${data.message}`);
       }
     } catch (error) {
       console.error("Error deleting tenant:", error);
@@ -168,13 +217,18 @@ export default function TenantDetailsPage() {
     if (!tenant) return;
     setEditTenant({ ...tenant });
     setShowEditModal(true);
+    setError(null);
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editTenant || !tenant) return;
+    if (!editTenant || !tenant || !csrfToken) {
+      setError("Missing tenant data or CSRF token.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       const res = await fetch(`/api/tenants/${tenant._id}`, {
         method: "PUT",
@@ -187,15 +241,19 @@ export default function TenantDetailsPage() {
           houseNumber: editTenant.houseNumber,
           leaseStartDate: editTenant.leaseStartDate,
           leaseEndDate: editTenant.leaseEndDate,
+          userId,
+          csrfToken,
         }),
       });
       const data = await res.json();
       if (data.success) {
         setTenant({ ...tenant, ...editTenant });
+        setSuccessMessage("Tenant updated successfully!");
         setShowEditModal(false);
         setEditTenant(null);
       } else {
         setError(data.message || "Failed to update tenant.");
+        console.log(`Update tenant failed - Error: ${data.message}`);
       }
     } catch (error) {
       console.error("Error updating tenant:", error);
@@ -306,6 +364,23 @@ export default function TenantDetailsPage() {
               </button>
             </div>
           )}
+          {successMessage && (
+            <div className="bg-green-100 text-green-700 p-4 rounded-lg shadow-md flex items-center gap-2 mb-6 animate-pulse">
+              <svg className="h-5 w-5 text-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {successMessage}
+              <button
+                onClick={() => setSuccessMessage(null)}
+                className="ml-auto text-green-700 hover:text-green-900"
+                aria-label="Dismiss success message"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
           <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-6 md:p-8 transform transition-all duration-300 hover:shadow-xl">
             <div className="bg-gradient-to-r from-indigo-600 to-blue-500 text-white p-4 rounded-t-xl mb-6">
               <h2 className="text-xl font-semibold">Tenant Information</h2>
@@ -384,7 +459,7 @@ export default function TenantDetailsPage() {
                 </p>
               </div>
             </div>
-            <div className="mt-8 flex justify-end gap-4">
+            <div className="mt-8 flex justify-end gap-4 flex-wrap">
               <button
                 onClick={handleEdit}
                 disabled={isLoading}
@@ -424,8 +499,8 @@ export default function TenantDetailsPage() {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full">
                 <h2 className="text-xl font-bold mb-4 text-gray-800">Edit Tenant</h2>
-                <form onSubmit={handleUpdate}>
-                  <div className="mb-4">
+                <form onSubmit={handleUpdate} className="space-y-4">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700">Full Name</label>
                     <input
                       type="text"
@@ -435,7 +510,7 @@ export default function TenantDetailsPage() {
                       required
                     />
                   </div>
-                  <div className="mb-4">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700">Email</label>
                     <input
                       type="email"
@@ -445,7 +520,7 @@ export default function TenantDetailsPage() {
                       required
                     />
                   </div>
-                  <div className="mb-4">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700">Phone</label>
                     <input
                       type="tel"
@@ -455,7 +530,7 @@ export default function TenantDetailsPage() {
                       required
                     />
                   </div>
-                  <div className="mb-4">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700">House Number</label>
                     <input
                       type="text"
@@ -465,20 +540,20 @@ export default function TenantDetailsPage() {
                       required
                     />
                   </div>
-                  <div className="mb-4">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700">Lease Start Date</label>
                     <input
                       type="date"
-                      value={editTenant.leaseStartDate || ""}
+                      value={editTenant.leaseStartDate ? new Date(editTenant.leaseStartDate).toISOString().split("T")[0] : ""}
                       onChange={(e) => setEditTenant({ ...editTenant, leaseStartDate: e.target.value })}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
                     />
                   </div>
-                  <div className="mb-4">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700">Lease End Date</label>
                     <input
                       type="date"
-                      value={editTenant.leaseEndDate || ""}
+                      value={editTenant.leaseEndDate ? new Date(editTenant.leaseEndDate).toISOString().split("T")[0] : ""}
                       onChange={(e) => setEditTenant({ ...editTenant, leaseEndDate: e.target.value })}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50"
                     />
@@ -486,7 +561,11 @@ export default function TenantDetailsPage() {
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowEditModal(false)}
+                      onClick={() => {
+                        setShowEditModal(false);
+                        setEditTenant(null);
+                        setError(null);
+                      }}
                       className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
                     >
                       Cancel
@@ -494,8 +573,13 @@ export default function TenantDetailsPage() {
                     <button
                       type="submit"
                       disabled={isLoading}
-                      className={`px-4 py-2 rounded-md text-white ${isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"}`}
+                      className={`px-4 py-2 rounded-md text-white flex items-center gap-2 ${
+                        isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+                      }`}
                     >
+                      {isLoading && (
+                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                      )}
                       {isLoading ? "Saving..." : "Save"}
                     </button>
                   </div>
@@ -514,7 +598,8 @@ export default function TenantDetailsPage() {
           animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
         @keyframes pulse {
-          0%, 100% {
+          0%,
+          100% {
             opacity: 1;
           }
           50% {

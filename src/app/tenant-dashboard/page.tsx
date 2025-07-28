@@ -11,6 +11,7 @@ import {
   Send,
   AlertCircle,
   Wallet,
+  LogOut,
 } from "lucide-react";
 
 interface Tenant {
@@ -26,7 +27,7 @@ interface Tenant {
   status: string;
   paymentStatus: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   wallet: number;
 }
 
@@ -40,7 +41,7 @@ interface Property {
 export default function TenantDashboardPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
+  const [isImpersonated, setIsImpersonated] = useState(false);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,25 +54,64 @@ export default function TenantDashboardPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const uid = Cookies.get("userId");
-    const r = Cookies.get("role");
-    if (!uid || r !== "tenant") {
-      setError("Unauthorized. Please log in as a tenant.");
-      router.replace("/");
-    } else {
-      setUserId(uid);
-      setRole(r);
+    // Unified cookie getter with fallback
+    const getCookie = (name: string): string | null => {
+      const value = Cookies.get(name);
+      if (value !== undefined) return value;
+
+      const cookie = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith(`${name}=`));
+      return cookie ? cookie.split("=")[1] : null;
+    };
+
+    const uid = getCookie("userId");
+    const role = getCookie("role");
+    const originalRole = getCookie("originalRole");
+    const originalUserId = getCookie("originalUserId");
+
+    console.log("Cookies retrieved:", {
+      userId: uid ?? "null",
+      role: role ?? "null",
+      originalRole: originalRole ?? "null",
+      originalUserId: originalUserId ?? "null",
+      documentCookie: document.cookie,
+    });
+
+    const isTenant = role === "tenant";
+    const isImpersonating =
+      originalRole === "propertyOwner" && originalUserId !== null;
+
+    if (!uid || (!isTenant && !isImpersonating)) {
+      setError("Unauthorized. Please log in as a tenant or impersonate a tenant.");
+      console.log(
+        `Unauthorized access - userId: ${uid ?? "null"}, role: ${role ?? "null"}, originalRole: ${
+          originalRole ?? "null"
+        }, originalUserId: ${originalUserId ?? "null"}`
+      );
+      setTimeout(() => router.replace("/login"), 2000);
+      return;
+    }
+
+    setUserId(uid);
+
+    if (isImpersonating) {
+      setIsImpersonated(true);
+      console.log(
+        `Impersonation session detected - userId: ${uid}, originalUserId: ${originalUserId}, originalRole: ${originalRole}`
+      );
     }
   }, [router]);
 
   useEffect(() => {
-    if (!userId || role !== "tenant") return;
+    if (!userId) return;
 
     const fetchTenantData = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const tenantRes = await fetch(`/api/tenants/${userId}`, {
+        // Fetch tenant profile using /api/tenant/profile
+        const tenantRes = await fetch("/api/tenant/profile", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -80,6 +120,7 @@ export default function TenantDashboardPage() {
 
         if (!tenantData.success) {
           setError(tenantData.message || "Failed to fetch tenant data");
+          console.log(`Failed to fetch tenant data - Error: ${tenantData.message}`);
           return;
         }
 
@@ -97,10 +138,11 @@ export default function TenantDashboardPage() {
             setProperty(propertyData.property);
           } else {
             setError(propertyData.message || "Failed to fetch property data");
+            console.log(`Failed to fetch property data - Error: ${propertyData.message}`);
           }
         }
       } catch (err) {
-        console.error("Tenant fetch error:", err);
+        console.error("Tenant fetch error:", err instanceof Error ? err.message : "Unknown error");
         setError("Failed to connect to the server");
       } finally {
         setIsLoading(false);
@@ -108,7 +150,7 @@ export default function TenantDashboardPage() {
     };
 
     fetchTenantData();
-  }, [userId, role]);
+  }, [userId]);
 
   const handleMaintenanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,15 +159,24 @@ export default function TenantDashboardPage() {
     setSuccessMessage(null);
 
     try {
+      const csrfRes = await fetch("/api/csrf-token", {
+        method: "GET",
+        credentials: "include",
+      });
+      const { csrfToken } = await csrfRes.json();
+
       const res = await fetch("/api/maintenance", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         credentials: "include",
         body: JSON.stringify({
           tenantId: userId,
           propertyId: tenant?.propertyId,
           description: maintenanceRequest.description,
           urgency: maintenanceRequest.urgency,
+          csrfToken,
         }),
       });
       const data = await res.json();
@@ -136,9 +187,48 @@ export default function TenantDashboardPage() {
         setIsModalOpen(false);
       } else {
         setError(data.message || "Failed to submit maintenance request");
+        console.log(`Maintenance request failed - Error: ${data.message}`);
       }
     } catch (err) {
-      console.error("Maintenance submit error:", err);
+      console.error("Maintenance submit error:", err instanceof Error ? err.message : "Unknown error");
+      setError("Failed to connect to the server");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRevertImpersonation = async () => {
+    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const csrfRes = await fetch("/api/csrf-token", {
+        method: "GET",
+        credentials: "include",
+      });
+      const { csrfToken } = await csrfRes.json();
+
+      const res = await fetch("/api/impersonate/revert", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ csrfToken }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setSuccessMessage("Impersonation reverted successfully!");
+        console.log("Impersonation reverted successfully");
+        setTimeout(() => router.push("/property-owner-dashboard"), 1000);
+      } else {
+        setError(data.message || "Failed to revert impersonation");
+        console.log(`Revert impersonation failed - Error: ${data.message}`);
+      }
+    } catch (err) {
+      console.error("Revert impersonation error:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to connect to the server");
     } finally {
       setIsLoading(false);
@@ -148,9 +238,21 @@ export default function TenantDashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-white">
       <main className="p-4 max-w-7xl mx-auto">
-        <section className="mb-6 bg-blue-900 text-white rounded-xl p-6 shadow-lg">
-          <h1 className="text-2xl font-bold mb-2">Welcome, {tenant?.name || "Tenant"}!</h1>
-          <p>Manage your lease, track payments, and submit maintenance requests with ease.</p>
+        <section className="mb-6 bg-blue-900 text-white rounded-xl p-6 shadow-lg flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Welcome, {tenant?.name || "Tenant"}!</h1>
+            <p>Manage your lease, track payments, and submit maintenance requests with ease.</p>
+          </div>
+          {isImpersonated && (
+            <button
+              onClick={handleRevertImpersonation}
+              disabled={isLoading}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-2"
+            >
+              <LogOut size={18} />
+              Revert Impersonation
+            </button>
+          )}
         </section>
 
         {error && (
@@ -167,40 +269,40 @@ export default function TenantDashboardPage() {
         {isLoading && (
           <div className="mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg flex items-center gap-2">
             <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600"></div>
-            Loading dashboard...
+            Loading...
           </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Leased Property */}
           <Card icon={<Home />} title="Leased Property">
             {property ? (
               <>
                 <p className="font-medium">{property.name}</p>
                 <p className="text-gray-500">{property.address}</p>
                 <p className="mt-2">Unit: {tenant?.houseNumber} ({tenant?.unitType})</p>
-                <p>Rent: Ksh. {tenant?.price?.toFixed(2)}</p>
-                <p>Deposit: Ksh. {tenant?.deposit?.toFixed(2)}</p>
+                <p>Rent: Ksh {tenant?.price?.toFixed(2)}</p>
+                <p>Deposit: Ksh {tenant?.deposit?.toFixed(2)}</p>
               </>
             ) : (
               <p className="text-sm text-gray-500">No property assigned.</p>
             )}
           </Card>
 
-          {/* Payment Status */}
           <Card icon={<DollarSign />} title="Payment Status">
             {tenant ? (
               <>
-                <p>Rent: Ksh. {tenant.price?.toFixed(2)}</p>
+                <p>Rent: Ksh {tenant.price?.toFixed(2)}</p>
                 <p className="mt-2">
                   Status:
-                  <span className={`ml-2 inline-block px-3 py-1 text-sm font-medium rounded-full ${
-                    tenant.paymentStatus === "paid"
-                      ? "bg-green-100 text-green-800"
-                      : tenant.paymentStatus === "overdue"
-                      ? "bg-red-100 text-red-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  }`}>
+                  <span
+                    className={`ml-2 inline-block px-3 py-1 text-sm font-medium rounded-full ${
+                      tenant.paymentStatus === "paid"
+                        ? "bg-green-100 text-green-800"
+                        : tenant.paymentStatus === "overdue"
+                        ? "bg-red-100 text-red-800"
+                        : "bg-yellow-100 text-yellow-800"
+                    }`}
+                  >
                     {tenant.paymentStatus || "N/A"}
                   </span>
                 </p>
@@ -210,11 +312,10 @@ export default function TenantDashboardPage() {
             )}
           </Card>
 
-          {/* Wallet */}
           <Card icon={<Wallet />} title="Wallet Balance">
             {tenant ? (
               <>
-                <p className="text-2xl font-bold text-teal-700">Ksh. {tenant.wallet?.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-teal-700">Ksh {tenant.wallet?.toFixed(2)}</p>
                 <p className="text-sm text-gray-500 mt-1">Use wallet for quick rent payments.</p>
               </>
             ) : (
@@ -222,7 +323,6 @@ export default function TenantDashboardPage() {
             )}
           </Card>
 
-          {/* Profile */}
           <Card icon={<User />} title="Your Profile">
             {tenant ? (
               <>
@@ -236,7 +336,6 @@ export default function TenantDashboardPage() {
           </Card>
         </div>
 
-        {/* Maintenance Section */}
         <section className="mt-10">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -254,7 +353,6 @@ export default function TenantDashboardPage() {
           </div>
         </section>
 
-        {/* Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-xl">

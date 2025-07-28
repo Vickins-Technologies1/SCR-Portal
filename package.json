@@ -10,8 +10,11 @@
   },
   "dependencies": {
     "@types/bcrypt": "^5.0.2",
+    "@upstash/ratelimit": "^2.0.6",
+    "@upstash/redis": "^1.35.1",
     "axios": "^1.10.0",
     "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
     "framer-motion": "^12.23.6",
     "js-cookie": "^3.0.5",
     "lucide-react": "^0.525.0",
@@ -21,21 +24,28 @@
     "nodemailer": "^6.9.15",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/csurf": "^1.11.5",
+    "@types/express-rate-limit": "^6.0.2",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^20",
     "@types/nodemailer": "^6.4.17",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.3.5",
+    "patch-package": "^8.0.0",
     "postcss": "^8.5.6",
+    "postinstall-postinstall": "^2.1.0",
     "tailwindcss": "^4.1.11",
     "typescript": "^5"
   }

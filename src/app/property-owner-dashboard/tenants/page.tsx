@@ -22,6 +22,7 @@ interface Tenant {
   leaseStartDate: string;
   leaseEndDate: string;
   createdAt: string;
+  walletBalance?: number;
 }
 
 interface Property {
@@ -55,6 +56,7 @@ export default function TenantsPage() {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
   const [tenantPassword, setTenantPassword] = useState("");
+  const [paymentPhone, setPaymentPhone] = useState("");
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [selectedUnitType, setSelectedUnitType] = useState("");
   const [price, setPrice] = useState("");
@@ -72,17 +74,38 @@ export default function TenantsPage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentFormErrors, setPaymentFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
+  const [csrfToken, setCsrfToken] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [totalTenants, setTotalTenants] = useState(0);
 
-  // UMS Pay API configuration (replace with secure storage in production)
-  const UMS_PAY_API_KEY = "your_api_key_here"; // Store in env variables
-  const UMS_PAY_EMAIL = "merchant@example.com"; // Store in env variables
-  const UMS_PAY_ACCOUNT_ID = "ACC-7890"; // Store in env variables
+  // UMS Pay API configuration
+  const UMS_PAY_API_KEY = process.env.NEXT_PUBLIC_UMS_PAY_API_KEY || "";
+  const UMS_PAY_EMAIL = process.env.NEXT_PUBLIC_UMS_PAY_EMAIL || "";
+  const UMS_PAY_ACCOUNT_ID = process.env.NEXT_PUBLIC_UMS_PAY_ACCOUNT_ID || "";
+
+  // Fetch CSRF token
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const res = await fetch("/api/csrf-token");
+        const data = await res.json();
+        if (data.success) {
+          setCsrfToken(data.csrfToken);
+        } else {
+          setError("Failed to fetch CSRF token.");
+        }
+      } catch {
+        setError("Failed to connect to server for CSRF token.");
+      }
+    };
+    fetchCsrfToken();
+  }, []);
 
   // Check cookies and redirect if unauthorized
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
-    console.log("Cookies - userId:", uid, "role:", userRole);
     setUserId(uid || null);
     setRole(userRole || null);
     if (!uid || userRole !== "propertyOwner") {
@@ -91,21 +114,22 @@ export default function TenantsPage() {
     }
   }, [router]);
 
-  // Fetch user data (paymentStatus, walletBalance)
+  // Fetch user data
   const fetchUserData = useCallback(async () => {
     if (!userId || !role) return;
     try {
       const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
       });
       const data = await res.json();
-      console.log("fetchUserData response:", data);
       if (data.success) {
         setPaymentStatus(data.user.paymentStatus || "inactive");
         setWalletBalance(data.user.walletBalance || 0);
-        console.log("Set paymentStatus:", data.user.paymentStatus, "walletBalance:", data.user.walletBalance);
       } else {
         if (res.status === 404) {
           setError("User account not found. Please log in again.");
@@ -119,21 +143,25 @@ export default function TenantsPage() {
     } catch {
       setError("Failed to connect to the server. Please try again later.");
     }
-  }, [userId, role, router]);
+  }, [userId, role, router, csrfToken]);
 
   // Fetch tenants
   const fetchTenants = useCallback(async () => {
     if (!userId) return;
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/tenants?userId=${encodeURIComponent(userId)}`, {
+      const res = await fetch(`/api/tenants?userId=${encodeURIComponent(userId)}&page=${page}&limit=${limit}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
         setTenants(data.tenants || []);
+        setTotalTenants(data.total || 0);
       } else {
         setError(data.message || "Failed to fetch tenants.");
       }
@@ -142,7 +170,7 @@ export default function TenantsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, page, limit, csrfToken]);
 
   // Fetch properties
   const fetchProperties = useCallback(async () => {
@@ -150,7 +178,10 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
       });
       const data = await res.json();
@@ -169,7 +200,7 @@ export default function TenantsPage() {
     } catch {
       setError("Failed to connect to the server.");
     }
-  }, [userId]);
+  }, [userId, csrfToken]);
 
   // Fetch pending invoices
   const fetchPendingInvoices = useCallback(async () => {
@@ -177,11 +208,13 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/invoices`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
       });
       const data = await res.json();
-      console.log("fetchPendingInvoices response:", data);
       if (data.success) {
         setPendingInvoices(data.pendingInvoices || 0);
       } else {
@@ -190,7 +223,7 @@ export default function TenantsPage() {
     } catch {
       setError("Failed to connect to the server.");
     }
-  }, [userId]);
+  }, [userId, csrfToken]);
 
   // Fetch data when userId and role are set
   useEffect(() => {
@@ -199,9 +232,8 @@ export default function TenantsPage() {
       fetchTenants();
       fetchProperties();
       fetchPendingInvoices();
-      console.log("Payment status:", paymentStatus, "Wallet balance:", walletBalance, "Tenants count:", tenants.length, "Pending invoices:", pendingInvoices);
     }
-  }, [userId, role, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices, paymentStatus, walletBalance, tenants, pendingInvoices]);
+  }, [userId, role, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
   // Reset tenant form
   const resetForm = useCallback(() => {
@@ -217,6 +249,7 @@ export default function TenantsPage() {
     setLeaseStartDate("");
     setLeaseEndDate("");
     setFormErrors({});
+    setError(null);
   }, []);
 
   // Reset payment form
@@ -224,7 +257,9 @@ export default function TenantsPage() {
     setPaymentPropertyId("");
     setPaymentUnitType("");
     setPaymentAmount("");
+    setPaymentPhone("");
     setPaymentFormErrors({});
+    setError(null);
   }, []);
 
   // Open add tenant modal
@@ -240,7 +275,7 @@ export default function TenantsPage() {
     }
     if (tenants.length >= 3) {
       const unit = properties.find((p) => p.unitTypes.some((u) => u.type === selectedUnitType))?.unitTypes.find((u) => u.type === selectedUnitType);
-      const requiredFee = unit ? unit.managementFee : 1000; // Fallback to 1000 if unit not selected
+      const requiredFee = unit ? unit.managementFee : 1000;
       if (paymentStatus !== "active" || walletBalance < requiredFee) {
         setError(`You need an active payment status and a minimum wallet balance of Ksh ${requiredFee} to add more than 2 tenants.`);
         setIsPaymentPromptOpen(true);
@@ -273,6 +308,7 @@ export default function TenantsPage() {
     if (pendingTenantData) {
       setPaymentPropertyId(pendingTenantData.propertyId || "");
       setPaymentUnitType(pendingTenantData.unitType || "");
+      setPaymentPhone(pendingTenantData.phone || "");
       const unit = properties
         .find((p) => p._id === pendingTenantData.propertyId)
         ?.unitTypes.find((u) => u.type === pendingTenantData.unitType);
@@ -280,8 +316,12 @@ export default function TenantsPage() {
         setPaymentAmount(unit.managementFee.toString());
       }
     }
+    if (!paymentPhone || !/^\+?\d{10,15}$/.test(paymentPhone)) {
+      setError("A valid phone number is required for payment.");
+      return;
+    }
     setIsPaymentPromptOpen(true);
-  }, [resetPaymentForm, pendingTenantData, properties]);
+  }, [resetPaymentForm, pendingTenantData, properties, paymentPhone]);
 
   // Open edit tenant modal
   const openEditModal = useCallback((tenant: Tenant) => {
@@ -303,6 +343,7 @@ export default function TenantsPage() {
     setLeaseEndDate(tenant.leaseEndDate);
     setTenantPassword("");
     setFormErrors({});
+    setError(null);
     setIsModalOpen(true);
   }, [paymentStatus, walletBalance]);
 
@@ -319,7 +360,10 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/tenants/${tenantToDelete}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
       });
       const data = await res.json();
@@ -336,7 +380,7 @@ export default function TenantsPage() {
       setIsDeleteModalOpen(false);
       setTenantToDelete(null);
     }
-  }, [tenantToDelete, fetchTenants]);
+  }, [tenantToDelete, fetchTenants, csrfToken]);
 
   // Validate payment form
   const validatePaymentForm = useCallback(() => {
@@ -357,12 +401,12 @@ export default function TenantsPage() {
         errors.paymentAmount = `Payment amount is insufficient. Expected Ksh ${unit.managementFee} for ${paymentUnitType}.`;
       }
     }
-    if (!tenantPhone || !/^\+?\d{10,15}$/.test(tenantPhone)) {
-      errors.tenantPhone = "Valid phone number is required (10-15 digits, optional +)";
+    if (!paymentPhone || !/^\+?\d{10,15}$/.test(paymentPhone)) {
+      errors.paymentPhone = "Valid phone number is required (10-15 digits, optional +)";
     }
     setPaymentFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [paymentPropertyId, paymentUnitType, paymentAmount, tenantPhone, properties]);
+  }, [paymentPropertyId, paymentUnitType, paymentAmount, paymentPhone, properties]);
 
   // Validate tenant form
   const validateForm = useCallback(() => {
@@ -378,8 +422,8 @@ export default function TenantsPage() {
     if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0) errors.price = "Price must be a non-negative number";
     if (!deposit || isNaN(parseFloat(deposit)) || parseFloat(deposit) < 0) errors.deposit = "Deposit must be a non-negative number";
     if (!houseNumber.trim()) errors.houseNumber = "House number is required";
-    if (!leaseStartDate) errors.leaseStartDate = "Lease start date is required";
-    if (!leaseEndDate) errors.leaseEndDate = "Lease end date is required";
+    if (!leaseStartDate || isNaN(Date.parse(leaseStartDate))) errors.leaseStartDate = "Valid lease start date is required";
+    if (!leaseEndDate || isNaN(Date.parse(leaseEndDate))) errors.leaseEndDate = "Valid lease end date is required";
     else if (new Date(leaseEndDate) <= new Date(leaseStartDate)) errors.leaseEndDate = "Lease end date must be after start date";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -400,17 +444,42 @@ export default function TenantsPage() {
               transaction_request_id: transactionRequestId,
             }),
           });
+          if (!res.ok) {
+            throw new Error(`HTTP error! Status: ${res.status}`);
+          }
           const data = await res.json();
-          console.log("Transaction status response:", data);
-
+          if (!data || typeof data !== "object") {
+            setError("Invalid response from payment API.");
+            return true;
+          }
           if (data.ResultCode === "200") {
             if (data.TransactionStatus === "Completed") {
-              setSuccessMessage("Payment processed successfully!");
-              await fetchUserData();
-              await fetchPendingInvoices();
               if (pendingTenantData) {
-                setIsPaymentPromptOpen(false);
-                setIsModalOpen(true);
+                const unit = properties
+                  .find((p) => p._id === pendingTenantData.propertyId)
+                  ?.unitTypes.find((u) => u.type === pendingTenantData.unitType);
+                const onboardingFee = unit ? unit.managementFee : 1000;
+                try {
+                  await fetch(`/api/update-wallet`, {
+                    method: "POST",
+                    headers: { 
+                      "Content-Type": "application/json",
+                      "X-CSRF-Token": csrfToken,
+                    },
+                    body: JSON.stringify({
+                      userId,
+                      amount: -onboardingFee,
+                      reference: `TENANT-INVOICE-${userId}-${Date.now()}`,
+                    }),
+                  });
+                  setSuccessMessage("Payment processed successfully!");
+                  await fetchUserData();
+                  await fetchPendingInvoices();
+                  setIsPaymentPromptOpen(false);
+                  setIsModalOpen(true);
+                } catch {
+                  setError("Failed to update wallet balance after payment.");
+                }
               }
               return true;
             } else if (["Failed", "Cancelled", "Timeout"].includes(data.TransactionStatus)) {
@@ -430,7 +499,8 @@ export default function TenantsPage() {
             setError(data.errorMessage || "Failed to check transaction status.");
             return true;
           }
-        } catch {
+        } catch (error) {
+          console.error("Error polling transaction status:", error);
           setError("Failed to connect to UMS Pay API.");
           return true;
         }
@@ -452,7 +522,7 @@ export default function TenantsPage() {
 
       poll();
     },
-    [fetchUserData, fetchPendingInvoices, pendingTenantData]
+    [fetchUserData, fetchPendingInvoices, pendingTenantData, userId, properties, csrfToken]
   );
 
   // Handle payment submission
@@ -471,8 +541,6 @@ export default function TenantsPage() {
       setIsPaymentLoadingModalOpen(true);
 
       const reference = `INVOICE-${userId}-${Date.now()}`;
-      console.log("Sending payment request with amount:", paymentAmount, "reference:", reference);
-
       try {
         const res = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
           method: "POST",
@@ -481,14 +549,12 @@ export default function TenantsPage() {
             api_key: UMS_PAY_API_KEY,
             email: UMS_PAY_EMAIL,
             amount: parseFloat(paymentAmount),
-            msisdn: tenantPhone,
+            msisdn: paymentPhone,
             reference,
             account_id: UMS_PAY_ACCOUNT_ID,
           }),
         });
         const data = await res.json();
-        console.log("initiateStkPush response:", data);
-
         if (data.success === "200") {
           pollTransactionStatus(data.transaction_request_id);
         } else {
@@ -502,7 +568,7 @@ export default function TenantsPage() {
         setIsLoading(false);
       }
     },
-    [userId, tenantPhone, paymentAmount, validatePaymentForm, pollTransactionStatus]
+    [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus]
   );
 
   // Handle tenant form submission
@@ -539,7 +605,10 @@ export default function TenantsPage() {
         const method = modalMode === "add" ? "POST" : "PUT";
         const res = await fetch(url, {
           method,
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
           credentials: "include",
           body: JSON.stringify(tenantData),
         });
@@ -571,35 +640,48 @@ export default function TenantsPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm]
+    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm, csrfToken]
   );
 
   // Handle table sorting
-  const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
-    setSortConfig((prev) => {
-      const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      const sortedTenants = [...tenants].sort((a, b) => {
-        if (key === "price" || key === "deposit") {
-          return direction === "asc" ? a[key] - b[key] : b[key] - a[key];
-        }
-        if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
-          return direction === "asc"
-            ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
-            : new Date(b[key]).getTime() - new Date(a[key]).getTime();
-        }
-        if (key === "propertyName") {
-          const aName = properties.find((p) => p._id === a.propertyId)?.name || "";
-          const bName = properties.find((p) => p._id === b.propertyId)?.name || "";
-          return direction === "asc" ? aName.localeCompare(bName) : bName.localeCompare(aName);
-        }
+const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
+  setSortConfig((prev) => {
+    const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
+    const sortedTenants = [...tenants].sort((a, b) => {
+      if (key === "price" || key === "deposit") {
         return direction === "asc"
-          ? a[key].localeCompare(b[key])
-          : b[key].localeCompare(a[key]);
-      });
-      setTenants(sortedTenants);
-      return { key, direction };
+          ? (a[key] as number) - (b[key] as number)
+          : (b[key] as number) - (a[key] as number);
+      }
+
+      if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
+        return direction === "asc"
+          ? new Date(a[key] as string).getTime() - new Date(b[key] as string).getTime()
+          : new Date(b[key] as string).getTime() - new Date(a[key] as string).getTime();
+      }
+
+      if (key === "propertyName") {
+        const aName = properties.find((p) => p._id === a.propertyId)?.name || "";
+        const bName = properties.find((p) => p._id === b.propertyId)?.name || "";
+        return direction === "asc"
+          ? aName.localeCompare(bName)
+          : bName.localeCompare(aName);
+      }
+
+      // Fallback: string comparison for other fields
+      const aVal = (a[key] ?? "").toString();
+      const bVal = (b[key] ?? "").toString();
+
+      return direction === "asc"
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
     });
-  }, [tenants, properties]);
+
+    setTenants(sortedTenants);
+    return { key, direction };
+  });
+}, [tenants, properties]);
+
 
   // Get sort icon for table headers
   const getSortIcon = useCallback((key: keyof Tenant | "propertyName") => {
@@ -610,6 +692,8 @@ export default function TenantsPage() {
       <span className="inline ml-1">↓</span>
     );
   }, [sortConfig]);
+
+  const totalPages = Math.ceil(totalTenants / limit);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
@@ -786,6 +870,30 @@ export default function TenantsPage() {
               </table>
             </div>
           )}
+          <div className="mt-4 flex justify-between items-center">
+            <div>
+              Showing {tenants.length} of {totalTenants} tenants
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={page === totalPages}
+                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
           <Modal
             title={modalMode === "add" ? "Add Tenant" : "Edit Tenant"}
             isOpen={isModalOpen}
@@ -1264,7 +1372,7 @@ export default function TenantsPage() {
                         ))}
                     </select>
                     {paymentFormErrors.paymentUnitType && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>
+                      <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentUnitType}</p>
                     )}
                   </div>
                 )}
@@ -1286,12 +1394,12 @@ export default function TenantsPage() {
                   <label className="block text-sm font-medium text-gray-700">Phone Number</label>
                   <input
                     placeholder="Enter phone number (e.g., +254123456789)"
-                    value={tenantPhone}
+                    value={paymentPhone}
                     onChange={(e) => {
-                      setTenantPhone(e.target.value);
-                      setFormErrors((prev) => ({
+                      setPaymentPhone(e.target.value);
+                      setPaymentFormErrors((prev) => ({
                         ...prev,
-                        tenantPhone: e.target.value.trim()
+                        paymentPhone: e.target.value.trim()
                           ? /^\+?\d{10,15}$/.test(e.target.value)
                             ? undefined
                             : "Invalid phone number (10-15 digits, optional +)"
@@ -1300,11 +1408,11 @@ export default function TenantsPage() {
                     }}
                     required
                     className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                      formErrors.tenantPhone ? "border-red-500" : "border-gray-300"
+                      paymentFormErrors.paymentPhone ? "border-red-500" : "border-gray-300"
                     }`}
                   />
-                  {formErrors.tenantPhone && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>
+                  {paymentFormErrors.paymentPhone && (
+                    <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentPhone}</p>
                   )}
                 </div>
                 <div className="flex flex-col sm:flex-row justify-end gap-3">
@@ -1328,7 +1436,7 @@ export default function TenantsPage() {
                       !paymentPropertyId ||
                       !paymentUnitType ||
                       !paymentAmount ||
-                      !tenantPhone
+                      !paymentPhone
                     }
                     className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
                       isLoading ||
@@ -1336,7 +1444,7 @@ export default function TenantsPage() {
                       !paymentPropertyId ||
                       !paymentUnitType ||
                       !paymentAmount ||
-                      !tenantPhone
+                      !paymentPhone
                         ? "bg-gray-400 cursor-not-allowed"
                         : "bg-[#012a4a] hover:bg-[#014a7a]"
                     }`}
