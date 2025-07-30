@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
+// lint-disable-next-line no-unused-vars
 
 // GET: Fetch owner profile and payment settings
 export async function GET(request: Request) {

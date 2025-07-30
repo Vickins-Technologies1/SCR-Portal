@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { CreditCard, ArrowUpDown } from "lucide-react";
+import { CreditCard, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -25,6 +25,8 @@ interface Payment {
   unitType: string;
   amount: number;
   createdAt: string;
+  transactionId: string;
+  status: "completed" | "pending" | "failed" | "cancelled";
 }
 
 interface SortConfig {
@@ -42,7 +44,30 @@ export default function PaymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [totalPayments, setTotalPayments] = useState(0);
+  const [csrfToken, setCsrfToken] = useState<string>("");
 
+  // Fetch CSRF token
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const res = await fetch("/api/csrf-token");
+        const data = await res.json();
+        if (data.success) {
+          setCsrfToken(data.csrfToken);
+        } else {
+          setError("Failed to fetch CSRF token.");
+        }
+      } catch {
+        setError("Failed to connect to server for CSRF token.");
+      }
+    };
+    fetchCsrfToken();
+  }, []);
+
+  // Check cookies and redirect if unauthorized
   useEffect(() => {
     const checkCookies = () => {
       const uid = Cookies.get("userId");
@@ -78,24 +103,33 @@ export default function PaymentsPage() {
   }, [router]);
 
   const fetchData = useCallback(async () => {
-    if (!userId || role !== "admin") return;
+    if (!userId || role !== "admin" || !csrfToken) return;
 
     setIsLoading(true);
     try {
       const [paymentsRes, usersRes, propertiesRes] = await Promise.all([
-        fetch("/api/payments", {
+        fetch(`/api/payments?page=${currentPage}&limit=${itemsPerPage}&sort=-createdAt`, {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
           credentials: "include",
         }),
         fetch("/api/admin/users", {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
           credentials: "include",
         }),
         fetch("/api/admin/properties", {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
           credentials: "include",
         }),
       ]);
@@ -118,6 +152,7 @@ export default function PaymentsPage() {
 
       if (paymentsData.success && usersData.success && propertiesData.success) {
         setPayments(paymentsData.payments || []);
+        setTotalPayments(paymentsData.total || 0);
         setPropertyOwners(usersData.users.filter((u: User) => u.role === "propertyOwner") || []);
         setProperties(propertiesData.properties || []);
       } else {
@@ -134,14 +169,14 @@ export default function PaymentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, role]);
+  }, [userId, role, currentPage, itemsPerPage, csrfToken]);
 
   useEffect(() => {
-    if (userId && role === "admin") {
-      console.log("Fetching data for PaymentsPage:", { userId, role });
+    if (userId && role === "admin" && csrfToken) {
+      console.log("Fetching data for PaymentsPage:", { userId, role, currentPage });
       fetchData();
     }
-  }, [userId, role, fetchData]);
+  }, [userId, role, currentPage, fetchData, csrfToken]);
 
   const handleSort = useCallback(
     (key: keyof Payment | "userEmail" | "propertyName") => {
@@ -189,13 +224,15 @@ export default function PaymentsPage() {
     [sortConfig]
   );
 
+  const totalPages = Math.ceil(totalPayments / itemsPerPage);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
       <Sidebar />
       <div className="sm:ml-64 mt-16">
         <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800 mb-6 animate-fade-in-down">
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800 mb-6">
             <CreditCard className="text-[#012a4a] h-6 w-6" />
             Payments
           </h1>
@@ -207,63 +244,103 @@ export default function PaymentsPage() {
           {isLoading ? (
             <div className="text-center text-gray-600">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <span className="ml-2">Loading...</span>
+              <span className="ml-2">Loading payments...</span>
+            </div>
+          ) : payments.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
+              No payments found.
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {payments.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-                  No payments found.
-                </div>
-              ) : (
-                payments.map((p, index) => (
-                  <div
-                    key={p._id}
-                    className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform transition-all duration-300 hover:-translate-y-1 animate-fade-in"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex items-center gap-2 mb-4">
-                      <CreditCard className="text-[#012a4a] h-5 w-5" />
-                      <h3
-                        className="text-lg font-semibold text-[#012a4a] cursor-pointer"
-                        onClick={() => handleSort("amount")}
-                      >
-                        Ksh {p.amount.toFixed(2)} {getSortIcon("amount")}
-                      </h3>
-                    </div>
-                    <p
-                      className="text-sm text-gray-600 mb-1 cursor-pointer"
+            <div className="overflow-x-auto bg-white shadow rounded-lg">
+              <table className="min-w-full table-auto text-sm md:text-base">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("transactionId")}
+                    >
+                      Transaction ID {getSortIcon("transactionId")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
                       onClick={() => handleSort("userEmail")}
                     >
-                      <span className="font-medium">Owner:</span>{" "}
-                      {propertyOwners.find((u) => u._id === p.userId)?.email || "N/A"}{" "}
-                      {getSortIcon("userEmail")}
-                    </p>
-                    <p
-                      className="text-sm text-gray-600 mb-1 cursor-pointer"
+                      Owner Email {getSortIcon("userEmail")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
                       onClick={() => handleSort("propertyName")}
                     >
-                      <span className="font-medium">Property:</span>{" "}
-                      {properties.find((prop) => prop._id === p.propertyId)?.name || "N/A"}{" "}
-                      {getSortIcon("propertyName")}
-                    </p>
-                    <p
-                      className="text-sm text-gray-600 mb-1 cursor-pointer"
+                      Property Name {getSortIcon("propertyName")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
                       onClick={() => handleSort("unitType")}
                     >
-                      <span className="font-medium">Unit:</span> {p.unitType || "N/A"}{" "}
-                      {getSortIcon("unitType")}
-                    </p>
-                    <p
-                      className="text-sm text-gray-600 cursor-pointer"
+                      Unit Type {getSortIcon("unitType")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("amount")}
+                    >
+                      Amount (Ksh) {getSortIcon("amount")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
                       onClick={() => handleSort("createdAt")}
                     >
-                      <span className="font-medium">Date:</span>{" "}
-                      {new Date(p.createdAt).toLocaleDateString()} {getSortIcon("createdAt")}
-                    </p>
+                      Payment Date {getSortIcon("createdAt")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("status")}
+                    >
+                      Status {getSortIcon("status")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((payment) => (
+                    <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
+                      <td className="px-4 py-3">{payment.transactionId}</td>
+                      <td className="px-4 py-3">{propertyOwners.find((u) => u._id === payment.userId)?.email || "N/A"}</td>
+                      <td className="px-4 py-3">{properties.find((p) => p._id === payment.propertyId)?.name || "N/A"}</td>
+                      <td className="px-4 py-3">{payment.unitType || "N/A"}</td>
+                      <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
+                      <td className="px-4 py-3">{new Date(payment.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">{payment.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="text-sm text-gray-600">
+                  Showing {payments.length} of {totalPayments} payments
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      aria-label="Previous page"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-3 py-1 text-sm text-gray-600">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      aria-label="Next page"
+                    >
+                      Next
+                    </button>
                   </div>
-                ))
-              )}
+                )}
+              </div>
             </div>
           )}
         </main>
@@ -272,30 +349,6 @@ export default function PaymentsPage() {
         @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
         body {
           font-family: "Inter", sans-serif;
-        }
-        @keyframes fadeInDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fade-in-down {
-          animation: fadeInDown 0.5s ease-out;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out;
         }
       `}</style>
     </div>

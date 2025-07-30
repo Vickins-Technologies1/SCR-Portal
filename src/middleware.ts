@@ -219,8 +219,8 @@ export const config = {
   matcher: [
     '/api/users/:path*',
     '/api/payments/:path*',
-    '/api/tenant/payments', // Explicitly match exact route
-    '/api/tenant/payments/:path*', // Match sub-routes
+    '/api/tenant/payments',
+    '/api/tenant/payments/:path*',
     '/api/tenant/profile',
     '/api/maintenance',
     '/api/invoices/:path*',

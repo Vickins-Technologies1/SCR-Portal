@@ -6,9 +6,9 @@ export const UNIT_TYPES = [
         { range: [5, 20], fee: 10 },
         { range: [21, 50], fee: 5000 },
         { range: [51, 100], fee: 8000 },
-        { range: [101, Infinity], fee: 0 }, // Default to 0 for "Call for pricing"
+        { range: [101, Infinity], fee: 0 }, 
       ],
-      FullManagement: 0, // Default to 0 for "Call for pricing"
+      FullManagement: 0, 
     },
   },
   {
@@ -93,5 +93,5 @@ export function getManagementFee(unit: { type: string; managementType: "RentColl
       return tier.fee;
     }
   }
-  return 0; // Default for undefined ranges or "Call for pricing"
+  return 0; 
 }

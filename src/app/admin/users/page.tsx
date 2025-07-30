@@ -91,7 +91,7 @@ export default function UsersPage() {
 
   const getSortIcon = useCallback((key: keyof PropertyOwner) => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-    return sortConfig.direction === "asc" ? <span className="inline ml-1">↑</span> : <span className="inline ml-1">↓</span>;
+    return sortConfig.direction === "asc" ? <ChevronUp className="inline ml-1 h-4 w-4" /> : <ChevronDown className="inline ml-1 h-4 w-4" />;
   }, [sortConfig]);
 
   const toggleExpand = (id: string) => {
@@ -176,105 +176,109 @@ export default function UsersPage() {
               <span className="ml-2">Loading...</span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {propertyOwners.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-                  No property owners found.
-                </div>
-              ) : (
-                propertyOwners.map((owner, index) => (
-                  <div
-                    key={owner._id}
-                    className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform transition-all duration-300 hover:-translate-y-1 animate-fade-in"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Users className="text-[#012a4a] h-5 w-5" />
-                        <h3
-                          className="text-lg font-semibold text-[#012a4a] cursor-pointer"
-                          onClick={() => handleSort("name")}
-                        >
-                          {owner.name} {getSortIcon("name")}
-                        </h3>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleEdit(owner)} className="text-blue-600 hover:text-blue-800">
-                          <Edit className="h-5 w-5" />
-                        </button>
-                        <button onClick={() => handleDelete(owner._id)} className="text-red-600 hover:text-red-800">
-                          <Trash2 className="h-5 w-5" />
-                        </button>
-                        <button onClick={() => toggleExpand(owner._id)}>
-                          {expanded.includes(owner._id) ? (
-                            <ChevronUp className="h-5 w-5 text-[#012a4a]" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-[#012a4a]" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <p
-                      className="text-sm text-gray-600 mb-1 cursor-pointer"
-                      onClick={() => handleSort("email")}
-                    >
-                      <span className="font-medium">Email:</span> {owner.email} {getSortIcon("email")}
-                    </p>
-                    <p
-                      className="text-sm text-gray-600 mb-1 cursor-pointer"
-                      onClick={() => handleSort("phone")}
-                    >
-                      <span className="font-medium">Phone:</span> {owner.phone} {getSortIcon("phone")}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-1">
-                      <span className="font-medium">Created:</span>{" "}
-                      {new Date(owner.createdAt).toLocaleDateString()}
-                    </p>
-                    {expanded.includes(owner._id) && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-semibold text-gray-800">Properties</h4>
-                        {owner.properties.length === 0 ? (
-                          <p className="text-sm text-gray-600">No properties</p>
-                        ) : (
-                          <ul className="list-disc pl-5 text-sm text-gray-600">
-                            {owner.properties.map((p) => (
-                              <li key={p._id}>
-                                {p.name} ({p.address}, {p.status})
-                              </li>
-                            ))}
-                          </ul>
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-md">
+                <thead className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white">
+                  <tr>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("name")}>
+                      Name {getSortIcon("name")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("email")}>
+                      Email {getSortIcon("email")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("phone")}>
+                      Phone {getSortIcon("phone")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold">Created At</th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {propertyOwners.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-4 px-4 text-center text-gray-600">
+                        No property owners found.
+                      </td>
+                    </tr>
+                  ) : (
+                    propertyOwners.map((owner, index) => (
+                      <React.Fragment key={owner._id}>
+                        <tr className="border-b border-gray-200 hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                          <td className="py-3 px-4 text-sm text-gray-800">{owner.name}</td>
+                          <td className="py-3 px-4 text-sm text-gray-600">{owner.email}</td>
+                          <td className="py-3 px-4 text-sm text-gray-600">{owner.phone}</td>
+                          <td className="py-3 px-4 text-sm text-gray-600">
+                            {new Date(owner.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            <div className="flex gap-2">
+                              <button onClick={() => handleEdit(owner)} className="text-blue-600 hover:text-blue-800">
+                                <Edit className="h-5 w-5" />
+                              </button>
+                              <button onClick={() => handleDelete(owner._id)} className="text-red-600 hover:text-red-800">
+                                <Trash2 className="h-5 w-5" />
+                              </button>
+                              <button onClick={() => toggleExpand(owner._id)}>
+                                {expanded.includes(owner._id) ? (
+                                  <ChevronUp className="h-5 w-5 text-[#012a4a]" />
+                                ) : (
+                                  <ChevronDown className="h-5 w-5 text-[#012a4a]" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {expanded.includes(owner._id) && (
+                          <tr className="bg-gray-50">
+                            <td colSpan={5} className="py-4 px-4">
+                              <div className="mt-2">
+                                <h4 className="text-sm font-semibold text-gray-800">Properties</h4>
+                                {owner.properties.length === 0 ? (
+                                  <p className="text-sm text-gray-600">No properties</p>
+                                ) : (
+                                  <ul className="list-disc pl-5 text-sm text-gray-600">
+                                    {owner.properties.map((p) => (
+                                      <li key={p._id}>
+                                        {p.name} ({p.address}, {p.status})
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <h4 className="text-sm font-semibold text-gray-800 mt-2">Payments</h4>
+                                {owner.payments.length === 0 ? (
+                                  <p className="text-sm text-gray-600">No payments</p>
+                                ) : (
+                                  <ul className="list-disc pl-5 text-sm text-gray-600">
+                                    {owner.payments.map((p) => (
+                                      <li key={p._id}>
+                                        Ksh {p.amount} for {p.unitType} (
+                                        {new Date(p.createdAt).toLocaleDateString()})
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <h4 className="text-sm font-semibold text-gray-800 mt-2">Invoices</h4>
+                                {owner.invoices.length === 0 ? (
+                                  <p className="text-sm text-gray-600">No invoices</p>
+                                ) : (
+                                  <ul className="list-disc pl-5 text-sm text-gray-600">
+                                    {owner.invoices.map((i) => (
+                                      <li key={i._id}>
+                                        Ksh {i.amount} ({i.status}, Due:{" "}
+                                        {new Date(i.dueDate).toLocaleDateString()})
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                        <h4 className="text-sm font-semibold text-gray-800 mt-2">Payments</h4>
-                        {owner.payments.length === 0 ? (
-                          <p className="text-sm text-gray-600">No payments</p>
-                        ) : (
-                          <ul className="list-disc pl-5 text-sm text-gray-600">
-                            {owner.payments.map((p) => (
-                              <li key={p._id}>
-                                Ksh {p.amount} for {p.unitType} (
-                                {new Date(p.createdAt).toLocaleDateString()})
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        <h4 className="text-sm font-semibold text-gray-800 mt-2">Invoices</h4>
-                        {owner.invoices.length === 0 ? (
-                          <p className="text-sm text-gray-600">No invoices</p>
-                        ) : (
-                          <ul className="list-disc pl-5 text-sm text-gray-600">
-                            {owner.invoices.map((i) => (
-                              <li key={i._id}>
-                                Ksh {i.amount} ({i.status}, Due:{" "}
-                                {new Date(i.dueDate).toLocaleDateString()})
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
           {showEditModal && editUser && (
@@ -358,6 +362,20 @@ export default function UsersPage() {
         }
         .animate-fade-in {
           animation: fadeIn 0.5s ease-out;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        th, td {
+          text-align: left;
+          vertical-align: middle;
+        }
+        th {
+          font-weight: 600;
+        }
+        tr {
+          transition: background-color 0.2s;
         }
       `}</style>
     </div>

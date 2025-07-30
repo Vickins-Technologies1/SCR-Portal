@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { FileText, ArrowUpDown } from "lucide-react";
+import { FileText, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -124,10 +124,9 @@ export default function InvoicesPage() {
   const getSortIcon = useCallback((key: keyof Invoice | "userEmail" | "propertyName") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
-      <span className="inline ml-1">↑</span>
+      <ChevronUp className="inline ml-1 h-4 w-4" />
     ) : (
-      <span className="inline ml-1">↓</span>
-    );
+      <ChevronDown className="inline ml-1 h-4 w-4" />);
   }, [sortConfig]);
 
   const handleGenerateInvoice = useCallback(async (invoice: Invoice) => {
@@ -205,63 +204,78 @@ export default function InvoicesPage() {
               <span className="ml-2">Loading...</span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {invoices.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-                  No invoices found.
-                </div>
-              ) : (
-                invoices.map((i, index) => (
-                  <div
-                    key={i._id}
-                    className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform transition-all duration-300 hover:-translate-y-1 animate-fade-in"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex items-center gap-2 mb-4">
-                      <FileText className="text-[#012a4a] h-5 w-5" />
-                      <h3 className="text-lg font-semibold text-[#012a4a] cursor-pointer" onClick={() => handleSort("amount")}>
-                        Ksh {i.amount.toFixed(2)} {getSortIcon("amount")}
-                      </h3>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("userEmail")}>
-                      <span className="font-medium">Owner:</span>{" "}
-                      {propertyOwners.find((u) => u._id === i.userId)?.email || "N/A"} {getSortIcon("userEmail")}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("propertyName")}>
-                      <span className="font-medium">Property:</span>{" "}
-                      {properties.find((p) => p._id === i.propertyId)?.name || "N/A"} {getSortIcon("propertyName")}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("unitType")}>
-                      <span className="font-medium">Unit:</span> {i.unitType} {getSortIcon("unitType")}
-                    </p>
-                    <div className="text-sm text-gray-600 mb-1 flex items-center">
-                      <span className="font-medium mr-2">Status:</span>
-                      <select
-                        value={i.status}
-                        onChange={(e) => handleStatusChange(i._id, e.target.value as "pending" | "paid" | "overdue")}
-                        className={`text-sm p-1 rounded border ${i.status === "paid" ? "text-green-600 border-green-600" : i.status === "overdue" ? "text-red-600 border-red-600" : "text-yellow-600 border-yellow-600"} bg-white`}
-                      >
-                        <option value="pending" className="text-yellow-600">pending</option>
-                        <option value="paid" className="text-green-600">paid</option>
-                        <option value="overdue" className="text-red-600">overdue</option>
-                      </select>
-                      {getSortIcon("status")}
-                    </div>
-                    <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("createdAt")}>
-                      <span className="font-medium">Created:</span> {new Date(i.createdAt).toLocaleDateString()} {getSortIcon("createdAt")}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("dueDate")}>
-                      <span className="font-medium">Due:</span> {new Date(i.dueDate).toLocaleDateString()} {getSortIcon("dueDate")}
-                    </p>
-                    <button
-                      onClick={() => handleGenerateInvoice(i)}
-                      className="mt-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] hover:scale-105 transform transition-all duration-300 text-sm"
-                    >
-                      Generate PDF
-                    </button>
-                  </div>
-                ))
-              )}
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-md">
+                <thead className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white">
+                  <tr>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("amount")}>
+                      Amount {getSortIcon("amount")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("userEmail")}>
+                      Owner Email {getSortIcon("userEmail")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("propertyName")}>
+                      Property Name {getSortIcon("propertyName")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("unitType")}>
+                      Unit Type {getSortIcon("unitType")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("status")}>
+                      Status {getSortIcon("status")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("createdAt")}>
+                      Created At {getSortIcon("createdAt")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("dueDate")}>
+                      Due Date {getSortIcon("dueDate")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-4 px-4 text-center text-gray-600">
+                        No invoices found.
+                      </td>
+                    </tr>
+                  ) : (
+                    invoices.map((i, index) => (
+                      <tr key={i._id} className="border-b border-gray-200 hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                        <td className="py-3 px-4 text-sm text-gray-800">Ksh {i.amount.toFixed(2)}</td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {propertyOwners.find((u) => u._id === i.userId)?.email || "N/A"}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">
+                          {properties.find((p) => p._id === i.propertyId)?.name || "N/A"}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">{i.unitType}</td>
+                        <td className="py-3 px-4 text-sm">
+                          <select
+                            value={i.status}
+                            onChange={(e) => handleStatusChange(i._id, e.target.value as "pending" | "paid" | "overdue")}
+                            className={`text-sm p-1 rounded border ${i.status === "paid" ? "text-green-600 border-green-600" : i.status === "overdue" ? "text-red-600 border-red-600" : "text-yellow-600 border-yellow-600"} bg-white`}
+                          >
+                            <option value="pending" className="text-yellow-600">pending</option>
+                            <option value="paid" className="text-green-600">paid</option>
+                            <option value="overdue" className="text-red-600">overdue</option>
+                          </select>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">{new Date(i.createdAt).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-sm text-gray-600">{new Date(i.dueDate).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-sm">
+                          <button
+                            onClick={() => handleGenerateInvoice(i)}
+                            className="px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] hover:scale-105 transform transition-all duration-300 text-sm"
+                          >
+                            Generate PDF
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </main>
@@ -294,6 +308,20 @@ export default function InvoicesPage() {
         }
         .animate-fade-in {
           animation: fadeIn 0.5s ease-out;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        th, td {
+          text-align: left;
+          vertical-align: middle;
+        }
+        th {
+          font-weight: 600;
+        }
+        tr {
+          transition: background-color 0.2s;
         }
       `}</style>
     </div>

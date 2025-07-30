@@ -42,7 +42,6 @@ export default function AdminDashboard() {
 
     checkCookies();
 
-    // Poll for cookies in case they are set asynchronously
     const cookiePoll = setInterval(() => {
       const uid = Cookies.get("userId");
       const userRole = Cookies.get("role");
@@ -54,52 +53,64 @@ export default function AdminDashboard() {
       }
     }, 100);
 
-    // Cleanup interval on unmount
     return () => clearInterval(cookiePoll);
   }, [router]);
 
   const fetchCounts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [usersRes, propertiesRes, paymentsRes, invoicesRes] = await Promise.all([
-        fetch("/api/admin/users", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
+      const [propertyOwnersRes, tenantsRes, propertiesRes, paymentsRes, invoicesRes, adminsRes] = await Promise.all([
+        fetch("/api/admin/property-owners", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
+        fetch("/api/admin/tenants", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
         fetch("/api/admin/properties", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
         fetch("/api/payments", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
         fetch("/api/invoices", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
+        fetch("/api/admin", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
       ]);
 
-      const responses = [usersRes, propertiesRes, paymentsRes, invoicesRes];
-      const endpoints = ["/api/admin/users", "/api/admin/properties", "/api/payments", "/api/invoices"];
+      const responses = [propertyOwnersRes, tenantsRes, propertiesRes, paymentsRes, invoicesRes, adminsRes];
+      const endpoints = ["/api/admin/property-owners", "/api/admin/tenants", "/api/admin/properties", "/api/payments", "/api/invoices", "/api/admin/admins"];
       responses.forEach((res, index) => {
         if (!res.ok) {
           console.error(`Failed to fetch ${endpoints[index]}: ${res.status} ${res.statusText}`);
         }
       });
 
-      const [usersData, propertiesData, paymentsData, invoicesData] = await Promise.all([
-        usersRes.json(),
+      const [propertyOwnersData, tenantsData, propertiesData, paymentsData, invoicesData, adminsData] = await Promise.all([
+        propertyOwnersRes.json(),
+        tenantsRes.json(),
         propertiesRes.json(),
         paymentsRes.json(),
         invoicesRes.json(),
+        adminsRes.json(),
       ]);
 
-      console.log("API responses:", { usersData, propertiesData, paymentsData, invoicesData });
+      console.log("API responses:", { propertyOwnersData, tenantsData, propertiesData, paymentsData, invoicesData, adminsData });
 
-      if (usersData.success && propertiesData.success && paymentsData.success && invoicesData.success) {
+      if (
+        propertyOwnersData.success &&
+        tenantsData.success &&
+        propertiesData.success &&
+        paymentsData.success &&
+        invoicesData.success &&
+        adminsData.success
+      ) {
         setCounts({
-          propertyOwners: usersData.counts?.propertyOwners || 0,
-          tenants: usersData.counts?.tenants || 0,
-          properties: propertiesData.count || 0,
+          propertyOwners: propertyOwnersData.count || 0,
+          tenants: tenantsData.count || 0,
+          properties: propertiesData.properties?.length || 0,
           payments: paymentsData.count || 0,
           invoices: invoicesData.count || 0,
-          admins: usersData.counts?.admins || 0,
+          admins: adminsData.count || 0,
         });
       } else {
         const errors = [
-          usersData.message,
+          propertyOwnersData.message,
+          tenantsData.message,
           propertiesData.message,
           paymentsData.message,
           invoicesData.message,
+          adminsData.message,
         ].filter(msg => msg).join("; ");
         setError(`Failed to fetch dashboard data: ${errors || "Unknown error"}`);
       }

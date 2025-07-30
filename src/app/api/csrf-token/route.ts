@@ -1,43 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { csrfProtection } from "../../../middleware";
+import { generateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
-    return await new Promise<NextResponse>((resolve, reject) => {
-      csrfProtection(request as any, {} as any, (err: any) => {
-        if (err) {
-          logger.error("CSRF protection failed", { error: err.message });
-          return resolve(
-            NextResponse.json(
-              { success: false, message: "CSRF token validation failed" },
-              { status: 403 }
-            )
-          );
-        }
+    const csrfToken = generateCsrfToken();
 
-        try {
-          const csrfToken = (request as any).csrfToken?.();
-          logger.debug("Generated CSRF token");
-          resolve(
-            NextResponse.json({
-              success: true,
-              csrfToken,
-            })
-          );
-        } catch (e) {
-          logger.error("Failed to generate CSRF token", {
-            message: e instanceof Error ? e.message : "Unknown error",
-          });
-          resolve(
-            NextResponse.json(
-              { success: false, message: "Failed to generate CSRF token" },
-              { status: 500 }
-            )
-          );
-        }
-      });
+    const response = NextResponse.json({ success: true, csrfToken });
+
+    response.cookies.set('csrf-token', csrfToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60,
     });
+
+    logger.debug("Generated CSRF token");
+
+    return response;
   } catch (error: unknown) {
     logger.error("Error generating CSRF token", {
       message: error instanceof Error ? error.message : "Unknown error",

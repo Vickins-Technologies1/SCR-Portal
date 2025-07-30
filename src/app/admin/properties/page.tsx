@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Building2, ArrowUpDown, Edit, Trash2 } from "lucide-react";
+import { Building2, ArrowUpDown, Edit, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -36,6 +36,7 @@ export default function PropertiesPage() {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
   const [editProperty, setEditProperty] = useState<Property | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [expanded, setExpanded] = useState<string[]>([]);
 
   useEffect(() => {
     const uid = Cookies.get("userId");
@@ -96,10 +97,9 @@ export default function PropertiesPage() {
   const getSortIcon = useCallback((key: keyof Property | "ownerEmail") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
-      <span className="inline ml-1">↑</span>
+      <ChevronUp className="inline ml-1 h-4 w-4" />
     ) : (
-      <span className="inline ml-1">↓</span>
-    );
+      <ChevronDown className="inline ml-1 h-4 w-4" />);
   }, [sortConfig]);
 
   const handleDelete = async (id: string) => {
@@ -158,6 +158,10 @@ export default function PropertiesPage() {
     }
   };
 
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -179,51 +183,85 @@ export default function PropertiesPage() {
               <span className="ml-2">Loading...</span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {properties.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-                  No properties found.
-                </div>
-              ) : (
-                properties.map((p, index) => (
-                  <div
-                    key={p._id}
-                    className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform transition-all duration-300 hover:-translate-y-1 animate-fade-in"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="text-[#012a4a] h-5 w-5" />
-                        <h3 className="text-lg font-semibold text-[#012a4a] cursor-pointer" onClick={() => handleSort("name")}>
-                          {p.name} {getSortIcon("name")}
-                        </h3>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleEdit(p)} className="text-blue-600 hover:text-blue-800">
-                          <Edit className="h-5 w-5" />
-                        </button>
-                        <button onClick={() => handleDelete(p._id)} className="text-red-600 hover:text-red-800">
-                          <Trash2 className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-1 cursor-pointer" onClick={() => handleSort("ownerEmail")}>
-                      <span className="font-medium">Owner:</span>{" "}
-                      {propertyOwners.find((u) => u._id === p.ownerId)?.email || "N/A"} {getSortIcon("ownerEmail")}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Units:</span>
-                    </p>
-                    <ul className="text-sm text-gray-600 space-y-1">
-                      {p.unitTypes.map((u) => (
-                        <li key={u.type}>
-                          {u.type} (Price: Ksh {u.price.toFixed(2)}, Fee: Ksh {u.managementFee.toFixed(2)})
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))
-              )}
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-md">
+                <thead className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white">
+                  <tr>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("name")}>
+                      Property Name {getSortIcon("name")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("ownerEmail")}>
+                      Owner Email {getSortIcon("ownerEmail")}
+                    </th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold">Unit Types</th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {properties.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-4 px-4 text-center text-gray-600">
+                        No properties found.
+                      </td>
+                    </tr>
+                  ) : (
+                    properties.map((p, index) => (
+                      <React.Fragment key={p._id}>
+                        <tr className="border-b border-gray-200 hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                          <td className="py-3 px-4 text-sm text-gray-800">{p.name}</td>
+                          <td className="py-3 px-4 text-sm text-gray-600">
+                            {propertyOwners.find((u) => u._id === p.ownerId)?.email || "N/A"}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">
+                            {p.unitTypes.length > 0 ? (
+                              <button
+                                className="text-[#012a4a] hover:text-[#014a7a]"
+                                onClick={() => toggleExpand(p._id)}
+                              >
+                                {expanded.includes(p._id) ? (
+                                  <ChevronUp className="h-5 w-5" />
+                                ) : (
+                                  <ChevronDown className="h-5 w-5" />
+                                )}
+                              </button>
+                            ) : (
+                              <span>No units</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            <div className="flex gap-2">
+                              <button onClick={() => handleEdit(p)} className="text-blue-600 hover:text-blue-800">
+                                <Edit className="h-5 w-5" />
+                              </button>
+                              <button onClick={() => handleDelete(p._id)} className="text-red-600 hover:text-red-800">
+                                <Trash2 className="h-5 w-5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {expanded.includes(p._id) && (
+                          <tr className="bg-gray-50">
+                            <td colSpan={4} className="py-4 px-4">
+                              <h4 className="text-sm font-semibold text-gray-800">Unit Types</h4>
+                              {p.unitTypes.length === 0 ? (
+                                <p className="text-sm text-gray-600">No unit types</p>
+                              ) : (
+                                <ul className="list-disc pl-5 text-sm text-gray-600">
+                                  {p.unitTypes.map((u) => (
+                                    <li key={u.type}>
+                                      {u.type} (Price: Ksh {u.price.toFixed(2)}, Fee: Ksh {u.managementFee.toFixed(2)})
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
           {showEditModal && editProperty && (
@@ -304,6 +342,20 @@ export default function PropertiesPage() {
         }
         .animate-fade-in {
           animation: fadeIn 0.5s ease-out;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        th, td {
+          text-align: left;
+          vertical-align: middle;
+        }
+        th {
+          font-weight: 600;
+        }
+        tr {
+          transition: background-color 0.2s;
         }
       `}</style>
     </div>
