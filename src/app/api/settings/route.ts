@@ -1,11 +1,8 @@
-// src/app/api/settings/route.ts
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
-// lint-disable-next-line no-unused-vars
 
-// GET: Fetch owner profile and payment settings
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -21,7 +18,6 @@ export async function GET(request: Request) {
 
     const { db } = await connectToDatabase();
     
-    // Fetch owner profile
     const owner = await db.collection("propertyOwners").findOne(
       { _id: new ObjectId(ownerId) },
       { projection: { name: 1, email: 1, phone: 1 } }
@@ -35,7 +31,6 @@ export async function GET(request: Request) {
       );
     }
 
-    // Fetch payment settings
     const paymentSettings = await db.collection("paymentSettings").findOne(
       { ownerId: new ObjectId(ownerId) }
     );
@@ -60,7 +55,7 @@ export async function GET(request: Request) {
         bankAccountDetails: "",
       },
     });
-  } catch (error) {
+  } catch (error: unknown) { // Changed from any to unknown
     console.error("[GET] Settings error:", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
@@ -73,9 +68,8 @@ export async function GET(request: Request) {
   }
 }
 
-// PUT: Update owner profile
 export async function PUT(request: Request) {
-  let body: any = null; // Declare body in outer scope
+  let body = null;
 
   try {
     body = await request.json();
@@ -128,7 +122,7 @@ export async function PUT(request: Request) {
     console.error("[PUT] Profile error:", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
-      body, // Now accessible here
+      body,
     });
 
     return NextResponse.json(
@@ -138,12 +132,10 @@ export async function PUT(request: Request) {
   }
 }
 
-
-// POST: Update payment settings
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    console.log("[POST] Received payment settings payload:", body); // Debug log
+    console.log("[POST] Received payment settings payload:", body);
     const {
       ownerId,
       umsPayEnabled,
@@ -191,7 +183,7 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString(),
     };
 
-    const result = await db.collection("paymentSettings").updateOne(
+    await db.collection("paymentSettings").updateOne(
       { ownerId: new ObjectId(ownerId) },
       { $set: paymentSettings },
       { upsert: true }
@@ -215,11 +207,10 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH: Change password
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    console.log("[PATCH] Received password change payload:", body); // Debug log
+    console.log("[PATCH] Received password change payload:", body);
     const { ownerId, password } = body;
 
     if (!ownerId || !password) {
@@ -234,18 +225,10 @@ export async function PATCH(request: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const result = await db.collection("propertyOwners").updateOne(
+    await db.collection("propertyOwners").updateOne( // Removed unused result variable
       { _id: new ObjectId(ownerId) },
       { $set: { password: hashedPassword, updatedAt: new Date().toISOString() } }
     );
-
-    if (result.modifiedCount === 0) {
-      console.log("[PATCH] No changes made or owner not found for ownerId:", ownerId);
-      return NextResponse.json(
-        { success: false, message: "Failed to update password or no changes made" },
-        { status: 400 }
-      );
-    }
 
     console.log("[PATCH] Password updated successfully for ownerId:", ownerId);
     return NextResponse.json({

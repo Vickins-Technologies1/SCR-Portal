@@ -115,35 +115,35 @@ export default function TenantsPage() {
   }, [router]);
 
   // Fetch user data
-  const fetchUserData = useCallback(async () => {
-    if (!userId || !role) return;
-    try {
-      const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
-        method: "GET",
-        headers: { 
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPaymentStatus(data.user.paymentStatus || "inactive");
-        setWalletBalance(data.user.walletBalance || 0);
+const fetchUserData = useCallback(async () => {
+  if (!userId || !role) return;
+  try {
+    const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
+      method: "GET",
+      headers: { 
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (data.success) {
+      setPaymentStatus(data.user.paymentStatus || "inactive");
+      setWalletBalance(data.user.walletBalance || 0);
+    } else {
+      if (res.status === 404) {
+        setError("User account not found. Please log in again.");
+        Cookies.remove("userId");
+        Cookies.remove("role");
+        router.push("/");
       } else {
-        if (res.status === 404) {
-          setError("User account not found. Please log in again.");
-          Cookies.remove("userId");
-          Cookies.remove("role");
-          router.push("/");
-        } else {
-          setError(data.message || "Failed to fetch user data.");
-        }
+        setError(data.message || "Failed to fetch user data.");
       }
-    } catch {
-      setError("Failed to connect to the server. Please try again later.");
     }
-  }, [userId, role, router, csrfToken]);
+  } catch {
+    setError("Failed to connect to the server. Please try again later.");
+  }
+}, [userId, role, router, csrfToken, UMS_PAY_API_KEY, UMS_PAY_EMAIL]);
 
   // Fetch tenants
   const fetchTenants = useCallback(async () => {
@@ -526,50 +526,50 @@ export default function TenantsPage() {
   );
 
   // Handle payment submission
-  const handlePayment = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!validatePaymentForm()) return;
-      if (!userId) {
-        setError("User ID is missing.");
-        return;
-      }
-      setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
-      setIsPaymentPromptOpen(false);
-      setIsPaymentLoadingModalOpen(true);
+const handlePayment = useCallback(
+  async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validatePaymentForm()) return;
+    if (!userId) {
+      setError("User ID is missing.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+    setIsPaymentPromptOpen(false);
+    setIsPaymentLoadingModalOpen(true);
 
-      const reference = `INVOICE-${userId}-${Date.now()}`;
-      try {
-        const res = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            api_key: UMS_PAY_API_KEY,
-            email: UMS_PAY_EMAIL,
-            amount: parseFloat(paymentAmount),
-            msisdn: paymentPhone,
-            reference,
-            account_id: UMS_PAY_ACCOUNT_ID,
-          }),
-        });
-        const data = await res.json();
-        if (data.success === "200") {
-          pollTransactionStatus(data.transaction_request_id);
-        } else {
-          setError(data.errorMessage || "Failed to initiate payment.");
-          setIsPaymentLoadingModalOpen(false);
-          setIsLoading(false);
-        }
-      } catch {
-        setError("Failed to connect to UMS Pay API.");
+    const reference = `INVOICE-${userId}-${Date.now()}`;
+    try {
+      const res = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: UMS_PAY_API_KEY,
+          email: UMS_PAY_EMAIL,
+          amount: parseFloat(paymentAmount),
+          msisdn: paymentPhone,
+          reference,
+          account_id: UMS_PAY_ACCOUNT_ID,
+        }),
+      });
+      const data = await res.json();
+      if (data.success === "200") {
+        pollTransactionStatus(data.transaction_request_id);
+      } else {
+        setError(data.errorMessage || "Failed to initiate payment.");
         setIsPaymentLoadingModalOpen(false);
         setIsLoading(false);
       }
-    },
-    [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus]
-  );
+    } catch {
+      setError("Failed to connect to UMS Pay API.");
+      setIsPaymentLoadingModalOpen(false);
+      setIsLoading(false);
+    }
+  },
+  [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus, UMS_PAY_API_KEY, UMS_PAY_EMAIL, UMS_PAY_ACCOUNT_ID]
+);
 
   // Handle tenant form submission
   const handleSubmit = useCallback(

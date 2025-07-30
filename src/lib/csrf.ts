@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 
 export function generateCsrfToken(): string {
   return uuidv4();

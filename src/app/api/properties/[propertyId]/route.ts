@@ -1,4 +1,3 @@
-// lint-disable-next-line no-unused-vars
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
@@ -99,8 +98,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       );
     }
 
-    // For tenants, only check _id since tenant association is already verified
-    // For admin/propertyOwner, filter by ownerId
     const propertyQuery = role === 'tenant' ? { _id: propertyObjectId } : { _id: propertyObjectId, ownerId: userId };
     const property = await db.collection<Property>('properties').findOne(propertyQuery);
 
@@ -136,7 +133,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         walletBalance: tenant.walletBalance ?? 0,
       })),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error in GET /api/properties/[propertyId]', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
@@ -196,7 +193,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     for (const field of updatableFields) {
       if (requestData[field] !== undefined) {
-        updateData[field] = requestData[field] as any;
+        if (field === 'name' || field === 'address') {
+          updateData[field] = requestData[field] as string;
+        } else if (field === 'unitTypes') {
+          updateData[field] = requestData[field] as UnitType[];
+        } else if (field === 'requiresAdminApproval') {
+          updateData[field] = requestData[field] as boolean;
+        }
       }
     }
 
@@ -221,7 +224,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
       // Check if existing tenants are affected
       const tenants = await db.collection<Tenant>('tenants').find({ propertyId: propertyId }).toArray();
-      const existingUnitTypes = new Set(property.unitTypes.map((u) => u.type));
       const newUnitTypes = new Set(updateData.unitTypes.map((u) => u.type));
 
       for (const tenant of tenants) {
@@ -282,7 +284,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         updatedAt: result.updatedAt?.toISOString(),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error in PUT /api/properties/[propertyId]', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
@@ -361,7 +363,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       success: true,
       message: 'Property deleted successfully',
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error in DELETE /api/properties/[propertyId]', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,

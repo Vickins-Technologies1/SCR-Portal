@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { CreditCard, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { CreditCard, ArrowUpDown } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 

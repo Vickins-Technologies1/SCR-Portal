@@ -118,8 +118,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ success: false, message: "Invalid role" }, { status: 400 });
-  } catch (error: any) {
-    console.error("GET Payments Error:", error);
+  } catch (error: unknown) { // Changed from any to unknown
+    console.error("GET Payments Error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ success: false, message: "Server error while fetching payments" }, { status: 500 });
   }
 }
@@ -182,8 +182,8 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({ success: true, message: "Payment processed", payment });
-  } catch (error: any) {
-    console.error("POST Payment Error:", error);
+  } catch (error: unknown) { // Changed from any to unknown
+    console.error("POST Payment Error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ success: false, message: "Server error while processing payment" }, { status: 500 });
   }
 }

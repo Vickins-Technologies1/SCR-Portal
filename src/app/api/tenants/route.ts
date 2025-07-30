@@ -41,28 +41,30 @@ interface Tenant {
   createdAt: Date;
 }
 
-// Custom edge-compatible logger
+interface LogMeta {
+  [key: string]: unknown;
+}
+
 const logger = {
-  debug: (message: string, meta?: Record<string, any>) => {
+  debug: (message: string, meta?: LogMeta) => {
     if (process.env.NODE_ENV !== "production") {
       console.debug(`[DEBUG] ${message}`, meta || "");
     }
   },
-  warn: (message: string, meta?: Record<string, any>) => {
+  warn: (message: string, meta?: LogMeta) => {
     console.warn(`[WARN] ${message}`, meta || "");
   },
-  error: (message: string, meta?: Record<string, any>) => {
+  error: (message: string, meta?: LogMeta) => {
     console.error(`[ERROR] ${message}`, meta || "");
   },
-  info: (message: string, meta?: Record<string, any>) => {
+  info: (message: string, meta?: LogMeta) => {
     console.info(`[INFO] ${message}`, meta || "");
   },
 };
 
 export async function GET(request: NextRequest) {
-  const startTime = Date.now();
   try {
-    const cookieStore = await cookies(); // Await cookies()
+    const cookieStore = await cookies();
     const userId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
     logger.debug("GET /api/tenants - Cookies", { userId, role });
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest) {
       },
       { status: 200 }
     );
-  } catch (error: unknown) {
+  } catch (error: unknown) { // Changed from any to unknown
     logger.error("Error in GET /api/tenants", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
@@ -119,9 +121,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const startTime = Date.now();
   try {
-    const cookieStore = await cookies(); // Await cookies()
+    const cookieStore = await cookies();
     const userId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
 
@@ -147,7 +148,6 @@ export async function POST(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
     logger.debug("Connected to database", { database: "rentaldb", collection: "tenants" });
 
-    // Validate required fields
     const requiredFields = [
       "name",
       "email",
@@ -172,7 +172,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate email format
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestData.email)) {
       logger.warn("Validation failed - Invalid email format", { email: requestData.email });
       return NextResponse.json(
@@ -181,7 +180,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate phone format
     if (!/^\+?\d{10,15}$/.test(requestData.phone)) {
       logger.warn("Validation failed - Invalid phone format", { phone: requestData.phone });
       return NextResponse.json(
@@ -190,7 +188,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate date formats
     if (isNaN(Date.parse(requestData.leaseStartDate)) || isNaN(Date.parse(requestData.leaseEndDate))) {
       logger.warn("Validation failed - Invalid date format");
       return NextResponse.json(
@@ -206,7 +203,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate property exists and belongs to user
     if (!ObjectId.isValid(requestData.propertyId)) {
       logger.warn("Validation failed - Invalid propertyId", { propertyId: requestData.propertyId });
       return NextResponse.json(
@@ -228,7 +224,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate unit type
     const unit = property.unitTypes.find((u) => u.type === requestData.unitType);
     if (!unit || unit.quantity <= 0) {
       logger.warn("Validation failed - Unit type not found or no available units", { unitType: requestData.unitType });
@@ -238,7 +233,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate price and deposit
     if (requestData.price !== unit.price || requestData.deposit !== unit.deposit) {
       logger.warn("Validation failed - Price or deposit mismatch", {
         requestedPrice: requestData.price,
@@ -252,7 +246,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check payment status and wallet balance
     const user = await db.collection("propertyOwners").findOne({ _id: new ObjectId(userId) });
     if (!user) {
       logger.warn("User not found", { userId });
@@ -262,7 +255,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate onboarding fee
     const onboardingFee = getManagementFee({
       type: requestData.unitType,
       managementType: unit.managementType,
@@ -270,7 +262,6 @@ export async function POST(request: NextRequest) {
     }) || 1000;
     logger.debug("Calculated onboarding fee", { unitType: requestData.unitType, onboardingFee });
 
-    // Check tenant count and invoice status
     const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
     logger.debug("Tenant count", { userId, count: tenantCount });
 
@@ -304,8 +295,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Generate invoice (wallet deduction handled by frontend via /api/update-wallet)
-      const invoiceStart = Date.now();
       invoice = {
         userId,
         amount: onboardingFee,
@@ -317,11 +306,9 @@ export async function POST(request: NextRequest) {
       await db.collection("invoices").insertOne(invoice);
       logger.debug("Generated invoice", {
         invoice,
-        duration: Date.now() - invoiceStart,
       });
     }
 
-    // Insert tenant
     const tenantData = {
       ownerId: userId,
       name: requestData.name,
@@ -346,13 +333,12 @@ export async function POST(request: NextRequest) {
       duration: Date.now() - insertStart,
     });
 
-    // Update property unit quantity
     await db.collection<Property>("properties").updateOne(
       { _id: new ObjectId(requestData.propertyId), "unitTypes.type": requestData.unitType },
       { $inc: { "unitTypes.$.quantity": -1 } }
     );
 
-    logger.info("POST /api/tenants completed", { duration: Date.now() - startTime });
+    logger.info("POST /api/tenants completed");
     return NextResponse.json(
       {
         success: true,
@@ -367,7 +353,7 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error: unknown) {
+  } catch (error: unknown) { // Changed from any to unknown
     logger.error("Error in POST /api/tenants", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,

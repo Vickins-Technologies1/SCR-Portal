@@ -71,7 +71,6 @@ export async function POST(request: NextRequest) {
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    // Validate tenant exists
     const tenant = await db
       .collection<Tenant>("tenants")
       .findOne({ _id: new ObjectId(tenantId) });
@@ -80,7 +79,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    // Validate property and get ownerId
     const property = await db
       .collection<Property>("properties")
       .findOne({ _id: new ObjectId(propertyId) });
@@ -89,7 +87,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
-    // Fetch payment settings for the owner
     const paymentSettings = await db
       .collection<PaymentSettings>("paymentSettings")
       .findOne({ ownerId: new ObjectId(property.ownerId) });
@@ -104,7 +101,6 @@ export async function POST(request: NextRequest) {
 
     const { umsPayApiKey, umsPayEmail, umsPayAccountId } = paymentSettings;
 
-    // Log UMS Pay credentials for debugging
     console.log(`[POST_CHECK_STATUS] UMS Pay credentials for ownerId: ${property.ownerId}`, {
       umsPayApiKey: umsPayApiKey ? "[REDACTED]" : "MISSING",
       umsPayEmail: umsPayEmail || "MISSING",
@@ -119,7 +115,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check transaction status via UMS Pay
     const umsPayResponse = await axios.post(
       "https://api.umspay.co.ke/api/v1/transactionstatus",
       {
@@ -145,7 +140,6 @@ export async function POST(request: NextRequest) {
     let status: Payment["status"] = "pending";
     let errorMessage = umsPayData.errorMessage;
 
-    // Override status based on MpesaResponse.errorMessage when TransactionStatus is Pending
     if (umsPayData.TransactionStatus === "Pending" && umsPayData.MpesaResponse) {
       try {
         const mpesaResponse = typeof umsPayData.MpesaResponse === "string" 
@@ -165,7 +159,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Use statusMap for other cases
     const statusMap: { [key: string]: Payment["status"] } = {
       Completed: "completed",
       Failed: "failed",
@@ -179,7 +172,6 @@ export async function POST(request: NextRequest) {
       errorMessage = status === "failed" ? "Payment failed." : status === "cancelled" ? "Payment was cancelled by the user." : undefined;
     }
 
-    // Update payment in MongoDB
     await db.collection<Payment>("payments").updateOne(
       { transactionId: transaction_request_id },
       {
@@ -193,7 +185,6 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Update tenant wallet balance if completed
     if (status === "completed") {
       await db.collection<Tenant>("tenants").updateOne(
         { _id: new ObjectId(tenantId) },
@@ -214,10 +205,10 @@ export async function POST(request: NextRequest) {
         reference: umsPayData.TransactionReference,
       },
     });
-  } catch (error: any) {
-    console.error("[POST_CHECK_STATUS] Check Transaction Status Error:", error.response?.data || error.message);
+  } catch (error: unknown) { // Changed from any to unknown
+    console.error("[POST_CHECK_STATUS] Check Transaction Status Error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { success: false, message: error.response?.data?.errorMessage || "Server error while checking transaction status" },
+      { success: false, message: "Server error while checking transaction status" },
       { status: 500 }
     );
   }

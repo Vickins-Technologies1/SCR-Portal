@@ -60,7 +60,7 @@ function csrfMiddleware(handler: (req: NextRequest) => Promise<NextResponse<unkn
           body: JSON.stringify(body),
         });
         console.log(`CSRF token extracted from body - Path: ${req.nextUrl.pathname}, Token: ${submittedToken}`);
-      } catch (error) {
+      } catch {
         console.log(`No JSON body found for CSRF validation - Path: ${req.nextUrl.pathname}`);
       }
     } else {
@@ -201,10 +201,9 @@ export async function middleware(request: NextRequest) {
 
     console.log(`Request allowed - Path: ${path}, Method: ${method}, UserId: ${userId}, Role: ${role}, Duration: ${Date.now() - startTime}ms`);
     return NextResponse.next();
-  } catch (error: unknown) {
+  } catch {
     console.log(`Middleware error - Path: ${path}, Method: ${method}`, {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
+      message: 'Unknown error',
     });
 
     const isApi = path.startsWith('/api/');

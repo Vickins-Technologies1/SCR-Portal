@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
   try {
     const { db }: { db: Db } = await connectToDatabase();
 
-    // Validate CSRF token (assuming a simple check against a stored session token)
     const session = await db.collection("sessions").findOne({ csrfToken });
     if (!session) {
       return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
@@ -218,8 +217,8 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ success: false, message: "Invalid role" }, { status: 400 });
-  } catch (error: any) {
-    console.error("GET Payments Error:", error);
+  } catch (error: unknown) { // Changed from any to unknown
+    console.error("GET Payments Error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json({ success: false, message: "Server error while fetching payments" }, { status: 500 });
   }
 }
@@ -236,7 +235,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { tenantId, amount, propertyId, userId: submittedUserId, csrfToken, type, phoneNumber, reference } = body;
 
-    // Input validation
     if (!tenantId) return NextResponse.json({ success: false, message: "Missing tenantId" }, { status: 400 });
     if (!amount || amount < 10) return NextResponse.json({ success: false, message: "Amount must be at least 10 KES" }, { status: 400 });
     if (!propertyId) return NextResponse.json({ success: false, message: "Missing propertyId" }, { status: 400 });
@@ -248,13 +246,11 @@ export async function POST(request: NextRequest) {
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    // Validate CSRF token
     const session = await db.collection("sessions").findOne({ csrfToken });
     if (!session) {
       return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
     }
 
-    // Validate property and get ownerId
     const property = await db
       .collection<Property>("properties")
       .findOne({ _id: new ObjectId(propertyId) });
@@ -263,7 +259,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
-    // Fetch payment settings for the owner
     const paymentSettings = await db
       .collection<PaymentSettings>("paymentSettings")
       .findOne({ ownerId: new ObjectId(property.ownerId) });
@@ -278,7 +273,6 @@ export async function POST(request: NextRequest) {
 
     const { umsPayApiKey, umsPayEmail, umsPayAccountId } = paymentSettings;
 
-    // Log UMS Pay credentials for debugging
     console.log(`[POST] UMS Pay credentials for ownerId: ${property.ownerId}`, {
       umsPayApiKey: umsPayApiKey ? "[REDACTED]" : "MISSING",
       umsPayEmail: umsPayEmail || "MISSING",
@@ -293,7 +287,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate tenant exists and fetch tenant name
     const tenant = await db
       .collection<Tenant>("tenants")
       .findOne({ _id: new ObjectId(tenantId) });
@@ -302,7 +295,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    // Skip propertyId check for tenants to allow payments to any valid property
     if (role === "propertyOwner") {
       const propertyCheck = await db
         .collection<Property>("properties")
@@ -313,7 +305,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Initiate STK Push via UMS Pay
     const umsPayResponse = await axios.post(
       "https://api.umspay.co.ke/api/v1/initiatestkpush",
       {
@@ -336,7 +327,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: umsPayData.errorMessage || "Failed to initiate STK Push" }, { status: 400 });
     }
 
-    // Store pending payment
     const transactionId = umsPayData.transaction_request_id;
     const payment: Payment = {
       _id: new ObjectId(),
@@ -371,10 +361,10 @@ export async function POST(request: NextRequest) {
         reference: payment.reference,
       },
     });
-  } catch (error: any) {
-    console.error("[POST] Payment Error:", error.response?.data || error.message);
+  } catch (error: unknown) { // Changed from any to unknown
+    console.error("[POST] Payment Error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { success: false, message: error.response?.data?.errorMessage || "Server error while processing payment" },
+      { success: false, message: "Server error while processing payment" },
       { status: 500 }
     );
   }

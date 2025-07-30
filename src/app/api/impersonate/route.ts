@@ -1,9 +1,8 @@
-// lint-disable-next-line no-unused-vars
+// src/app/api/impersonate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { MongoClient, ObjectId, Db } from 'mongodb';
 
-// Cached MongoDB client to avoid creating new connections per request
-let cachedClient: MongoClient | null = null;
+// Cached MongoDB database to avoid creating new connections per request
 let cachedDb: Db | null = null;
 
 const connectToDatabase = async (): Promise<Db> => {
@@ -15,7 +14,6 @@ const connectToDatabase = async (): Promise<Db> => {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb://localhost:27017');
   try {
     await client.connect();
-    cachedClient = client;
     cachedDb = client.db('rentaldb');
     console.log('Established new MongoDB connection');
     return cachedDb;
