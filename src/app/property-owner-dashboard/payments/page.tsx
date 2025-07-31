@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { CreditCard, ArrowUpDown } from "lucide-react";
+import { CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -15,17 +15,16 @@ interface Payment {
   paymentDate: string;
   transactionId: string;
   status: "completed" | "pending" | "failed";
+  tenantName: string;
+  type?: "Rent" | "Utility";
+  phoneNumber?: string;
+  reference?: string;
 }
 
 interface Property {
   _id: string;
   name: string;
   ownerId: string;
-}
-
-interface SortConfig<T> {
-  key: keyof T;
-  direction: "asc" | "desc";
 }
 
 export default function PaymentsPage() {
@@ -35,27 +34,43 @@ export default function PaymentsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortConfig, setSortConfig] = useState<SortConfig<Payment>>({ key: "paymentDate", direction: "desc" });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [totalPayments, setTotalPayments] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [csrfToken, setCsrfToken] = useState<string>("");
 
-  // Fetch CSRF token
+  // Fetch CSRF token with retry
   useEffect(() => {
-    const fetchCsrfToken = async () => {
-      try {
-        const res = await fetch("/api/csrf-token");
-        const data = await res.json();
-        if (data.success) {
-          setCsrfToken(data.csrfToken);
-        } else {
-          setError("Failed to fetch CSRF token.");
+    const fetchCsrfToken = async (retries = 3, delay = 1000) => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          setIsLoading(true);
+          const res = await fetch("/api/csrf-token", {
+            method: "GET",
+            credentials: "include",
+          });
+          const data = await res.json();
+          console.log("CSRF token response:", data);
+          if (data.success) {
+            setCsrfToken(data.csrfToken);
+            console.log("CSRF token fetched:", data.csrfToken);
+            return;
+          } else {
+            setError(data.message || "Failed to fetch CSRF token.");
+            console.error("CSRF token fetch failed:", data.message);
+          }
+        } catch (err) {
+          console.error("CSRF token fetch error (attempt", i + 1, "):", err);
+          if (i < retries - 1) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          setError("Failed to connect to server for CSRF token.");
         }
-      } catch {
-        setError("Failed to connect to server for CSRF token.");
+        setIsLoading(false);
       }
     };
     fetchCsrfToken();
@@ -75,60 +90,101 @@ export default function PaymentsPage() {
 
   // Fetch properties
   const fetchProperties = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!userId || !csrfToken) {
+      console.log("Skipping fetchProperties: userId or csrfToken missing", { userId, csrfToken });
+      return;
+    }
     try {
       const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
         credentials: "include",
       });
       const data = await res.json();
+      console.log("Properties API response:", data);
       if (data.success) {
         setProperties(data.properties || []);
       } else {
         setError(data.message || "Failed to fetch properties.");
+        console.error("Properties fetch failed:", data.message);
       }
-    } catch {
+    } catch (err) {
       setError("Failed to connect to the server.");
+      console.error("Properties fetch error:", err);
     }
   }, [userId, csrfToken]);
 
   // Fetch payments with pagination
   const fetchPayments = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!userId || !csrfToken) {
+      console.log("Skipping fetchPayments: userId or csrfToken missing", { userId, csrfToken });
+      return;
+    }
     setIsLoading(true);
+    setError(null);
     try {
       const query = selectedPropertyId === "all"
         ? `?page=${currentPage}&limit=${itemsPerPage}&sort=-paymentDate`
         : `?propertyId=${encodeURIComponent(selectedPropertyId)}&page=${currentPage}&limit=${itemsPerPage}&sort=-paymentDate`;
+      console.log("Fetching payments with query:", `/api/payments${query}`);
       const res = await fetch(`/api/payments${query}`, {
         method: "GET",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
         credentials: "include",
       });
+      if (!res.ok) {
+        if (res.status === 403) {
+          setError("Unauthorized request. Please try logging in again.");
+          console.error("403 Forbidden: Invalid CSRF token or session");
+          return;
+        }
+        throw new Error(`HTTP error: ${res.status}`);
+      }
       const data = await res.json();
+      console.log("Payments API response:", {
+        success: data.success,
+        payments: data.payments?.length,
+        total: data.total,
+        page: data.page,
+        totalPages: data.totalPages,
+        paymentDates: data.payments?.map((p: Payment) => p.paymentDate),
+      });
       if (data.success) {
         setPayments(data.payments || []);
         setTotalPayments(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+        setCurrentPage(data.page || 1);
+        if (data.payments?.length === 0 && data.total > 0) {
+          setError(`No payments found for page ${currentPage}, but ${data.total} total payments exist. Try another page.`);
+        }
       } else {
         setError(data.message || "Failed to fetch payments.");
+        console.error("Payments fetch failed:", data.message);
+        setPayments([]);
+        setTotalPayments(0);
+        setTotalPages(1);
       }
-    } catch {
+    } catch (err) {
       setError("Failed to connect to the server.");
+      console.error("Payments fetch error:", err);
+      setPayments([]);
+      setTotalPayments(0);
+      setTotalPages(1);
     } finally {
       setIsLoading(false);
     }
   }, [userId, selectedPropertyId, currentPage, itemsPerPage, csrfToken]);
 
-  // Fetch data when userId, role, or page changes
+  // Fetch data when dependencies change
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
+      console.log("Triggering fetch: userId, role, and csrfToken present", { userId, role, currentPage, selectedPropertyId, csrfToken });
       fetchProperties();
       fetchPayments();
     }
@@ -137,44 +193,32 @@ export default function PaymentsPage() {
   // Handle property selection
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedPropertyId(e.target.value);
-    setCurrentPage(1); // Reset to first page on property change
+    setCurrentPage(1);
     setError(null);
+    console.log("Property changed, resetting to page 1:", e.target.value);
   };
 
-  // Handle payment sorting
-  const handleSort = useCallback((key: keyof Payment) => {
-    setSortConfig((prev) => {
-      const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      const sortedPayments = [...payments].sort((a, b) => {
-        if (key === "amount") {
-          return direction === "asc" ? a[key] - b[key] : b[key] - a[key];
-        }
-        if (key === "paymentDate") {
-          return direction === "asc"
-            ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
-            : new Date(b[key]).getTime() - new Date(a[key]).getTime();
-        }
-        return direction === "asc"
-          ? String(a[key]).localeCompare(String(b[key]))
-          : String(b[key]).localeCompare(String(a[key]));
-      });
-      setPayments(sortedPayments);
-      return { key, direction };
-    });
-  }, [payments]);
-
-  // Get sort icon for table headers
-  const getSortIcon = useCallback(<T extends Payment>(key: keyof T, sortConfig: SortConfig<T>) => {
-    if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-    return sortConfig.direction === "asc" ? (
-      <span className="inline ml-1">↑</span>
-    ) : (
-      <span className="inline ml-1">↓</span>
-    );
-  }, []);
-
   // Pagination controls
-  const totalPages = Math.ceil(totalPayments / itemsPerPage);
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages && !isLoading) {
+      setCurrentPage(newPage);
+      console.log("Navigating to page:", newPage);
+    }
+  };
+
+  // Status styles
+  const getStatusStyles = (status: Payment["status"]) => {
+    switch (status) {
+      case "completed":
+        return "text-green-600 bg-green-100";
+      case "pending":
+        return "text-yellow-600 bg-yellow-100";
+      case "failed":
+        return "text-red-600 bg-red-100";
+      default:
+        return "text-gray-600 bg-gray-100";
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
@@ -194,6 +238,7 @@ export default function PaymentsPage() {
               value={selectedPropertyId}
               onChange={handlePropertyChange}
               className="w-full sm:w-64 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base border-gray-300"
+              disabled={isLoading}
             >
               <option value="all">All Properties</option>
               {properties.map((property) => (
@@ -215,85 +260,70 @@ export default function PaymentsPage() {
             </div>
           ) : payments.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-              No payments found for {selectedPropertyId === "all" ? "any properties" : "selected property"}.
+              {totalPayments > 0
+                ? `No payments found for page ${currentPage}. Try another page.`
+                : `No payments found for ${selectedPropertyId === "all" ? "any properties" : "selected property"}.`}
             </div>
           ) : (
             <div className="overflow-x-auto bg-white shadow rounded-lg">
               <table className="min-w-full table-auto text-sm md:text-base">
                 <thead className="bg-gray-200">
                   <tr>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("transactionId")}
-                    >
-                      Transaction ID {getSortIcon("transactionId", sortConfig)}
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("tenantId")}
-                    >
-                      Tenant ID {getSortIcon("tenantId", sortConfig)}
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("amount")}
-                    >
-                      Amount (Ksh) {getSortIcon("amount", sortConfig)}
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("paymentDate")}
-                    >
-                      Payment Date {getSortIcon("paymentDate", sortConfig)}
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("status")}
-                    >
-                      Status {getSortIcon("status", sortConfig)}
-                    </th>
+                    <th className="px-4 py-3 text-left">#</th>
+                    <th className="px-4 py-3 text-left">Transaction ID</th>
+                    <th className="px-4 py-3 text-left">Tenant</th>
+                    <th className="px-4 py-3 text-left">Amount (Ksh)</th>
+                    <th className="px-4 py-3 text-left">Payment Date</th>
+                    <th className="px-4 py-3 text-left">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((payment) => (
+                  {payments.map((payment, index) => (
                     <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
+                      <td className="px-4 py-3">{index + 1 + (currentPage - 1) * itemsPerPage}</td>
                       <td className="px-4 py-3">{payment.transactionId}</td>
-                      <td className="px-4 py-3">{payment.tenantId}</td>
+                      <td className="px-4 py-3">{payment.tenantName || payment.tenantId}</td>
                       <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
                       <td className="px-4 py-3">{new Date(payment.paymentDate).toLocaleDateString()}</td>
-                      <td className="px-4 py-3">{payment.status}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusStyles(payment.status)}`}>
+                          {payment.status}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div className="text-sm text-gray-600">
-                  Showing {payments.length} of {totalPayments} payments
-                </div>
-                {totalPages > 1 && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                      aria-label="Previous page"
-                    >
-                      Previous
-                    </button>
-                    <span className="px-3 py-1 text-sm text-gray-600">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <button
-                      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                      aria-label="Next page"
-                    >
-                      Next
-                    </button>
+              {totalPayments > 0 && (
+                <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4 p-4">
+                  <div className="text-sm text-gray-600">
+                    Showing {Math.min(payments.length, itemsPerPage)} of {totalPayments} payments
                   </div>
-                )}
-              </div>
+                  {totalPayments > itemsPerPage && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1 || isLoading}
+                        className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        aria-label="Previous page"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <span className="px-3 py-1 text-sm text-gray-600">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages || isLoading}
+                        className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        aria-label="Next page"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </main>

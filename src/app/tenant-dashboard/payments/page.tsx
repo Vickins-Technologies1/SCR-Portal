@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, CheckCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Payment {
   _id: string;
@@ -16,6 +16,8 @@ interface Payment {
   transactionId: string;
   status: "completed" | "pending" | "failed" | "cancelled";
   createdAt: string;
+  tenantName: string;
+  reference: string;
 }
 
 interface Tenant {
@@ -36,7 +38,7 @@ export default function PaymentsPage() {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading true
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -44,13 +46,15 @@ export default function PaymentsPage() {
   const [amount, setAmount] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  // Detect client
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // Fetch CSRF token and initial data
   useEffect(() => {
     if (!isClient) return;
 
@@ -60,93 +64,109 @@ export default function PaymentsPage() {
         ...prev,
         { type: "error", text: "Please log in to view payments.", timestamp: new Date().toISOString() },
       ]);
+      setLoading(false);
       return;
     }
     setTenantId(id);
-    setLoading(true);
+    fetchCsrfToken();
+  }, [isClient]);
 
-    const fetchCsrfToken = async () => {
-      try {
-        const csrfRes = await fetch("/api/csrf-token", {
-          method: "GET",
-          credentials: "include",
-        });
-        const data = await csrfRes.json();
-        if (data.success) {
-          setCsrfToken(data.csrfToken);
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            { type: "error", text: data.message || "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
-          ]);
-        }
-      } catch (err) {
-        console.error("Error fetching CSRF token:", err);
+  const fetchCsrfToken = async () => {
+    try {
+      const csrfRes = await fetch("/api/csrf-token", {
+        method: "GET",
+        credentials: "include",
+      });
+      const data = await csrfRes.json();
+      if (data.success) {
+        setCsrfToken(data.csrfToken);
+      } else {
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
+          { type: "error", text: data.message || "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
         ]);
-      }
-    };
-
-    const fetchData = async () => {
-      try {
-        if (!csrfToken) {
-          await fetchCsrfToken();
-          if (!csrfToken) return;
-        }
-
-        const tenantRes = await fetch("/api/tenant/profile", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken!,
-          },
-          credentials: "include",
-        });
-        const tenantData = await tenantRes.json();
-        console.log("Tenant profile response:", tenantData);
-        if (!tenantData.success || !tenantData.tenant) {
-          setMessages((prev) => [
-            ...prev,
-            { type: "error", text: tenantData.message || "Failed to fetch tenant data", timestamp: new Date().toISOString() },
-          ]);
-          return;
-        }
-        setTenant(tenantData.tenant);
-        setPhoneNumber(tenantData.tenant.phone || "");
-
-        const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${id}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken!,
-          },
-          credentials: "include",
-        });
-        const paymentsData = await paymentsRes.json();
-        console.log("Payments response:", paymentsData);
-        if (paymentsData.success) {
-          setPayments(paymentsData.payments || []);
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            { type: "error", text: paymentsData.message || "Failed to fetch payments", timestamp: new Date().toISOString() },
-          ]);
-        }
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setMessages((prev) => [
-          ...prev,
-          { type: "error", text: "Failed to connect to the server", timestamp: new Date().toISOString() },
-        ]);
-      } finally {
         setLoading(false);
       }
-    };
+    } catch (err) {
+      console.error("Error fetching CSRF token:", err);
+      setMessages((prev) => [
+        ...prev,
+        { type: "error", text: "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
+      ]);
+      setLoading(false);
+    }
+  };
 
+  const fetchData = async () => {
+    if (!tenantId || !csrfToken) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+
+    try {
+      const tenantRes = await fetch("/api/tenant/profile", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const tenantData = await tenantRes.json();
+      console.log("Tenant profile response:", tenantData);
+      if (!tenantData.success || !tenantData.tenant) {
+        setMessages((prev) => [
+          ...prev,
+          { type: "error", text: tenantData.message || "Failed to fetch tenant data", timestamp: new Date().toISOString() },
+        ]);
+        setLoading(false);
+        return;
+      }
+      setTenant(tenantData.tenant);
+      setPhoneNumber(tenantData.tenant.phone || "");
+
+      const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}&page=${page}&limit=${limit}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const paymentsData = await paymentsRes.json();
+      console.log("Payments response:", paymentsData);
+      if (paymentsData.success) {
+        setPayments(paymentsData.payments || []);
+        setTotal(paymentsData.total || 0);
+        setTotalPages(paymentsData.totalPages || 1);
+        setPage(paymentsData.page || 1);
+        if (paymentsData.payments.length === 0 && paymentsData.total > 0) {
+          setMessages((prev) => [
+            ...prev,
+            { type: "error", text: `No payments found for page ${page}, but ${paymentsData.total} total payments exist.`, timestamp: new Date().toISOString() },
+          ]);
+        }
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { type: "error", text: paymentsData.message || "Failed to fetch payments", timestamp: new Date().toISOString() },
+        ]);
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setMessages((prev) => [
+        ...prev,
+        { type: "error", text: "Failed to connect to the server", timestamp: new Date().toISOString() },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
-  }, [isClient, csrfToken]);
+  }, [tenantId, csrfToken, page]);
 
   const validatePhoneNumber = (phone: string): boolean => {
     const regex = /^(?:\+2547|07)\d{8}$/;
@@ -171,7 +191,7 @@ export default function PaymentsPage() {
     try {
       const response = await fetch("/api/tenant/payments/check-status", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         credentials: "include",
         body: JSON.stringify({
           transaction_request_id: transactionRequestId,
@@ -182,7 +202,6 @@ export default function PaymentsPage() {
       });
       const data = await response.json();
       console.log("Transaction status response:", data);
-
       if (data.success) {
         setMessages((prev) => [
           ...prev,
@@ -245,10 +264,9 @@ export default function PaymentsPage() {
       };
       console.log("Submitting payment with payload:", payload);
 
-      // Step 1: Initiate STK Push
       const paymentRes = await fetch("/api/tenant/payments", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         credentials: "include",
         body: JSON.stringify(payload),
       });
@@ -270,8 +288,6 @@ export default function PaymentsPage() {
       ]);
 
       const { transaction_request_id } = paymentData;
-
-      // Step 2: Poll transaction status
       let status = "pending";
       let attempts = 0;
       const maxAttempts = 10;
@@ -282,51 +298,12 @@ export default function PaymentsPage() {
         console.log(`Attempt ${attempts}: Transaction status = ${status}`);
       }
 
-      // Handle terminal states
       if (status === "completed") {
         setMessages((prev) => [
           ...prev,
           { type: "success", text: "Payment completed successfully!", timestamp: new Date().toISOString() },
         ]);
-
-        // Fetch updated tenant and payments
-        const tenantRes = await fetch("/api/tenant/profile", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken,
-          },
-          credentials: "include",
-        });
-        const tenantData = await tenantRes.json();
-        if (tenantData.success) {
-          setTenant(tenantData.tenant);
-          setPhoneNumber(tenantData.tenant?.phone || "");
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            { type: "error", text: tenantData.message || "Failed to update tenant profile", timestamp: new Date().toISOString() },
-          ]);
-        }
-
-        const updatedRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken,
-          },
-          credentials: "include",
-        });
-        const updatedData = await updatedRes.json();
-        if (updatedData.success) {
-          setPayments(updatedData.payments || []);
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            { type: "error", text: updatedData.message || "Failed to fetch updated payments", timestamp: new Date().toISOString() },
-          ]);
-        }
-
+        await fetchData();
         setIsModalOpen(false);
         setAmount(0);
         setPaymentType("Rent");
@@ -342,9 +319,7 @@ export default function PaymentsPage() {
           ...prev,
           { type: "error", text: errorMessage, timestamp: new Date().toISOString() },
         ]);
-        if (status === "failed" || status === "cancelled") {
-          setIsProcessing(false);
-        }
+        setIsProcessing(false);
       }
     } catch (err) {
       console.error("Payment error:", err);
@@ -353,6 +328,12 @@ export default function PaymentsPage() {
         { type: "error", text: "Failed to process payment. Please check your connection.", timestamp: new Date().toISOString() },
       ]);
       setIsProcessing(false);
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setPage(newPage);
     }
   };
 
@@ -433,13 +414,37 @@ export default function PaymentsPage() {
             ) : (
               <tr>
                 <td colSpan={5} className="px-4 py-4 text-center text-gray-500">
-                  No payment records found.
+                  {total > 0 ? `No payments found for page ${page}.` : "No payment records found."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <button
+            onClick={() => handlePageChange(page - 1)}
+            disabled={page === 1 || loading}
+            className="flex items-center px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 transition"
+          >
+            <ChevronLeft size={16} className="mr-1" />
+            Previous
+          </button>
+          <span className="text-sm text-gray-600">
+            Page {page} of {totalPages} ({total} total payments)
+          </span>
+          <button
+            onClick={() => handlePageChange(page + 1)}
+            disabled={page === totalPages || loading}
+            className="flex items-center px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 transition"
+          >
+            Next
+            <ChevronRight size={16} className="ml-1" />
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>
         {isModalOpen && (

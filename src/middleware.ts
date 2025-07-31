@@ -169,7 +169,7 @@ export async function middleware(request: NextRequest) {
           { status: 401 }
         );
       }
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL('/', request.url));
     }
 
     // Special handling for /api/tenants/:tenantId (excluding /api/tenant/*)
@@ -190,7 +190,7 @@ export async function middleware(request: NextRequest) {
           { status: 403 }
         );
       }
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL('/', request.url));
     }
 
     // Apply CSRF and rate-limiting for non-GET API requests
@@ -210,7 +210,7 @@ export async function middleware(request: NextRequest) {
     if (isApi) {
       return NextResponse.json({ success: false, message: 'Internal server error' }, { status: 500 });
     }
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL('/', request.url));
   }
 }
 
