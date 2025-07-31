@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, CheckCircle } from "lucide-react";
 
 interface Payment {
   _id: string;
@@ -43,15 +43,14 @@ export default function PaymentsPage() {
   const [paymentType, setPaymentType] = useState<"Rent" | "Utility">("Rent");
   const [amount, setAmount] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [totalPayments, setTotalPayments] = useState(0);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
   // Detect client
   useEffect(() => {
     setIsClient(true);
   }, []);
 
+  // Fetch CSRF token and initial data
   useEffect(() => {
     if (!isClient) return;
 
@@ -66,11 +65,43 @@ export default function PaymentsPage() {
     setTenantId(id);
     setLoading(true);
 
+    const fetchCsrfToken = async () => {
+      try {
+        const csrfRes = await fetch("/api/csrf-token", {
+          method: "GET",
+          credentials: "include",
+        });
+        const data = await csrfRes.json();
+        if (data.success) {
+          setCsrfToken(data.csrfToken);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            { type: "error", text: data.message || "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
+          ]);
+        }
+      } catch (err) {
+        console.error("Error fetching CSRF token:", err);
+        setMessages((prev) => [
+          ...prev,
+          { type: "error", text: "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
+        ]);
+      }
+    };
+
     const fetchData = async () => {
       try {
+        if (!csrfToken) {
+          await fetchCsrfToken();
+          if (!csrfToken) return;
+        }
+
         const tenantRes = await fetch("/api/tenant/profile", {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken!,
+          },
           credentials: "include",
         });
         const tenantData = await tenantRes.json();
@@ -85,19 +116,18 @@ export default function PaymentsPage() {
         setTenant(tenantData.tenant);
         setPhoneNumber(tenantData.tenant.phone || "");
 
-        const paymentsRes = await fetch(
-          `/api/tenant/payments?tenantId=${id}&page=${currentPage}&limit=${itemsPerPage}&sort=-createdAt`,
-          {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-          }
-        );
+        const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${id}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken!,
+          },
+          credentials: "include",
+        });
         const paymentsData = await paymentsRes.json();
         console.log("Payments response:", paymentsData);
         if (paymentsData.success) {
           setPayments(paymentsData.payments || []);
-          setTotalPayments(paymentsData.total || 0);
         } else {
           setMessages((prev) => [
             ...prev,
@@ -116,7 +146,7 @@ export default function PaymentsPage() {
     };
 
     fetchData();
-  }, [isClient, currentPage, itemsPerPage]);
+  }, [isClient, csrfToken]);
 
   const validatePhoneNumber = (phone: string): boolean => {
     const regex = /^(?:\+2547|07)\d{8}$/;
@@ -129,32 +159,16 @@ export default function PaymentsPage() {
     return phone;
   };
 
-  const getCsrfToken = async (): Promise<string> => {
-    try {
-      const csrfRes = await fetch("/api/csrf-token", {
-        method: "GET",
-        credentials: "include",
-      });
-      const { csrfToken } = await csrfRes.json();
-      console.log("Fetched CSRF token:", csrfToken);
-      return csrfToken;
-    } catch (err) {
-      console.error("Error fetching CSRF token:", err);
+  const checkTransactionStatus = async (transactionRequestId: string): Promise<string> => {
+    if (!csrfToken) {
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
+        { type: "error", text: "CSRF token not available", timestamp: new Date().toISOString() },
       ]);
-      throw new Error("Failed to fetch CSRF token");
+      throw new Error("CSRF token not available");
     }
-  };
 
-  const checkTransactionStatus = async (transactionRequestId: string): Promise<{ status: string; errorMessage?: string }> => {
     try {
-      let csrfToken = Cookies.get("csrf-token");
-      if (!csrfToken) {
-        csrfToken = await getCsrfToken();
-      }
-
       const response = await fetch("/api/tenant/payments/check-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -174,40 +188,7 @@ export default function PaymentsPage() {
           ...prev,
           { type: "success", text: data.message || "Transaction status retrieved successfully", timestamp: new Date().toISOString() },
         ]);
-        return { status: data.status, errorMessage: data.message };
-      } else if (data.message === "CSRF token validation failed") {
-        console.log("CSRF token validation failed, retrying...");
-        setMessages((prev) => [
-          ...prev,
-          { type: "error", text: "CSRF token validation failed, retrying...", timestamp: new Date().toISOString() },
-        ]);
-        csrfToken = await getCsrfToken();
-        const retryResponse = await fetch("/api/tenant/payments/check-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            transaction_request_id: transactionRequestId,
-            tenantId,
-            propertyId: tenant?.propertyId,
-            csrfToken,
-          }),
-        });
-        const retryData = await retryResponse.json();
-        console.log("Retry transaction status response:", retryData);
-        if (retryData.success) {
-          setMessages((prev) => [
-            ...prev,
-            { type: "success", text: retryData.message || "Transaction status retrieved successfully after retry", timestamp: new Date().toISOString() },
-          ]);
-          return { status: retryData.status, errorMessage: retryData.message };
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            { type: "error", text: retryData.message || "Failed to check transaction status after retry", timestamp: new Date().toISOString() },
-          ]);
-          throw new Error(retryData.message || "Failed to check transaction status after retry");
-        }
+        return data.status;
       } else {
         setMessages((prev) => [
           ...prev,
@@ -226,7 +207,7 @@ export default function PaymentsPage() {
   };
 
   const handlePayment = async () => {
-    if (!tenantId || !tenant?.propertyId || amount < 10 || !validatePhoneNumber(phoneNumber)) {
+    if (!tenantId || !tenant?.propertyId || amount < 10 || !validatePhoneNumber(phoneNumber) || !csrfToken) {
       setMessages((prev) => [
         ...prev,
         {
@@ -237,24 +218,20 @@ export default function PaymentsPage() {
             ? "Tenant profile incomplete. Missing property ID."
             : amount < 10
             ? "Amount must be at least 10 KES."
-            : "Please enter a valid phone number (e.g., +2547xxxxxxxx or 07xxxxxxxx).",
+            : !validatePhoneNumber(phoneNumber)
+            ? "Please enter a valid phone number (e.g., +2547xxxxxxxx or 07xxxxxxxx)."
+            : "CSRF token not available.",
           timestamp: new Date().toISOString(),
         },
       ]);
-      setIsProcessing(true); // Show loader modal for validation errors
+      setIsProcessing(true);
       return;
     }
 
     setIsProcessing(true);
-    setMessages([]); // Clear previous messages
+    setMessages([]);
 
     try {
-      let csrfToken = Cookies.get("csrf-token");
-      if (!csrfToken) {
-        csrfToken = await getCsrfToken();
-      }
-      console.log("CSRF token:", csrfToken);
-
       const reference = `ORDER-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
       const payload = {
         tenantId,
@@ -268,7 +245,7 @@ export default function PaymentsPage() {
       };
       console.log("Submitting payment with payload:", payload);
 
-      // Step 1: Initiate STK Push via internal API
+      // Step 1: Initiate STK Push
       const paymentRes = await fetch("/api/tenant/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,7 +260,7 @@ export default function PaymentsPage() {
           ...prev,
           { type: "error", text: paymentData.message || "Failed to initiate payment.", timestamp: new Date().toISOString() },
         ]);
-        setIsProcessing(false); // Close modal for initiation failure
+        setIsProcessing(false);
         return;
       }
 
@@ -297,19 +274,12 @@ export default function PaymentsPage() {
       // Step 2: Poll transaction status
       let status = "pending";
       let attempts = 0;
-      const maxAttempts = 10; // Poll for ~50 seconds (5s interval)
-      let errorMessage: string | undefined;
+      const maxAttempts = 10;
       while (status === "pending" && attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
-        const result = await checkTransactionStatus(transaction_request_id);
-        status = result.status;
-        errorMessage = result.errorMessage;
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        status = await checkTransactionStatus(transaction_request_id);
         attempts++;
-        console.log(`Attempt ${attempts}: Transaction status = ${status}, ErrorMessage = ${errorMessage || "None"}`);
-        // Stop polling for terminal states
-        if (status === "completed" || status === "failed" || status === "cancelled") {
-          break;
-        }
+        console.log(`Attempt ${attempts}: Transaction status = ${status}`);
       }
 
       // Handle terminal states
@@ -322,7 +292,10 @@ export default function PaymentsPage() {
         // Fetch updated tenant and payments
         const tenantRes = await fetch("/api/tenant/profile", {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
           credentials: "include",
         });
         const tenantData = await tenantRes.json();
@@ -336,19 +309,17 @@ export default function PaymentsPage() {
           ]);
         }
 
-        const updatedRes = await fetch(
-          `/api/tenant/payments?tenantId=${tenantId}&page=1&limit=${itemsPerPage}&sort=-createdAt`,
-          {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-          }
-        );
+        const updatedRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          credentials: "include",
+        });
         const updatedData = await updatedRes.json();
         if (updatedData.success) {
           setPayments(updatedData.payments || []);
-          setTotalPayments(updatedData.total || 0);
-          setCurrentPage(1); // Reset to page 1 to show latest payment
         } else {
           setMessages((prev) => [
             ...prev,
@@ -359,24 +330,21 @@ export default function PaymentsPage() {
         setIsModalOpen(false);
         setAmount(0);
         setPaymentType("Rent");
-        setIsProcessing(false); // Close modal for completed payment
+        setIsProcessing(false);
       } else {
-        const errorText =
-          status === "failed" && errorMessage?.toLowerCase().includes("insufficient balance")
+        const errorMessage =
+          status === "failed"
             ? "Payment failed due to insufficient balance."
-            : status === "failed"
-            ? errorMessage || "Payment failed."
             : status === "cancelled"
-            ? errorMessage || "Payment was cancelled by the user."
+            ? "Payment was cancelled by the user."
             : "Payment timed out. User was not reachable.";
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: errorText, timestamp: new Date().toISOString() },
+          { type: "error", text: errorMessage, timestamp: new Date().toISOString() },
         ]);
         if (status === "failed" || status === "cancelled") {
-          setIsProcessing(false); // Close modal for failed or cancelled
+          setIsProcessing(false);
         }
-        // Keep isProcessing true for timeout (non-terminal in some cases)
       }
     } catch (err) {
       console.error("Payment error:", err);
@@ -384,16 +352,7 @@ export default function PaymentsPage() {
         ...prev,
         { type: "error", text: "Failed to process payment. Please check your connection.", timestamp: new Date().toISOString() },
       ]);
-      setIsProcessing(false); // Close modal for unexpected errors
-    }
-  };
-
-  // Pagination controls
-  const totalPages = Math.ceil(totalPayments / itemsPerPage);
-
-  const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
+      setIsProcessing(false);
     }
   };
 
@@ -403,7 +362,7 @@ export default function PaymentsPage() {
     <div className="space-y-6 p-4 max-w-7xl mx-auto">
       <section className="mb-6 bg-blue-900 text-white rounded-xl p-6 shadow-lg">
         <h1 className="text-2xl font-semibold mb-1">Payment History</h1>
-        <p>View your past and upcoming rent or utility payments, sorted by latest.</p>
+        <p>View your past and upcoming rent or utility payments.</p>
         {tenant && (
           <div className="mt-2 text-sm">
             <p>
@@ -423,7 +382,7 @@ export default function PaymentsPage() {
         <button
           onClick={() => setIsModalOpen(true)}
           className="mt-4 bg-blue-600 text-white font-semibold px-4 py-2 rounded shadow hover:bg-blue-700 transition disabled:bg-blue-300 disabled:cursor-not-allowed"
-          disabled={!tenantId || !tenant?.propertyId}
+          disabled={!tenantId || !tenant?.propertyId || !csrfToken}
         >
           Make a Payment
         </button>
@@ -480,48 +439,6 @@ export default function PaymentsPage() {
             )}
           </tbody>
         </table>
-        {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
-            <span className="text-sm text-gray-600">
-              Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-              {Math.min(currentPage * itemsPerPage, totalPayments)} of {totalPayments} payments
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="p-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-full hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition"
-                aria-label="Previous page"
-              >
-                <ChevronLeft size="16" />
-              </button>
-              <div className="flex gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => handlePageChange(page)}
-                    className={`px-3 py-1 text-sm font-medium rounded-md ${
-                      currentPage === page
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    } transition`}
-                    aria-label={`Page ${page}`}
-                  >
-                    {page}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="p-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-full hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition"
-                aria-label="Next page"
-              >
-                <ChevronRight size="16" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       <AnimatePresence>
@@ -584,7 +501,7 @@ export default function PaymentsPage() {
                 </button>
                 <button
                   onClick={handlePayment}
-                  disabled={isProcessing || amount < 10 || !validatePhoneNumber(phoneNumber)}
+                  disabled={isProcessing || amount < 10 || !validatePhoneNumber(phoneNumber) || !csrfToken}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed transition"
                 >
                   Pay Now

@@ -1,8 +1,9 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import axios from "axios";
+import { validateCsrfToken } from "../../../../../lib/csrf";
+import logger from "../../../../../lib/logger";
 
 interface Tenant {
   _id: ObjectId;
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
   const role = request.cookies.get("role")?.value;
 
   if (!userId || !role || !["tenant", "propertyOwner", "admin"].includes(role)) {
+    logger.error("Unauthorized access attempt", { userId, role });
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
@@ -69,6 +71,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Missing CSRF token" }, { status: 400 });
     }
 
+    if (!validateCsrfToken(request, csrfToken)) {
+      logger.error("Invalid CSRF token", { userId });
+      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    }
+
     const { db }: { db: Db } = await connectToDatabase();
 
     const tenant = await db
@@ -76,6 +83,7 @@ export async function POST(request: NextRequest) {
       .findOne({ _id: new ObjectId(tenantId) });
 
     if (!tenant) {
+      logger.error("Tenant not found", { tenantId });
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
@@ -84,6 +92,7 @@ export async function POST(request: NextRequest) {
       .findOne({ _id: new ObjectId(propertyId) });
 
     if (!property) {
+      logger.error("Property not found", { propertyId });
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
@@ -92,7 +101,7 @@ export async function POST(request: NextRequest) {
       .findOne({ ownerId: new ObjectId(property.ownerId) });
 
     if (!paymentSettings || !paymentSettings.umsPayEnabled) {
-      console.log(`[POST_CHECK_STATUS] UMS Pay not enabled for ownerId: ${property.ownerId}`);
+      logger.error(`UMS Pay not enabled for ownerId: ${property.ownerId}`);
       return NextResponse.json(
         { success: false, message: "UMS Pay is not enabled for this property owner" },
         { status: 400 }
@@ -101,14 +110,14 @@ export async function POST(request: NextRequest) {
 
     const { umsPayApiKey, umsPayEmail, umsPayAccountId } = paymentSettings;
 
-    console.log(`[POST_CHECK_STATUS] UMS Pay credentials for ownerId: ${property.ownerId}`, {
+    logger.debug(`UMS Pay credentials for ownerId: ${property.ownerId}`, {
       umsPayApiKey: umsPayApiKey ? "[REDACTED]" : "MISSING",
       umsPayEmail: umsPayEmail || "MISSING",
       umsPayAccountId: umsPayAccountId || "MISSING",
     });
 
     if (!umsPayApiKey || !umsPayEmail || !umsPayAccountId) {
-      console.log(`[POST_CHECK_STATUS] Incomplete UMS Pay configuration for ownerId: ${property.ownerId}`);
+      logger.error(`Incomplete UMS Pay configuration for ownerId: ${property.ownerId}`);
       return NextResponse.json(
         { success: false, message: "Incomplete UMS Pay configuration" },
         { status: 400 }
@@ -128,9 +137,10 @@ export async function POST(request: NextRequest) {
     );
 
     const umsPayData = umsPayResponse.data;
-    console.log("[POST_CHECK_STATUS] UMS Pay transaction status response:", umsPayData);
+    logger.debug("UMS Pay transaction status response", umsPayData);
 
     if (umsPayData.ResultCode !== "200") {
+      logger.error("Transaction not found", { errorMessage: umsPayData.errorMessage });
       return NextResponse.json(
         { success: false, message: umsPayData.errorMessage || "Transaction not found" },
         { status: 400 }
@@ -155,7 +165,9 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (parseError) {
-        console.error("[POST_CHECK_STATUS] Error parsing MpesaResponse:", parseError);
+        logger.error("Error parsing MpesaResponse", {
+          message: parseError instanceof Error ? parseError.message : "Unknown error",
+        });
       }
     }
 
@@ -205,8 +217,10 @@ export async function POST(request: NextRequest) {
         reference: umsPayData.TransactionReference,
       },
     });
-  } catch (error: unknown) { // Changed from any to unknown
-    console.error("[POST_CHECK_STATUS] Check Transaction Status Error:", error instanceof Error ? error.message : String(error));
+  } catch (error: unknown) {
+    logger.error("POST Check Transaction Status Error", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     return NextResponse.json(
       { success: false, message: "Server error while checking transaction status" },
       { status: 500 }

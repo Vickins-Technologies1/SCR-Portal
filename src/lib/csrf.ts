@@ -1,3 +1,4 @@
+// src/lib/csrf.ts
 import { v4 as uuidv4 } from 'uuid';
 import { NextRequest } from 'next/server';
 

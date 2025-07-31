@@ -143,7 +143,7 @@ const fetchUserData = useCallback(async () => {
   } catch {
     setError("Failed to connect to the server. Please try again later.");
   }
-}, [userId, role, router, csrfToken, UMS_PAY_API_KEY, UMS_PAY_EMAIL]);
+}, [userId, role, router, csrfToken]);
 
   // Fetch tenants
   const fetchTenants = useCallback(async () => {
@@ -568,7 +568,8 @@ const handlePayment = useCallback(
       setIsLoading(false);
     }
   },
-  [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus, UMS_PAY_API_KEY, UMS_PAY_EMAIL, UMS_PAY_ACCOUNT_ID]
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus, UMS_PAY_ACCOUNT_ID] // UMS_PAY_API_KEY and UMS_PAY_EMAIL are stable environment variables
 );
 
   // Handle tenant form submission
