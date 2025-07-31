@@ -63,7 +63,10 @@ export async function GET(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
     const skip = (page - 1) * limit;
 
-    let query: any = {};
+  const query: {
+  tenantId?: string;
+  propertyId?: string | { $in: string[] };
+} = {};
 
     if (role === "propertyOwner") {
       const properties = await db
