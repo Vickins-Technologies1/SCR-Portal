@@ -1,7 +1,7 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Home, Pencil, Trash2, Plus, ArrowUpDown, MapPin, DollarSign, Star, ChevronLeft, ChevronRight, Maximize2, X } from "lucide-react";
@@ -110,10 +110,15 @@ const PropertyModal: React.FC<PropertyModalProps> = ({ property, onClose }) => {
                 transition={{ duration: 0.3 }}
                 className="relative h-64 sm:h-80 lg:h-96"
               >
-                <img
+                <Image
                   src={images[currentImageIndex]}
                   alt={`${property.name} image ${currentImageIndex + 1}`}
                   className="w-full h-full object-cover rounded-lg"
+                  width={500}
+                  height={300}
+                  priority={currentImageIndex === 0}
+                  placeholder="blur"
+                  blurDataURL="/logo.png"
                 />
                 <button
                   onClick={() => setIsFullScreen(true)}
@@ -232,10 +237,15 @@ const PropertyModal: React.FC<PropertyModalProps> = ({ property, onClose }) => {
               transition={{ duration: 0.3 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <img
+              <Image
                 src={images[currentImageIndex]}
                 alt={`${property.name} full-screen image ${currentImageIndex + 1}`}
                 className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                width={1200}
+                height={800}
+                priority={currentImageIndex === 0}
+                placeholder="blur"
+                blurDataURL="/logo.png"
               />
               <button
                 onClick={() => setIsFullScreen(false)}
@@ -329,7 +339,6 @@ export default function ListPropertiesPage() {
     setUserId(uid);
     setRole(userRole);
 
-    // Fetch CSRF token on component mount
     const fetchCsrf = async () => {
       try {
         const res = await fetch("/api/csrf-token", {
@@ -1014,10 +1023,14 @@ export default function ListPropertiesPage() {
                       <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {imagePreviews.map((preview, index) => (
                           <div key={index} className="relative">
-                            <img
+                            <Image
                               src={preview}
                               alt={`Preview ${index + 1}`}
                               className="h-24 w-full object-cover rounded-lg"
+                              width={200}
+                              height={96}
+                              placeholder="blur"
+                              blurDataURL="/logo.png"
                             />
                             <button
                               type="button"

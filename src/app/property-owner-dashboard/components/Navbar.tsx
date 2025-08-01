@@ -1,11 +1,10 @@
+
 "use client";
 
 import React from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function Navbar() {
-  const pathname = usePathname();
   const router = useRouter();
 
   const handleSignOut = () => {
@@ -26,14 +25,6 @@ export default function Navbar() {
 
         {/* Right Side Items */}
         <div className="flex items-center gap-4">
-          <Link
-            href="https://www.smartchoicerentalmanagement.com/"
-            className={`text-sm font-medium text-[#0a0a23] hover:text-[#03a678] transition-colors ${
-              pathname === "/" ? "text-[#03a678]" : ""
-            }`}
-          >
-            Home
-          </Link>
           <button
             onClick={handleSignOut}
             className="text-sm font-medium bg-[#03a678] text-white px-4 py-1.5 rounded-md shadow-sm hover:bg-[#029c6b] transition"

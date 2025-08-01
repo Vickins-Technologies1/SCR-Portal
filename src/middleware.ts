@@ -1,4 +1,3 @@
-// src/middleware.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -48,7 +47,7 @@ async function validateCsrfToken(req: NextRequest): Promise<boolean> {
     try {
       const body = await req.clone().json();
       bodyToken = body.csrfToken;
-    } catch (error) {
+    } catch {
       console.log(`Failed to parse body for CSRF token - Path: ${req.nextUrl.pathname}`);
     }
   }
@@ -66,7 +65,7 @@ function csrfMiddleware(handler: (req: NextRequest) => Promise<NextResponse<unkn
       try {
         const body = await req.clone().json();
         bodyToken = body.csrfToken;
-      } catch (error) {
+      } catch {
         console.log(`Failed to extract CSRF token from body - Path: ${req.nextUrl.pathname}`);
       }
     }

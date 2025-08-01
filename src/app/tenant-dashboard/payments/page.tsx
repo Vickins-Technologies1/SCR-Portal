@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
@@ -97,7 +98,7 @@ export default function PaymentsPage() {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!tenantId || !csrfToken) {
       setLoading(false);
       return;
@@ -162,11 +163,11 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId, csrfToken, page, limit, setTenant, setPhoneNumber, setPayments, setTotal, setTotalPages, setPage, setMessages, setLoading]);
 
   useEffect(() => {
     fetchData();
-  }, [tenantId, csrfToken, page]);
+  }, [tenantId, csrfToken, page, fetchData]);
 
   const validatePhoneNumber = (phone: string): boolean => {
     const regex = /^(?:\+2547|07)\d{8}$/;

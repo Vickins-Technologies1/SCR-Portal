@@ -1,8 +1,8 @@
 // src/app/api/public-properties/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   console.log("Handling GET request to /api/public-properties");
 
   try {

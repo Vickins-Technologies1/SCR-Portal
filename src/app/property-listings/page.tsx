@@ -1,10 +1,10 @@
-// src/app/property-listings/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, DollarSign, Star, Filter } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 interface PropertyListing {
   _id: string;
@@ -43,9 +43,9 @@ const Footer: React.FC = () => {
           <div>
             <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
             <ul className="text-sm space-y-2">
-              <li><a href="/" className="hover:text-[#34d399] transition">Home</a></li>
-              <li><a href="/property-listings" className="hover:text-[#34d399] transition">Properties</a></li>
-              <li><a href="/contact" className="hover:text-[#34d399] transition">Contact</a></li>
+              <li><Link href="/" className="hover:text-[#34d399] transition">Home</Link></li>
+              <li><Link href="/property-listings" className="hover:text-[#34d399] transition">Properties</Link></li>
+              <li><Link href="/contact" className="hover:text-[#34d399] transition">Contact</Link></li>
             </ul>
           </div>
           <div>
@@ -163,22 +163,24 @@ export default function LandingPage() {
       <header className="bg-white text-gray-800 py-6 shadow-lg">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img
+            <Image
               src="/logo.png"
               alt="Smart Choice Rental Management Logo"
-              className="h-13 w-13 object-contain"
+              width={52}
+              height={52}
+              className="object-contain"
             />
             <h1 className="text-3xl md:text-4xl font-bold">
               Smart Choice Rentals
             </h1>
           </div>
           <nav className="hidden md:flex gap-6">
-            <a href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium hover:text-[#012a4a] transition">
+            <Link href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium hover:text-[#012a4a] transition">
               Home
-            </a>
-            <a href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium hover:text-[#012a4a] transition">
+            </Link>
+            <Link href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium hover:text-[#012a4a] transition">
               Contact
-            </a>
+            </Link>
           </nav>
         </div>
       </header>
@@ -354,14 +356,22 @@ export default function LandingPage() {
                 )}
                 <div className="relative h-56">
                   {property.images && property.images.length > 0 ? (
-                    <img
+                    <Image
                       src={property.images[0]}
                       alt={`${property.name} image`}
+                      width={400}
+                      height={224}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (
                     <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                      <img src="/logo.png" alt="Placeholder Logo" className="h-16 w-16 object-contain" />
+                      <Image
+                        src="/logo.png"
+                        alt="Placeholder Logo"
+                        width={64}
+                        height={64}
+                        className="object-contain"
+                      />
                     </div>
                   )}
                 </div>

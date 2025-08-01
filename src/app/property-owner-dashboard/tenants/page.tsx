@@ -115,35 +115,35 @@ export default function TenantsPage() {
   }, [router]);
 
   // Fetch user data
-const fetchUserData = useCallback(async () => {
-  if (!userId || !role) return;
-  try {
-    const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
-      method: "GET",
-      headers: { 
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrfToken,
-      },
-      credentials: "include",
-    });
-    const data = await res.json();
-    if (data.success) {
-      setPaymentStatus(data.user.paymentStatus || "inactive");
-      setWalletBalance(data.user.walletBalance || 0);
-    } else {
-      if (res.status === 404) {
-        setError("User account not found. Please log in again.");
-        Cookies.remove("userId");
-        Cookies.remove("role");
-        router.push("/");
+  const fetchUserData = useCallback(async () => {
+    if (!userId || !role) return;
+    try {
+      const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
+        method: "GET",
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPaymentStatus(data.user.paymentStatus || "inactive");
+        setWalletBalance(data.user.walletBalance || 0);
       } else {
-        setError(data.message || "Failed to fetch user data.");
+        if (res.status === 404) {
+          setError("User account not found. Please log in again.");
+          Cookies.remove("userId");
+          Cookies.remove("role");
+          router.push("/");
+        } else {
+          setError(data.message || "Failed to fetch user data.");
+        }
       }
+    } catch {
+      setError("Failed to connect to the server. Please try again later.");
     }
-  } catch {
-    setError("Failed to connect to the server. Please try again later.");
-  }
-}, [userId, role, router, csrfToken]);
+  }, [userId, role, router, csrfToken]);
 
   // Fetch tenants
   const fetchTenants = useCallback(async () => {
@@ -522,55 +522,54 @@ const fetchUserData = useCallback(async () => {
 
       poll();
     },
-    [fetchUserData, fetchPendingInvoices, pendingTenantData, userId, properties, csrfToken]
+    [fetchUserData, fetchPendingInvoices, pendingTenantData, userId, properties, csrfToken, UMS_PAY_API_KEY, UMS_PAY_EMAIL]
   );
 
   // Handle payment submission
-const handlePayment = useCallback(
-  async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validatePaymentForm()) return;
-    if (!userId) {
-      setError("User ID is missing.");
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-    setIsPaymentPromptOpen(false);
-    setIsPaymentLoadingModalOpen(true);
+  const handlePayment = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!validatePaymentForm()) return;
+      if (!userId) {
+        setError("User ID is missing.");
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      setSuccessMessage(null);
+      setIsPaymentPromptOpen(false);
+      setIsPaymentLoadingModalOpen(true);
 
-    const reference = `INVOICE-${userId}-${Date.now()}`;
-    try {
-      const res = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: UMS_PAY_API_KEY,
-          email: UMS_PAY_EMAIL,
-          amount: parseFloat(paymentAmount),
-          msisdn: paymentPhone,
-          reference,
-          account_id: UMS_PAY_ACCOUNT_ID,
-        }),
-      });
-      const data = await res.json();
-      if (data.success === "200") {
-        pollTransactionStatus(data.transaction_request_id);
-      } else {
-        setError(data.errorMessage || "Failed to initiate payment.");
+      const reference = `INVOICE-${userId}-${Date.now()}`;
+      try {
+        const res = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            api_key: UMS_PAY_API_KEY,
+            email: UMS_PAY_EMAIL,
+            amount: parseFloat(paymentAmount),
+            msisdn: paymentPhone,
+            reference,
+            account_id: UMS_PAY_ACCOUNT_ID,
+          }),
+        });
+        const data = await res.json();
+        if (data.success === "200") {
+          pollTransactionStatus(data.transaction_request_id);
+        } else {
+          setError(data.errorMessage || "Failed to initiate payment.");
+          setIsPaymentLoadingModalOpen(false);
+          setIsLoading(false);
+        }
+      } catch {
+        setError("Failed to connect to UMS Pay API.");
         setIsPaymentLoadingModalOpen(false);
         setIsLoading(false);
       }
-    } catch {
-      setError("Failed to connect to UMS Pay API.");
-      setIsPaymentLoadingModalOpen(false);
-      setIsLoading(false);
-    }
-  },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus, UMS_PAY_ACCOUNT_ID] // UMS_PAY_API_KEY and UMS_PAY_EMAIL are stable environment variables
-);
+    },
+    [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus, UMS_PAY_ACCOUNT_ID, UMS_PAY_API_KEY, UMS_PAY_EMAIL]
+  );
 
   // Handle tenant form submission
   const handleSubmit = useCallback(
@@ -645,44 +644,43 @@ const handlePayment = useCallback(
   );
 
   // Handle table sorting
-const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
-  setSortConfig((prev) => {
-    const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-    const sortedTenants = [...tenants].sort((a, b) => {
-      if (key === "price" || key === "deposit") {
+  const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
+    setSortConfig((prev) => {
+      const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
+      const sortedTenants = [...tenants].sort((a, b) => {
+        if (key === "price" || key === "deposit") {
+          return direction === "asc"
+            ? (a[key] as number) - (b[key] as number)
+            : (b[key] as number) - (a[key] as number);
+        }
+
+        if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
+          return direction === "asc"
+            ? new Date(a[key] as string).getTime() - new Date(b[key] as string).getTime()
+            : new Date(b[key] as string).getTime() - new Date(a[key] as string).getTime();
+        }
+
+        if (key === "propertyName") {
+          const aName = properties.find((p) => p._id === a.propertyId)?.name || "";
+          const bName = properties.find((p) => p._id === b.propertyId)?.name || "";
+          return direction === "asc"
+            ? aName.localeCompare(bName)
+            : bName.localeCompare(aName);
+        }
+
+        // Fallback: string comparison for other fields
+        const aVal = (a[key] ?? "").toString();
+        const bVal = (b[key] ?? "").toString();
+
         return direction === "asc"
-          ? (a[key] as number) - (b[key] as number)
-          : (b[key] as number) - (a[key] as number);
-      }
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      });
 
-      if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
-        return direction === "asc"
-          ? new Date(a[key] as string).getTime() - new Date(b[key] as string).getTime()
-          : new Date(b[key] as string).getTime() - new Date(a[key] as string).getTime();
-      }
-
-      if (key === "propertyName") {
-        const aName = properties.find((p) => p._id === a.propertyId)?.name || "";
-        const bName = properties.find((p) => p._id === b.propertyId)?.name || "";
-        return direction === "asc"
-          ? aName.localeCompare(bName)
-          : bName.localeCompare(aName);
-      }
-
-      // Fallback: string comparison for other fields
-      const aVal = (a[key] ?? "").toString();
-      const bVal = (b[key] ?? "").toString();
-
-      return direction === "asc"
-        ? aVal.localeCompare(bVal)
-        : bVal.localeCompare(aVal);
+      setTenants(sortedTenants);
+      return { key, direction };
     });
-
-    setTenants(sortedTenants);
-    return { key, direction };
-  });
-}, [tenants, properties]);
-
+  }, [tenants, properties]);
 
   // Get sort icon for table headers
   const getSortIcon = useCallback((key: keyof Tenant | "propertyName") => {

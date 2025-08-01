@@ -1,10 +1,10 @@
-// src/app/property-listings/[id]/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, DollarSign, Star, ChevronLeft, ChevronRight, Maximize2, Mail, Phone, X } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 interface PropertyListing {
@@ -49,9 +49,9 @@ const Footer: React.FC = () => {
           <div>
             <h3 className="text-xl font-semibold mb-4 tracking-tight">Quick Links</h3>
             <ul className="text-sm space-y-3">
-              <li><a href="/" className="hover:text-[#34d399] transition-colors duration-200">Home</a></li>
-              <li><a href="/property-listings" className="hover:text-[#34d399] transition-colors duration-200">Properties</a></li>
-              <li><a href="/contact" className="hover:text-[#34d399] transition-colors duration-200">Contact</a></li>
+              <li><Link href="/" className="hover:text-[#34d399] transition-colors duration-200">Home</Link></li>
+              <li><Link href="/property-listings" className="hover:text-[#34d399] transition-colors duration-200">Properties</Link></li>
+              <li><Link href="/contact" className="hover:text-[#34d399] transition-colors duration-200">Contact</Link></li>
             </ul>
           </div>
           <div>
@@ -120,8 +120,8 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
     setCurrentImageIndex(index);
   }, []);
 
-  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    e.currentTarget.src = "/logo.png"; // Fallback to default image on error
+  const handleImageError = useCallback(() => {
+    return "/logo.png"; // Fallback to default image on error
   }, []);
 
   if (isLoading) {
@@ -166,20 +166,23 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
       <header className="bg-white py-6 shadow-sm">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img
+            <Image
               src="/logo.png"
               alt="Smart Choice Rental Management Logo"
-              className="h-14 w-14 object-contain"
+              width={56}
+              height={56}
+              className="object-contain"
+              onError={() => handleImageError()}
             />
             <h1 className="text-2xl md:text-3xl font-bold text-[#1e3a8a] tracking-tight">Smart Choice Rentals</h1>
           </div>
           <nav className="hidden md:flex gap-8">
-            <a href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
+            <Link href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
               Home
-            </a>
-            <a href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
+            </Link>
+            <Link href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
               Contact
-            </a>
+            </Link>
           </nav>
         </div>
       </header>
@@ -208,11 +211,13 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                   transition={{ duration: 0.4, ease: "easeInOut" }}
                   className="relative h-64 sm:h-80 lg:h-[28rem] rounded-xl overflow-hidden shadow-md"
                 >
-                  <img
+                  <Image
                     src={images[currentImageIndex]}
                     alt={`${property.name} image ${currentImageIndex + 1}`}
+                    width={672}
+                    height={448}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    onError={handleImageError}
+                    onError={() => handleImageError()}
                   />
                   <button
                     onClick={() => setIsFullScreen(true)}
@@ -259,11 +264,13 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
-                      <img
+                      <Image
                         src={image}
                         alt={`${property.name} thumbnail ${index + 1}`}
+                        width={96}
+                        height={96}
                         className="w-full h-full object-cover"
-                        onError={handleImageError}
+                        onError={() => handleImageError()}
                       />
                     </motion.button>
                   ))}
@@ -378,11 +385,13 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
               transition={{ duration: 0.3, ease: "easeOut" }}
               onClick={(e) => e.stopPropagation()}
             >
-              <img
+              <Image
                 src={images[currentImageIndex]}
                 alt={`${property.name} full-screen image ${currentImageIndex + 1}`}
+                width={1280}
+                height={720}
                 className="max-w-full max-h-[65vh] object-contain rounded-xl shadow-lg"
-                onError={handleImageError}
+                onError={() => handleImageError()}
               />
               <button
                 onClick={() => setIsFullScreen(false)}
@@ -425,11 +434,13 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
-                      <img
+                      <Image
                         src={image}
                         alt={`${property.name} thumbnail ${index + 1}`}
+                        width={80}
+                        height={80}
                         className="w-full h-full object-cover"
-                        onError={handleImageError}
+                        onError={() => handleImageError()}
                       />
                     </motion.button>
                   ))}
