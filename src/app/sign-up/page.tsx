@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import Cookies from "js-cookie";
+import Link from "next/link";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -54,7 +55,7 @@ export default function SignUp() {
         setConfirmPassword("");
         setPhone("");
         setError("Account created successfully! Redirecting to sign in...");
-        setTimeout(() => router.push("/"), 2000); // Redirect to sign-in page
+        setTimeout(() => router.push("/"), 2000);
       }
     } catch (err) {
       console.error("Submission error:", err);
@@ -182,12 +183,12 @@ export default function SignUp() {
           </form>
           <p className="text-center text-sm text-foreground">
             Already have an account?{" "}
-            <a
+            <Link
               href="/"
               className="text-accent font-medium hover:underline transition-colors"
             >
               Sign In
-            </a>
+            </Link>
           </p>
         </div>
       </div>

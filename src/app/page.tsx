@@ -147,7 +147,7 @@ export default function Home() {
             </button>
           </form>
           <p className="text-center text-sm text-foreground">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <a
               href="/sign-up"
               className="text-accent font-medium hover:underline transition-colors"
