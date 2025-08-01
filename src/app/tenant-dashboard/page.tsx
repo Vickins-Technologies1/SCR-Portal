@@ -66,9 +66,9 @@ export default function TenantDashboardPage() {
     };
 
     const uid = getCookie("userId");
-    const role = getCookie("role");
-    const originalRole = getCookie("originalRole");
-    const originalUserId = getCookie("originalUserId");
+    const role = getCookie("role") ?? null;
+    const originalRole = getCookie("originalRole") ?? null;
+    const originalUserId = getCookie("originalUserId") ?? null;
 
     console.log("Cookies retrieved:", {
       userId: uid ?? "null",
@@ -79,8 +79,7 @@ export default function TenantDashboardPage() {
     });
 
     const isTenant = role === "tenant";
-    const isImpersonating =
-      originalRole === "propertyOwner" && originalUserId !== null;
+    const isImpersonating = originalRole === "propertyOwner" && originalUserId !== null;
 
     if (!uid || (!isTenant && !isImpersonating)) {
       setError("Unauthorized. Please log in as a tenant or impersonate a tenant.");
@@ -89,12 +88,11 @@ export default function TenantDashboardPage() {
           originalRole ?? "null"
         }, originalUserId: ${originalUserId ?? "null"}`
       );
-      setTimeout(() => router.replace("/login"), 2000);
+      setTimeout(() => router.replace("/"), 2000);
       return;
     }
 
     setUserId(uid);
-
     if (isImpersonating) {
       setIsImpersonated(true);
       console.log(
@@ -110,7 +108,6 @@ export default function TenantDashboardPage() {
       setIsLoading(true);
       setError(null);
       try {
-        // Fetch tenant profile using /api/tenant/profile
         const tenantRes = await fetch("/api/tenant/profile", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -165,6 +162,10 @@ export default function TenantDashboardPage() {
       });
       const { csrfToken } = await csrfRes.json();
 
+      if (!csrfToken) {
+        throw new Error("CSRF token not received");
+      }
+
       const res = await fetch("/api/maintenance", {
         method: "POST",
         headers: {
@@ -191,7 +192,7 @@ export default function TenantDashboardPage() {
       }
     } catch (err) {
       console.error("Maintenance submit error:", err instanceof Error ? err.message : "Unknown error");
-      setError("Failed to connect to the server");
+      setError("Failed to submit maintenance request");
     } finally {
       setIsLoading(false);
     }
@@ -209,6 +210,10 @@ export default function TenantDashboardPage() {
       });
       const { csrfToken } = await csrfRes.json();
 
+      if (!csrfToken) {
+        throw new Error("CSRF token not received");
+      }
+
       const res = await fetch("/api/impersonate/revert", {
         method: "POST",
         headers: {
@@ -222,6 +227,10 @@ export default function TenantDashboardPage() {
       if (data.success) {
         setSuccessMessage("Impersonation reverted successfully!");
         console.log("Impersonation reverted successfully");
+        Cookies.remove("userId", { path: "/" });
+        Cookies.remove("role", { path: "/" });
+        Cookies.remove("originalUserId", { path: "/" });
+        Cookies.remove("originalRole", { path: "/" });
         setTimeout(() => router.push("/property-owner-dashboard"), 1000);
       } else {
         setError(data.message || "Failed to revert impersonation");
@@ -229,7 +238,7 @@ export default function TenantDashboardPage() {
       }
     } catch (err) {
       console.error("Revert impersonation error:", err instanceof Error ? err.message : "Unknown error");
-      setError("Failed to connect to the server");
+      setError("Failed to revert impersonation");
     } finally {
       setIsLoading(false);
     }

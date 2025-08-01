@@ -6,6 +6,13 @@ import { UNIT_TYPES, getManagementFee } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
 
+// Shared CSRF token validation function
+async function validateCsrfToken(req: NextRequest, token: string | null): Promise<boolean> {
+  const storedToken = req.cookies.get('csrf-token')?.value;
+  const submittedToken = token || req.headers.get('x-csrf-token');
+  return !!submittedToken && storedToken === submittedToken;
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log('Handling GET request to /api/properties');
@@ -18,7 +25,7 @@ export async function GET(request: NextRequest) {
     console.log('Connected to MongoDB database: rentaldb');
 
     if (role === 'admin') {
-      const properties = await db.collection<Property>('properties').find().toArray();
+      const properties = await db.collection<Property>('propertyListings').find().toArray();
       return NextResponse.json(
         {
           success: true,
@@ -81,7 +88,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const property = await db.collection<Property>('properties').findOne({
+      const property = await db.collection<Property>('propertyListings').findOne({
         _id: new ObjectId(tenant.propertyId),
       });
 
@@ -125,6 +132,17 @@ export async function POST(request: NextRequest) {
     const role = cookieStore.get('role')?.value;
     const ownerId = cookieStore.get('userId')?.value;
 
+    // Validate CSRF token
+    const body = await request.json();
+    const csrfToken = body.csrfToken || request.headers.get('x-csrf-token');
+    if (!await validateCsrfToken(request, csrfToken)) {
+      console.log('Invalid CSRF token', { ownerId, csrfToken });
+      return NextResponse.json(
+        { success: false, message: 'Invalid CSRF token' },
+        { status: 403 }
+      );
+    }
+
     if (role !== 'propertyOwner' || !ownerId || !ObjectId.isValid(ownerId)) {
       console.log('Unauthorized or invalid ownerId:', { role, ownerId });
       return NextResponse.json(
@@ -135,7 +153,7 @@ export async function POST(request: NextRequest) {
 
     const { db } = await connectToDatabase();
     console.log('Connected to MongoDB database: rentaldb');
-    const { name, address, unitTypes, status } = await request.json();
+    const { name, address, unitTypes, status } = body;
 
     if (
       !name ||

@@ -1,5 +1,7 @@
+// src/app/api/properties/[propertyId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { validateCsrfToken } from '@/lib/csrf';
 import { ObjectId } from 'mongodb';
 
 interface UnitType {
@@ -147,6 +149,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ propertyId: string }> }) {
   try {
+    const submittedToken = request.headers.get('X-CSRF-Token');
+    console.log(`CSRF token extracted from header - Path: /api/properties/[propertyId], Token: ${submittedToken}`);
+    const isValidCsrf = await validateCsrfToken(request, submittedToken);
+
+    if (!isValidCsrf) {
+      console.error('Invalid CSRF token', { submittedToken });
+      return NextResponse.json(
+        { success: false, message: 'Invalid CSRF token' },
+        { status: 403 }
+      );
+    }
+
     const { propertyId } = await params;
     const cookieStore = request.cookies;
     const userId = cookieStore.get('userId')?.value;
@@ -204,7 +218,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (updateData.unitTypes) {
-      // Validate unitTypes
       for (const unit of updateData.unitTypes) {
         if (
           !unit.type ||
@@ -222,7 +235,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
 
-      // Check if existing tenants are affected
       const tenants = await db.collection<Tenant>('tenants').find({ propertyId: propertyId }).toArray();
       const newUnitTypes = new Set(updateData.unitTypes.map((u) => u.type));
 
@@ -298,6 +310,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ propertyId: string }> }) {
   try {
+    const submittedToken = request.headers.get('X-CSRF-Token');
+    console.log(`CSRF token extracted from header - Path: /api/properties/[propertyId], Token: ${submittedToken}`);
+    const isValidCsrf = await validateCsrfToken(request, submittedToken);
+
+    if (!isValidCsrf) {
+      console.error('Invalid CSRF token', { submittedToken });
+      return NextResponse.json(
+        { success: false, message: 'Invalid CSRF token' },
+        { status: 403 }
+      );
+    }
+
     const { propertyId } = await params;
     const cookieStore = request.cookies;
     const userId = cookieStore.get('userId')?.value;

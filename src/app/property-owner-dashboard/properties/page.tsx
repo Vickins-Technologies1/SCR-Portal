@@ -110,6 +110,7 @@ export default function PropertiesPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
@@ -125,6 +126,28 @@ export default function PropertiesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
+
+  // Fetch CSRF token on mount
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const res = await fetch("/api/csrf-token", {
+          method: "GET",
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (data.success && data.csrfToken) {
+          setCsrfToken(data.csrfToken);
+        } else {
+          setError("Failed to fetch CSRF token.");
+        }
+      } catch {
+        setError("Failed to connect to the server for CSRF token.");
+      }
+    };
+
+    fetchCsrfToken();
+  }, []);
 
   useEffect(() => {
     const uid = Cookies.get("userId");
@@ -142,7 +165,10 @@ export default function PropertiesPage() {
     try {
       const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId!)}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrfToken && { "x-csrf-token": csrfToken }),
+        },
         credentials: "include",
       });
       const data = await res.json();
@@ -156,13 +182,13 @@ export default function PropertiesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, csrfToken]);
 
   useEffect(() => {
-    if (userId && role === "propertyOwner") {
+    if (userId && role === "propertyOwner" && csrfToken) {
       fetchProperties();
     }
-  }, [userId, role, fetchProperties]);
+  }, [userId, role, csrfToken, fetchProperties]);
 
   const resetForm = useCallback(() => {
     setPropertyName("");
@@ -207,13 +233,20 @@ export default function PropertiesPage() {
   }, []);
 
   const confirmDelete = useCallback(async () => {
-    if (!propertyToDelete) return;
+    if (!propertyToDelete || !csrfToken) {
+      setError("Missing property ID or CSRF token.");
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await fetch(`/api/properties/${propertyToDelete}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
         credentials: "include",
+        body: JSON.stringify({ csrfToken }),
       });
       const data = await res.json();
       if (data.success) {
@@ -228,7 +261,7 @@ export default function PropertiesPage() {
       setIsDeleteModalOpen(false);
       setPropertyToDelete(null);
     }
-  }, [propertyToDelete, fetchProperties]);
+  }, [propertyToDelete, fetchProperties, csrfToken]);
 
   const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
@@ -275,8 +308,8 @@ export default function PropertiesPage() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!validateForm()) return;
-      if (!userId) {
-        setError("User ID is missing.");
+      if (!userId || !csrfToken) {
+        setError("User ID or CSRF token is missing.");
         return;
       }
       setIsLoading(true);
@@ -294,6 +327,7 @@ export default function PropertiesPage() {
           managementType: u.managementType,
         })),
         ownerId: userId,
+        csrfToken,
       };
 
       try {
@@ -301,7 +335,10 @@ export default function PropertiesPage() {
         const method = modalMode === "add" ? "POST" : "PUT";
         const res = await fetch(url, {
           method,
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
           credentials: "include",
           body: JSON.stringify(propertyData),
         });
@@ -319,7 +356,7 @@ export default function PropertiesPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingPropertyId, propertyName, address, status, unitTypes, fetchProperties, resetForm, validateForm]
+    [userId, modalMode, editingPropertyId, propertyName, address, status, unitTypes, fetchProperties, resetForm, validateForm, csrfToken]
   );
 
   const sortedProperties = useMemo(() => {
@@ -389,9 +426,9 @@ export default function PropertiesPage() {
             <button
               onClick={openAddModal}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${
-                isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
+                isLoading || !csrfToken ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
               }`}
-              disabled={isLoading}
+              disabled={isLoading || !csrfToken}
               aria-label="Add new property"
             >
               <Plus className="h-5 w-5" />
@@ -685,9 +722,9 @@ export default function PropertiesPage() {
                     </button>
                     <button
                       type="submit"
-                      disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined)}
+                      disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken}
                       className={`px-4 py-2 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base ${
-                        isLoading || Object.values(formErrors).some((v) => v !== undefined)
+                        isLoading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken
                           ? "bg-gray-400 cursor-not-allowed"
                           : "bg-[#012a4a] hover:bg-[#014a7a]"
                       }`}
@@ -722,7 +759,7 @@ export default function PropertiesPage() {
                   <button
                     onClick={confirmDelete}
                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2 text-sm sm:text-base"
-                    disabled={isLoading}
+                    disabled={isLoading || !csrfToken}
                     aria-label="Confirm delete property"
                   >
                     {isLoading && (

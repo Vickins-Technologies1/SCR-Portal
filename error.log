@@ -1,3 +1,13 @@
 {"level":"error","message":"Invalid CSRF token","timestamp":"2025-07-31T15:11:57.654Z","userId":"688763c7e08bc4ff44f7e1e5"}
 {"level":"error","message":"Invalid CSRF token","timestamp":"2025-07-31T15:12:51.685Z","userId":"688763c7e08bc4ff44f7e1e5"}
 {"level":"error","message":"Invalid CSRF token","timestamp":"2025-07-31T15:39:53.405Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":null,"level":"error","message":"Invalid CSRF token","timestamp":"2025-08-01T16:42:26.248Z","userId":"6880fc9059dc87d900661fd2"}
+{"level":"error","message":"Invalid CSRF token","timestamp":"2025-08-01T16:53:47.679Z","userId":"6880fc9059dc87d900661fd2"}
+{"level":"error","message":"Invalid CSRF token","timestamp":"2025-08-01T17:02:26.953Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":"00538e32-427d-4acb-8706-54045132a1a2","level":"error","message":"Invalid CSRF token","timestamp":"2025-08-01T17:14:26.305Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":"38387a03-350b-4602-a47c-735addbd7e7a","level":"error","message":"Invalid CSRF token","timestamp":"2025-08-01T17:21:02.144Z","userId":"6880fc9059dc87d900661fd2"}
+{"level":"error","message":"No files uploaded","timestamp":"2025-08-01T17:37:43.283Z","userId":"6880fc9059dc87d900661fd2"}
+{"address":"test","level":"error","message":"Missing or invalid required fields","name":"Test","status":"Active","timestamp":"2025-08-01T18:36:12.274Z","unitTypes":[{"deposit":1000,"managementType":"RentCollection","price":1000,"quantity":12,"type":"Single"}]}
+{"id":"688d09fd241a78028865e46f","level":"error","message":"Property not found or unauthorized","timestamp":"2025-08-01T18:46:01.495Z","userId":"6880fc9059dc87d900661fd2"}
+{"id":"688d1a30241a78028865e476","level":"error","message":"Property not found or unauthorized","timestamp":"2025-08-01T19:56:08.935Z","userId":"6880fc9059dc87d900661fd2"}
+{"id":"688d1a30241a78028865e476","level":"error","message":"Property not found or unauthorized","timestamp":"2025-08-01T19:57:06.918Z","userId":"6880fc9059dc87d900661fd2"}

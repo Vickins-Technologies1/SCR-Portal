@@ -1,3 +1,4 @@
+// src/middleware.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -8,10 +9,9 @@ interface RouteAccess {
   isApi: boolean;
 }
 
-// Custom in-memory rate limiter
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX = 100; // Max 100 requests per window
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const RATE_LIMIT_MAX = 100;
 
 function customRateLimiter(ip: string): { success: boolean; remaining: number } {
   const now = Date.now();
@@ -35,41 +35,46 @@ function customRateLimiter(ip: string): { success: boolean; remaining: number } 
   return { success: true, remaining: RATE_LIMIT_MAX - record.count };
 }
 
-// Custom CSRF protection
 function generateCsrfToken(): string {
   return uuidv4();
 }
 
-function validateCsrfToken(req: NextRequest, token: string | null): boolean {
+async function validateCsrfToken(req: NextRequest): Promise<boolean> {
   const storedToken = req.cookies.get('csrf-token')?.value;
-  const submittedToken = token || req.headers.get('x-csrf-token');
+  const headerToken = req.headers.get('x-csrf-token');
+  
+  let bodyToken: string | undefined;
+  if (req.method !== 'GET') {
+    try {
+      const body = await req.clone().json();
+      bodyToken = body.csrfToken;
+    } catch (error) {
+      console.log(`Failed to parse body for CSRF token - Path: ${req.nextUrl.pathname}`);
+    }
+  }
+
+  const submittedToken = headerToken || bodyToken;
   return !!submittedToken && storedToken === submittedToken;
 }
 
-// CSRF middleware wrapper
 function csrfMiddleware(handler: (req: NextRequest) => Promise<NextResponse<unknown>>) {
   return async (req: NextRequest) => {
-    let submittedToken: string | null = null;
-    if (req.method === 'POST') {
+    const headerToken = req.headers.get('x-csrf-token');
+    let bodyToken: string | undefined;
+    
+    if (req.method !== 'GET') {
       try {
-        const body = await req.json();
-        submittedToken = body.csrfToken;
-        req = new NextRequest(req.url, {
-          method: req.method,
-          headers: req.headers,
-          body: JSON.stringify(body),
-        });
-        console.log(`CSRF token extracted from body - Path: ${req.nextUrl.pathname}, Token: ${submittedToken}`);
-      } catch {
-        console.log(`No JSON body found for CSRF validation - Path: ${req.nextUrl.pathname}`);
+        const body = await req.clone().json();
+        bodyToken = body.csrfToken;
+      } catch (error) {
+        console.log(`Failed to extract CSRF token from body - Path: ${req.nextUrl.pathname}`);
       }
-    } else {
-      submittedToken = req.headers.get('x-csrf-token');
-      console.log(`CSRF token extracted from header - Path: ${req.nextUrl.pathname}, Token: ${submittedToken}`);
     }
 
-    if (!validateCsrfToken(req, submittedToken)) {
-      console.log(`CSRF validation failed - Path: ${req.nextUrl.pathname}, Stored: ${req.cookies.get('csrf-token')?.value}, Submitted: ${submittedToken}`);
+    console.log(`CSRF token extracted - Path: ${req.nextUrl.pathname}, Header: ${headerToken}, Body: ${bodyToken}`);
+
+    if (!await validateCsrfToken(req)) {
+      console.log(`CSRF validation failed - Path: ${req.nextUrl.pathname}, Stored: ${req.cookies.get('csrf-token')?.value}, Header: ${headerToken}, Body: ${bodyToken}`);
       return NextResponse.json(
         { success: false, message: 'CSRF token validation failed' },
         { status: 403 }
@@ -79,7 +84,6 @@ function csrfMiddleware(handler: (req: NextRequest) => Promise<NextResponse<unkn
   };
 }
 
-// Rate limit middleware wrapper
 function rateLimitMiddleware(handler: (req: NextRequest) => Promise<NextResponse<unknown>>) {
   return async (req: NextRequest) => {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
@@ -97,7 +101,6 @@ function rateLimitMiddleware(handler: (req: NextRequest) => Promise<NextResponse
   };
 }
 
-// Define role-based access for routes
 const routeAccessMap: { [key: string]: RouteAccess } = {
   '/api/users': { roles: ['admin'], isApi: true },
   '/api/invoices/generate': { roles: ['admin'], isApi: true },
@@ -108,6 +111,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   '/api/tenant/payments': { roles: ['tenant'], isApi: true },
   '/api/invoices': { roles: ['admin', 'propertyOwner'], isApi: true },
   '/api/properties': { roles: ['propertyOwner', 'tenant'], isApi: true },
+  '/api/list-properties': { roles: ['propertyOwner'], isApi: true },
   '/api/tenants': { roles: ['propertyOwner', 'tenant'], isApi: true },
   '/api/tenant/profile': { roles: ['tenant'], isApi: true },
   '/api/maintenance': { roles: ['tenant'], isApi: true },
@@ -118,16 +122,37 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   '/tenants': { roles: ['propertyOwner', 'tenant'], isApi: false },
   '/property-owner-dashboard': { roles: ['propertyOwner'], isApi: false },
   '/tenant-dashboard': { roles: ['tenant'], isApi: false },
+  '/property-listings': { roles: [], isApi: false },
 };
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const method = request.method;
 
-  // Skip middleware for Webpack HMR and static assets
   if (path.startsWith('/_next/static/') || path === '/_next/webpack-hmr') {
     console.log(`Skipping middleware for static or HMR path - Path: ${path}, Method: ${method}`);
     return NextResponse.next();
+  }
+
+  // Skip middleware for public API routes
+  if (path === '/api/public-properties' && method === 'GET') {
+    console.log(`Skipping middleware for public GET /api/public-properties - Path: ${path}, Method: ${method}`);
+    return NextResponse.next();
+  }
+  if (path.startsWith('/api/public-properties/') && method === 'GET') {
+    console.log(`Skipping middleware for public GET /api/public-properties/[id] - Path: ${path}, Method: ${method}`);
+    return NextResponse.next();
+  }
+  if (path === '/api/list-properties' && method === 'GET' && request.nextUrl.searchParams.get('public') === 'true') {
+    console.log(`Skipping middleware for public GET /api/list-properties - Path: ${path}, Method: ${method}`);
+    return NextResponse.next();
+  }
+
+  // Redirect /properties/[id] to /property-listings/[id] for public access
+  if (path.startsWith('/properties/') && method === 'GET') {
+    const id = path.split('/')[2];
+    console.log(`Redirecting /properties/${id} to /property-listings/${id} - Path: ${path}, Method: ${method}`);
+    return NextResponse.redirect(new URL(`/property-listings/${id}`, request.url));
   }
 
   const startTime = Date.now();
@@ -146,7 +171,7 @@ export async function middleware(request: NextRequest) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 60 * 60, // 1 hour
+        maxAge: 60 * 60,
       });
       return response;
     }
@@ -161,6 +186,11 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
+    if (routeConfig.roles.length === 0) {
+      console.log(`Public route access allowed - Path: ${path}, Method: ${method}`);
+      return NextResponse.next();
+    }
+
     if (!userId || !role) {
       console.log(`Missing auth cookies - Path: ${path}, Method: ${method}, UserId: ${userId}, Role: ${role}`);
       if (routeConfig.isApi) {
@@ -172,7 +202,6 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // Special handling for /api/tenants/:tenantId (excluding /api/tenant/*)
     if (path.startsWith('/api/tenants/') && !path.startsWith('/api/tenant/') && role === 'tenant') {
       const tenantId = path.split('/')[3];
       if (tenantId !== userId) {
@@ -193,7 +222,6 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // Apply CSRF and rate-limiting for non-GET API requests
     if (routeConfig.isApi && method !== 'GET') {
       console.log(`Applying CSRF & rate limit - Path: ${path}, Method: ${method}`);
       return rateLimitMiddleware(csrfMiddleware(async () => NextResponse.next()))(request);
@@ -228,6 +256,7 @@ export const config = {
     '/api/admin/properties/:path*',
     '/api/admin/property-owners/:path*',
     '/api/properties/:path*',
+    '/api/list-properties/:path*',
     '/api/tenants/:path*',
     '/api/update-wallet/:path*',
     '/api/csrf-token/:path*',
@@ -237,5 +266,6 @@ export const config = {
     '/tenants/:path*',
     '/property-owner-dashboard/:path*',
     '/tenant-dashboard/:path*',
+    '/property-listings/:path*',
   ],
 };

@@ -14,6 +14,7 @@ import {
   Settings,
   Bell,
   BarChart,
+  PlusCircle,
 } from "lucide-react";
 import Cookies from "js-cookie";
 
@@ -22,8 +23,8 @@ const useAuth = () => {
     console.log("useAuth: Running server-side, returning null");
     return { userId: null, role: null };
   }
-  const userId = Cookies.get("userId") || null;
-  const role = Cookies.get("role") || null;
+  const userId = Cookies.get("userId") ?? null;
+  const role = Cookies.get("role") ?? null;
   console.log("useAuth: Cookies read:", { userId, role });
   return { userId, role };
 };
@@ -52,39 +53,52 @@ export default function Sidebar() {
 
   const links = [
     {
+      key: "dashboard",
       href: "/property-owner-dashboard",
       label: "Dashboard",
       icon: <LayoutDashboard size={18} />,
     },
     {
+      key: "properties",
       href: "/property-owner-dashboard/properties",
       label: "Properties",
       icon: <Building2 size={18} />,
     },
     {
+      key: "tenants",
       href: "/property-owner-dashboard/tenants",
       label: "Tenants",
       icon: <Users size={18} />,
     },
     {
+      key: "payments",
       href: "/property-owner-dashboard/payments",
       label: "Payments",
       icon: <CreditCard size={18} />,
     },
     {
+      key: "notifications",
       href: "/property-owner-dashboard/notifications",
       label: "Notifications",
       icon: <Bell size={18} />,
     },
     {
+      key: "reports",
       href: "/property-owner-dashboard/reports",
       label: "Reports",
       icon: <BarChart size={18} />,
     },
     {
+      key: "settings",
       href: "/property-owner-dashboard/settings",
       label: "Settings",
       icon: <Settings size={18} />,
+    },
+    {
+      key: "list-property",
+      href: "/property-owner-dashboard/list-properties",
+      label: "List Property",
+      icon: <PlusCircle size={18} />,
     },
   ];
 
@@ -156,19 +170,19 @@ export default function Sidebar() {
         ${isOpen ? "translate-x-0" : "-translate-x-full"} sm:translate-x-0 sm:block`}
       >
         <div className="flex items-center justify-center mb-6">
-  <Image src="/logo.png" alt="Logo" width={56} height={56} className="object-contain" />
-</div>
+          <Image src="/logo.png" alt="Logo" width={56} height={56} className="object-contain" />
+        </div>
 
         <h2 className="text-lg font-semibold text-center mb-6 text-gray-700 tracking-tight">
           {isLoading ? "Loading..." : error ? `Error: ${error}` : `Welcome ${name}`}
         </h2>
 
         <nav className="flex flex-col space-y-2">
-          {links.map(({ href, label, icon }) => {
+          {links.map(({ key, href, label, icon }) => {
             const isActive = pathname === href;
             return (
               <Link
-                key={href}
+                key={key}
                 href={href}
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center gap-3 px-4 py-2 rounded-md font-medium transition-colors text-sm ${
