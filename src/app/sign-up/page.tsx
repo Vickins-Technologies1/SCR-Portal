@@ -6,10 +6,12 @@ import Image from "next/image";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import Cookies from "js-cookie";
 
-export default function Home() {
-  const [isTenantPortal, setIsTenantPortal] = useState(false);
+export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -20,8 +22,14 @@ export default function Home() {
     setError(null);
     setIsLoading(true);
 
-    const endpoint = "/api/signin";
-    const payload = { email, password, role: isTenantPortal ? "tenant" : "propertyOwner" };
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
+
+    const endpoint = "/api/signup";
+    const payload = { name, email, password, phone, confirmPassword, role: "propertyOwner" };
 
     try {
       const response = await fetch(endpoint, {
@@ -31,7 +39,7 @@ export default function Home() {
       });
 
       const data = await response.json();
-      console.log("Signin response:", data);
+      console.log("Signup response:", data);
       if (!data.success) {
         setError(data.message || "An error occurred");
       } else {
@@ -40,12 +48,13 @@ export default function Home() {
           Cookies.set("role", data.role, { secure: true, sameSite: "Strict", expires: 7 });
           console.log("Client-side cookies set:", { userId: data.userId, role: data.role });
         }
-        if (data.redirect) {
-          console.log(`Sign-in successful, redirecting to ${data.redirect}`);
-          setTimeout(() => router.push(data.redirect), 100);
-        } else {
-          setError("No redirect path provided");
-        }
+        setName("");
+        setEmail("");
+        setPassword("");
+        setConfirmPassword("");
+        setPhone("");
+        setError("Account created successfully! Redirecting to sign in...");
+        setTimeout(() => router.push("/"), 2000); // Redirect to sign-in page
       }
     } catch (err) {
       console.error("Submission error:", err);
@@ -92,7 +101,7 @@ export default function Home() {
             />
           </div>
           <h1 className="text-3xl lg:text-4xl font-extrabold text-center text-foreground">
-            {isTenantPortal ? "Tenant Portal Login" : "Property Owner Login"}
+            Create Your Account
           </h1>
           {error && (
             <p className="text-red-500 text-center animate-fade-in">{error}</p>
@@ -102,16 +111,23 @@ export default function Home() {
               <div className="w-8 h-8 border-4 border-t-4 border-accent border-t-transparent rounded-full animate-spin"></div>
             </div>
           )}
-          <div className="text-center mb-4">
-            <button
-              type="button"
-              onClick={() => setIsTenantPortal(!isTenantPortal)}
-              className="text-accent font-medium hover:underline transition-colors"
-            >
-              {isTenantPortal ? "Switch to Property Owner Login" : "Switch to Tenant Portal Login"}
-            </button>
-          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-4 py-3 border border-dark-blue rounded-lg focus:outline-none focus:ring-2 focus:ring-accent transition duration-200"
+              required
+            />
+            <input
+              type="tel"
+              placeholder="Phone Number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full px-4 py-3 border border-dark-blue rounded-lg focus:outline-none focus:ring-2 focus:ring-accent transition duration-200"
+              required
+            />
             <input
               type="email"
               placeholder="Email Address"
@@ -138,21 +154,39 @@ export default function Home() {
                 {showPassword ? <FaEyeSlash size={20} /> : <FaEye size={20} />}
               </button>
             </div>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-dark-blue rounded-lg focus:outline-none focus:ring-2 focus:ring-accent transition duration-200 pr-10"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-foreground hover:text-accent"
+                aria-label="Toggle confirm password visibility"
+              >
+                {showPassword ? <FaEyeSlash size={20} /> : <FaEye size={20} />}
+              </button>
+            </div>
             <button
               type="submit"
               disabled={isLoading}
               className="w-full bg-accent text-foreground font-semibold py-3 rounded-lg hover:bg-green-400 transition-all duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
-              {isLoading ? "Processing..." : isTenantPortal ? "Tenant Login" : "Property Owner Login"}
+              {isLoading ? "Processing..." : "Sign Up"}
             </button>
           </form>
           <p className="text-center text-sm text-foreground">
-            Don't have an account?{" "}
+            Already have an account?{" "}
             <a
-              href="/sign-up"
+              href="/"
               className="text-accent font-medium hover:underline transition-colors"
             >
-              Sign Up
+              Sign In
             </a>
           </p>
         </div>
