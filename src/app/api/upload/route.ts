@@ -1,37 +1,23 @@
-// src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { put } from '@vercel/blob';
 import { v4 as uuidv4 } from 'uuid';
 import { validateCsrfToken } from '@/lib/csrf';
 import logger from '@/lib/logger';
 
-// Define the upload directory
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
-
-// Ensure the upload directory exists
-async function ensureUploadDir() {
-  try {
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
-  } catch (error) {
-    logger.error('Failed to create upload directory', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    throw new Error('Failed to initialize upload directory');
-  }
-}
+// Maximum file size (5MB)
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+// Maximum number of files
+const MAX_FILES = 5;
+// Allowed file types
+const VALID_FILE_TYPES = ['image/jpeg', 'image/png'];
 
 // Validate file type and size
 function isValidFile(file: File): { valid: boolean; error?: string } {
-  const validTypes = ['image/jpeg', 'image/png'];
-  const maxSize = 5 * 1024 * 1024; // 5MB
-
-  if (!validTypes.includes(file.type)) {
+  if (!VALID_FILE_TYPES.includes(file.type)) {
     return { valid: false, error: `${file.name} is not a valid image (JPEG or PNG only)` };
   }
-  if (file.size > maxSize) {
+  if (file.size > MAX_FILE_SIZE) {
     return { valid: false, error: `${file.name} exceeds 5MB limit` };
   }
   return { valid: true };
@@ -39,27 +25,28 @@ function isValidFile(file: File): { valid: boolean; error?: string } {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Handling POST request to /api/upload');
+    logger.debug('Handling POST request to /api/upload', {
+      method: request.method,
+      url: request.url,
+    });
 
-    // Authentication
+    // Authentication check
     const cookieStore = await cookies();
     const role = cookieStore.get('role')?.value;
     const userId = cookieStore.get('userId')?.value;
 
     if (!role || role !== 'propertyOwner' || !userId) {
-      logger.error('Unauthorized or invalid userId', { role, userId });
+      logger.warn('Unauthorized access attempt', { role, userId });
       return NextResponse.json(
         { success: false, message: 'Unauthorized or invalid user ID' },
         { status: 401 }
       );
     }
 
-    // Extract CSRF token from headers
+    // CSRF token validation
     const csrfToken = request.headers.get('X-CSRF-Token');
-
-    // Verify CSRF token
     if (!validateCsrfToken(request, csrfToken)) {
-      logger.error('Invalid CSRF token', { userId, csrfToken });
+      logger.warn('Invalid CSRF token', { userId, csrfToken });
       return NextResponse.json(
         { success: false, message: 'Invalid CSRF token' },
         { status: 403 }
@@ -72,16 +59,16 @@ export async function POST(request: NextRequest) {
 
     // Validate number of files
     if (files.length === 0) {
-      logger.error('No files uploaded');
+      logger.warn('No files uploaded', { userId });
       return NextResponse.json(
         { success: false, message: 'No files uploaded' },
         { status: 400 }
       );
     }
-    if (files.length > 5) {
-      logger.error('Too many files uploaded', { fileCount: files.length });
+    if (files.length > MAX_FILES) {
+      logger.warn('Too many files uploaded', { userId, fileCount: files.length });
       return NextResponse.json(
-        { success: false, message: 'Maximum 5 images allowed' },
+        { success: false, message: `Maximum ${MAX_FILES} images allowed` },
         { status: 400 }
       );
     }
@@ -100,38 +87,39 @@ export async function POST(request: NextRequest) {
     }
 
     if (validationErrors.length > 0) {
-      logger.error('Invalid files detected', { errors: validationErrors });
+      logger.warn('Invalid files detected', { userId, errors: validationErrors });
       return NextResponse.json(
         { success: false, message: validationErrors.join('; ') },
         { status: 400 }
       );
     }
 
-    // Ensure upload directory exists
-    await ensureUploadDir();
-
-    // Process and save files
+    // Upload files to Vercel Blob
     const urls: string[] = [];
     for (const file of validFiles) {
       const extension = file.name.split('.').pop()?.toLowerCase();
-      const fileName = `${uuidv4()}.${extension}`;
-      const filePath = path.join(UPLOAD_DIR, fileName);
-      const fileBuffer = Buffer.from(await file.arrayBuffer());
+      const fileName = `uploads/${userId}/${uuidv4()}.${extension}`;
+      const fileContent = Buffer.from(await file.arrayBuffer());
 
       try {
-        await fs.writeFile(filePath, fileBuffer);
-        urls.push(`/uploads/${fileName}`);
+        // Use put() as shown in the example, adapted for image files
+        const { url } = await put(fileName, fileContent, {
+          access: 'public',
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+        urls.push(url);
       } catch (error) {
-        logger.error('Failed to save file', {
+        logger.error('Failed to upload file to Vercel Blob', {
+          userId,
           fileName,
           message: error instanceof Error ? error.message : 'Unknown error',
           stack: error instanceof Error ? error.stack : undefined,
         });
-        throw new Error(`Failed to save file: ${fileName}`);
+        throw new Error(`Failed to upload file: ${fileName}`);
       }
     }
 
-    logger.debug('Images uploaded successfully', { userId, fileCount: urls.length, urls });
+    logger.info('Images uploaded successfully', { userId, fileCount: urls.length, urls });
     return NextResponse.json(
       {
         success: true,
@@ -140,7 +128,10 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error: unknown) {
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value || 'unknown';
     logger.error('Error uploading images', {
+      userId,
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });
@@ -150,3 +141,9 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Configure runtime for Vercel serverless
+export const config = {
+  runtime: 'edge', // Use Edge runtime for faster execution
+  maxDuration: 30, // Set timeout to 30 seconds to handle larger uploads
+};
