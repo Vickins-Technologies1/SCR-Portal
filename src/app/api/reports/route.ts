@@ -44,6 +44,7 @@ interface Report {
   date: string;
   status: string;
   ownerId: string;
+  tenantPaymentStatus: string; // New field for tenant payment status
 }
 
 interface ApiResponse<T> {
@@ -56,7 +57,7 @@ interface ApiResponse<T> {
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Report[]>>> {
   const startTime = Date.now();
   try {
-    // ✅ Read cookies from client request
+    // Read cookies from client request
     const userId = request.cookies.get("userId")?.value;
     const role = request.cookies.get("role")?.value;
     console.log("GET /api/reports - Cookies - userId:", userId, "role:", role);
@@ -75,9 +76,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       );
     }
 
-    // ✅ Get propertyId from query params
+    // Get query params (propertyId, startDate, endDate)
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get("propertyId");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+
     if (propertyId && !ObjectId.isValid(propertyId)) {
       return NextResponse.json(
         { success: false, message: "Invalid property ID" },
@@ -85,14 +89,27 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       );
     }
 
-    // ✅ DB Connection
+    // Validate date range
+    if ((startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) || (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate))) {
+      return NextResponse.json(
+        { success: false, message: "Invalid date format. Use YYYY-MM-DD." },
+        { status: 400 }
+      );
+    }
+
+    // DB Connection
     const db = await connectToDatabase();
     const paymentsCollection = db.collection<Payment>("payments");
     const tenantsCollection = db.collection<Tenant>("tenants");
     const propertiesCollection = db.collection<Property>("properties");
 
-    const paymentQuery: { ownerId: string; propertyId?: string } = { ownerId: userId };
+    const paymentQuery: { ownerId: string; propertyId?: string; date?: { $gte?: string; $lte?: string } } = { ownerId: userId };
     if (propertyId) paymentQuery.propertyId = propertyId;
+    if (startDate || endDate) {
+      paymentQuery.date = {};
+      if (startDate) paymentQuery.date.$gte = startDate;
+      if (endDate) paymentQuery.date.$lte = endDate;
+    }
 
     const payments = await paymentsCollection
       .find(paymentQuery)
@@ -123,6 +140,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       date: payment.date,
       status: payment.status,
       ownerId: payment.ownerId,
+      tenantPaymentStatus: tenantMap.get(payment.tenantId)?.paymentStatus || "Unknown",
     }));
 
     console.log("GET /api/reports - Completed in", Date.now() - startTime, "ms");

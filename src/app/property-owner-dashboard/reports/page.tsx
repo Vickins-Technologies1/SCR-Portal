@@ -3,9 +3,22 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { FileText, BarChart2, ArrowUpDown } from "lucide-react";
+import { FileText, BarChart2, ArrowUpDown, Download } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  LineElement,
+  PointElement,
+  LinearScale,
+  Title,
+  CategoryScale,
+  Tooltip,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend);
 
 interface Report {
   _id: string;
@@ -17,6 +30,7 @@ interface Report {
   date: string;
   status: string;
   ownerId: string;
+  tenantPaymentStatus: string;
 }
 
 interface Invoice {
@@ -47,8 +61,11 @@ export default function ReportsAndInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -66,6 +83,33 @@ export default function ReportsAndInvoicesPage() {
       router.push("/login");
     }
   }, [router]);
+
+  // Fetch user data for wallet balance
+  const fetchUserData = useCallback(async () => {
+    if (!userId || !role) return;
+    try {
+      const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWalletBalance(data.user.walletBalance || 0);
+      } else {
+        if (res.status === 404) {
+          setError("User account not found. Please log in again.");
+          Cookies.remove("userId");
+          Cookies.remove("role");
+          router.push("/login");
+        } else {
+          setError(data.message || "Failed to fetch user data.");
+        }
+      }
+    } catch {
+      setError("Failed to connect to the server. Please try again later.");
+    }
+  }, [userId, role, router]);
 
   // Fetch properties
   const fetchProperties = useCallback(async () => {
@@ -92,7 +136,11 @@ export default function ReportsAndInvoicesPage() {
     if (!userId) return;
     setIsLoading(true);
     try {
-      const query = selectedPropertyId === "all" ? "" : `?propertyId=${encodeURIComponent(selectedPropertyId)}`;
+      const queryParams = new URLSearchParams();
+      if (selectedPropertyId !== "all") queryParams.append("propertyId", selectedPropertyId);
+      if (startDate) queryParams.append("startDate", startDate);
+      if (endDate) queryParams.append("endDate", endDate);
+      const query = queryParams.toString() ? `?${queryParams}` : "";
       const res = await fetch(`/api/reports${query}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
@@ -109,7 +157,7 @@ export default function ReportsAndInvoicesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedPropertyId]);
+  }, [userId, selectedPropertyId, startDate, endDate]);
 
   // Fetch invoices
   const fetchInvoices = useCallback(async () => {
@@ -134,7 +182,7 @@ export default function ReportsAndInvoicesPage() {
     }
   }, [userId]);
 
-  // Fetch data when userId and role are set
+  // Fetch data when userId, role, or filters change
   useEffect(() => {
     if (userId && role === "propertyOwner") {
       fetchProperties();
@@ -142,9 +190,10 @@ export default function ReportsAndInvoicesPage() {
         fetchReports();
       } else {
         fetchInvoices();
+        fetchUserData();
       }
     }
-  }, [userId, role, activeTab, selectedPropertyId, fetchProperties, fetchReports, fetchInvoices]);
+  }, [userId, role, activeTab, selectedPropertyId, startDate, endDate, fetchProperties, fetchReports, fetchInvoices, fetchUserData]);
 
   // Handle tab switch
   const handleTabSwitch = (tab: "reports" | "invoices") => {
@@ -156,6 +205,15 @@ export default function ReportsAndInvoicesPage() {
   // Handle property selection
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedPropertyId(e.target.value);
+    setError(null);
+    setSuccessMessage(null);
+  };
+
+  // Handle date range change
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (name === "startDate") setStartDate(value);
+    if (name === "endDate") setEndDate(value);
     setError(null);
     setSuccessMessage(null);
   };
@@ -214,6 +272,84 @@ export default function ReportsAndInvoicesPage() {
     );
   }, []);
 
+  // Calculate total revenue for selected property
+  const totalRevenue = reports.reduce((sum, report) => sum + (selectedPropertyId === "all" || report.propertyId === selectedPropertyId ? report.revenue : 0), 0);
+
+  // Export reports as CSV
+  const exportToCSV = useCallback(() => {
+    const headers = ["Property,Tenant,Revenue (Ksh),Date,Status,Tenant Payment Status"];
+    const rows = reports.map((report) => [
+      report.propertyName,
+      report.tenantName,
+      report.revenue.toFixed(2),
+      new Date(report.date).toLocaleDateString(),
+      report.status,
+      report.tenantPaymentStatus,
+    ].map((value) => `"${value}"`).join(","));
+    const csvContent = [headers, ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reports_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setSuccessMessage("Reports exported successfully!");
+  }, [reports]);
+
+  // Prepare chart data for revenue trends
+  const chartData = reports.reduce((acc, report) => {
+    if (selectedPropertyId !== "all" && report.propertyId !== selectedPropertyId) return acc;
+    const month = new Date(report.date).toLocaleString("default", { year: "numeric", month: "short" });
+    acc[month] = (acc[month] || 0) + report.revenue;
+    return acc;
+  }, {} as Record<string, number>);
+  const chartLabels = Object.keys(chartData).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  const chartValues = chartLabels.map((label) => chartData[label]);
+
+  // Chart.js configuration for Line component
+  const lineChartData = {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: "Revenue (Ksh)",
+        data: chartValues,
+        borderColor: "#012a4a",
+        backgroundColor: "rgba(1, 42, 74, 0.2)",
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
+
+  const lineChartOptions = {
+    responsive: true,
+    scales: {
+      x: {
+        title: {
+          display: true,
+          text: "Month",
+        },
+      },
+      y: {
+        title: {
+          display: true,
+          text: "Revenue (Ksh)",
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        display: true,
+      },
+      tooltip: {
+        enabled: true,
+      },
+    },
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -255,20 +391,42 @@ export default function ReportsAndInvoicesPage() {
             </div>
           </div>
           {activeTab === "reports" && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700">Select Property</label>
-              <select
-                value={selectedPropertyId}
-                onChange={handlePropertyChange}
-                className="w-full sm:w-64 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base border-gray-300"
-              >
-                <option value="all">All Properties</option>
-                {properties.map((property) => (
-                  <option key={property._id} value={property._id}>
-                    {property.name}
-                  </option>
-                ))}
-              </select>
+            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Select Property</label>
+                <select
+                  value={selectedPropertyId}
+                  onChange={handlePropertyChange}
+                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base border-gray-300"
+                >
+                  <option value="all">All Properties</option>
+                  {properties.map((property) => (
+                    <option key={property._id} value={property._id}>
+                      {property.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Start Date</label>
+                <input
+                  type="date"
+                  name="startDate"
+                  value={startDate}
+                  onChange={handleDateChange}
+                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base border-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">End Date</label>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={endDate}
+                  onChange={handleDateChange}
+                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base border-gray-300"
+                />
+              </div>
             </div>
           )}
           {error && (
@@ -279,6 +437,45 @@ export default function ReportsAndInvoicesPage() {
           {successMessage && (
             <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg shadow animate-pulse">
               {successMessage}
+            </div>
+          )}
+          {activeTab === "reports" && (
+            <>
+              <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-md">
+                <h2 className="text-lg font-semibold text-gray-800">Total Revenue</h2>
+                <p className="text-2xl font-bold text-[#012a4a]">
+                  Ksh {totalRevenue.toFixed(2)}
+                </p>
+                <p className="text-sm text-gray-600">
+                  For {selectedPropertyId === "all" ? "all properties" : "selected property"} {startDate && endDate ? `from ${startDate} to ${endDate}` : ""}
+                </p>
+              </div>
+              <div className="mb-6">
+                <button
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#013a6a] transition"
+                >
+                  <Download className="h-5 w-5" />
+                  Export Reports
+                </button>
+              </div>
+              {chartLabels.length > 0 && (
+                <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-md">
+                  <h2 className="text-lg font-semibold text-gray-800 mb-4">Revenue Trends</h2>
+                  <Line data={lineChartData} options={lineChartOptions} />
+                </div>
+              )}
+            </>
+          )}
+          {activeTab === "invoices" && (
+            <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-md">
+              <h2 className="text-lg font-semibold text-gray-800">Wallet Balance</h2>
+              <p className="text-2xl font-bold text-[#012a4a]">
+                Ksh {walletBalance !== null ? walletBalance.toFixed(2) : "Loading..."}
+              </p>
+              <p className="text-sm text-gray-600">
+                Current balance available for property management
+              </p>
             </div>
           )}
           {isLoading ? (
@@ -326,6 +523,12 @@ export default function ReportsAndInvoicesPage() {
                       >
                         Status {getSortIcon("status", reportSortConfig)}
                       </th>
+                      <th
+                        className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                        onClick={() => handleReportSort("tenantPaymentStatus")}
+                      >
+                        Tenant Payment Status {getSortIcon("tenantPaymentStatus", reportSortConfig)}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -336,6 +539,7 @@ export default function ReportsAndInvoicesPage() {
                         <td className="px-4 py-3">Ksh {report.revenue.toFixed(2)}</td>
                         <td className="px-4 py-3">{new Date(report.date).toLocaleDateString()}</td>
                         <td className="px-4 py-3">{report.status}</td>
+                        <td className="px-4 py-3">{report.tenantPaymentStatus}</td>
                       </tr>
                     ))}
                   </tbody>

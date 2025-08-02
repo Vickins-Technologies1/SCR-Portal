@@ -113,15 +113,14 @@ export default function Sidebar() {
       setIsLoading(true);
       setError(null);
       try {
-        console.log("Fetching user from:", `/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`);
         const response = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
         });
-        console.log("Response status:", response.status);
+
         const text = await response.text();
-        console.log("Response body:", text);
+
         if (!response.ok) {
           const data: UserResponse = JSON.parse(text);
           if (response.status === 404) {
@@ -133,7 +132,6 @@ export default function Sidebar() {
           }
         } else {
           const data: UserResponse = JSON.parse(text);
-          console.log("fetchUserName response:", data);
           if (data.success && data.user?.name) {
             setName(data.user.name);
           } else {
@@ -157,17 +155,19 @@ export default function Sidebar() {
 
   return (
     <>
+      {/* Toggle Button for mobile/tablet */}
       <button
-        className="sm:hidden fixed top-4 right-4 z-40 text-[#0a0a23] bg-white p-2 shadow-md"
+        className="md:hidden fixed top-4 right-4 z-40 text-[#0a0a23] bg-white p-2 shadow-md"
         onClick={() => setIsOpen(!isOpen)}
         aria-label="Toggle Sidebar"
       >
         {isOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
+      {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 z-30 h-screen w-64 bg-white text-[#0a0a23] px-6 py-6 border-r border-gray-200 shadow-md transition-transform duration-300 ease-in-out
-        ${isOpen ? "translate-x-0" : "-translate-x-full"} sm:translate-x-0 sm:block`}
+        ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 md:block`}
       >
         <div className="flex items-center justify-center mb-6">
           <Image src="/logo.png" alt="Logo" width={56} height={56} className="object-contain" />
@@ -199,9 +199,10 @@ export default function Sidebar() {
         </nav>
       </aside>
 
+      {/* Overlay for mobile/tablet */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-20 sm:hidden"
+          className="fixed inset-0 bg-black/40 z-20 md:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}

@@ -36,9 +36,17 @@ interface SortConfig {
   direction: "asc" | "desc";
 }
 
+interface FilterConfig {
+  tenantName: string;
+  tenantEmail: string;
+  propertyId: string;
+  unitType: string;
+}
+
 export default function TenantsPage() {
   const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [filteredTenants, setFilteredTenants] = useState<Tenant[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -78,6 +86,12 @@ export default function TenantsPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [totalTenants, setTotalTenants] = useState(0);
+  const [filters, setFilters] = useState<FilterConfig>({
+    tenantName: "",
+    tenantEmail: "",
+    propertyId: "",
+    unitType: "",
+  });
 
   // UMS Pay API configuration
   const UMS_PAY_API_KEY = process.env.NEXT_PUBLIC_UMS_PAY_API_KEY || "";
@@ -92,6 +106,7 @@ export default function TenantsPage() {
         const data = await res.json();
         if (data.success) {
           setCsrfToken(data.csrfToken);
+          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
         } else {
           setError("Failed to fetch CSRF token.");
         }
@@ -161,6 +176,7 @@ export default function TenantsPage() {
       const data = await res.json();
       if (data.success) {
         setTenants(data.tenants || []);
+        setFilteredTenants(data.tenants || []);
         setTotalTenants(data.total || 0);
       } else {
         setError(data.message || "Failed to fetch tenants.");
@@ -234,6 +250,47 @@ export default function TenantsPage() {
       fetchPendingInvoices();
     }
   }, [userId, role, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
+
+  // Apply filters
+  useEffect(() => {
+    const applyFilters = () => {
+      let filtered = [...tenants];
+      if (filters.tenantName) {
+        filtered = filtered.filter((tenant) =>
+          tenant.name.toLowerCase().includes(filters.tenantName.toLowerCase())
+        );
+      }
+      if (filters.tenantEmail) {
+        filtered = filtered.filter((tenant) =>
+          tenant.email.toLowerCase().includes(filters.tenantEmail.toLowerCase())
+        );
+      }
+      if (filters.propertyId) {
+        filtered = filtered.filter((tenant) => tenant.propertyId === filters.propertyId);
+      }
+      if (filters.unitType) {
+        filtered = filtered.filter((tenant) => tenant.unitType === filters.unitType);
+      }
+      setFilteredTenants(filtered);
+      setTotalTenants(filtered.length);
+    };
+    applyFilters();
+  }, [filters, tenants]);
+
+  // Handle filter changes
+  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({ ...prev, [name]: value }));
+    setPage(1);
+  };
+
+  // Clear filters
+  const clearFilters = () => {
+    setFilters({ tenantName: "", tenantEmail: "", propertyId: "", unitType: "" });
+    setFilteredTenants(tenants);
+    setTotalTenants(tenants.length);
+    setPage(1);
+  };
 
   // Reset tenant form
   const resetForm = useCallback(() => {
@@ -647,7 +704,7 @@ export default function TenantsPage() {
   const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
     setSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      const sortedTenants = [...tenants].sort((a, b) => {
+      const sortedTenants = [...filteredTenants].sort((a, b) => {
         if (key === "price" || key === "deposit") {
           return direction === "asc"
             ? (a[key] as number) - (b[key] as number)
@@ -677,10 +734,10 @@ export default function TenantsPage() {
           : bVal.localeCompare(aVal);
       });
 
-      setTenants(sortedTenants);
+      setFilteredTenants(sortedTenants);
       return { key, direction };
     });
-  }, [tenants, properties]);
+  }, [filteredTenants, properties]);
 
   // Get sort icon for table headers
   const getSortIcon = useCallback((key: keyof Tenant | "propertyName") => {
@@ -736,6 +793,69 @@ export default function TenantsPage() {
               Note: Adding more tenants will require payment of a management fee if there are pending invoices or insufficient wallet balance.
             </div>
           )}
+          <div className="mb-6 bg-white p-4 rounded-lg shadow">
+            <h2 className="text-lg font-semibold mb-4">Filter Tenants</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Name</label>
+                <input
+                  name="tenantName"
+                  value={filters.tenantName}
+                  onChange={handleFilterChange}
+                  placeholder="Enter tenant name"
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Email</label>
+                <input
+                  name="tenantEmail"
+                  value={filters.tenantEmail}
+                  onChange={handleFilterChange}
+                  placeholder="Enter tenant email"
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Property</label>
+                <select
+                  name="propertyId"
+                  value={filters.propertyId}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Properties</option>
+                  {properties.map((property) => (
+                    <option key={property._id} value={property._id}>
+                      {property.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unit Type</label>
+                <select
+                  name="unitType"
+                  value={filters.unitType}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Unit Types</option>
+                  {[...new Set(properties.flatMap((p) => p.unitTypes.map((u) => u.type)))].map((unitType) => (
+                    <option key={unitType} value={unitType}>
+                      {unitType}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <button
+              onClick={clearFilters}
+              className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-md hover:bg-[#024a7a] transition"
+            >
+              Clear Filters
+            </button>
+          </div>
           {error && (
             <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
               {error}
@@ -751,9 +871,9 @@ export default function TenantsPage() {
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
               <span className="ml-2">Loading tenants...</span>
             </div>
-          ) : tenants.length === 0 ? (
+          ) : filteredTenants.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-              No tenants found. Add a tenant to get started.
+              No tenants found. Adjust filters or add a tenant to get started.
             </div>
           ) : (
             <div className="overflow-x-auto bg-white shadow rounded-lg">
@@ -824,7 +944,7 @@ export default function TenantsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tenants.map((t) => (
+                  {filteredTenants.slice((page - 1) * limit, page * limit).map((t) => (
                     <tr
                       key={t._id}
                       className="border-t hover:bg-gray-50 transition cursor-pointer"
@@ -871,7 +991,7 @@ export default function TenantsPage() {
           )}
           <div className="mt-4 flex justify-between items-center">
             <div>
-              Showing {tenants.length} of {totalTenants} tenants
+              Showing {Math.min(filteredTenants.length, limit)} of {totalTenants} tenants
             </div>
             <div className="flex gap-2">
               <button

@@ -27,9 +27,16 @@ interface Property {
   ownerId: string;
 }
 
+interface FilterConfig {
+  tenantName: string;
+  type: string;
+  status: string;
+}
+
 export default function PaymentsPage() {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [userId, setUserId] = useState<string | null>(null);
@@ -41,6 +48,11 @@ export default function PaymentsPage() {
   const [totalPayments, setTotalPayments] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [csrfToken, setCsrfToken] = useState<string>("");
+  const [filters, setFilters] = useState<FilterConfig>({
+    tenantName: "",
+    type: "",
+    status: "",
+  });
 
   // Fetch CSRF token with retry
   useEffect(() => {
@@ -56,6 +68,7 @@ export default function PaymentsPage() {
           console.log("CSRF token response:", data);
           if (data.success) {
             setCsrfToken(data.csrfToken);
+            Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
             console.log("CSRF token fetched:", data.csrfToken);
             return;
           } else {
@@ -157,6 +170,7 @@ export default function PaymentsPage() {
       });
       if (data.success) {
         setPayments(data.payments || []);
+        setFilteredPayments(data.payments || []);
         setTotalPayments(data.total || 0);
         setTotalPages(data.totalPages || 1);
         setCurrentPage(data.page || 1);
@@ -167,6 +181,7 @@ export default function PaymentsPage() {
         setError(data.message || "Failed to fetch payments.");
         console.error("Payments fetch failed:", data.message);
         setPayments([]);
+        setFilteredPayments([]);
         setTotalPayments(0);
         setTotalPages(1);
       }
@@ -174,6 +189,7 @@ export default function PaymentsPage() {
       setError("Failed to connect to the server.");
       console.error("Payments fetch error:", err);
       setPayments([]);
+      setFilteredPayments([]);
       setTotalPayments(0);
       setTotalPages(1);
     } finally {
@@ -197,6 +213,44 @@ export default function PaymentsPage() {
     setError(null);
     console.log("Property changed, resetting to page 1:", e.target.value);
   };
+
+  // Handle filter changes
+  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({ ...prev, [name]: value }));
+    setCurrentPage(1);
+    setError(null);
+  };
+
+  // Clear filters
+  const clearFilters = () => {
+    setFilters({ tenantName: "", type: "", status: "" });
+    setFilteredPayments(payments);
+    setCurrentPage(1);
+    setTotalPayments(payments.length);
+  };
+
+  // Apply filters
+  useEffect(() => {
+    const applyFilters = () => {
+      let filtered = [...payments];
+      if (filters.tenantName) {
+        filtered = filtered.filter((payment) =>
+          payment.tenantName.toLowerCase().includes(filters.tenantName.toLowerCase())
+        );
+      }
+      if (filters.type) {
+        filtered = filtered.filter((payment) => payment.type === filters.type);
+      }
+      if (filters.status) {
+        filtered = filtered.filter((payment) => payment.status === filters.status);
+      }
+      setFilteredPayments(filtered);
+      setTotalPayments(filtered.length);
+      setTotalPages(Math.ceil(filtered.length / itemsPerPage));
+    };
+    applyFilters();
+  }, [filters, payments, itemsPerPage]);
 
   // Pagination controls
   const handlePageChange = (newPage: number) => {
@@ -232,8 +286,8 @@ export default function PaymentsPage() {
               Payments
             </h1>
           </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Select Property</label>
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Property</label>
             <select
               value={selectedPropertyId}
               onChange={handlePropertyChange}
@@ -248,6 +302,60 @@ export default function PaymentsPage() {
               ))}
             </select>
           </div>
+          <div className="mb-6 bg-white p-4 rounded-lg shadow">
+            <h2 className="text-lg font-semibold mb-4">Filter Payments</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Name</label>
+                <select
+                  name="tenantName"
+                  value={filters.tenantName}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Tenants</option>
+                  {[...new Set(payments.map((payment) => payment.tenantName))].map((tenantName) => (
+                    <option key={tenantName} value={tenantName}>
+                      {tenantName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  name="type"
+                  value={filters.type}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Types</option>
+                  <option value="Rent">Rent</option>
+                  <option value="Utility">Utility</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  name="status"
+                  value={filters.status}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+            </div>
+            <button
+              onClick={clearFilters}
+              className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-md hover:bg-[#024a7a] transition"
+            >
+              Clear Filters
+            </button>
+          </div>
           {error && (
             <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
               {error}
@@ -258,10 +366,10 @@ export default function PaymentsPage() {
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
               <span className="ml-2">Loading payments...</span>
             </div>
-          ) : payments.length === 0 ? (
+          ) : filteredPayments.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
               {totalPayments > 0
-                ? `No payments found for page ${currentPage}. Try another page.`
+                ? `No payments found for page ${currentPage}. Try another page or adjust filters.`
                 : `No payments found for ${selectedPropertyId === "all" ? "any properties" : "selected property"}.`}
             </div>
           ) : (
@@ -278,7 +386,7 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((payment, index) => (
+                  {filteredPayments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((payment, index) => (
                     <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
                       <td className="px-4 py-3">{index + 1 + (currentPage - 1) * itemsPerPage}</td>
                       <td className="px-4 py-3">{payment.transactionId}</td>
@@ -297,7 +405,7 @@ export default function PaymentsPage() {
               {totalPayments > 0 && (
                 <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4 p-4">
                   <div className="text-sm text-gray-600">
-                    Showing {Math.min(payments.length, itemsPerPage)} of {totalPayments} payments
+                    Showing {Math.min(filteredPayments.length, itemsPerPage)} of {totalPayments} payments
                   </div>
                   {totalPayments > itemsPerPage && (
                     <div className="flex gap-2">

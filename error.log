@@ -11,3 +11,15 @@
 {"id":"688d09fd241a78028865e46f","level":"error","message":"Property not found or unauthorized","timestamp":"2025-08-01T18:46:01.495Z","userId":"6880fc9059dc87d900661fd2"}
 {"id":"688d1a30241a78028865e476","level":"error","message":"Property not found or unauthorized","timestamp":"2025-08-01T19:56:08.935Z","userId":"6880fc9059dc87d900661fd2"}
 {"id":"688d1a30241a78028865e476","level":"error","message":"Property not found or unauthorized","timestamp":"2025-08-01T19:57:06.918Z","userId":"6880fc9059dc87d900661fd2"}
+{"level":"error","message":"Invalid CSRF token","timestamp":"2025-08-02T13:03:47.341Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":"","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T13:38:29.051Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":"fc9b5d2a-9866-45d9-970d-120542715853","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T13:50:26.176Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":"2f3b72d6-b6f9-4db8-90ba-985417ef27b3","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T13:52:18.041Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":"c1375c6d-4a81-4e61-ac83-59d2f8a89736","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T13:56:58.243Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":null,"level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T15:22:07.236Z","userId":"6880fdc759dc87d900661fd3"}
+{"csrfToken":"4e832fb3-d70a-48f3-82fe-6fdb61adabaa","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T15:25:34.001Z","userId":"6880fdc759dc87d900661fd3"}
+{"csrfToken":"ecb2e82e-5d2c-4609-872c-c7fd41a6784c","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T15:28:42.571Z","userId":"6880fdc759dc87d900661fd3"}
+{"csrfToken":"c140a85c-c423-46a6-80a1-5042768e3820","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T15:41:37.869Z","userId":"6880fdc759dc87d900661fd3"}
+{"level":"error","message":"GET Invoices Error Cannot read properties of undefined (reading 'toISOString')","role":"admin","timestamp":"2025-08-02T15:56:22.846Z","userId":"6880fdc759dc87d900661fd3"}
+{"level":"error","message":"GET Invoices Error Cannot read properties of undefined (reading 'toISOString')","role":"admin","timestamp":"2025-08-02T15:57:57.512Z","userId":"6880fdc759dc87d900661fd3"}
+{"csrfToken":"2731efce-d8b7-42a4-9ac8-41432f0563bd","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-02T16:15:34.529Z","userId":"6880fc9059dc87d900661fd2"}

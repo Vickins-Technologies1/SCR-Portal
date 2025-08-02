@@ -23,7 +23,9 @@ export default function AdminDashboard() {
   const [role, setRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
+  // Load cookies and fetch CSRF token
   useEffect(() => {
     const checkCookies = () => {
       const uid = Cookies.get("userId");
@@ -37,6 +39,30 @@ export default function AdminDashboard() {
       } else {
         setUserId(uid);
         setRole(userRole);
+      }
+
+      const token = Cookies.get("csrf-token");
+      if (!token) {
+        fetch("/api/csrf-token", {
+          method: "GET",
+          credentials: "include",
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.csrfToken) {
+              Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict" });
+              setCsrfToken(data.csrfToken);
+            } else {
+              console.error("Failed to fetch CSRF token");
+              setError("Failed to initialize session. Please try again.");
+            }
+          })
+          .catch((err) => {
+            console.error("CSRF token fetch error:", err);
+            setError("Failed to initialize session. Please try again.");
+          });
+      } else {
+        setCsrfToken(token);
       }
     };
 
@@ -57,19 +83,49 @@ export default function AdminDashboard() {
   }, [router]);
 
   const fetchCounts = useCallback(async () => {
+    if (!csrfToken) {
+      setError("CSRF token not available. Please try again.");
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const [propertyOwnersRes, tenantsRes, propertiesRes, paymentsRes, invoicesRes, adminsRes] = await Promise.all([
-        fetch("/api/admin/property-owners", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
-        fetch("/api/admin/tenants", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
-        fetch("/api/admin/properties", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
-        fetch("/api/payments", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
-        fetch("/api/invoices", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
-        fetch("/api/admin", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
+        fetch("/api/admin/property-owners", {
+          method: "GET",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "include",
+        }),
+        fetch("/api/admin/tenants", {
+          method: "GET",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "include",
+        }),
+        fetch("/api/admin/properties", {
+          method: "GET",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "include",
+        }),
+        fetch("/api/payments", {
+          method: "GET",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "include",
+        }),
+        fetch("/api/invoices", {
+          method: "GET",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "include",
+        }),
+        fetch("/api/admin", {
+          method: "GET",
+          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+          credentials: "include",
+        }),
       ]);
 
       const responses = [propertyOwnersRes, tenantsRes, propertiesRes, paymentsRes, invoicesRes, adminsRes];
-      const endpoints = ["/api/admin/property-owners", "/api/admin/tenants", "/api/admin/properties", "/api/payments", "/api/invoices", "/api/admin/admins"];
+      const endpoints = ["/api/admin/property-owners", "/api/admin/tenants", "/api/admin/properties", "/api/payments", "/api/invoices", "/api/admin"];
       responses.forEach((res, index) => {
         if (!res.ok) {
           console.error(`Failed to fetch ${endpoints[index]}: ${res.status} ${res.statusText}`);
@@ -120,14 +176,14 @@ export default function AdminDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [csrfToken]);
 
   useEffect(() => {
-    if (userId && role === "admin") {
+    if (userId && role === "admin" && csrfToken) {
       console.log("Fetching counts for user:", { userId, role });
       fetchCounts();
     }
-  }, [userId, role, fetchCounts]);
+  }, [userId, role, csrfToken, fetchCounts]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">

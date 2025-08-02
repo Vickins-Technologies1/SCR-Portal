@@ -1,3 +1,4 @@
+// src/app/admin/payments/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -20,13 +21,18 @@ interface Property {
 
 interface Payment {
   _id: string;
-  userId: string;
-  propertyId: string;
-  unitType: string;
+  tenantId: string;
   amount: number;
-  createdAt: string;
+  propertyId: string;
+  paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "failed" | "cancelled";
+  status: "completed" | "pending" | "failed";
+  createdAt: string;
+  type?: "Rent" | "Utility";
+  phoneNumber?: string;
+  reference?: string;
+  date: string;
+  tenantName?: string;
 }
 
 interface SortConfig {
@@ -34,42 +40,47 @@ interface SortConfig {
   direction: "asc" | "desc";
 }
 
+interface FilterConfig {
+  tenantEmail: string;
+  propertyName: string;
+  type: string;
+  status: string;
+}
+
+interface ApiResponse {
+  success: boolean;
+  payments?: Payment[];
+  users?: User[];
+  properties?: Property[];
+  total?: number;
+  message?: string;
+}
+
 export default function PaymentsPage() {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [propertyOwners, setPropertyOwners] = useState<User[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "paymentDate", direction: "desc" });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [totalPayments, setTotalPayments] = useState(0);
-  const [csrfToken, setCsrfToken] = useState<string>("");
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterConfig>({
+    tenantEmail: "",
+    propertyName: "",
+    type: "",
+    status: "",
+  });
 
-  // Fetch CSRF token
+  // Fetch CSRF token and check cookies
   useEffect(() => {
-    const fetchCsrfToken = async () => {
-      try {
-        const res = await fetch("/api/csrf-token");
-        const data = await res.json();
-        if (data.success) {
-          setCsrfToken(data.csrfToken);
-        } else {
-          setError("Failed to fetch CSRF token.");
-        }
-      } catch {
-        setError("Failed to connect to server for CSRF token.");
-      }
-    };
-    fetchCsrfToken();
-  }, []);
-
-  // Check cookies and redirect if unauthorized
-  useEffect(() => {
-    const checkCookies = () => {
+    const checkCookiesAndFetchCsrf = async () => {
       const uid = Cookies.get("userId");
       const userRole = Cookies.get("role");
       console.log("Checking cookies in PaymentsPage:", { userId: uid, role: userRole });
@@ -78,15 +89,39 @@ export default function PaymentsPage() {
         console.log("Redirecting to /admin/login due to invalid cookies:", { userId: uid, role: userRole });
         setError("Unauthorized. Please log in as an admin.");
         router.push("/admin/login");
-      } else {
-        setUserId(uid);
-        setRole(userRole);
+        return;
+      }
+
+      setUserId(uid);
+      setRole(userRole);
+
+      const token = Cookies.get("csrf-token");
+      if (token) {
+        setCsrfToken(token);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/csrf-token", {
+          method: "GET",
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (data.csrfToken) {
+          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+          setCsrfToken(data.csrfToken);
+        } else {
+          console.error("Failed to fetch CSRF token:", data);
+          setError("Failed to initialize session. Please try again.");
+        }
+      } catch (err) {
+        console.error("CSRF token fetch error:", err);
+        setError("Failed to connect to server for CSRF token.");
       }
     };
 
-    checkCookies();
+    checkCookiesAndFetchCsrf();
 
-    // Poll for cookies in case they are set asynchronously
     const cookiePoll = setInterval(() => {
       const uid = Cookies.get("userId");
       const userRole = Cookies.get("role");
@@ -98,17 +133,20 @@ export default function PaymentsPage() {
       }
     }, 100);
 
-    // Cleanup interval on unmount
     return () => clearInterval(cookiePoll);
   }, [router]);
 
   const fetchData = useCallback(async () => {
-    if (!userId || role !== "admin" || !csrfToken) return;
+    if (!userId || role !== "admin" || !csrfToken) {
+      setError("Required authentication or CSRF token not available.");
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
       const [paymentsRes, usersRes, propertiesRes] = await Promise.all([
-        fetch(`/api/payments?page=${currentPage}&limit=${itemsPerPage}&sort=-createdAt`, {
+        fetch(`/api/payments?page=${currentPage}&limit=${itemsPerPage}&sort=-paymentDate`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -136,28 +174,32 @@ export default function PaymentsPage() {
 
       const responses = [paymentsRes, usersRes, propertiesRes];
       const endpoints = ["/api/payments", "/api/admin/users", "/api/admin/properties"];
-      responses.forEach((res, index) => {
-        if (!res.ok) {
-          console.error(`Failed to fetch ${endpoints[index]}: ${res.status} ${res.statusText}`);
-        }
-      });
+      const responseBodies: (ApiResponse | string)[] = [];
 
-      const [paymentsData, usersData, propertiesData] = await Promise.all([
-        paymentsRes.json(),
-        usersRes.json(),
-        propertiesRes.json(),
-      ]);
+      for (let i = 0; i < responses.length; i++) {
+        const res = responses[i];
+        if (!res.ok) {
+          const body = await res.text();
+          console.error(`Failed to fetch ${endpoints[i]}: ${res.status} ${res.statusText}`, { body });
+          responseBodies[i] = body;
+        } else {
+          responseBodies[i] = await res.json();
+        }
+      }
+
+      const [paymentsData, usersData, propertiesData] = responseBodies as [ApiResponse, ApiResponse, ApiResponse];
 
       console.log("API responses:", { paymentsData, usersData, propertiesData });
 
       if (paymentsData.success && usersData.success && propertiesData.success) {
         setPayments(paymentsData.payments || []);
+        setFilteredPayments(paymentsData.payments || []);
         setTotalPayments(paymentsData.total || 0);
-        setPropertyOwners(usersData.users.filter((u: User) => u.role === "propertyOwner") || []);
+        setPropertyOwners(usersData.users?.filter((u) => u.role === "propertyOwner") || []);
         setProperties(propertiesData.properties || []);
       } else {
         const errors = [
-          paymentsData.message,
+          paymentsData.message || (paymentsRes.status === 403 && "Invalid or missing CSRF token"),
           usersData.message,
           propertiesData.message,
         ].filter((msg) => msg).join("; ");
@@ -173,7 +215,7 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     if (userId && role === "admin" && csrfToken) {
-      console.log("Fetching data for PaymentsPage:", { userId, role, currentPage });
+      console.log("Fetching data for PaymentsPage:", { userId, role, currentPage, csrfToken });
       fetchData();
     }
   }, [userId, role, currentPage, fetchData, csrfToken]);
@@ -182,14 +224,14 @@ export default function PaymentsPage() {
     (key: keyof Payment | "userEmail" | "propertyName") => {
       setSortConfig((prev) => {
         const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-        const sorted = [...payments].sort((a, b) => {
+        const sorted = [...filteredPayments].sort((a, b) => {
           if (key === "amount") {
             return direction === "asc" ? a.amount - b.amount : b.amount - a.amount;
           }
-          if (key === "createdAt") {
+          if (key === "paymentDate") {
             return direction === "asc"
-              ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-              : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              ? new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime()
+              : new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime();
           }
           if (key === "propertyName") {
             const aName = properties.find((p) => p._id === a.propertyId)?.name || "";
@@ -197,19 +239,19 @@ export default function PaymentsPage() {
             return direction === "asc" ? aName.localeCompare(bName) : bName.localeCompare(aName);
           }
           if (key === "userEmail") {
-            const aEmail = propertyOwners.find((u) => u._id === a.userId)?.email || "";
-            const bEmail = propertyOwners.find((u) => u._id === b.userId)?.email || "";
+            const aEmail = propertyOwners.find((u) => u._id === a.tenantId)?.email || "";
+            const bEmail = propertyOwners.find((u) => u._id === b.tenantId)?.email || "";
             return direction === "asc" ? aEmail.localeCompare(bEmail) : bEmail.localeCompare(aEmail);
           }
           return direction === "asc"
             ? String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
             : String(b[key] ?? "").localeCompare(String(a[key] ?? ""));
         });
-        setPayments(sorted);
+        setFilteredPayments(sorted);
         return { key, direction };
       });
     },
-    [payments, propertyOwners, properties]
+    [filteredPayments, propertyOwners, properties]
   );
 
   const getSortIcon = useCallback(
@@ -223,6 +265,49 @@ export default function PaymentsPage() {
     },
     [sortConfig]
   );
+
+  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({ ...prev, [name]: value }));
+    setCurrentPage(1); // Reset to first page on filter change
+  };
+
+  const clearFilters = () => {
+    setFilters({ tenantEmail: "", propertyName: "", type: "", status: "" });
+    setFilteredPayments(payments);
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    const applyFilters = () => {
+      let filtered = [...payments];
+      if (filters.tenantEmail) {
+        filtered = filtered.filter((payment) =>
+          propertyOwners
+            .find((u) => u._id === payment.tenantId)
+            ?.email.toLowerCase()
+            .includes(filters.tenantEmail.toLowerCase())
+        );
+      }
+      if (filters.propertyName) {
+        filtered = filtered.filter((payment) =>
+          properties
+            .find((p) => p._id === payment.propertyId)
+            ?.name.toLowerCase()
+            .includes(filters.propertyName.toLowerCase())
+        );
+      }
+      if (filters.type) {
+        filtered = filtered.filter((payment) => payment.type === filters.type);
+      }
+      if (filters.status) {
+        filtered = filtered.filter((payment) => payment.status === filters.status);
+      }
+      setFilteredPayments(filtered);
+      setTotalPayments(filtered.length);
+    };
+    applyFilters();
+  }, [filters, payments, propertyOwners, properties]);
 
   const totalPages = Math.ceil(totalPayments / itemsPerPage);
 
@@ -241,12 +326,82 @@ export default function PaymentsPage() {
               {error}
             </div>
           )}
+          <div className="mb-6 bg-white p-4 rounded-lg shadow">
+            <h2 className="text-lg font-semibold mb-4">Filter Payments</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Email</label>
+                <select
+                  name="tenantEmail"
+                  value={filters.tenantEmail}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Tenants</option>
+                  {propertyOwners.map((owner) => (
+                    <option key={owner._id} value={owner.email}>
+                      {owner.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Property Name</label>
+                <select
+                  name="propertyName"
+                  value={filters.propertyName}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Properties</option>
+                  {properties.map((property) => (
+                    <option key={property._id} value={property.name}>
+                      {property.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  name="type"
+                  value={filters.type}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Types</option>
+                  <option value="Rent">Rent</option>
+                  <option value="Utility">Utility</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  name="status"
+                  value={filters.status}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+            </div>
+            <button
+              onClick={clearFilters}
+              className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-md hover:bg-[#024a7a] transition"
+            >
+              Clear Filters
+            </button>
+          </div>
           {isLoading ? (
             <div className="text-center text-gray-600">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
               <span className="ml-2">Loading payments...</span>
             </div>
-          ) : payments.length === 0 ? (
+          ) : filteredPayments.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
               No payments found.
             </div>
@@ -265,7 +420,7 @@ export default function PaymentsPage() {
                       className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
                       onClick={() => handleSort("userEmail")}
                     >
-                      Owner Email {getSortIcon("userEmail")}
+                      Tenant Email {getSortIcon("userEmail")}
                     </th>
                     <th
                       className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
@@ -275,9 +430,9 @@ export default function PaymentsPage() {
                     </th>
                     <th
                       className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("unitType")}
+                      onClick={() => handleSort("type")}
                     >
-                      Unit Type {getSortIcon("unitType")}
+                      Type {getSortIcon("type")}
                     </th>
                     <th
                       className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
@@ -287,9 +442,9 @@ export default function PaymentsPage() {
                     </th>
                     <th
                       className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("createdAt")}
+                      onClick={() => handleSort("paymentDate")}
                     >
-                      Payment Date {getSortIcon("createdAt")}
+                      Payment Date {getSortIcon("paymentDate")}
                     </th>
                     <th
                       className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
@@ -300,14 +455,14 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((payment) => (
+                  {filteredPayments.map((payment) => (
                     <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
                       <td className="px-4 py-3">{payment.transactionId}</td>
-                      <td className="px-4 py-3">{propertyOwners.find((u) => u._id === payment.userId)?.email || "N/A"}</td>
+                      <td className="px-4 py-3">{propertyOwners.find((u) => u._id === payment.tenantId)?.email || payment.tenantName || "N/A"}</td>
                       <td className="px-4 py-3">{properties.find((p) => p._id === payment.propertyId)?.name || "N/A"}</td>
-                      <td className="px-4 py-3">{payment.unitType || "N/A"}</td>
+                      <td className="px-4 py-3">{payment.type || "N/A"}</td>
                       <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
-                      <td className="px-4 py-3">{new Date(payment.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">{new Date(payment.paymentDate).toLocaleDateString()}</td>
                       <td className="px-4 py-3">{payment.status}</td>
                     </tr>
                   ))}
@@ -315,7 +470,7 @@ export default function PaymentsPage() {
               </table>
               <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="text-sm text-gray-600">
-                  Showing {payments.length} of {totalPayments} payments
+                  Showing {filteredPayments.length} of {totalPayments} payments
                 </div>
                 {totalPages > 1 && (
                   <div className="flex gap-2">

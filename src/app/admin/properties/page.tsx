@@ -1,3 +1,4 @@
+// src/app/admin/properties/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -25,6 +26,13 @@ interface SortConfig {
   direction: "asc" | "desc";
 }
 
+interface ApiResponse {
+  success: boolean;
+  properties?: Property[];
+  users?: User[];
+  message?: string;
+}
+
 export default function PropertiesPage() {
   const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
@@ -32,83 +40,190 @@ export default function PropertiesPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
   const [editProperty, setEditProperty] = useState<Property | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
+  // Fetch CSRF token and check cookies
   useEffect(() => {
-    const uid = Cookies.get("userId");
-    const userRole = Cookies.get("role");
-    setUserId(uid || null);
-    setRole(userRole || null);
-    if (!uid || userRole !== "admin") {
-      setError("Unauthorized. Please log in as an admin.");
-      router.push("/admin/login");
-    }
+    const checkCookiesAndFetchCsrf = async () => {
+      const uid = Cookies.get("userId");
+      const userRole = Cookies.get("role");
+      console.log("Checking cookies in PropertiesPage:", { userId: uid, role: userRole });
+
+      if (!uid || userRole !== "admin") {
+        console.log("Redirecting to /admin/login due to invalid cookies:", { userId: uid, role: userRole });
+        setError("Unauthorized. Please log in as an admin.");
+        router.push("/admin/login");
+        return;
+      }
+
+      setUserId(uid);
+      setRole(userRole);
+
+      const token = Cookies.get("csrf-token");
+      if (token) {
+        setCsrfToken(token);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/csrf-token", {
+          method: "GET",
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (data.csrfToken) {
+          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+          setCsrfToken(data.csrfToken);
+        } else {
+          console.error("Failed to fetch CSRF token:", data);
+          setError("Failed to initialize session. Please try again.");
+        }
+      } catch (err) {
+        console.error("CSRF token fetch error:", err);
+        setError("Failed to connect to server for CSRF token.");
+      }
+    };
+
+    checkCookiesAndFetchCsrf();
+
+    const cookiePoll = setInterval(() => {
+      const uid = Cookies.get("userId");
+      const userRole = Cookies.get("role");
+      if (uid && userRole === "admin") {
+        console.log("Cookies detected on poll:", { userId: uid, role: userRole });
+        setUserId(uid);
+        setRole(userRole);
+        clearInterval(cookiePoll);
+      }
+    }, 100);
+
+    return () => clearInterval(cookiePoll);
   }, [router]);
 
   const fetchData = useCallback(async () => {
+    if (!userId || role !== "admin" || !csrfToken) {
+      setError("Required authentication or CSRF token not available.");
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const [propertiesRes, usersRes] = await Promise.all([
-        fetch("/api/admin/properties", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
-        fetch("/api/admin/users", { method: "GET", headers: { "Content-Type": "application/json" }, credentials: "include" }),
+        fetch("/api/admin/properties", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "include",
+        }),
+        fetch("/api/admin/users", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "include",
+        }),
       ]);
-      const [propertiesData, usersData] = await Promise.all([propertiesRes.json(), usersRes.json()]);
+
+      const responses = [propertiesRes, usersRes];
+      const endpoints = ["/api/admin/properties", "/api/admin/users"];
+      const responseBodies: (ApiResponse | string)[] = [];
+
+      for (let i = 0; i < responses.length; i++) {
+        const res = responses[i];
+        if (!res.ok) {
+          const body = await res.text();
+          console.error(`Failed to fetch ${endpoints[i]}: ${res.status} ${res.statusText}`, { body });
+          responseBodies[i] = body;
+        } else {
+          responseBodies[i] = await res.json();
+        }
+      }
+
+      const [propertiesData, usersData] = responseBodies as [ApiResponse, ApiResponse];
+
+      console.log("API responses:", { propertiesData, usersData });
+
       if (propertiesData.success && usersData.success) {
         setProperties(propertiesData.properties || []);
-        setPropertyOwners(usersData.users.filter((u: User) => u.role === "propertyOwner") || []);
+        setPropertyOwners(usersData.users?.filter((u) => u.role === "propertyOwner") || []);
       } else {
-        setError("Failed to fetch data.");
+        const errors = [
+          propertiesData.message || (propertiesRes.status === 403 && "Invalid or missing CSRF token"),
+          usersData.message || (usersRes.status === 403 && "Invalid or missing CSRF token"),
+        ].filter((msg) => msg).join("; ");
+        setError(`Failed to fetch data: ${errors || "Unknown error"}`);
       }
-    } catch {
-      setError("Failed to connect to the server.");
+    } catch (error: unknown) {
+      console.error("Fetch data error:", error instanceof Error ? error.message : String(error));
+      setError("Failed to connect to the server. Please try again later.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [userId, role, csrfToken]);
 
   useEffect(() => {
-    if (userId && role === "admin") {
+    if (userId && role === "admin" && csrfToken) {
+      console.log("Fetching data for PropertiesPage:", { userId, role, csrfToken });
       fetchData();
     }
-  }, [userId, role, fetchData]);
+  }, [userId, role, csrfToken, fetchData]);
 
-  const handleSort = useCallback((key: keyof Property | "ownerEmail") => {
-    setSortConfig((prev) => {
-      const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      const sorted = [...properties].sort((a, b) => {
-        if (key === "ownerEmail") {
-          const aEmail = propertyOwners.find((u) => u._id === a.ownerId)?.email || "";
-          const bEmail = propertyOwners.find((u) => u._id === b.ownerId)?.email || "";
-          return direction === "asc" ? aEmail.localeCompare(bEmail) : bEmail.localeCompare(aEmail);
-        }
-        return direction === "asc"
-          ? String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
-          : String(b[key] ?? "").localeCompare(String(a[key] ?? ""));
+  const handleSort = useCallback(
+    (key: keyof Property | "ownerEmail") => {
+      setSortConfig((prev) => {
+        const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
+        const sorted = [...properties].sort((a, b) => {
+          if (key === "ownerEmail") {
+            const aEmail = propertyOwners.find((u) => u._id === a.ownerId)?.email || "";
+            const bEmail = propertyOwners.find((u) => u._id === b.ownerId)?.email || "";
+            return direction === "asc" ? aEmail.localeCompare(bEmail) : bEmail.localeCompare(aEmail);
+          }
+          return direction === "asc"
+            ? String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
+            : String(b[key] ?? "").localeCompare(String(a[key] ?? ""));
+        });
+        setProperties(sorted);
+        return { key, direction };
       });
-      setProperties(sorted);
-      return { key, direction };
-    });
-  }, [properties, propertyOwners]);
+    },
+    [properties, propertyOwners]
+  );
 
-  const getSortIcon = useCallback((key: keyof Property | "ownerEmail") => {
-    if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-    return sortConfig.direction === "asc" ? (
-      <ChevronUp className="inline ml-1 h-4 w-4" />
-    ) : (
-      <ChevronDown className="inline ml-1 h-4 w-4" />);
-  }, [sortConfig]);
+  const getSortIcon = useCallback(
+    (key: keyof Property | "ownerEmail") => {
+      if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
+      return sortConfig.direction === "asc" ? (
+        <ChevronUp className="inline ml-1 h-4 w-4" />
+      ) : (
+        <ChevronDown className="inline ml-1 h-4 w-4" />);
+    },
+    [sortConfig]
+  );
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this property?")) return;
-    
+
+    if (!csrfToken) {
+      setError("CSRF token not available. Please refresh the page.");
+      return;
+    }
+
     try {
       const res = await fetch(`/api/admin/properties/${id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
       });
       const data = await res.json();
@@ -117,7 +232,8 @@ export default function PropertiesPage() {
       } else {
         setError(data.message || "Failed to delete property.");
       }
-    } catch {
+    } catch (error: unknown) {
+      console.error("Delete property error:", error instanceof Error ? error.message : String(error));
       setError("Failed to connect to the server.");
     }
   };
@@ -129,12 +245,18 @@ export default function PropertiesPage() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editProperty) return;
+    if (!editProperty || !csrfToken) {
+      setError("CSRF token or property data not available. Please try again.");
+      return;
+    }
 
     try {
       const res = await fetch(`/api/admin/properties/${editProperty._id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
         credentials: "include",
         body: JSON.stringify({
           name: editProperty.name,
@@ -153,7 +275,8 @@ export default function PropertiesPage() {
       } else {
         setError(data.message || "Failed to update property.");
       }
-    } catch {
+    } catch (error: unknown) {
+      console.error("Update property error:", error instanceof Error ? error.message : String(error));
       setError("Failed to connect to the server.");
     }
   };
@@ -187,10 +310,16 @@ export default function PropertiesPage() {
               <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-md">
                 <thead className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white">
                   <tr>
-                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("name")}>
+                    <th
+                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
+                      onClick={() => handleSort("name")}
+                    >
                       Property Name {getSortIcon("name")}
                     </th>
-                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("ownerEmail")}>
+                    <th
+                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
+                      onClick={() => handleSort("ownerEmail")}
+                    >
                       Owner Email {getSortIcon("ownerEmail")}
                     </th>
                     <th className="py-3 px-4 text-left text-sm font-semibold">Unit Types</th>
@@ -207,7 +336,10 @@ export default function PropertiesPage() {
                   ) : (
                     properties.map((p, index) => (
                       <React.Fragment key={p._id}>
-                        <tr className="border-b border-gray-200 hover:bg-gray-50 animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                        <tr
+                          className="border-b border-gray-200 hover:bg-gray-50 animate-fade-in"
+                          style={{ animationDelay: `${index * 100}ms` }}
+                        >
                           <td className="py-3 px-4 text-sm text-gray-800">{p.name}</td>
                           <td className="py-3 px-4 text-sm text-gray-600">
                             {propertyOwners.find((u) => u._id === p.ownerId)?.email || "N/A"}
@@ -230,10 +362,18 @@ export default function PropertiesPage() {
                           </td>
                           <td className="py-3 px-4 text-sm">
                             <div className="flex gap-2">
-                              <button onClick={() => handleEdit(p)} className="text-blue-600 hover:text-blue-800">
+                              <button
+                                onClick={() => handleEdit(p)}
+                                className="text-blue-600 hover:text-blue-800"
+                                aria-label={`Edit property ${p.name}`}
+                              >
                                 <Edit className="h-5 w-5" />
                               </button>
-                              <button onClick={() => handleDelete(p._id)} className="text-red-600 hover:text-red-800">
+                              <button
+                                onClick={() => handleDelete(p._id)}
+                                className="text-red-600 hover:text-red-800"
+                                aria-label={`Delete property ${p.name}`}
+                              >
                                 <Trash2 className="h-5 w-5" />
                               </button>
                             </div>
@@ -249,7 +389,7 @@ export default function PropertiesPage() {
                                 <ul className="list-disc pl-5 text-sm text-gray-600">
                                   {p.unitTypes.map((u) => (
                                     <li key={u.type}>
-                                      {u.type} (Price: Ksh {u.price.toFixed(2)}, Fee: Ksh {u.managementFee.toFixed(2)})
+                                      {u.type} (Price: Ksh {u.price.toFixed(2)}, Deposit: Ksh {u.deposit.toFixed(2)}, Fee: Ksh {u.managementFee.toFixed(2)})
                                     </li>
                                   ))}
                                 </ul>
@@ -276,6 +416,7 @@ export default function PropertiesPage() {
                       value={editProperty.name}
                       onChange={(e) => setEditProperty({ ...editProperty, name: e.target.value })}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                      required
                     />
                   </div>
                   <div className="mb-4">
@@ -284,6 +425,7 @@ export default function PropertiesPage() {
                       value={editProperty.ownerId}
                       onChange={(e) => setEditProperty({ ...editProperty, ownerId: e.target.value })}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                      required
                     >
                       <option value="">Select Owner</option>
                       {propertyOwners.map((owner) => (

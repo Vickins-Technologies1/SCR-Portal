@@ -1,11 +1,28 @@
-// src/app/api/payments/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 
+// Interface for API response
 interface Payment {
+  _id: string;
+  tenantId: string;
+  amount: number;
+  propertyId: string;
+  paymentDate: string;
+  transactionId: string;
+  status: "completed" | "pending" | "failed";
+  createdAt: string;
+  type?: "Rent" | "Utility";
+  phoneNumber?: string;
+  reference?: string;
+  date: string;
+  tenantName?: string;
+}
+
+// Interface for database model
+interface PaymentDb {
   _id: ObjectId;
   tenantId: string;
   amount: number;
@@ -17,6 +34,8 @@ interface Payment {
   type?: "Rent" | "Utility";
   phoneNumber?: string;
   reference?: string;
+  date: string;
+  tenantName?: string;
 }
 
 interface Tenant {
@@ -28,7 +47,7 @@ interface Tenant {
   price: number;
   status: string;
   paymentStatus: string;
-  leaseStartDate: string;
+  leaseStart: string;
   walletBalance: number;
 }
 
@@ -38,7 +57,17 @@ interface Property {
   name: string;
 }
 
-export async function GET(request: NextRequest) {
+interface ApiResponse<T> {
+  success: boolean;
+  payments?: T;
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+  message?: string;
+}
+
+export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Payment[]>>> {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
@@ -49,56 +78,92 @@ export async function GET(request: NextRequest) {
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "10")));
   const sort = searchParams.get("sort") || "-paymentDate";
 
+  // Log request details for debugging
+  logger.debug("GET /api/payments request", {
+    userId,
+    role,
+    csrfToken,
+    tenantId,
+    propertyId,
+    page,
+    limit,
+    sort,
+  });
+
+  // Validate user and role
   if (!userId || !role || !["admin", "propertyOwner", "tenant"].includes(role)) {
     logger.error("Unauthorized access attempt", { userId, role });
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ success: false, message: "Unauthorized: Invalid user or role" }, { status: 401 });
   }
 
-  if (!validateCsrfToken(request, csrfToken)) {
-    logger.error("Invalid CSRF token", { userId });
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+  // Validate CSRF token
+  try {
+    if (!csrfToken || !validateCsrfToken(request, csrfToken)) {
+      logger.error("Invalid or missing CSRF token", { userId, csrfToken });
+      return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+    }
+  } catch (error) {
+    logger.error("CSRF validation error", { userId, error: error instanceof Error ? error.message : String(error) });
+    return NextResponse.json({ success: false, message: "CSRF validation failed" }, { status: 403 });
   }
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
     const skip = (page - 1) * limit;
 
-  const query: {
-  tenantId?: string;
-  propertyId?: string | { $in: string[] };
-} = {};
+    const query: {
+      tenantId?: string | { $in: string[] };
+      propertyId?: string | { $in: string[] };
+    } = {};
 
     if (role === "propertyOwner") {
       const properties = await db
         .collection<Property>("properties")
-        .find({ ownerId: userId })
+        .find({ ownerId: userId }, { projection: { _id: 1 } })
         .toArray();
       const propertyIds = properties.map((p) => p._id.toString());
 
       if (!propertyIds.length) {
-        logger.debug("No properties found for user", { userId });
-        return NextResponse.json({ success: true, payments: [], total: 0, page, limit, totalPages: 0 }, { status: 200 });
+        logger.debug("No properties found for propertyOwner", { userId });
+        return NextResponse.json(
+          { success: true, payments: [], total: 0, page, limit, totalPages: 0 },
+          { status: 200 }
+        );
+      }
+
+      if (propertyId && propertyId !== "all" && !propertyIds.includes(propertyId)) {
+        logger.error("Unauthorized property access", { userId, propertyId });
+        return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
       }
 
       query.propertyId = propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds };
+
+      const tenants = await db
+        .collection<Tenant>("tenants")
+        .find({ propertyId: query.propertyId }, { projection: { _id: 1 } })
+        .toArray();
+      const tenantIds = tenants.map((t) => t._id.toString());
+      query.tenantId = tenantIds.length ? { $in: tenantIds } : { $in: [] };
     } else if (role === "tenant") {
       if (!tenantId || tenantId !== userId) {
         logger.error("Unauthorized tenant access", { userId, tenantId });
-        return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
+        return NextResponse.json({ success: false, message: "Unauthorized: Tenant ID mismatch" }, { status: 403 });
       }
       query.tenantId = tenantId;
     } else if (role === "admin") {
+      // Admins can fetch all payments or filter by tenantId/propertyId
       if (tenantId) query.tenantId = tenantId;
-    } else {
-      logger.error("Invalid role", { role });
-      return NextResponse.json({ success: false, message: "Invalid role" }, { status: 400 });
+      if (propertyId && propertyId !== "all") query.propertyId = propertyId;
     }
 
-    const total = await db.collection<Payment>("payments").countDocuments(query);
+    await db.collection<PaymentDb>("payments").createIndex({ propertyId: 1, paymentDate: -1 });
+    await db.collection<PaymentDb>("payments").createIndex({ tenantId: 1 });
+
+    const total = await db.collection<PaymentDb>("payments").countDocuments(query);
     const totalPages = Math.ceil(total / limit) || 1;
 
-    const payments = await db
-      .collection<Payment>("payments")
+    const payments = (await db
+      .collection<PaymentDb>("payments")
       .aggregate([
         { $match: query },
         { $sort: { paymentDate: sort === "-paymentDate" ? -1 : 1 } },
@@ -107,8 +172,11 @@ export async function GET(request: NextRequest) {
         {
           $lookup: {
             from: "tenants",
-            localField: "tenantId",
-            foreignField: "_id",
+            let: { tenantId: { $toObjectId: "$tenantId" } },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$_id", "$$tenantId"] } } },
+              { $project: { name: 1 } },
+            ],
             as: "tenant",
           },
         },
@@ -126,12 +194,13 @@ export async function GET(request: NextRequest) {
             phoneNumber: 1,
             reference: 1,
             tenantName: { $ifNull: ["$tenant.name", "Unknown"] },
+            date: "$paymentDate",
           },
         },
       ])
-      .toArray();
+      .toArray()) as Payment[];
 
-    logger.debug("Payments fetched", {
+    logger.info("Payments fetched successfully", {
       userId,
       role,
       tenantId,
@@ -153,23 +222,43 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     logger.error("GET Payments Error", {
       message: error instanceof Error ? error.message : String(error),
+      userId,
+      role,
     });
     return NextResponse.json({ success: false, message: "Server error while fetching payments" }, { status: 500 });
   }
 }
-export async function POST(request: NextRequest) {
+
+export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<Payment>>> {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
+  const csrfToken = request.headers.get("x-csrf-token");
 
+  // Log POST request details for debugging
+  logger.debug("POST /api/payments request", { userId, role, csrfToken });
+
+  // Validate user, role, and CSRF
   if (!userId || !role || !["tenant", "propertyOwner"].includes(role)) {
+    logger.error("Unauthorized POST attempt", { userId, role });
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    if (!csrfToken || !validateCsrfToken(request, csrfToken)) {
+      logger.error("Invalid or missing CSRF token in POST", { userId, csrfToken });
+      return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+    }
+  } catch (error) {
+    logger.error("CSRF validation error in POST", { userId, error: error instanceof Error ? error.message : String(error) });
+    return NextResponse.json({ success: false, message: "CSRF validation failed" }, { status: 403 });
+  }
+
+  try {
     const body = await request.json();
-    const { tenantId, amount, propertyId, userId: submittedUserId } = body;
+    const { tenantId, amount, propertyId, userId: submittedUserId, type, phoneNumber, reference } = body;
 
     if (!tenantId || !amount || amount <= 0 || !propertyId || submittedUserId !== userId) {
+      logger.error("Invalid POST input", { userId, tenantId, amount, propertyId });
       return NextResponse.json({ success: false, message: "Invalid input" }, { status: 400 });
     }
 
@@ -180,43 +269,45 @@ export async function POST(request: NextRequest) {
       .findOne({ _id: new ObjectId(tenantId), propertyId });
 
     if (!tenant) {
+      logger.error("Tenant not found", { tenantId, propertyId });
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    if (role === "propertyOwner") {
-      const property = await db
-        .collection<Property>("properties")
-        .findOne({ _id: new ObjectId(propertyId), ownerId: userId });
-
-      if (!property) {
-        return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
-      }
-    }
-
-    const transactionId = `TXN-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-    const paymentDate = new Date().toISOString();
-
+    const paymentId = new ObjectId();
     const payment: Payment = {
-      _id: new ObjectId(),
+      _id: paymentId.toString(),
       tenantId,
-      amount: Number(amount),
+      amount,
       propertyId,
-      paymentDate,
-      transactionId,
-      status: "completed",
+      paymentDate: new Date().toISOString(),
+      transactionId: `TX${Date.now()}${Math.floor(Math.random() * 1000)}`,
+      status: "pending",
       createdAt: new Date().toISOString(),
+      type,
+      phoneNumber,
+      reference,
+      date: new Date().toISOString(),
+      tenantName: tenant.name,
     };
 
-    await db.collection<Payment>("payments").insertOne(payment);
+    const result = await db.collection<PaymentDb>("payments").insertOne({
+      ...payment,
+      _id: paymentId,
+    });
 
-    await db.collection<Tenant>("tenants").updateOne(
-      { _id: new ObjectId(tenantId) },
-      { $inc: { walletBalance: Number(amount) } }
-    );
-
-    return NextResponse.json({ success: true, message: "Payment processed", payment });
-  } catch (error: unknown) { // Changed from any to unknown
-    console.error("POST Payment Error:", error instanceof Error ? error.message : String(error));
-    return NextResponse.json({ success: false, message: "Server error while processing payment" }, { status: 500 });
+    if (result.acknowledged) {
+      logger.info("Payment created successfully", { userId, paymentId: payment._id });
+      return NextResponse.json({ success: true, payments: payment }, { status: 201 });
+    } else {
+      logger.error("Failed to insert payment", { userId, paymentId: payment._id });
+      return NextResponse.json({ success: false, message: "Failed to create payment" }, { status: 500 });
+    }
+  } catch (error: unknown) {
+    logger.error("POST Payments Error", {
+      message: error instanceof Error ? error.message : String(error),
+      userId,
+      role,
+    });
+    return NextResponse.json({ success: false, message: "Server error while creating payment" }, { status: 500 });
   }
 }
