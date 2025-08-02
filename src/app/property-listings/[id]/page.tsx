@@ -188,7 +188,7 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
       </header>
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Link
-          href="/"
+          href="/property-listings"
           className="inline-flex items-center text-[#1e3a8a] hover:text-[#2563eb] mb-8 text-sm font-medium transition-colors duration-200"
         >
           <ChevronLeft className="h-5 w-5 mr-1" />
