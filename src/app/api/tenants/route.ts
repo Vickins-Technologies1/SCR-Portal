@@ -1,4 +1,4 @@
-// lint-disable-next-line no-unused-vars
+// src/app/api/tenants/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";

@@ -107,7 +107,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   '/api/admin/properties': { roles: ['admin'], isApi: true },
   '/api/admin/property-owners': { roles: ['admin'], isApi: true },
   '/api/payments': { roles: ['admin', 'propertyOwner', 'tenant'], isApi: true },
-  '/api/tenant/payments': { roles: ['tenant'], isApi: true },
+  '/api/tenant/payments': { roles: ['tenant', 'propertyOwner'], isApi: true },
   '/api/invoices': { roles: ['admin', 'propertyOwner'], isApi: true },
   '/api/properties': { roles: ['propertyOwner', 'tenant'], isApi: true },
   '/api/list-properties': { roles: ['propertyOwner'], isApi: true },
