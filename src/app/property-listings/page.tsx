@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, DollarSign, Star, Filter } from "lucide-react";
+import { motion, AnimatePresence, Variants } from "framer-motion";
+import { MapPin, DollarSign, Star, Filter, Menu, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -77,6 +77,7 @@ export default function LandingPage() {
     location: "",
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const fetchProperties = useCallback(async () => {
     setIsLoading(true);
@@ -153,10 +154,31 @@ export default function LandingPage() {
     setIsFilterOpen(false);
   }, []);
 
+  const toggleMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen((prev) => !prev);
+  }, []);
+
   const unitTypes = useMemo(
     () => Array.from(new Set(properties.flatMap((p) => p.unitTypes.map((u) => u.type)))),
     [properties]
   );
+
+  // Animation variants for the filter panel
+  const filterVariants: Variants = {
+    hidden: { opacity: 0, height: 0, y: -20 },
+    visible: { opacity: 1, height: "auto", y: 0 },
+    exit: { opacity: 0, height: 0, y: -20 },
+  };
+
+  // Animation variants for filter inputs
+  const inputVariants: Variants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: { delay: i * 0.1, duration: 0.3, ease: "easeOut" },
+    }),
+  };
 
   return (
     <div className="min-h-screen bg-white font-sans text-gray-800">
@@ -174,22 +196,59 @@ export default function LandingPage() {
               Smart Choice Rentals
             </h1>
           </div>
-          <nav className="hidden md:flex gap-6">
-            <Link href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium hover:text-[#012a4a] transition">
-              Home
-            </Link>
-            <Link href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium hover:text-[#012a4a] transition">
-              Contact
-            </Link>
-          </nav>
+          <div className="flex items-center">
+            <nav className="hidden md:flex gap-6">
+              <Link href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium hover:text-[#012a4a] transition">
+                Home
+              </Link>
+              <Link href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium hover:text-[#012a4a] transition">
+                Contact
+              </Link>
+            </nav>
+            <button
+              className="md:hidden p-2 text-gray-800 hover:text-[#012a4a] transition"
+              onClick={toggleMobileMenu}
+              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+            >
+              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
         </div>
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.nav
+              className="md:hidden bg-white shadow-lg"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="container mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4">
+                <Link
+                  href="https://smartchoicerentalmanagement.com/"
+                  className="text-sm font-medium hover:text-[#012a4a] transition"
+                  onClick={toggleMobileMenu}
+                >
+                  Home
+                </Link>
+                <Link
+                  href="https://www.smartchoicerentalmanagement.com/contact-us"
+                  className="text-sm font-medium hover:text-[#012a4a] transition"
+                  onClick={toggleMobileMenu}
+                >
+                  Contact
+                </Link>
+              </div>
+            </motion.nav>
+          )}
+        </AnimatePresence>
       </header>
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <motion.div
           className="flex flex-col sm:flex-row justify-between items-center mb-8"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
         >
           <h2 className="text-2xl md:text-3xl font-semibold text-[#012a4a]">
             Available Properties
@@ -206,100 +265,122 @@ export default function LandingPage() {
           {isFilterOpen && (
             <motion.div
               className="bg-gray-50 p-6 rounded-lg shadow-md mb-8"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
+              variants={filterVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#012a4a] mb-2">
-                    Location
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter city or address"
-                    value={filters.location}
-                    onChange={(e) => handleFilterChange("location", e.target.value)}
-                    className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#012a4a] mb-2">
-                    Unit Type
-                  </label>
-                  <select
-                    value={filters.unitType}
-                    onChange={(e) => handleFilterChange("unitType", e.target.value)}
-                    className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
+                {[
+                  {
+                    label: "Location",
+                    component: (
+                      <input
+                        type="text"
+                        placeholder="Enter city or address"
+                        value={filters.location}
+                        onChange={(e) => handleFilterChange("location", e.target.value)}
+                        className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
+                      />
+                    ),
+                  },
+                  {
+                    label: "Unit Type",
+                    component: (
+                      <select
+                        value={filters.unitType}
+                        onChange={(e) => handleFilterChange("unitType", e.target.value)}
+                        className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
+                      >
+                        <option value="">All Unit Types</option>
+                        {unitTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                    ),
+                  },
+                  {
+                    label: "Price Range (Ksh/mo)",
+                    component: (
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.priceRange[0] === 0 ? "" : filters.priceRange[0]}
+                          onChange={(e) =>
+                            handleFilterChange("priceRange", [
+                              parseInt(e.target.value) || 0,
+                              filters.priceRange[1],
+                            ])
+                          }
+                          className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.priceRange[1] === Infinity ? "" : filters.priceRange[1]}
+                          onChange={(e) =>
+                            handleFilterChange("priceRange", [
+                              filters.priceRange[0],
+                              parseInt(e.target.value) || Infinity,
+                            ])
+                          }
+                          className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
+                        />
+                      </div>
+                    ),
+                  },
+                  {
+                    label: "Advertising Status",
+                    component: (
+                      <select
+                        value={filters.isAdvertised === null ? "all" : filters.isAdvertised ? "yes" : "no"}
+                        onChange={(e) =>
+                          handleFilterChange(
+                            "isAdvertised",
+                            e.target.value === "all" ? null : e.target.value === "yes"
+                          )
+                        }
+                        className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
+                      >
+                        <option value="all">All Properties</option>
+                        <option value="yes">Featured Only</option>
+                        <option value="no">Non-Featured Only</option>
+                      </select>
+                    ),
+                  },
+                ].map((filter, index) => (
+                  <motion.div
+                    key={filter.label}
+                    variants={inputVariants}
+                    initial="hidden"
+                    animate="visible"
+                    custom={index}
                   >
-                    <option value="">All Unit Types</option>
-                    {unitTypes.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#012a4a] mb-2">
-                    Price Range (Ksh/mo)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      placeholder="Min"
-                      value={filters.priceRange[0] === 0 ? "" : filters.priceRange[0]}
-                      onChange={(e) =>
-                        handleFilterChange("priceRange", [
-                          parseInt(e.target.value) || 0,
-                          filters.priceRange[1],
-                        ])
-                      }
-                      className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                    />
-                    <input
-                      type="number"
-                      placeholder="Max"
-                      value={filters.priceRange[1] === Infinity ? "" : filters.priceRange[1]}
-                      onChange={(e) =>
-                        handleFilterChange("priceRange", [
-                          filters.priceRange[0],
-                          parseInt(e.target.value) || Infinity,
-                        ])
-                      }
-                      className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#012a4a] mb-2">
-                    Advertising Status
-                  </label>
-                  <select
-                    value={filters.isAdvertised === null ? "all" : filters.isAdvertised ? "yes" : "no"}
-                    onChange={(e) =>
-                      handleFilterChange(
-                        "isAdvertised",
-                        e.target.value === "all" ? null : e.target.value === "yes"
-                      )
-                    }
-                    className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                  >
-                    <option value="all">All Properties</option>
-                    <option value="yes">Featured Only</option>
-                    <option value="no">Non-Featured Only</option>
-                  </select>
-                </div>
+                    <label className="block text-sm font-medium text-[#012a4a] mb-2">
+                      {filter.label}
+                    </label>
+                    {filter.component}
+                  </motion.div>
+                ))}
               </div>
-              <div className="mt-4 flex justify-end">
+              <motion.div
+                className="mt-4 flex justify-end"
+                variants={inputVariants}
+                initial="hidden"
+                animate="visible"
+                custom={4}
+              >
                 <button
                   onClick={resetFilters}
                   className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition text-sm"
                 >
                   Reset Filters
                 </button>
-              </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>

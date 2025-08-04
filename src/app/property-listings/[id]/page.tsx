@@ -1,8 +1,9 @@
+// src/app/property-listings/[id]/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, DollarSign, Star, ChevronLeft, ChevronRight, Maximize2, Mail, Phone, X } from "lucide-react";
+import { MapPin, DollarSign, Star, ChevronLeft, ChevronRight, Maximize2, Mail, Phone, X, Menu } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -78,6 +79,7 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -122,6 +124,10 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
 
   const handleImageError = useCallback(() => {
     return "/logo.png"; // Fallback to default image on error
+  }, []);
+
+  const toggleMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen((prev) => !prev);
   }, []);
 
   if (isLoading) {
@@ -169,33 +175,70 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
             <Image
               src="/logo.png"
               alt="Smart Choice Rental Management Logo"
-              width={56}
-              height={56}
+              width={48}
+              height={48}
               className="object-contain"
               onError={() => handleImageError()}
             />
             <h1 className="text-2xl md:text-3xl font-bold text-[#1e3a8a] tracking-tight">Smart Choice Rentals</h1>
           </div>
-          <nav className="hidden md:flex gap-8">
-            <Link href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
-              Home
-            </Link>
-            <Link href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
-              Contact
-            </Link>
-          </nav>
+          <div className="flex items-center">
+            <nav className="hidden md:flex gap-8">
+              <Link href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
+                Home
+              </Link>
+              <Link href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200">
+                Contact
+              </Link>
+            </nav>
+            <button
+              className="md:hidden p-2 text-gray-800 hover:text-[#2563eb] transition-colors duration-200"
+              onClick={toggleMobileMenu}
+              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+            >
+              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
         </div>
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.nav
+              className="md:hidden bg-white shadow-md"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="container mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4">
+                <Link
+                  href="https://smartchoicerentalmanagement.com/"
+                  className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200"
+                  onClick={toggleMobileMenu}
+                >
+                  Home
+                </Link>
+                <Link
+                  href="https://www.smartchoicerentalmanagement.com/contact-us"
+                  className="text-sm font-medium text-gray-600 hover:text-[#2563eb] transition-colors duration-200"
+                  onClick={toggleMobileMenu}
+                >
+                  Contact
+                </Link>
+              </div>
+            </motion.nav>
+          )}
+        </AnimatePresence>
       </header>
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Link
           href="/property-listings"
-          className="inline-flex items-center text-[#1e3a8a] hover:text-[#2563eb] mb-8 text-sm font-medium transition-colors duration-200"
+          className="inline-flex items-center text-[#1e3a8a] hover:text-[#2563eb] mb-8 text-sm font-semibold transition-colors duration-200 group"
         >
-          <ChevronLeft className="h-5 w-5 mr-1" />
+          <ChevronLeft className="h-5 w-5 mr-1 transition-transform duration-200 group-hover:-translate-x-1" />
           Back to Properties
         </Link>
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="bg-white rounded-2xl shadow-lg p-6 lg:p-8"
@@ -205,33 +248,40 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
               <div className="relative group">
                 <motion.div
                   key={currentImageIndex}
-                  initial={{ x: 50, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: -50, opacity: 0 }}
-                  transition={{ duration: 0.4, ease: "easeInOut" }}
-                  className="relative h-64 sm:h-80 lg:h-[28rem] rounded-xl overflow-hidden shadow-md"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className="relative h-64 sm:h-80 lg:h-[32rem] rounded-xl overflow-hidden shadow-md"
                 >
                   <Image
                     src={images[currentImageIndex]}
                     alt={`${property.name} image ${currentImageIndex + 1}`}
                     width={672}
-                    height={448}
+                    height={512}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={() => handleImageError()}
+                    priority={currentImageIndex === 0}
                   />
                   <button
                     onClick={() => setIsFullScreen(true)}
-                    className="absolute bottom-4 right-4 bg-[#1e3a8a] text-white p-2 rounded-full hover:bg-[#2563eb] transition-colors duration-200 opacity-0 group-hover:opacity-100"
+                    className="absolute bottom-4 right-4 bg-[#1e3a8a] text-white p-2 rounded-full hover:bg-[#2563eb] transition-colors duration-200 opacity-80 hover:opacity-100"
                     aria-label="View full screen"
                   >
                     <Maximize2 className="h-5 w-5" />
                   </button>
+                  {property.isAdvertised && (
+                    <div className="absolute top-4 left-4 bg-[#34d399] text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center">
+                      <Star className="h-4 w-4 mr-1" />
+                      Featured
+                    </div>
+                  )}
                 </motion.div>
                 {!isSingleImage && (
                   <div className="flex justify-between items-center mt-4">
                     <button
                       onClick={handlePrevImage}
-                      className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50"
+                      className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 transition-colors duration-200 hover:scale-105 disabled:opacity-50"
                       disabled={isSingleImage}
                       aria-label="Previous image"
                     >
@@ -242,7 +292,7 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                     </span>
                     <button
                       onClick={handleNextImage}
-                      className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 transition-colors duration-200 disabled:opacity-50"
+                      className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 transition-colors duration-200 hover:scale-105 disabled:opacity-50"
                       disabled={isSingleImage}
                       aria-label="Next image"
                     >
@@ -252,12 +302,12 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                 )}
               </div>
               {images.length > 1 && (
-                <div className="flex overflow-x-auto gap-3 py-3 thumbnail-container">
+                <div className="flex overflow-x-auto gap-2 py-3 thumbnail-container">
                   {images.map((image, index) => (
                     <motion.button
                       key={index}
                       onClick={() => handleThumbnailClick(index)}
-                      className={`flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border-2 shadow-sm ${
+                      className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 shadow-sm ${
                         currentImageIndex === index ? "border-[#34d399]" : "border-gray-200"
                       } hover:border-[#2563eb] transition-colors duration-200`}
                       aria-label={`View image ${index + 1}`}
@@ -267,8 +317,8 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                       <Image
                         src={image}
                         alt={`${property.name} thumbnail ${index + 1}`}
-                        width={96}
-                        height={96}
+                        width={80}
+                        height={80}
                         className="w-full h-full object-cover"
                         onError={() => handleImageError()}
                       />
@@ -288,19 +338,19 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
               </motion.h2>
               <div className="flex items-center text-gray-600">
                 <MapPin className="h-5 w-5 mr-2 text-[#34d399]" />
-                <span className="text-sm font-medium">{property.address}</span>
+                <span className="text-base font-medium">{property.address}</span>
               </div>
               <div className="flex items-center text-gray-600">
                 <DollarSign className="h-5 w-5 mr-2 text-[#34d399]" />
-                <span className="text-sm font-medium">
+                <span className="text-base font-medium">
                   Starting from Ksh {Math.min(...property.unitTypes.map((u) => u.price)).toLocaleString()} /mo
                 </span>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#1e3a8a] mb-3 tracking-tight">Unit Types</h3>
-                <ul className="space-y-2 text-gray-600">
+                <h3 className="text-xl font-semibold text-[#1e3a8a] mb-3 tracking-tight">Unit Types</h3>
+                <ul className="space-y-3 text-gray-600">
                   {property.unitTypes.map((unit, index) => (
-                    <li key={index} className="flex items-center text-sm">
+                    <li key={index} className="flex items-center text-base">
                       <span className="w-2 h-2 bg-[#34d399] rounded-full mr-2"></span>
                       {unit.type} (x{unit.quantity}): Ksh {unit.price.toLocaleString()}/mo, Deposit: Ksh {unit.deposit.toLocaleString()}
                     </li>
@@ -308,26 +358,32 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                 </ul>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#1e3a8a] mb-3 tracking-tight">Facilities</h3>
-                <ul className="space-y-2 text-gray-600">
+                <h3 className="text-xl font-semibold text-[#1e3a8a] mb-3 tracking-tight">Facilities</h3>
+                <div className="flex flex-wrap gap-2">
                   {property.facilities && property.facilities.length > 0 ? (
                     property.facilities.map((facility, index) => (
-                      <li key={index} className="flex items-center text-sm">
-                        <span className="w-2 h-2 bg-[#34d399] rounded-full mr-2"></span>
+                      <span
+                        key={index}
+                        className="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded-full shadow-sm"
+                      >
                         {facility}
-                      </li>
+                      </span>
                     ))
                   ) : (
-                    <li className="text-sm">No facilities listed.</li>
+                    <span className="text-sm text-gray-600">No facilities listed.</span>
                   )}
-                </ul>
+                </div>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#1e3a8a] mb-3 tracking-tight">Status</h3>
-                <span className="text-sm text-gray-600">{property.status}</span>
+                <h3 className="text-xl font-semibold text-[#1e3a8a] mb-3 tracking-tight">Status</h3>
+                <span className={`text-sm font-medium px-3 py-1 rounded-full ${
+                  property.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                }`}>
+                  {property.status}
+                </span>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#1e3a8a] mb-3 tracking-tight">Advertising</h3>
+                <h3 className="text-xl font-semibold text-[#1e3a8a] mb-3 tracking-tight">Advertising</h3>
                 <span className="text-sm text-gray-600 flex items-center">
                   {property.isAdvertised ? (
                     <>
@@ -335,33 +391,33 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                       Featured (Expires: {property.adExpiration ? new Date(property.adExpiration).toLocaleDateString() : "N/A"})
                     </>
                   ) : (
-                    "Not Featured"
+                    <span className="text-sm bg-gray-100 text-gray-700 px-3 py-1 rounded-full">Not Featured</span>
                   )}
                 </span>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#1e3a8a] mb-3 tracking-tight">Description</h3>
-                <p className="text-sm text-gray-600 leading-relaxed">{property.description || "No description available."}</p>
+                <h3 className="text-xl font-semibold text-[#1e3a8a] mb-3 tracking-tight">Description</h3>
+                <p className="text-base text-gray-600 leading-relaxed">{property.description || "No description available."}</p>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#1e3a8a] mb-3 tracking-tight">Contact Owner</h3>
+                <h3 className="text-xl font-semibold text-[#1e3a8a] mb-3 tracking-tight">Contact Owner</h3>
                 {owner ? (
-                  <div className="space-y-3 text-gray-600">
-                    <div className="flex items-center">
-                      <Mail className="h-5 w-5 mr-2 text-[#34d399]" />
-                      <a href={`mailto:${owner.email}`} className="text-sm hover:text-[#2563eb] transition-colors duration-200">
+                  <div className="space-y-4 text-gray-600">
+                    <div className="flex items-center group">
+                      <Mail className="h-5 w-5 mr-2 text-[#34d399] group-hover:text-[#2563eb] transition-colors duration-200" />
+                      <a href={`mailto:${owner.email}`} className="text-base font-medium hover:text-[#2563eb] transition-colors duration-200">
                         {owner.email}
                       </a>
                     </div>
-                    <div className="flex items-center">
-                      <Phone className="h-5 w-5 mr-2 text-[#34d399]" />
-                      <a href={`tel:${owner.phone}`} className="text-sm hover:text-[#2563eb] transition-colors duration-200">
+                    <div className="flex items-center group">
+                      <Phone className="h-5 w-5 mr-2 text-[#34d399] group-hover:text-[#2563eb] transition-colors duration-200" />
+                      <a href={`tel:${owner.phone}`} className="text-base font-medium hover:text-[#2563eb] transition-colors duration-200">
                         {owner.phone}
                       </a>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-600">Contact information not available.</p>
+                  <p className="text-base text-gray-600">Contact information not available.</p>
                 )}
               </div>
             </div>
@@ -371,7 +427,7 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
       <AnimatePresence>
         {isFullScreen && (
           <motion.div
-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 sm:p-6"
+            className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4 sm:p-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -390,31 +446,32 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                 alt={`${property.name} full-screen image ${currentImageIndex + 1}`}
                 width={1280}
                 height={720}
-                className="max-w-full max-h-[65vh] object-contain rounded-xl shadow-lg"
+                className="max-w-full max-h-[80vh] object-contain rounded-xl shadow-lg"
                 onError={() => handleImageError()}
+                priority
               />
               <button
                 onClick={() => setIsFullScreen(false)}
-                className="absolute top-4 right-4 bg-[#1e3a8a] text-white p-2 rounded-full hover:bg-[#2563eb] transition-colors duration-200"
+                className="absolute top-4 right-4 bg-[#1e3a8a] text-white p-2 rounded-full hover:bg-[#2563eb] transition-colors duration-200 opacity-80 hover:opacity-100"
                 aria-label="Close full-screen view"
               >
                 <X className="h-5 w-5" />
               </button>
               {!isSingleImage && (
-                <div className="flex justify-between items-center w-full max-w-2xl mt-4">
+                <div className="flex justify-between items-center w-full max-w-3xl mt-4">
                   <button
                     onClick={handlePrevImage}
-                    className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 transition-colors duration-200"
+                    className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 hover:scale-105 transition-all duration-200"
                     aria-label="Previous image"
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </button>
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-medium text-white bg-black bg-opacity-60 px-3 py-1 rounded-full">
                     {currentImageIndex + 1} / {images.length}
                   </span>
                   <button
                     onClick={handleNextImage}
-                    className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 transition-colors duration-200"
+                    className="bg-white text-gray-800 p-2 rounded-full shadow-sm hover:bg-gray-100 hover:scale-105 transition-all duration-200"
                     aria-label="Next image"
                   >
                     <ChevronRight className="h-5 w-5" />
@@ -422,12 +479,12 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                 </div>
               )}
               {images.length > 1 && (
-                <div className="flex overflow-x-auto gap-3 mt-4 max-w-2xl p-3 bg-black bg-opacity-60 rounded-lg thumbnail-container">
+                <div className="flex overflow-x-auto gap-2 mt-4 max-w-3xl p-3 bg-black bg-opacity-60 rounded-lg thumbnail-container">
                   {images.map((image, index) => (
                     <motion.button
                       key={index}
                       onClick={() => handleThumbnailClick(index)}
-                      className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 shadow-sm ${
+                      className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 shadow-sm ${
                         currentImageIndex === index ? "border-[#34d399]" : "border-gray-200"
                       } hover:border-[#2563eb] transition-colors duration-200`}
                       aria-label={`View image ${index + 1}`}
@@ -437,8 +494,8 @@ export default function PropertyDetails({ params }: { params: Promise<{ id: stri
                       <Image
                         src={image}
                         alt={`${property.name} thumbnail ${index + 1}`}
-                        width={80}
-                        height={80}
+                        width={64}
+                        height={64}
                         className="w-full h-full object-cover"
                         onError={() => handleImageError()}
                       />
