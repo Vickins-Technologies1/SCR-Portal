@@ -1,3 +1,4 @@
+// src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { put } from '@vercel/blob';
@@ -8,7 +9,7 @@ import logger from '@/lib/logger';
 // Maximum file size (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 // Maximum number of files
-const MAX_FILES = 5;
+const MAX_FILES = 9;
 // Allowed file types
 const VALID_FILE_TYPES = ['image/jpeg', 'image/png'];
 
