@@ -8,17 +8,12 @@ import { Building2, ArrowUpDown, Edit, Trash2, ChevronDown, ChevronUp } from "lu
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
-interface User {
-  _id: string;
-  email: string;
-  role: "tenant" | "propertyOwner" | "admin";
-}
-
 interface Property {
   _id: string;
   name: string;
   ownerId: string;
-  unitTypes: { type: string; price: number; deposit: number; managementType: string; managementFee: number }[];
+  ownerEmail?: string;
+  unitTypes: { type: string; price?: number; deposit?: number; managementType: string; managementFee?: number }[];
 }
 
 interface SortConfig {
@@ -29,14 +24,12 @@ interface SortConfig {
 interface ApiResponse {
   success: boolean;
   properties?: Property[];
-  users?: User[];
   message?: string;
 }
 
 export default function PropertiesPage() {
   const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
-  const [propertyOwners, setPropertyOwners] = useState<User[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,8 +76,8 @@ export default function PropertiesPage() {
           console.error("Failed to fetch CSRF token:", data);
           setError("Failed to initialize session. Please try again.");
         }
-      } catch (err) {
-        console.error("CSRF token fetch error:", err);
+      } catch {
+        console.error("CSRF token fetch error");
         setError("Failed to connect to server for CSRF token.");
       }
     };
@@ -114,56 +107,33 @@ export default function PropertiesPage() {
 
     setIsLoading(true);
     try {
-      const [propertiesRes, usersRes] = await Promise.all([
-        fetch("/api/admin/properties", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-          credentials: "include",
-        }),
-        fetch("/api/admin/users", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-          credentials: "include",
-        }),
-      ]);
+      const res = await fetch("/api/admin/properties", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
 
-      const responses = [propertiesRes, usersRes];
-      const endpoints = ["/api/admin/properties", "/api/admin/users"];
-      const responseBodies: (ApiResponse | string)[] = [];
-
-      for (let i = 0; i < responses.length; i++) {
-        const res = responses[i];
-        if (!res.ok) {
-          const body = await res.text();
-          console.error(`Failed to fetch ${endpoints[i]}: ${res.status} ${res.statusText}`, { body });
-          responseBodies[i] = body;
-        } else {
-          responseBodies[i] = await res.json();
-        }
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`Failed to fetch /api/admin/properties: ${res.status} ${res.statusText}`, { body });
+        setError(res.status === 403 ? "Invalid or missing CSRF token" : "Failed to fetch properties");
+        setIsLoading(false);
+        return;
       }
 
-      const [propertiesData, usersData] = responseBodies as [ApiResponse, ApiResponse];
+      const data: ApiResponse = await res.json();
+      console.log("API response:", { propertiesData: data });
 
-      console.log("API responses:", { propertiesData, usersData });
-
-      if (propertiesData.success && usersData.success) {
-        setProperties(propertiesData.properties || []);
-        setPropertyOwners(usersData.users?.filter((u) => u.role === "propertyOwner") || []);
+      if (data.success) {
+        setProperties(data.properties || []);
       } else {
-        const errors = [
-          propertiesData.message || (propertiesRes.status === 403 && "Invalid or missing CSRF token"),
-          usersData.message || (usersRes.status === 403 && "Invalid or missing CSRF token"),
-        ].filter((msg) => msg).join("; ");
-        setError(`Failed to fetch data: ${errors || "Unknown error"}`);
+        setError(data.message || "Failed to fetch properties.");
       }
-    } catch (error: unknown) {
-      console.error("Fetch data error:", error instanceof Error ? error.message : String(error));
+    } catch {
+      console.error("Fetch data error");
       setError("Failed to connect to the server. Please try again later.");
     } finally {
       setIsLoading(false);
@@ -183,8 +153,8 @@ export default function PropertiesPage() {
         const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
         const sorted = [...properties].sort((a, b) => {
           if (key === "ownerEmail") {
-            const aEmail = propertyOwners.find((u) => u._id === a.ownerId)?.email || "";
-            const bEmail = propertyOwners.find((u) => u._id === b.ownerId)?.email || "";
+            const aEmail = a.ownerEmail || "";
+            const bEmail = b.ownerEmail || "";
             return direction === "asc" ? aEmail.localeCompare(bEmail) : bEmail.localeCompare(aEmail);
           }
           return direction === "asc"
@@ -195,7 +165,7 @@ export default function PropertiesPage() {
         return { key, direction };
       });
     },
-    [properties, propertyOwners]
+    [properties]
   );
 
   const getSortIcon = useCallback(
@@ -232,8 +202,8 @@ export default function PropertiesPage() {
       } else {
         setError(data.message || "Failed to delete property.");
       }
-    } catch (error: unknown) {
-      console.error("Delete property error:", error instanceof Error ? error.message : String(error));
+    } catch {
+      console.error("Delete property error");
       setError("Failed to connect to the server.");
     }
   };
@@ -275,8 +245,8 @@ export default function PropertiesPage() {
       } else {
         setError(data.message || "Failed to update property.");
       }
-    } catch (error: unknown) {
-      console.error("Update property error:", error instanceof Error ? error.message : String(error));
+    } catch {
+      console.error("Update property error");
       setError("Failed to connect to the server.");
     }
   };
@@ -341,9 +311,7 @@ export default function PropertiesPage() {
                           style={{ animationDelay: `${index * 100}ms` }}
                         >
                           <td className="py-3 px-4 text-sm text-gray-800">{p.name}</td>
-                          <td className="py-3 px-4 text-sm text-gray-600">
-                            {propertyOwners.find((u) => u._id === p.ownerId)?.email || "N/A"}
-                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">{p.ownerEmail || "N/A"}</td>
                           <td className="py-3 px-4 text-sm text-gray-600">
                             {p.unitTypes.length > 0 ? (
                               <button
@@ -387,11 +355,19 @@ export default function PropertiesPage() {
                                 <p className="text-sm text-gray-600">No unit types</p>
                               ) : (
                                 <ul className="list-disc pl-5 text-sm text-gray-600">
-                                  {p.unitTypes.map((u) => (
-                                    <li key={u.type}>
-                                      {u.type} (Price: Ksh {u.price.toFixed(2)}, Deposit: Ksh {u.deposit.toFixed(2)}, Fee: Ksh {u.managementFee.toFixed(2)})
-                                    </li>
-                                  ))}
+                                  {p.unitTypes.map((u) => {
+                                    if (!u.type) {
+                                      console.warn("Unit type missing type field", { propertyId: p._id, unit: u });
+                                      return null;
+                                    }
+                                    return (
+                                      <li key={u.type}>
+                                        {u.type} (Price: Ksh {u.price != null ? u.price.toFixed(2) : "N/A"}, Deposit: Ksh{" "}
+                                        {u.deposit != null ? u.deposit.toFixed(2) : "N/A"}, Fee: Ksh{" "}
+                                        {u.managementFee != null ? u.managementFee.toFixed(2) : "N/A"})
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               )}
                             </td>
@@ -420,20 +396,13 @@ export default function PropertiesPage() {
                     />
                   </div>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Owner</label>
-                    <select
-                      value={editProperty.ownerId}
-                      onChange={(e) => setEditProperty({ ...editProperty, ownerId: e.target.value })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
-                      required
-                    >
-                      <option value="">Select Owner</option>
-                      {propertyOwners.map((owner) => (
-                        <option key={owner._id} value={owner._id}>
-                          {owner.email}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-sm font-medium text-gray-700">Owner Email</label>
+                    <input
+                      type="text"
+                      value={editProperty.ownerEmail || ""}
+                      disabled
+                      className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm"
+                    />
                   </div>
                   <div className="flex justify-end gap-2">
                     <button
@@ -489,7 +458,8 @@ export default function PropertiesPage() {
           width: 100%;
           border-collapse: collapse;
         }
-        th, td {
+        th,
+        td {
           text-align: left;
           vertical-align: middle;
         }
