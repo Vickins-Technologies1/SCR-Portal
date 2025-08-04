@@ -1,7 +1,6 @@
-// src/app/api/payments/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
-import { ObjectId, Db } from "mongodb";
+import { ObjectId, Db, Filter } from "mongodb";
 import { validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 
@@ -75,6 +74,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   const { searchParams } = new URL(request.url);
   const tenantId = searchParams.get("tenantId");
   const propertyId = searchParams.get("propertyId");
+  const tenantName = searchParams.get("tenantName");
+  const type = searchParams.get("type") as "Rent" | "Utility" | undefined;
+  const status = searchParams.get("status") as "completed" | "pending" | "failed" | undefined;
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "10")));
   const sort = searchParams.get("sort") || "-paymentDate";
@@ -86,6 +88,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     csrfToken,
     tenantId,
     propertyId,
+    tenantName,
+    type,
+    status,
     page,
     limit,
     sort,
@@ -112,10 +117,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const { db }: { db: Db } = await connectToDatabase();
     const skip = (page - 1) * limit;
 
-    const query: {
-      tenantId?: string | { $in: string[] };
-      propertyId?: string | { $in: string[] };
-    } = {};
+    const query: Filter<PaymentDb> = {};
 
     if (role === "propertyOwner") {
       const properties = await db
@@ -152,10 +154,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       }
       query.tenantId = tenantId;
     } else if (role === "admin") {
-      // Admins can fetch all payments or filter by tenantId/propertyId
       if (tenantId) query.tenantId = tenantId;
       if (propertyId && propertyId !== "all") query.propertyId = propertyId;
     }
+
+    // Apply filters
+    if (tenantName) query.tenantName = { $regex: tenantName, $options: "i" };
+    if (type) query.type = type;
+    if (status) query.status = status;
 
     await db.collection<PaymentDb>("payments").createIndex({ propertyId: 1, paymentDate: -1 });
     await db.collection<PaymentDb>("payments").createIndex({ tenantId: 1 });
@@ -206,6 +212,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       role,
       tenantId,
       propertyId,
+      tenantName,
+      type,
+      status,
       page,
       limit,
       total,

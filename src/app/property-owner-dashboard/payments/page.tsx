@@ -36,7 +36,6 @@ interface FilterConfig {
 export default function PaymentsPage() {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [userId, setUserId] = useState<string | null>(null);
@@ -65,18 +64,14 @@ export default function PaymentsPage() {
             credentials: "include",
           });
           const data = await res.json();
-          console.log("CSRF token response:", data);
           if (data.success) {
             setCsrfToken(data.csrfToken);
             Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
-            console.log("CSRF token fetched:", data.csrfToken);
             return;
           } else {
             setError(data.message || "Failed to fetch CSRF token.");
-            console.error("CSRF token fetch failed:", data.message);
           }
-        } catch (err) {
-          console.error("CSRF token fetch error (attempt", i + 1, "):", err);
+        } catch {
           if (i < retries - 1) {
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
@@ -103,10 +98,7 @@ export default function PaymentsPage() {
 
   // Fetch properties
   const fetchProperties = useCallback(async () => {
-    if (!userId || !csrfToken) {
-      console.log("Skipping fetchProperties: userId or csrfToken missing", { userId, csrfToken });
-      return;
-    }
+    if (!userId || !csrfToken) return;
     try {
       const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
@@ -117,33 +109,32 @@ export default function PaymentsPage() {
         credentials: "include",
       });
       const data = await res.json();
-      console.log("Properties API response:", data);
       if (data.success) {
         setProperties(data.properties || []);
       } else {
         setError(data.message || "Failed to fetch properties.");
-        console.error("Properties fetch failed:", data.message);
       }
-    } catch (err) {
+    } catch {
       setError("Failed to connect to the server.");
-      console.error("Properties fetch error:", err);
     }
   }, [userId, csrfToken]);
 
-  // Fetch payments with pagination
+  // Fetch payments with pagination and filters
   const fetchPayments = useCallback(async () => {
-    if (!userId || !csrfToken) {
-      console.log("Skipping fetchPayments: userId or csrfToken missing", { userId, csrfToken });
-      return;
-    }
+    if (!userId || !csrfToken) return;
     setIsLoading(true);
     setError(null);
     try {
-      const query = selectedPropertyId === "all"
-        ? `?page=${currentPage}&limit=${itemsPerPage}&sort=-paymentDate`
-        : `?propertyId=${encodeURIComponent(selectedPropertyId)}&page=${currentPage}&limit=${itemsPerPage}&sort=-paymentDate`;
-      console.log("Fetching payments with query:", `/api/payments${query}`);
-      const res = await fetch(`/api/payments${query}`, {
+      const queryParams = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+        sort: "-paymentDate",
+        ...(selectedPropertyId !== "all" && { propertyId: selectedPropertyId }),
+        ...(filters.tenantName && { tenantName: filters.tenantName }),
+        ...(filters.type && { type: filters.type }),
+        ...(filters.status && { status: filters.status }),
+      });
+      const res = await fetch(`/api/payments?${queryParams}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -154,64 +145,48 @@ export default function PaymentsPage() {
       if (!res.ok) {
         if (res.status === 403) {
           setError("Unauthorized request. Please try logging in again.");
-          console.error("403 Forbidden: Invalid CSRF token or session");
           return;
         }
         throw new Error(`HTTP error: ${res.status}`);
       }
       const data = await res.json();
-      console.log("Payments API response:", {
-        success: data.success,
-        payments: data.payments?.length,
-        total: data.total,
-        page: data.page,
-        totalPages: data.totalPages,
-        paymentDates: data.payments?.map((p: Payment) => p.paymentDate),
-      });
       if (data.success) {
         setPayments(data.payments || []);
-        setFilteredPayments(data.payments || []);
         setTotalPayments(data.total || 0);
         setTotalPages(data.totalPages || 1);
         setCurrentPage(data.page || 1);
         if (data.payments?.length === 0 && data.total > 0) {
-          setError(`No payments found for page ${currentPage}, but ${data.total} total payments exist. Try another page.`);
+          setError(`No payments found for page ${currentPage}. Try another page or adjust filters.`);
         }
       } else {
         setError(data.message || "Failed to fetch payments.");
-        console.error("Payments fetch failed:", data.message);
         setPayments([]);
-        setFilteredPayments([]);
         setTotalPayments(0);
         setTotalPages(1);
       }
-    } catch (err) {
+    } catch {
       setError("Failed to connect to the server.");
-      console.error("Payments fetch error:", err);
       setPayments([]);
-      setFilteredPayments([]);
       setTotalPayments(0);
       setTotalPages(1);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedPropertyId, currentPage, itemsPerPage, csrfToken]);
+  }, [userId, selectedPropertyId, currentPage, itemsPerPage, csrfToken, filters]);
 
   // Fetch data when dependencies change
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
-      console.log("Triggering fetch: userId, role, and csrfToken present", { userId, role, currentPage, selectedPropertyId, csrfToken });
       fetchProperties();
       fetchPayments();
     }
-  }, [userId, role, selectedPropertyId, currentPage, fetchProperties, fetchPayments, csrfToken]);
+  }, [userId, role, selectedPropertyId, currentPage, filters, fetchProperties, fetchPayments, csrfToken]);
 
   // Handle property selection
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedPropertyId(e.target.value);
     setCurrentPage(1);
     setError(null);
-    console.log("Property changed, resetting to page 1:", e.target.value);
   };
 
   // Handle filter changes
@@ -225,38 +200,15 @@ export default function PaymentsPage() {
   // Clear filters
   const clearFilters = () => {
     setFilters({ tenantName: "", type: "", status: "" });
-    setFilteredPayments(payments);
     setCurrentPage(1);
-    setTotalPayments(payments.length);
+    setError(null);
   };
-
-  // Apply filters
-  useEffect(() => {
-    const applyFilters = () => {
-      let filtered = [...payments];
-      if (filters.tenantName) {
-        filtered = filtered.filter((payment) =>
-          payment.tenantName.toLowerCase().includes(filters.tenantName.toLowerCase())
-        );
-      }
-      if (filters.type) {
-        filtered = filtered.filter((payment) => payment.type === filters.type);
-      }
-      if (filters.status) {
-        filtered = filtered.filter((payment) => payment.status === filters.status);
-      }
-      setFilteredPayments(filtered);
-      setTotalPayments(filtered.length);
-      setTotalPages(Math.ceil(filtered.length / itemsPerPage));
-    };
-    applyFilters();
-  }, [filters, payments, itemsPerPage]);
 
   // Pagination controls
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages && !isLoading) {
       setCurrentPage(newPage);
-      console.log("Navigating to page:", newPage);
+      setError(null);
     }
   };
 
@@ -366,11 +318,9 @@ export default function PaymentsPage() {
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
               <span className="ml-2">Loading payments...</span>
             </div>
-          ) : filteredPayments.length === 0 ? (
+          ) : payments.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-              {totalPayments > 0
-                ? `No payments found for page ${currentPage}. Try another page or adjust filters.`
-                : `No payments found for ${selectedPropertyId === "all" ? "any properties" : "selected property"}.`}
+              No payments found for {selectedPropertyId === "all" ? "any properties" : "selected property"}.
             </div>
           ) : (
             <div className="overflow-x-auto bg-white shadow rounded-lg">
@@ -386,7 +336,7 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPayments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((payment, index) => (
+                  {payments.map((payment, index) => (
                     <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
                       <td className="px-4 py-3">{index + 1 + (currentPage - 1) * itemsPerPage}</td>
                       <td className="px-4 py-3">{payment.transactionId}</td>
@@ -405,7 +355,7 @@ export default function PaymentsPage() {
               {totalPayments > 0 && (
                 <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4 p-4">
                   <div className="text-sm text-gray-600">
-                    Showing {Math.min(filteredPayments.length, itemsPerPage)} of {totalPayments} payments
+                    Showing {Math.min(payments.length, itemsPerPage)} of {totalPayments} payments
                   </div>
                   {totalPayments > itemsPerPage && (
                     <div className="flex gap-2">
