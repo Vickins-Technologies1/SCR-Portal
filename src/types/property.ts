@@ -14,6 +14,7 @@ export interface Property {
   address: string;
   unitTypes: UnitType[];
   status: string;
+  rentPaymentDate: Date;
   createdAt: Date;
   updatedAt: Date;
 }

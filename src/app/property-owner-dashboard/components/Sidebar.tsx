@@ -85,7 +85,7 @@ export default function Sidebar() {
     {
       key: "reports",
       href: "/property-owner-dashboard/reports",
-      label: "Reports",
+      label: "Reports/Invoices",
       icon: <BarChart size={18} />,
     },
     {

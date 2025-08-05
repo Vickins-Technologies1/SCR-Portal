@@ -15,6 +15,7 @@ interface Property {
   address: string;
   unitTypes: { type: string; price: number; deposit: number; quantity: number; managementType: "RentCollection" | "FullManagement"; managementFee: number }[];
   status: "Active" | "Inactive";
+  rentPaymentDate: number;
   createdAt: string;
 }
 
@@ -101,7 +102,7 @@ const UNIT_TYPES = [
 ];
 
 interface SortConfig {
-  key: "name" | "address" | "createdAt" | "status";
+  key: "name" | "address" | "createdAt" | "status" | "rentPaymentDate";
   direction: "asc" | "desc";
 }
 
@@ -119,6 +120,7 @@ export default function PropertiesPage() {
   const [propertyName, setPropertyName] = useState("");
   const [address, setAddress] = useState("");
   const [status, setStatus] = useState<"Active" | "Inactive">("Active");
+  const [rentPaymentDate, setRentPaymentDate] = useState<string>("");
   const [unitTypes, setUnitTypes] = useState<
     { type: string; price: string; deposit: string; quantity: string; managementType: "RentCollection" | "FullManagement" }[]
   >([{ type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
@@ -194,6 +196,7 @@ export default function PropertiesPage() {
     setPropertyName("");
     setAddress("");
     setStatus("Active");
+    setRentPaymentDate("");
     setUnitTypes([{ type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
     setFormErrors({});
     setEditingPropertyId(null);
@@ -212,6 +215,7 @@ export default function PropertiesPage() {
       setPropertyName(property.name);
       setAddress(property.address);
       setStatus(property.status);
+      setRentPaymentDate(property.rentPaymentDate.toString());
       setUnitTypes(
         property.unitTypes.map((u) => ({
           type: u.type,
@@ -267,6 +271,8 @@ export default function PropertiesPage() {
     const errors: { [key: string]: string | undefined } = {};
     if (!propertyName.trim()) errors.propertyName = "Property name is required";
     if (!address.trim()) errors.address = "Address is required";
+    if (!rentPaymentDate || isNaN(parseInt(rentPaymentDate)) || parseInt(rentPaymentDate) < 1 || parseInt(rentPaymentDate) > 28)
+      errors.rentPaymentDate = "Rent payment date must be a number between 1 and 28";
     const unitTypeSet = new Set();
     unitTypes.forEach((unit, index) => {
       if (!unit.type || !UNIT_TYPES.find((ut) => ut.type === unit.type)) {
@@ -287,7 +293,7 @@ export default function PropertiesPage() {
     });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [propertyName, address, unitTypes]);
+  }, [propertyName, address, rentPaymentDate, unitTypes]);
 
   const getManagementFee = (unitType: string, managementType: "RentCollection" | "FullManagement", quantity: string): string => {
     const unit = UNIT_TYPES.find((ut) => ut.type === unitType);
@@ -319,6 +325,7 @@ export default function PropertiesPage() {
         name: propertyName,
         address,
         status,
+        rentPaymentDate: parseInt(rentPaymentDate),
         unitTypes: unitTypes.map((u) => ({
           type: u.type,
           price: parseFloat(u.price) || 0,
@@ -356,7 +363,7 @@ export default function PropertiesPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingPropertyId, propertyName, address, status, unitTypes, fetchProperties, resetForm, validateForm, csrfToken]
+    [userId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, unitTypes, fetchProperties, resetForm, validateForm, csrfToken]
   );
 
   const sortedProperties = useMemo(() => {
@@ -368,6 +375,11 @@ export default function PropertiesPage() {
           ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
           : new Date(b[key]).getTime() - new Date(a[key]).getTime();
       }
+      if (key === "rentPaymentDate") {
+        return direction === "asc"
+          ? a[key] - b[key]
+          : b[key] - a[key];
+      }
       return direction === "asc"
         ? a[key].localeCompare(b[key])
         : b[key].localeCompare(a[key]);
@@ -375,14 +387,14 @@ export default function PropertiesPage() {
     return sorted;
   }, [properties, sortConfig]);
 
-  const handleSort = useCallback((key: "name" | "address" | "createdAt" | "status") => {
+  const handleSort = useCallback((key: "name" | "address" | "createdAt" | "status" | "rentPaymentDate") => {
     setSortConfig((prev) => ({
       key,
       direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
     }));
   }, []);
 
-  const getSortIcon = useCallback((key: "name" | "address" | "createdAt" | "status") => {
+  const getSortIcon = useCallback((key: "name" | "address" | "createdAt" | "status" | "rentPaymentDate") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
       <span className="inline ml-1">↑</span>
@@ -469,13 +481,13 @@ export default function PropertiesPage() {
               <table className="min-w-full table-auto text-sm md:text-base">
                 <thead className="bg-gray-200">
                   <tr>
-                    {["name", "address", "status", "createdAt"].map((key) => (
+                    {["name", "address", "status", "rentPaymentDate", "createdAt"].map((key) => (
                       <th
                         key={key}
                         className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                        onClick={() => handleSort(key as "name" | "address" | "createdAt" | "status")}
+                        onClick={() => handleSort(key as "name" | "address" | "createdAt" | "status" | "rentPaymentDate")}
                       >
-                        {key[0].toUpperCase() + key.slice(1)} {getSortIcon(key as "name" | "address" | "createdAt" | "status")}
+                        {key === "rentPaymentDate" ? "Rent Due Day" : key[0].toUpperCase() + key.slice(1)} {getSortIcon(key as "name" | "address" | "createdAt" | "status" | "rentPaymentDate")}
                       </th>
                     ))}
                     <th className="px-4 py-3 text-left">Unit Types</th>
@@ -503,6 +515,7 @@ export default function PropertiesPage() {
                           {p.status}
                         </span>
                       </td>
+                      <td className="px-4 py-3">{p.rentPaymentDate}</td>
                       <td className="px-4 py-3">{new Date(p.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
                         {p.unitTypes.map((u) => `${u.type} (x${u.quantity}, ${u.managementFee} Ksh/mo)`).join(", ") || "N/A"}
@@ -585,6 +598,33 @@ export default function PropertiesPage() {
                     />
                     {formErrors.address && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Rent Payment Date (Day of Month)</label>
+                    <input
+                      placeholder="Enter day (1-28)"
+                      value={rentPaymentDate}
+                      onChange={(e) => {
+                        setRentPaymentDate(e.target.value);
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          rentPaymentDate:
+                            e.target.value && !isNaN(parseInt(e.target.value)) && parseInt(e.target.value) >= 1 && parseInt(e.target.value) <= 28
+                              ? undefined
+                              : "Rent payment date must be a number between 1 and 28",
+                        }));
+                      }}
+                      type="number"
+                      min="1"
+                      max="28"
+                      required
+                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
+                        formErrors.rentPaymentDate ? "border-red-500" : "border-gray-300"
+                      } text-sm sm:text-base`}
+                    />
+                    {formErrors.rentPaymentDate && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.rentPaymentDate}</p>
                     )}
                   </div>
                   <div>

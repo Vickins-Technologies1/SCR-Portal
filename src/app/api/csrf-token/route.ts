@@ -1,3 +1,4 @@
+// src/app/api/csrf-token/route.ts
 import { NextResponse } from "next/server";
 import { generateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";

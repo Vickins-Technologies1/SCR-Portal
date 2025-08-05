@@ -8,6 +8,7 @@ import { TenantRequest } from "../../../types/tenant";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
+import PaymentModal from "../components/PaymentModal";
 
 interface Tenant {
   _id: string;
@@ -56,7 +57,6 @@ export default function TenantsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPaymentPromptOpen, setIsPaymentPromptOpen] = useState(false);
-  const [isPaymentLoadingModalOpen, setIsPaymentLoadingModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<string | null>(null);
@@ -64,7 +64,6 @@ export default function TenantsPage() {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
   const [tenantPassword, setTenantPassword] = useState("");
-  const [paymentPhone, setPaymentPhone] = useState("");
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [selectedUnitType, setSelectedUnitType] = useState("");
   const [price, setPrice] = useState("");
@@ -77,10 +76,6 @@ export default function TenantsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
-  const [paymentPropertyId, setPaymentPropertyId] = useState("");
-  const [paymentUnitType, setPaymentUnitType] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentFormErrors, setPaymentFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
   const [csrfToken, setCsrfToken] = useState("");
   const [page, setPage] = useState(1);
@@ -92,11 +87,6 @@ export default function TenantsPage() {
     propertyId: "",
     unitType: "",
   });
-
-  // UMS Pay API configuration
-  const UMS_PAY_API_KEY = process.env.NEXT_PUBLIC_UMS_PAY_API_KEY || "";
-  const UMS_PAY_EMAIL = process.env.NEXT_PUBLIC_UMS_PAY_EMAIL || "";
-  const UMS_PAY_ACCOUNT_ID = process.env.NEXT_PUBLIC_UMS_PAY_ACCOUNT_ID || "";
 
   // Fetch CSRF token
   useEffect(() => {
@@ -135,7 +125,7 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
         method: "GET",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
@@ -167,7 +157,7 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/tenants?userId=${encodeURIComponent(userId)}&page=${page}&limit=${limit}`, {
         method: "GET",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
@@ -194,7 +184,7 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
         method: "GET",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
@@ -224,7 +214,7 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/invoices`, {
         method: "GET",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
@@ -241,15 +231,74 @@ export default function TenantsPage() {
     }
   }, [userId, csrfToken]);
 
-  // Fetch data when userId and role are set
+  // Update fetchInvoiceStatus with detailed logging and error handling
+  const fetchInvoiceStatus = useCallback(
+    async (propertyId: string, unitType: string) => {
+      if (!userId || !propertyId || !unitType) {
+        console.warn("Missing required parameters for fetchInvoiceStatus", {
+          userId,
+          propertyId,
+          unitType,
+        });
+        setError("Missing required parameters to check invoice status.");
+        return null;
+      }
+      try {
+        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(
+          propertyId
+        )}&unitType=${encodeURIComponent(unitType)}`;
+        console.log("Fetching invoice status", { url, userId, propertyId, unitType });
+
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "include",
+        });
+        const data = await res.json();
+        console.log("Invoice status response", { data, propertyId, unitType });
+
+        if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
+          if (data.status === null) {
+            console.log("No invoice found", { propertyId, unitType });
+          } else {
+            console.log("Invoice status", { status: data.status, propertyId, unitType });
+          }
+          return data.status;
+        }
+        console.warn("Invalid invoice status response", { data });
+        setError(data.message || "Failed to fetch invoice status.");
+        return null;
+      } catch (error) {
+        console.error("Error in fetchInvoiceStatus", {
+          message: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        setError("Failed to connect to the server while checking invoice status.");
+        return null;
+      }
+    },
+    [userId, csrfToken, setError]
+  );
+
+  // Update useEffect for data fetching to optimize dependencies
   useEffect(() => {
-    if (userId && role === "propertyOwner") {
-      fetchUserData();
-      fetchTenants();
-      fetchProperties();
-      fetchPendingInvoices();
+    if (userId && role === "propertyOwner" && csrfToken) {
+      Promise.all([
+        fetchUserData(),
+        fetchTenants(),
+        fetchProperties(),
+        fetchPendingInvoices(),
+      ]).catch((error) => {
+        console.error("Error fetching initial data", {
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+        setError("Failed to load initial data. Please try again.");
+      });
     }
-  }, [userId, role, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
+  }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
   // Apply filters
   useEffect(() => {
@@ -309,35 +358,11 @@ export default function TenantsPage() {
     setError(null);
   }, []);
 
-  // Reset payment form
-  const resetPaymentForm = useCallback(() => {
-    setPaymentPropertyId("");
-    setPaymentUnitType("");
-    setPaymentAmount("");
-    setPaymentPhone("");
-    setPaymentFormErrors({});
-    setError(null);
-  }, []);
-
   // Open add tenant modal
-  const openAddModal = useCallback(() => {
+  const openAddModal = useCallback(async () => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
       return;
-    }
-    if (tenants.length >= 3 && pendingInvoices > 0) {
-      setError("Cannot add more tenants until all pending invoices are paid.");
-      setIsPaymentPromptOpen(true);
-      return;
-    }
-    if (tenants.length >= 3) {
-      const unit = properties.find((p) => p.unitTypes.some((u) => u.type === selectedUnitType))?.unitTypes.find((u) => u.type === selectedUnitType);
-      const requiredFee = unit ? unit.managementFee : 1000;
-      if (paymentStatus !== "active" || walletBalance < requiredFee) {
-        setError(`You need an active payment status and a minimum wallet balance of Ksh ${requiredFee} to add more than 2 tenants.`);
-        setIsPaymentPromptOpen(true);
-        return;
-      }
     }
     resetForm();
     setModalMode("add");
@@ -356,29 +381,7 @@ export default function TenantsPage() {
       setLeaseEndDate(pendingTenantData.leaseEndDate || "");
     }
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, tenants, pendingInvoices, properties, selectedUnitType, pendingTenantData, resetForm]);
-
-  // Open payment modal
-  const openPaymentModal = useCallback(() => {
-    setError(null);
-    resetPaymentForm();
-    if (pendingTenantData) {
-      setPaymentPropertyId(pendingTenantData.propertyId || "");
-      setPaymentUnitType(pendingTenantData.unitType || "");
-      setPaymentPhone(pendingTenantData.phone || "");
-      const unit = properties
-        .find((p) => p._id === pendingTenantData.propertyId)
-        ?.unitTypes.find((u) => u.type === pendingTenantData.unitType);
-      if (unit) {
-        setPaymentAmount(unit.managementFee.toString());
-      }
-    }
-    if (!paymentPhone || !/^\+?\d{10,15}$/.test(paymentPhone)) {
-      setError("A valid phone number is required for payment.");
-      return;
-    }
-    setIsPaymentPromptOpen(true);
-  }, [resetPaymentForm, pendingTenantData, properties, paymentPhone]);
+  }, [paymentStatus, walletBalance, pendingTenantData, resetForm]);
 
   // Open edit tenant modal
   const openEditModal = useCallback((tenant: Tenant) => {
@@ -417,7 +420,7 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/tenants/${tenantToDelete}`, {
         method: "DELETE",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
@@ -439,32 +442,6 @@ export default function TenantsPage() {
     }
   }, [tenantToDelete, fetchTenants, csrfToken]);
 
-  // Validate payment form
-  const validatePaymentForm = useCallback(() => {
-    const errors: { [key: string]: string | undefined } = {};
-    if (!paymentPropertyId) {
-      errors.paymentPropertyId = "Property is required";
-    }
-    if (!paymentUnitType) {
-      errors.paymentUnitType = "Unit type is required";
-    }
-    if (!paymentAmount || isNaN(parseFloat(paymentAmount)) || parseFloat(paymentAmount) <= 0) {
-      errors.paymentAmount = "Payment amount must be a positive number";
-    } else {
-      const unit = properties
-        .find((p) => p._id === paymentPropertyId)
-        ?.unitTypes.find((u) => u.type === paymentUnitType);
-      if (unit && parseFloat(paymentAmount) < unit.managementFee) {
-        errors.paymentAmount = `Payment amount is insufficient. Expected Ksh ${unit.managementFee} for ${paymentUnitType}.`;
-      }
-    }
-    if (!paymentPhone || !/^\+?\d{10,15}$/.test(paymentPhone)) {
-      errors.paymentPhone = "Valid phone number is required (10-15 digits, optional +)";
-    }
-    setPaymentFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [paymentPropertyId, paymentUnitType, paymentAmount, paymentPhone, properties]);
-
   // Validate tenant form
   const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
@@ -485,148 +462,6 @@ export default function TenantsPage() {
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, modalMode]);
-
-  // Poll transaction status
-  const pollTransactionStatus = useCallback(
-    async (transactionRequestId: string, maxAttempts = 6, interval = 5000) => {
-      let attempts = 0;
-      const checkStatus = async (): Promise<boolean> => {
-        try {
-          const res = await fetch("https://api.umspay.co.ke/api/v1/transactionstatus", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              api_key: UMS_PAY_API_KEY,
-              email: UMS_PAY_EMAIL,
-              transaction_request_id: transactionRequestId,
-            }),
-          });
-          if (!res.ok) {
-            throw new Error(`HTTP error! Status: ${res.status}`);
-          }
-          const data = await res.json();
-          if (!data || typeof data !== "object") {
-            setError("Invalid response from payment API.");
-            return true;
-          }
-          if (data.ResultCode === "200") {
-            if (data.TransactionStatus === "Completed") {
-              if (pendingTenantData) {
-                const unit = properties
-                  .find((p) => p._id === pendingTenantData.propertyId)
-                  ?.unitTypes.find((u) => u.type === pendingTenantData.unitType);
-                const onboardingFee = unit ? unit.managementFee : 1000;
-                try {
-                  await fetch(`/api/update-wallet`, {
-                    method: "POST",
-                    headers: { 
-                      "Content-Type": "application/json",
-                      "X-CSRF-Token": csrfToken,
-                    },
-                    body: JSON.stringify({
-                      userId,
-                      amount: -onboardingFee,
-                      reference: `TENANT-INVOICE-${userId}-${Date.now()}`,
-                    }),
-                  });
-                  setSuccessMessage("Payment processed successfully!");
-                  await fetchUserData();
-                  await fetchPendingInvoices();
-                  setIsPaymentPromptOpen(false);
-                  setIsModalOpen(true);
-                } catch {
-                  setError("Failed to update wallet balance after payment.");
-                }
-              }
-              return true;
-            } else if (["Failed", "Cancelled", "Timeout"].includes(data.TransactionStatus)) {
-              setError(
-                data.ResultDesc ||
-                  `Payment ${data.TransactionStatus.toLowerCase()}: ${
-                    data.TransactionStatus === "Failed"
-                      ? "Insufficient balance"
-                      : data.TransactionStatus === "Cancelled"
-                      ? "User cancelled payment"
-                      : "User not reachable"
-                  }`
-              );
-              return true;
-            }
-          } else {
-            setError(data.errorMessage || "Failed to check transaction status.");
-            return true;
-          }
-        } catch (error) {
-          console.error("Error polling transaction status:", error);
-          setError("Failed to connect to UMS Pay API.");
-          return true;
-        }
-        return false;
-      };
-
-      const poll = async () => {
-        while (attempts < maxAttempts) {
-          const done = await checkStatus();
-          if (done) break;
-          await new Promise((resolve) => setTimeout(resolve, interval));
-          attempts++;
-        }
-        if (attempts >= maxAttempts) {
-          setError("Payment processing timed out. Please check the transaction status later.");
-        }
-        setIsPaymentLoadingModalOpen(false);
-      };
-
-      poll();
-    },
-    [fetchUserData, fetchPendingInvoices, pendingTenantData, userId, properties, csrfToken, UMS_PAY_API_KEY, UMS_PAY_EMAIL]
-  );
-
-  // Handle payment submission
-  const handlePayment = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!validatePaymentForm()) return;
-      if (!userId) {
-        setError("User ID is missing.");
-        return;
-      }
-      setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
-      setIsPaymentPromptOpen(false);
-      setIsPaymentLoadingModalOpen(true);
-
-      const reference = `INVOICE-${userId}-${Date.now()}`;
-      try {
-        const res = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            api_key: UMS_PAY_API_KEY,
-            email: UMS_PAY_EMAIL,
-            amount: parseFloat(paymentAmount),
-            msisdn: paymentPhone,
-            reference,
-            account_id: UMS_PAY_ACCOUNT_ID,
-          }),
-        });
-        const data = await res.json();
-        if (data.success === "200") {
-          pollTransactionStatus(data.transaction_request_id);
-        } else {
-          setError(data.errorMessage || "Failed to initiate payment.");
-          setIsPaymentLoadingModalOpen(false);
-          setIsLoading(false);
-        }
-      } catch {
-        setError("Failed to connect to UMS Pay API.");
-        setIsPaymentLoadingModalOpen(false);
-        setIsLoading(false);
-      }
-    },
-    [userId, paymentPhone, paymentAmount, validatePaymentForm, pollTransactionStatus, UMS_PAY_ACCOUNT_ID, UMS_PAY_API_KEY, UMS_PAY_EMAIL]
-  );
 
   // Handle tenant form submission
   const handleSubmit = useCallback(
@@ -662,7 +497,7 @@ export default function TenantsPage() {
         const method = modalMode === "add" ? "POST" : "PUT";
         const res = await fetch(url, {
           method,
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
             "X-CSRF-Token": csrfToken,
           },
@@ -671,11 +506,7 @@ export default function TenantsPage() {
         });
         const data = await res.json();
         if (data.success) {
-          setSuccessMessage(
-            modalMode === "add" && data.invoice?.amount
-              ? `Tenant ${tenantName} added successfully. An invoice of Ksh ${data.invoice.amount} has been generated.`
-              : `Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`
-          );
+          setSuccessMessage(`Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`);
           setIsModalOpen(false);
           setPendingTenantData(null);
           resetForm();
@@ -683,7 +514,7 @@ export default function TenantsPage() {
           fetchUserData();
           fetchPendingInvoices();
         } else {
-          if (data.message === "Cannot add more tenants until all pending invoices are paid.") {
+          if (data.message.includes("Cannot add more tenants until the invoice")) {
             setPendingTenantData(tenantData);
             setError(data.message);
             setIsPaymentPromptOpen(true);
@@ -725,7 +556,6 @@ export default function TenantsPage() {
             : bName.localeCompare(aName);
         }
 
-        // Fallback: string comparison for other fields
         const aVal = (a[key] ?? "").toString();
         const bVal = (b[key] ?? "").toString();
 
@@ -762,35 +592,24 @@ export default function TenantsPage() {
               <Users className="text-[#012a4a]" />
               Manage Tenants
             </h1>
-            {tenants.length >= 3 && pendingInvoices > 0 ? (
-              <button
-                onClick={openPaymentModal}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium text-sm sm:text-base ${
-                  isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
-                }`}
-                disabled={isLoading}
-                aria-label="Make payment"
-              >
-                <Plus className="h-5 w-5" />
-                Make Payment
-              </button>
-            ) : (
-              <button
-                onClick={openAddModal}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium text-sm sm:text-base ${
-                  isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
-                }`}
-                disabled={isLoading}
-                aria-label="Add new tenant"
-              >
-                <Plus className="h-5 w-5" />
-                Add Tenant
-              </button>
-            )}
+            <button
+              onClick={openAddModal}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium text-sm sm:text-base ${isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"}`}
+              disabled={isLoading}
+              aria-label="Add new tenant"
+            >
+              <Plus className="h-5 w-5" />
+              Add Tenant
+            </button>
           </div>
           {tenants.length >= 3 && (
             <div className="bg-yellow-100 text-yellow-700 p-4 mb-4 rounded-lg shadow">
-              Note: Adding more tenants will require payment of a management fee if there are pending invoices or insufficient wallet balance.
+              Note: Adding more tenants may require payment of a management fee for the selected unit type if no invoice has been paid.
+            </div>
+          )}
+          {pendingInvoices > 0 && (
+            <div className="bg-blue-100 text-blue-700 p-4 mb-4 rounded-lg shadow">
+              You have {pendingInvoices} pending invoice{pendingInvoices === 1 ? '' : 's'}. Please settle them to add more tenants.
             </div>
           )}
           <div className="mb-6 bg-white p-4 rounded-lg shadow">
@@ -856,11 +675,6 @@ export default function TenantsPage() {
               Clear Filters
             </button>
           </div>
-          {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
-              {error}
-            </div>
-          )}
           {successMessage && (
             <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg shadow animate-pulse">
               {successMessage}
@@ -1020,8 +834,14 @@ export default function TenantsPage() {
               setIsModalOpen(false);
               resetForm();
               setPendingTenantData(null);
+              setError(null);
             }}
           >
+            {error && (
+              <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+                {error}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Full Name</label>
@@ -1036,9 +856,8 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    formErrors.tenantName ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantName ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.tenantName && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.tenantName}</p>
@@ -1062,9 +881,8 @@ export default function TenantsPage() {
                   }}
                   required
                   type="email"
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    formErrors.tenantEmail ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantEmail ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.tenantEmail && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.tenantEmail}</p>
@@ -1087,9 +905,8 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    formErrors.tenantPhone ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPhone ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.tenantPhone && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>
@@ -1110,9 +927,8 @@ export default function TenantsPage() {
                     }}
                     type="password"
                     required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                      formErrors.tenantPassword ? "border-red-500" : "border-gray-300"
-                    }`}
+                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPassword ? "border-red-500" : "border-gray-300"
+                      }`}
                   />
                   {formErrors.tenantPassword && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>
@@ -1149,9 +965,8 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    formErrors.selectedPropertyId ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedPropertyId ? "border-red-500" : "border-gray-300"
+                    }`}
                 >
                   <option value="">Select Property</option>
                   {properties.map((p) => (
@@ -1165,11 +980,12 @@ export default function TenantsPage() {
                 )}
               </div>
               {selectedPropertyId && (
+                // Update the unit type selection handler in the Modal form
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Unit Type</label>
                   <select
                     value={selectedUnitType}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const unitType = e.target.value;
                       setSelectedUnitType(unitType);
                       const unit = properties
@@ -1180,10 +996,57 @@ export default function TenantsPage() {
                         setDeposit(unit.deposit.toString());
                         setFormErrors((prev) => ({
                           ...prev,
-                          selectedUnitType: undefined,
+                          selectedUnitType: unitType ? undefined : "Unit type is required",
                           price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
                           deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
                         }));
+                        // Check invoice status only if tenants.length >= 3 and in add mode
+                        if (tenants.length >= 3 && unitType && modalMode === "add") {
+                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, unitType);
+                          console.log("Invoice status check result", {
+                            invoiceStatus,
+                            propertyId: selectedPropertyId,
+                            unitType,
+                          });
+                          if (invoiceStatus !== "completed") {
+                            const tenantData: Partial<TenantRequest> = {
+                              name: tenantName,
+                              email: tenantEmail,
+                              phone: tenantPhone,
+                              password: tenantPassword,
+                              propertyId: selectedPropertyId,
+                              unitType,
+                              price: parseFloat(price) || unit.price,
+                              deposit: parseFloat(deposit) || unit.deposit,
+                              houseNumber,
+                              leaseStartDate,
+                              leaseEndDate,
+                              role: "tenant",
+                              ownerId: userId || "",
+                            };
+                            setPendingTenantData(tenantData);
+                            setError(
+                              invoiceStatus === "pending"
+                                ? `Cannot add more tenants until the pending invoice for unit type ${unitType} in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"
+                                } is paid.`
+                                : invoiceStatus === "failed"
+                                  ? `Cannot add tenants because the invoice for unit type ${unitType} in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"
+                                  } has failed. Please contact support.`
+                                  : `No invoice found for unit type ${unitType} in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"
+                                  }. Please create an invoice.`
+                            );
+                            setIsModalOpen(false);
+                            setIsPaymentPromptOpen(true);
+                          } else {
+                            setPendingTenantData(null);
+                            setIsPaymentPromptOpen(false);
+                            setError(null);
+                          }
+                        } else {
+                          setPendingTenantData(null);
+                          setIsPaymentPromptOpen(false);
+                          setError(null);
+                        }
                       } else {
                         setPrice("");
                         setDeposit("");
@@ -1193,12 +1056,14 @@ export default function TenantsPage() {
                           price: undefined,
                           deposit: undefined,
                         }));
+                        setPendingTenantData(null);
+                        setIsPaymentPromptOpen(false);
+                        setError(null);
                       }
                     }}
                     required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                      formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"
-                    }`}
+                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"
+                      }`}
                   >
                     <option value="">Select Unit Type</option>
                     {properties
@@ -1220,9 +1085,8 @@ export default function TenantsPage() {
                   placeholder="Price (auto-filled)"
                   value={price}
                   readOnly
-                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${
-                    formErrors.price ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.price ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.price && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
@@ -1234,9 +1098,8 @@ export default function TenantsPage() {
                   placeholder="Deposit (auto-filled)"
                   value={deposit}
                   readOnly
-                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${
-                    formErrors.deposit ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.deposit ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.deposit && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.deposit}</p>
@@ -1255,9 +1118,8 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    formErrors.houseNumber ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.houseNumber ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.houseNumber && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>
@@ -1280,9 +1142,8 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.leaseStartDate && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>
@@ -1305,9 +1166,8 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {formErrors.leaseEndDate && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
@@ -1320,6 +1180,7 @@ export default function TenantsPage() {
                     setIsModalOpen(false);
                     resetForm();
                     setPendingTenantData(null);
+                    setError(null);
                   }}
                   className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
                   aria-label="Cancel tenant form"
@@ -1334,14 +1195,13 @@ export default function TenantsPage() {
                     !selectedPropertyId ||
                     !selectedUnitType
                   }
-                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
-                    isLoading ||
+                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${isLoading ||
                     Object.values(formErrors).some((v) => v !== undefined) ||
                     !selectedPropertyId ||
                     !selectedUnitType
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-[#012a4a] hover:bg-[#014a7a]"
-                  }`}
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#012a4a] hover:bg-[#014a7a]"
+                    }`}
                   aria-label={modalMode === "add" ? "Add tenant" : "Update tenant"}
                 >
                   {isLoading && (
@@ -1381,215 +1241,35 @@ export default function TenantsPage() {
               </button>
             </div>
           </Modal>
-          <Modal
-            title="Make Payment"
+          <PaymentModal
             isOpen={isPaymentPromptOpen}
             onClose={() => {
               setIsPaymentPromptOpen(false);
-              resetPaymentForm();
+              setIsModalOpen(true); // Reopen tenant form
               setError(null);
             }}
-          >
-            {properties.length === 0 ? (
-              <>
-                <p className="mb-6 text-gray-700 text-sm sm:text-base">
-                  You need an active payment status and a minimum wallet balance to add a tenant. Please complete the payment process.
-                </p>
-                <div className="flex flex-col sm:flex-row justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setIsPaymentPromptOpen(false);
-                      resetPaymentForm();
-                      setError(null);
-                    }}
-                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
-                    aria-label="Cancel payment prompt"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => router.push("/property-owner-dashboard/payments")}
-                    className="px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition text-sm sm:text-base"
-                    aria-label="Go to payments"
-                  >
-                    Go to Payments
-                  </button>
-                </div>
-              </>
-            ) : (
-              <form onSubmit={handlePayment} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Property</label>
-                  <select
-                    value={paymentPropertyId}
-                    onChange={(e) => {
-                      setPaymentPropertyId(e.target.value);
-                      setPaymentUnitType("");
-                      setPaymentAmount("");
-                      setPaymentFormErrors((prev) => ({
-                        ...prev,
-                        paymentPropertyId: e.target.value ? undefined : "Property is required",
-                        paymentUnitType: undefined,
-                        paymentAmount: undefined,
-                      }));
-                    }}
-                    required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                      paymentFormErrors.paymentPropertyId ? "border-red-500" : "border-gray-300"
-                    }`}
-                  >
-                    <option value="">Select Property</option>
-                    {properties.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  {paymentFormErrors.paymentPropertyId && (
-                    <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentPropertyId}</p>
-                  )}
-                </div>
-                {paymentPropertyId && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Unit Type</label>
-                    <select
-                      value={paymentUnitType}
-                      onChange={(e) => {
-                        const unitType = e.target.value;
-                        setPaymentUnitType(unitType);
-                        const unit = properties
-                          .find((p) => p._id === paymentPropertyId)
-                          ?.unitTypes.find((u) => u.type === unitType);
-                        if (unit) {
-                          setPaymentAmount(unit.managementFee.toString());
-                          setPaymentFormErrors((prev) => ({
-                            ...prev,
-                            paymentUnitType: undefined,
-                            paymentAmount: unit.managementFee >= 10 ? undefined : "Payment amount must be at least Ksh 10",
-                          }));
-                        } else {
-                          setPaymentAmount("");
-                          setPaymentFormErrors((prev) => ({
-                            ...prev,
-                            paymentUnitType: unitType ? undefined : "Unit type is required",
-                            paymentAmount: undefined,
-                          }));
-                        }
-                      }}
-                      required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                        paymentFormErrors.paymentUnitType ? "border-red-500" : "border-gray-300"
-                      }`}
-                    >
-                      <option value="">Select Unit Type</option>
-                      {properties
-                        .find((p) => p._id === paymentPropertyId)
-                        ?.unitTypes.map((u) => (
-                          <option key={u.type} value={u.type}>
-                            {u.type} ({u.managementType}: Ksh {u.managementFee}/mo)
-                          </option>
-                        ))}
-                    </select>
-                    {paymentFormErrors.paymentUnitType && (
-                      <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentUnitType}</p>
-                    )}
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Payment Amount (Ksh)</label>
-                  <input
-                    placeholder="Payment amount (auto-filled)"
-                    value={paymentAmount}
-                    readOnly
-                    className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${
-                      paymentFormErrors.paymentAmount ? "border-red-500" : "border-gray-300"
-                    }`}
-                  />
-                  {paymentFormErrors.paymentAmount && (
-                    <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentAmount}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-                  <input
-                    placeholder="Enter phone number (e.g., +254123456789)"
-                    value={paymentPhone}
-                    onChange={(e) => {
-                      setPaymentPhone(e.target.value);
-                      setPaymentFormErrors((prev) => ({
-                        ...prev,
-                        paymentPhone: e.target.value.trim()
-                          ? /^\+?\d{10,15}$/.test(e.target.value)
-                            ? undefined
-                            : "Invalid phone number (10-15 digits, optional +)"
-                          : "Phone number is required",
-                      }));
-                    }}
-                    required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                      paymentFormErrors.paymentPhone ? "border-red-500" : "border-gray-300"
-                    }`}
-                  />
-                  {paymentFormErrors.paymentPhone && (
-                    <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentPhone}</p>
-                  )}
-                </div>
-                <div className="flex flex-col sm:flex-row justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsPaymentPromptOpen(false);
-                      resetPaymentForm();
-                      setError(null);
-                    }}
-                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
-                    aria-label="Cancel payment"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={
-                      isLoading ||
-                      Object.values(paymentFormErrors).some((v) => v !== undefined) ||
-                      !paymentPropertyId ||
-                      !paymentUnitType ||
-                      !paymentAmount ||
-                      !paymentPhone
-                    }
-                    className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
-                      isLoading ||
-                      Object.values(paymentFormErrors).some((v) => v !== undefined) ||
-                      !paymentPropertyId ||
-                      !paymentUnitType ||
-                      !paymentAmount ||
-                      !paymentPhone
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-[#012a4a] hover:bg-[#014a7a]"
-                    }`}
-                    aria-label="Confirm payment"
-                  >
-                    {isLoading && (
-                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                    )}
-                    Confirm Payment
-                  </button>
-                </div>
-              </form>
-            )}
-          </Modal>
-          <Modal
-            title="Processing Payment"
-            isOpen={isPaymentLoadingModalOpen}
-            onClose={() => {}}
-          >
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a] mb-4"></div>
-              <p className="text-gray-700 text-sm sm:text-base">
-                Processing your payment. Please wait...
-              </p>
-            </div>
-          </Modal>
+            onSuccess={() => {
+              setSuccessMessage("Payment processed successfully!");
+              setPendingTenantData(null); // Clear pending data after successful payment
+              fetchUserData();
+              fetchPendingInvoices();
+              fetchTenants(); // Refresh tenants to reflect any changes
+              setIsPaymentPromptOpen(false);
+              setIsModalOpen(true); // Reopen tenant form
+              setError(null);
+            }}
+            onError={(message) => {
+              setError(message);
+              setIsPaymentPromptOpen(false);
+              setIsModalOpen(true); // Reopen tenant form
+            }}
+            properties={properties}
+            initialPropertyId={pendingTenantData?.propertyId ?? ""}
+            initialUnitType={pendingTenantData?.unitType ?? ""}
+            initialPhone={pendingTenantData?.phone ?? ""}
+            userId={userId ?? ""}
+            csrfToken={csrfToken}
+          />
         </main>
       </div>
       <style jsx global>{`

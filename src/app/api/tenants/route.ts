@@ -1,11 +1,11 @@
-// src/app/api/tenants/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { TenantRequest } from "../../../types/tenant";
-import { getManagementFee } from "../../../lib/unitTypes";
 import bcrypt from "bcryptjs";
+import { sendWelcomeEmail } from "../../../lib/email";
+import { sendWelcomeSms } from "../../../lib/sms";
 
 interface UnitType {
   type: string;
@@ -21,6 +21,7 @@ interface Property {
   ownerId: string;
   name: string;
   unitTypes: UnitType[];
+  rentPaymentDate: number;
 }
 
 interface Tenant {
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
       },
       { status: 200 }
     );
-  } catch (error: unknown) { // Changed from any to unknown
+  } catch (error: unknown) {
     logger.error("Error in GET /api/tenants", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
@@ -255,58 +256,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const onboardingFee = getManagementFee({
-      type: requestData.unitType,
-      managementType: unit.managementType,
-      quantity: 1,
-    }) || 1000;
-    logger.debug("Calculated onboarding fee", { unitType: requestData.unitType, onboardingFee });
-
     const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
     logger.debug("Tenant count", { userId, count: tenantCount });
 
-    let invoice = null;
+    // Check invoice status for unitType if adding 4th tenant or more
     if (tenantCount >= 3) {
-      const pendingInvoices = await db.collection("invoices").find({
+      const unitInvoice = await db.collection("invoices").findOne({
         userId,
-        status: { $ne: "completed" },
-      }).toArray();
+        propertyId: requestData.propertyId,
+        unitType: requestData.unitType,
+        status: "completed",
+      });
 
-      if (pendingInvoices.length > 0) {
-        logger.warn("Cannot add tenant - Pending invoices found", { count: pendingInvoices.length });
-        return NextResponse.json(
-          { success: false, message: "Cannot add more tenants until all pending invoices are paid." },
-          { status: 402 }
-        );
-      }
-
-      if (user.paymentStatus !== "active" || user.walletBalance < onboardingFee) {
-        logger.warn("Insufficient payment status or wallet balance", {
-          paymentStatus: user.paymentStatus,
-          walletBalance: user.walletBalance,
-          requiredFee: onboardingFee,
+      if (!unitInvoice) {
+        logger.warn("Cannot add tenant - No completed invoice found for unit type", {
+          unitType: requestData.unitType,
+          propertyId: requestData.propertyId,
+          propertyName: property.name,
         });
         return NextResponse.json(
           {
             success: false,
-            message: `You need an active payment status and a minimum wallet balance of Ksh ${onboardingFee} to add more than 3 tenants.`,
+            message: `Cannot add tenant for unit type '${requestData.unitType}' in property '${property.name}'. Please complete the payment for the management fee invoice first.`,
           },
           { status: 402 }
         );
       }
-
-      invoice = {
-        userId,
-        amount: onboardingFee,
-        reference: `TENANT-INVOICE-${userId}-${Date.now()}`,
-        status: "pending",
-        createdAt: new Date(),
-        description: `Tenant onboarding fee for ${requestData.name} in ${property.name}`,
-      };
-      await db.collection("invoices").insertOne(invoice);
-      logger.debug("Generated invoice", {
-        invoice,
-      });
+      logger.debug("Invoice validation passed", { unitType: requestData.unitType, invoiceId: unitInvoice._id });
     }
 
     const tenantData = {
@@ -338,22 +314,75 @@ export async function POST(request: NextRequest) {
       { $inc: { "unitTypes.$.quantity": -1 } }
     );
 
+    // Send welcome email
+    try {
+      await sendWelcomeEmail({
+        to: requestData.email,
+        name: requestData.name,
+        email: requestData.email,
+        password: requestData.password!,
+        loginUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal`,
+        propertyName: property.name,
+        houseNumber: requestData.houseNumber,
+      });
+      logger.info("Welcome email sent successfully", { email: requestData.email });
+    } catch (emailError) {
+      logger.error("Failed to send welcome email", {
+        email: requestData.email,
+        error: emailError instanceof Error ? emailError.message : "Unknown error",
+      });
+      // Continue even if email fails to ensure tenant is added
+    }
+
+    // Send welcome SMS
+    try {
+      // Truncate property name to ensure message fits within 160 characters
+      const maxPropertyNameLength = 20; // Adjust based on testing
+      const truncatedPropertyName = property.name.length > maxPropertyNameLength
+        ? `${property.name.substring(0, maxPropertyNameLength)}...`
+        : property.name;
+      
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+      const shortUrl = baseUrl.length > 30 ? "scr-portal.com/login" : baseUrl; // Use a short URL alias
+      
+      const smsMessage = `Welcome, ${requestData.name}! Log in at ${shortUrl} with email: ${requestData.email}, pass: ${requestData.password}. Unit: ${truncatedPropertyName} ${requestData.houseNumber}.`;
+      
+      if (smsMessage.length > 160) {
+        logger.warn("SMS message still exceeds 160 characters after truncation", {
+          phone: requestData.phone,
+          messageLength: smsMessage.length,
+        });
+        // Fallback to even shorter message
+        const fallbackMessage = `Welcome, ${requestData.name}! Log in: ${shortUrl}, email: ${requestData.email}, pass: ${requestData.password}.`;
+        await sendWelcomeSms({
+          phone: requestData.phone,
+          message: fallbackMessage,
+        });
+      } else {
+        await sendWelcomeSms({
+          phone: requestData.phone,
+          message: smsMessage,
+        });
+      }
+      logger.info("Welcome SMS sent successfully", { phone: requestData.phone });
+    } catch (smsError) {
+      logger.error("Failed to send welcome SMS", {
+        phone: requestData.phone,
+        error: smsError instanceof Error ? smsError.message : "Unknown error",
+      });
+      // Continue even if SMS fails to ensure tenant is added
+    }
+
     logger.info("POST /api/tenants completed");
     return NextResponse.json(
       {
         success: true,
         message: "Tenant added successfully",
         tenantId: result.insertedId.toString(),
-        invoice: invoice
-          ? {
-              ...invoice,
-              createdAt: invoice.createdAt.toISOString(),
-            }
-          : null,
       },
       { status: 201 }
     );
-  } catch (error: unknown) { // Changed from any to unknown
+  } catch (error: unknown) {
     logger.error("Error in POST /api/tenants", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,

@@ -1,4 +1,3 @@
-// src/app/api/properties/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
@@ -6,6 +5,21 @@ import { ObjectId } from 'mongodb';
 import { UNIT_TYPES, getManagementFee } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
+
+// Define Invoice interface for type safety
+interface Invoice {
+  _id: ObjectId;
+  userId: string;
+  propertyId: string;
+  unitType: string;
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  reference: string;
+  createdAt: Date;
+  updatedAt: Date;
+  expiresAt: Date;
+  description: string;
+}
 
 // Shared CSRF token validation function
 async function validateCsrfToken(req: NextRequest, token: string | null): Promise<boolean> {
@@ -154,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     const { db } = await connectToDatabase();
     console.log('Connected to MongoDB database: rentaldb');
-    const { name, address, unitTypes, status } = body;
+    const { name, address, unitTypes, status, rentPaymentDate } = body;
 
     if (
       !name ||
@@ -162,11 +176,14 @@ export async function POST(request: NextRequest) {
       !unitTypes ||
       !Array.isArray(unitTypes) ||
       unitTypes.length === 0 ||
-      !status
+      !status ||
+      !Number.isInteger(rentPaymentDate) ||
+      rentPaymentDate < 1 ||
+      rentPaymentDate > 28
     ) {
-      console.log('Missing or invalid required fields:', { name, address, unitTypes, status });
+      console.log('Missing or invalid required fields:', { name, address, unitTypes, status, rentPaymentDate });
       return NextResponse.json(
-        { success: false, message: 'Missing or invalid required fields' },
+        { success: false, message: 'Missing or invalid required fields. Rent payment date must be between 1 and 28.' },
         { status: 400 }
       );
     }
@@ -202,12 +219,6 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    const totalManagementFee = validatedUnitTypes.reduce((sum: number, unit: UnitType) => {
-      const fee = typeof unit.managementFee === 'number' ? unit.managementFee : 0;
-      return sum + fee;
-    }, 0);
-    console.log('POST /api/properties - Total management fee for ownerId:', ownerId, 'amount:', totalManagementFee);
-
     const newProperty: Property = {
       _id: new ObjectId(),
       name,
@@ -215,26 +226,46 @@ export async function POST(request: NextRequest) {
       unitTypes: validatedUnitTypes,
       status,
       ownerId,
+      rentPaymentDate,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const result = await db.collection<Property>('properties').insertOne(newProperty);
 
-    // Generate invoice for total management fee if applicable
-    if (totalManagementFee > 0) {
-      const invoice = {
-        userId: ownerId,
-        amount: totalManagementFee,
-        reference: `PROPERTY-INVOICE-${ownerId}-${Date.now()}`,
-        status: 'pending',
-        createdAt: new Date(),
-        description: `Property creation fee for ${name}`,
-      };
-      await db.collection('invoices').insertOne(invoice);
-      console.log('Generated invoice for property creation:', invoice);
-    } else {
-      console.log('No management fees for unit types, skipping invoice generation');
+    // Generate a separate invoice for each unit type with a non-zero management fee
+    for (const unit of validatedUnitTypes) {
+      if (unit.managementFee && unit.managementFee > 0) {
+        const createdAt = new Date();
+        const expiresAt = new Date(createdAt);
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+
+        const invoice: Omit<Invoice, '_id'> = {
+          userId: ownerId,
+          propertyId: result.insertedId.toString(),
+          unitType: unit.type,
+          amount: unit.managementFee,
+          reference: `PROPERTY-INVOICE-${ownerId}-${unit.type}-${Date.now()}`,
+          status: 'pending',
+          createdAt,
+          updatedAt: createdAt,
+          expiresAt,
+          description: `Property creation fee for ${name} - Unit Type: ${unit.type}`,
+        };
+
+        const invoiceResult = await db.collection<Omit<Invoice, '_id'>>('invoices').insertOne(invoice);
+        console.log('Generated invoice for unit type:', {
+          invoiceId: invoiceResult.insertedId.toString(),
+          unitType: unit.type,
+          propertyId: result.insertedId.toString(),
+          invoice,
+        });
+      } else {
+        console.log('No management fee for unit type, skipping invoice generation:', {
+          unitType: unit.type,
+          propertyId: result.insertedId.toString(),
+        });
+      }
     }
 
     return NextResponse.json(
