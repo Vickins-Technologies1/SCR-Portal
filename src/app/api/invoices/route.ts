@@ -172,3 +172,169 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+
+  try {
+    console.log("Handling POST request to /api/invoices");
+
+    const userId = request.cookies.get("userId")?.value;
+    const role = request.cookies.get("role")?.value;
+
+    console.log("Cookies from request:", { userId, role });
+
+    if (!userId || !ObjectId.isValid(userId)) {
+      console.log("Invalid or missing user ID:", userId);
+      return NextResponse.json(
+        { success: false, message: "Valid user ID is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!["propertyOwner", "admin"].includes(role || "")) {
+      console.log("Unauthorized role:", role);
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized: Only property owners or admins can update invoices",
+        },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { userId: bodyUserId, propertyId, unitType, amount, status, reference } = body;
+
+    if (!bodyUserId || !ObjectId.isValid(bodyUserId) || bodyUserId !== userId) {
+      console.log("Invalid or mismatched userId in body:", { bodyUserId, userId });
+      return NextResponse.json(
+        { success: false, message: "Valid and matching user ID is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!propertyId || !ObjectId.isValid(propertyId)) {
+      console.log("Invalid property ID:", propertyId);
+      return NextResponse.json(
+        { success: false, message: "Valid property ID is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!unitType || typeof unitType !== "string") {
+      console.log("Invalid unit type:", unitType);
+      return NextResponse.json(
+        { success: false, message: "Valid unit type is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!amount || typeof amount !== "number" || amount <= 0) {
+      console.log("Invalid amount:", amount);
+      return NextResponse.json(
+        { success: false, message: "Valid positive amount is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!status || !["pending", "completed", "failed"].includes(status)) {
+      console.log("Invalid status:", status);
+      return NextResponse.json(
+        { success: false, message: "Valid status (pending, completed, failed) is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!reference || typeof reference !== "string") {
+      console.log("Invalid reference:", reference);
+      return NextResponse.json(
+        { success: false, message: "Valid reference is required" },
+        { status: 400 }
+      );
+    }
+
+    const { db } = await connectToDatabase();
+    console.log("Connected to MongoDB");
+
+    const existingInvoice = await db.collection<Invoice>("invoices").findOne({
+      userId,
+      propertyId,
+      unitType: { $regex: `^${unitType}$`, $options: "i" },
+      reference,
+    });
+
+    if (!existingInvoice) {
+      console.log("Invoice not found for update:", { userId, propertyId, unitType, reference });
+      return NextResponse.json(
+        { success: false, message: "Invoice not found" },
+        { status: 404 }
+      );
+    }
+
+    if (existingInvoice.status === "completed" || existingInvoice.status === "failed") {
+      console.log("Invoice already finalized:", { invoiceId: existingInvoice._id.toString(), status: existingInvoice.status });
+      return NextResponse.json(
+        { success: false, message: `Invoice is already ${existingInvoice.status}` },
+        { status: 400 }
+      );
+    }
+
+    const updateResult = await db.collection<Invoice>("invoices").updateOne(
+      { _id: existingInvoice._id },
+      {
+        $set: {
+          status,
+          amount,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      console.log("Failed to update invoice: No matching document", { invoiceId: existingInvoice._id.toString() });
+      return NextResponse.json(
+        { success: false, message: "Failed to update invoice" },
+        { status: 500 }
+      );
+    }
+
+    console.log("Invoice updated successfully:", {
+      invoiceId: existingInvoice._id.toString(),
+      status,
+      amount,
+      duration: Date.now() - startTime,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Invoice updated successfully",
+        invoice: {
+          _id: existingInvoice._id.toString(),
+          userId,
+          propertyId,
+          unitType,
+          amount,
+          status,
+          reference,
+          createdAt: existingInvoice.createdAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+          expiresAt: existingInvoice.expiresAt.toISOString(),
+          description: existingInvoice.description,
+        },
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Error updating invoice:", {
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

@@ -239,85 +239,134 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   }
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<Payment>>> {
-  const userId = request.cookies.get("userId")?.value;
-  const role = request.cookies.get("role")?.value;
-  const csrfToken = request.headers.get("x-csrf-token");
+const UMS_PAY_API_KEY = process.env.UMS_PAY_API_KEY || "";
+const UMS_PAY_EMAIL = process.env.UMS_PAY_EMAIL || "";
+const UMS_PAY_ACCOUNT_ID = process.env.UMS_PAY_ACCOUNT_ID || "";
 
-  // Log POST request details for debugging
-  logger.debug("POST /api/payments request", { userId, role, csrfToken });
-
-  // Validate user, role, and CSRF
-  if (!userId || !role || !["tenant", "propertyOwner"].includes(role)) {
-    logger.error("Unauthorized POST attempt", { userId, role });
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+export async function POST(request: NextRequest) {
+  const startTime = Date.now();
 
   try {
-    if (!csrfToken || !validateCsrfToken(request, csrfToken)) {
-      logger.error("Invalid or missing CSRF token in POST", { userId, csrfToken });
-      return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+    console.log("Handling POST request to /api/payments");
+
+    // Validate environment variables
+    if (!UMS_PAY_API_KEY || !UMS_PAY_EMAIL || !UMS_PAY_ACCOUNT_ID) {
+      console.error("Missing UMS Pay configuration:", {
+        hasApiKey: !!UMS_PAY_API_KEY,
+        hasEmail: !!UMS_PAY_EMAIL,
+        hasAccountId: !!UMS_PAY_ACCOUNT_ID,
+      });
+      return NextResponse.json(
+        { success: false, message: "Server configuration error: Missing payment credentials" },
+        { status: 500 }
+      );
     }
-  } catch (error) {
-    logger.error("CSRF validation error in POST", { userId, error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json({ success: false, message: "CSRF validation failed" }, { status: 403 });
-  }
 
-  try {
     const body = await request.json();
-    const { tenantId, amount, propertyId, userId: submittedUserId, type, phoneNumber, reference } = body;
+    const { action, amount, msisdn, reference, transactionRequestId } = body;
 
-    if (!tenantId || !amount || amount <= 0 || !propertyId || submittedUserId !== userId) {
-      logger.error("Invalid POST input", { userId, tenantId, amount, propertyId });
-      return NextResponse.json({ success: false, message: "Invalid input" }, { status: 400 });
+    if (!action) {
+      console.log("Missing action in request body:", body);
+      return NextResponse.json(
+        { success: false, message: "Action is required" },
+        { status: 400 }
+      );
     }
 
-    const { db }: { db: Db } = await connectToDatabase();
+    if (action === "initiate") {
+      // Validate initiate request
+      if (!amount || !msisdn || !reference) {
+        console.log("Missing required fields for initiate:", { amount, msisdn, reference });
+        return NextResponse.json(
+          { success: false, message: "Amount, phone number, and reference are required" },
+          { status: 400 }
+        );
+      }
 
-    const tenant = await db
-      .collection<Tenant>("tenants")
-      .findOne({ _id: new ObjectId(tenantId), propertyId });
+      const requestBody = {
+        api_key: UMS_PAY_API_KEY,
+        email: UMS_PAY_EMAIL,
+        amount,
+        msisdn,
+        reference,
+        account_id: UMS_PAY_ACCOUNT_ID,
+      };
+      console.log("STK push request body:", requestBody);
 
-    if (!tenant) {
-      logger.error("Tenant not found", { tenantId, propertyId });
-      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+      const stkRes = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const stkData = await stkRes.json();
+      console.log("STK push response:", stkData);
+
+      if (!stkRes.ok) {
+        console.error("STK push failed:", { status: stkRes.status, response: stkData });
+        return NextResponse.json(
+          { success: false, message: stkData.errorMessage || "Failed to initiate payment" },
+          { status: stkRes.status }
+        );
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`POST /api/payments completed in ${duration}ms`);
+      return NextResponse.json(stkData, { status: 200 });
     }
 
-    const paymentId = new ObjectId();
-    const payment: Payment = {
-      _id: paymentId.toString(),
-      tenantId,
-      amount,
-      propertyId,
-      paymentDate: new Date().toISOString(),
-      transactionId: `TX${Date.now()}${Math.floor(Math.random() * 1000)}`,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      type,
-      phoneNumber,
-      reference,
-      date: new Date().toISOString(),
-      tenantName: tenant.name,
-    };
+    if (action === "status") {
+      // Validate status request
+      if (!transactionRequestId) {
+        console.log("Missing transactionRequestId for status check:", body);
+        return NextResponse.json(
+          { success: false, message: "Transaction request ID is required" },
+          { status: 400 }
+        );
+      }
 
-    const result = await db.collection<PaymentDb>("payments").insertOne({
-      ...payment,
-      _id: paymentId,
+      const requestBody = {
+        api_key: UMS_PAY_API_KEY,
+        email: UMS_PAY_EMAIL,
+        transaction_request_id: transactionRequestId,
+      };
+      console.log("Transaction status request body:", requestBody);
+
+      const statusRes = await fetch("https://api.umspay.co.ke/api/v1/transactionstatus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const statusData = await statusRes.json();
+      console.log("Transaction status response:", statusData);
+
+      if (!statusRes.ok) {
+        console.error("Status check failed:", { status: statusRes.status, response: statusData });
+        return NextResponse.json(
+          { success: false, message: statusData.errorMessage || "Failed to check transaction status" },
+          { status: statusRes.status }
+        );
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`POST /api/payments completed in ${duration}ms`);
+      return NextResponse.json(statusData, { status: 200 });
+    }
+
+    console.log("Invalid action:", action);
+    return NextResponse.json(
+      { success: false, message: "Invalid action" },
+      { status: 400 }
+    );
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error("Error in /api/payments:", {
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+      duration: `${duration}ms`,
     });
-
-    if (result.acknowledged) {
-      logger.info("Payment created successfully", { userId, paymentId: payment._id });
-      return NextResponse.json({ success: true, payments: payment }, { status: 201 });
-    } else {
-      logger.error("Failed to insert payment", { userId, paymentId: payment._id });
-      return NextResponse.json({ success: false, message: "Failed to create payment" }, { status: 500 });
-    }
-  } catch (error: unknown) {
-    logger.error("POST Payments Error", {
-      message: error instanceof Error ? error.message : String(error),
-      userId,
-      role,
-    });
-    return NextResponse.json({ success: false, message: "Server error while creating payment" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

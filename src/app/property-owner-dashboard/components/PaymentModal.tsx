@@ -31,12 +31,7 @@ interface PaymentModalProps {
   initialUnitType?: string;
   initialPhone?: string;
   userId: string | null;
-  csrfToken: string;
 }
-
-const UMS_PAY_API_KEY = process.env.UMS_PAY_API_KEY || "";
-const UMS_PAY_EMAIL = process.env.UMS_PAY_EMAIL || "";
-const UMS_PAY_ACCOUNT_ID = process.env.UMS_PAY_ACCOUNT_ID || "";
 
 export default function PaymentModal({
   isOpen,
@@ -48,7 +43,6 @@ export default function PaymentModal({
   initialUnitType = "",
   initialPhone = "",
   userId,
-  csrfToken,
 }: PaymentModalProps) {
   const [paymentPropertyId, setPaymentPropertyId] = useState(initialPropertyId);
   const [paymentUnitType, setPaymentUnitType] = useState(initialUnitType);
@@ -57,7 +51,32 @@ export default function PaymentModal({
   const [paymentFormErrors, setPaymentFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isPaymentLoadingModalOpen, setIsPaymentLoadingModalOpen] = useState(false);
-  const [isFetchingAmount, setIsFetchingAmount] = useState(false); // New state for fetching amount
+  const [isFetchingAmount, setIsFetchingAmount] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string>("");
+  const [statusMessage, setStatusMessage] = useState<string>("Processing your payment. Please wait...");
+
+  // Fetch CSRF token when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const fetchCsrfToken = async () => {
+        try {
+          const response = await fetch("/api/csrf-token");
+          const data = await response.json();
+          if (data.success && data.csrfToken) {
+            console.log("Fetched CSRF token:", data.csrfToken);
+            setCsrfToken(data.csrfToken);
+          } else {
+            console.error("Failed to fetch CSRF token:", data.message);
+            onError("Failed to fetch CSRF token");
+          }
+        } catch (error) {
+          console.error("Error fetching CSRF token:", error);
+          onError("Failed to fetch CSRF token");
+        }
+      };
+      fetchCsrfToken();
+    }
+  }, [isOpen, onError]);
 
   const resetPaymentForm = useCallback(() => {
     setPaymentPropertyId(initialPropertyId);
@@ -66,6 +85,7 @@ export default function PaymentModal({
     setPaymentAmount("");
     setPaymentFormErrors({});
     setIsFetchingAmount(false);
+    setStatusMessage("Processing your payment. Please wait...");
   }, [initialPropertyId, initialUnitType, initialPhone]);
 
   const validatePaymentForm = useCallback(
@@ -80,17 +100,18 @@ export default function PaymentModal({
       if (!paymentPhone || !/^\+?\d{10,15}$/.test(paymentPhone)) {
         errors.paymentPhone = "Valid phone number is required (10-15 digits, optional +)";
       }
-      if (paymentPropertyId && paymentUnitType && userId) {
+      if (paymentPropertyId && paymentUnitType && userId && csrfToken) {
         setIsFetchingAmount(true);
         try {
+          const encodedUnitType = encodeURIComponent(paymentUnitType);
           const invoiceRes = await fetch(
-            `/api/invoices?userId=${userId}&propertyId=${paymentPropertyId}&unitType=${encodeURIComponent(paymentUnitType)}`,
+            `/api/invoices?userId=${userId}&propertyId=${paymentPropertyId}&unitType=${encodedUnitType}`,
             {
               headers: { "X-CSRF-Token": csrfToken },
             }
           );
           const invoiceData = await invoiceRes.json();
-          console.log("Invoice fetch response:", { userId, paymentPropertyId, paymentUnitType, invoiceData });
+          console.log("Invoice fetch response:", { userId, paymentPropertyId, paymentUnitType, encodedUnitType, invoiceData });
 
           if (!invoiceRes.ok || !invoiceData.success) {
             errors.paymentInvoice = invoiceData.message || "Failed to verify invoice status";
@@ -115,6 +136,9 @@ export default function PaymentModal({
         }
       } else {
         setPaymentAmount("");
+        if (!csrfToken) {
+          errors.paymentInvoice = "CSRF token is missing";
+        }
       }
       setPaymentFormErrors(errors);
       return Object.keys(errors).length === 0;
@@ -122,39 +146,73 @@ export default function PaymentModal({
     [paymentPropertyId, paymentUnitType, paymentPhone, userId, csrfToken]
   );
 
-  // Trigger validatePaymentForm when unitType changes
   useEffect(() => {
-    if (paymentPropertyId && paymentUnitType && userId) {
+    if (paymentPropertyId && paymentUnitType && userId && csrfToken) {
       validatePaymentForm();
     } else {
       setPaymentAmount("");
-      setPaymentFormErrors((prev) => ({ ...prev, paymentInvoice: undefined }));
+      setPaymentFormErrors((prev) => ({ ...prev, paymentInvoice: csrfToken ? undefined : "CSRF token is missing" }));
     }
-  }, [paymentPropertyId, paymentUnitType, userId, validatePaymentForm]);
+  }, [paymentPropertyId, paymentUnitType, userId, csrfToken, validatePaymentForm]);
 
-const pollTransactionStatus = useCallback(
-  async (transactionRequestId: string, invoice: Invoice, maxAttempts = 6, interval = 5000) => {
-    let attempts = 0;
-    const checkStatus = async (): Promise<boolean> => {
-      try {
-        const statusRes = await fetch("https://api.umspay.co.ke/api/v1/transactionstatus", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            api_key: UMS_PAY_API_KEY,
-            email: UMS_PAY_EMAIL,
-            transaction_request_id: transactionRequestId,
-          }),
-        });
-        if (!statusRes.ok) {
-          throw new Error(`HTTP error! Status: ${statusRes.status}`);
-        }
-        const statusData = await statusRes.json();
-        if (!statusData || typeof statusData !== "object") {
-          onError("Invalid response from payment API");
-          return true;
-        }
-        if (statusData.ResultCode === "200") {
+  const pollTransactionStatus = useCallback(
+    async (transactionRequestId: string, invoice: Invoice, maxAttempts = 6, interval = 5000) => {
+      let attempts = 0;
+      const checkStatus = async (): Promise<boolean> => {
+        try {
+          if (!csrfToken) {
+            throw new Error("CSRF token is missing");
+          }
+          const requestBody = { transactionRequestId };
+          console.log("Transaction status request body:", requestBody, { csrfToken });
+
+          const statusRes = await fetch("/api/transaction-status", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+            },
+            body: JSON.stringify(requestBody),
+          });
+          const statusData = await statusRes.json();
+          console.log("Transaction status response:", statusData);
+
+          if (!statusRes.ok || !statusData.success) {
+            throw new Error(statusData.message || `HTTP error! Status: ${statusRes.status}`);
+          }
+
+          // Parse MpesaResponse with robust error handling
+          let mpesaErrorCode = "";
+          let mpesaErrorMessage = "";
+          try {
+            const mpesaResponse = JSON.parse(statusData.MpesaResponse || "{}");
+            mpesaErrorCode = mpesaResponse.errorCode || "";
+            mpesaErrorMessage = mpesaResponse.errorMessage || "";
+            console.log("Parsed MpesaResponse:", { mpesaErrorCode, mpesaErrorMessage, rawMpesaResponse: statusData.MpesaResponse });
+          } catch (error) {
+            console.error("Error parsing MpesaResponse:", error, { rawMpesaResponse: statusData.MpesaResponse });
+            mpesaErrorCode = "";
+            mpesaErrorMessage = "";
+          }
+
+          // Check for cancellation condition
+          const isCancelled = mpesaErrorCode === "500.001.1001" && mpesaErrorMessage.includes("user pressed Cancel Button");
+          if (isCancelled) {
+            console.log("Cancellation detected:", { transactionRequestId, mpesaErrorCode, mpesaErrorMessage });
+            setStatusMessage("Payment cancelled on your phone. Please retry or confirm.");
+            onError("Payment cancelled by user");
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Delay to show message
+            setIsPaymentLoadingModalOpen(false);
+            setIsLoading(false);
+            return true; // Stop polling immediately
+          }
+
+          // Update status message for the loader
+          if (statusData.TransactionStatus === "Pending") {
+            setStatusMessage("Transaction pending, please complete the payment on your phone.");
+          }
+
+          // Check for terminal states
           if (statusData.TransactionStatus === "Completed") {
             try {
               const updateRes = await fetch("/api/invoices", {
@@ -176,51 +234,79 @@ const pollTransactionStatus = useCallback(
               if (!updateRes.ok || !updateData.success) {
                 throw new Error(updateData.message || "Failed to update invoice status");
               }
+              setStatusMessage("Payment successful!");
               onSuccess();
+              await new Promise((resolve) => setTimeout(resolve, 2000)); // Delay to show message
+              setIsPaymentLoadingModalOpen(false);
+              setIsLoading(false);
+              return true;
             } catch (error) {
+              console.error("Error updating invoice:", error);
+              setStatusMessage("Failed to update invoice status.");
               onError(error instanceof Error ? error.message : "Failed to update invoice status");
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              setIsPaymentLoadingModalOpen(false);
+              setIsLoading(false);
+              return true;
             }
-            return true;
           } else if (["Failed", "Cancelled", "Timeout"].includes(statusData.TransactionStatus)) {
-            onError(
+            const errorMessage =
               statusData.ResultDesc ||
-                (statusData.TransactionStatus === "Failed"
-                  ? "Payment failed: Insufficient balance"
-                  : statusData.TransactionStatus === "Cancelled"
-                  ? "Payment cancelled by user"
-                  : "Payment timed out: User not reachable")
-            );
+              (statusData.TransactionStatus === "Failed"
+                ? "Payment failed: Insufficient balance"
+                : statusData.TransactionStatus === "Cancelled"
+                ? "Payment cancelled by user"
+                : "Payment timed out: User not reachable");
+            console.log("Stopping polling due to terminal state:", { transactionRequestId, status: statusData.TransactionStatus, errorMessage });
+            setStatusMessage(errorMessage);
+            onError(errorMessage);
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            setIsPaymentLoadingModalOpen(false);
+            setIsLoading(false);
             return true;
           }
-        } else {
-          onError(statusData.errorMessage || "Failed to check transaction status");
-          return true;
+
+          console.log("Continuing polling:", { transactionRequestId, status: statusData.TransactionStatus, attempts: attempts + 1 });
+          return false; // Continue polling for non-terminal states
+        } catch (error) {
+          console.error("Error checking transaction status:", error, { transactionRequestId });
+          const errorMessage = error instanceof Error ? error.message : "Failed to check transaction status";
+          setStatusMessage(errorMessage);
+          onError(errorMessage);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          setIsPaymentLoadingModalOpen(false);
+          setIsLoading(false);
+          return true; // Stop polling on error
         }
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "Failed to connect to UMS Pay API");
-        return true;
-      }
-      return false;
-    };
+      };
 
-    const poll = async () => {
-      while (attempts < maxAttempts) {
-        const done = await checkStatus();
-        if (done) break;
-        await new Promise((resolve) => setTimeout(resolve, interval));
-        attempts++;
-      }
-      if (attempts >= maxAttempts) {
-        onError("Payment processing timed out. Please check the transaction status later.");
-      }
-      setIsPaymentLoadingModalOpen(false);
-      setIsLoading(false);
-    };
+      const poll = async () => {
+        console.log(`Starting polling for transaction ${transactionRequestId}`);
+        while (attempts < maxAttempts) {
+          const done = await checkStatus();
+          if (done) {
+            console.log(`Stopping polling: Transaction ${transactionRequestId} reached terminal state or error after ${attempts + 1} attempts`);
+            break; // Exit polling loop immediately
+          }
+          console.log(`Polling attempt ${attempts + 1}/${maxAttempts} for transaction ${transactionRequestId}`);
+          await new Promise((resolve) => setTimeout(resolve, interval));
+          attempts++;
+        }
+        if (attempts >= maxAttempts) {
+          console.log(`Polling timed out for transaction ${transactionRequestId} after ${maxAttempts} attempts`);
+          const timeoutMessage = "Payment processing timed out. Please check the transaction status later.";
+          setStatusMessage(timeoutMessage);
+          onError(timeoutMessage);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          setIsPaymentLoadingModalOpen(false);
+          setIsLoading(false);
+        }
+      };
 
-    poll();
-  },
-  [onError, onSuccess, paymentPropertyId, paymentUnitType, userId, csrfToken] // Added onError to the dependency array
-);
+      poll();
+    },
+    [onError, onSuccess, paymentPropertyId, paymentUnitType, userId, csrfToken]
+  );
 
   const handlePayment = useCallback(
     async (e: React.FormEvent) => {
@@ -230,30 +316,52 @@ const pollTransactionStatus = useCallback(
         setIsLoading(false);
         return;
       }
+      if (!csrfToken) {
+        onError("CSRF token is missing");
+        setIsLoading(false);
+        return;
+      }
       if (!(await validatePaymentForm())) return;
 
       setIsLoading(true);
       onError("");
       setIsPaymentLoadingModalOpen(true);
+      setStatusMessage("Processing your payment. Please wait...");
 
       try {
-        // Fetch the pending invoice
+        const encodedUnitType = encodeURIComponent(paymentUnitType);
         const invoiceRes = await fetch(
-          `/api/invoices?userId=${userId}&propertyId=${paymentPropertyId}&unitType=${encodeURIComponent(paymentUnitType)}`,
+          `/api/invoices?userId=${userId}&propertyId=${paymentPropertyId}&unitType=${encodedUnitType}`,
           {
             headers: { "X-CSRF-Token": csrfToken },
           }
         );
         const invoiceData = await invoiceRes.json();
-        console.log("Invoice fetch in handlePayment:", { userId, paymentPropertyId, paymentUnitType, invoiceData });
+        console.log("Invoice fetch in handlePayment:", { userId, paymentPropertyId, paymentUnitType, encodedUnitType, invoiceData });
 
-        if (!invoiceRes.ok || !invoiceData.success || invoiceData.status !== "pending") {
-          onError(invoiceData.message || `No pending invoice found for ${paymentUnitType} in selected property`);
+        if (!invoiceRes.ok) {
+          onError(invoiceData.message || `Failed to fetch invoice (HTTP ${invoiceRes.status})`);
           setIsPaymentLoadingModalOpen(false);
           setIsLoading(false);
           return;
         }
-        if (!invoiceData.invoices?.[0]) {
+        if (!invoiceData.success) {
+          onError(invoiceData.message || "Failed to verify invoice status");
+          setIsPaymentLoadingModalOpen(false);
+          setIsLoading(false);
+          return;
+        }
+        if (invoiceData.status !== "pending") {
+          onError(
+            invoiceData.status
+              ? `Invoice is already ${invoiceData.status}`
+              : `No pending invoice found for ${paymentUnitType} in selected property`
+          );
+          setIsPaymentLoadingModalOpen(false);
+          setIsLoading(false);
+          return;
+        }
+        if (!invoiceData.invoices || !Array.isArray(invoiceData.invoices) || invoiceData.invoices.length === 0) {
           onError(`No invoice details found for ${paymentUnitType} in selected property`);
           setIsPaymentLoadingModalOpen(false);
           setIsLoading(false);
@@ -261,29 +369,35 @@ const pollTransactionStatus = useCallback(
         }
         const invoice: Invoice = invoiceData.invoices[0];
 
-        const stkRes = await fetch("https://api.umspay.co.ke/api/v1/initiatestkpush", {
+        const requestBody = {
+          action: "initiate",
+          amount: invoice.amount,
+          msisdn: paymentPhone,
+          reference: invoice.reference,
+        };
+        console.log("Payment initiate request body:", requestBody, { csrfToken });
+
+        const stkRes = await fetch("/api/payments", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            api_key: UMS_PAY_API_KEY,
-            email: UMS_PAY_EMAIL,
-            amount: invoice.amount,
-            msisdn: paymentPhone,
-            reference: invoice.reference,
-            account_id: UMS_PAY_ACCOUNT_ID,
-          }),
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify(requestBody),
         });
         const stkData = await stkRes.json();
+        console.log("Payment initiate response:", stkData);
+
         if (stkData.success === "200") {
           pollTransactionStatus(stkData.transaction_request_id, invoice);
         } else {
-          onError(stkData.errorMessage || "Failed to initiate payment");
+          onError(stkData.message || "Failed to initiate payment");
           setIsPaymentLoadingModalOpen(false);
           setIsLoading(false);
         }
       } catch (error) {
         console.error("Error initiating payment:", error);
-        onError(error instanceof Error ? error.message : "Failed to connect to UMS Pay API");
+        onError(error instanceof Error ? error.message : "Failed to initiate payment");
         setIsPaymentLoadingModalOpen(false);
         setIsLoading(false);
       }
@@ -458,7 +572,8 @@ const pollTransactionStatus = useCallback(
                   !paymentPropertyId ||
                   !paymentUnitType ||
                   !paymentPhone ||
-                  !paymentAmount
+                  !paymentAmount ||
+                  !csrfToken
                 }
                 className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
                   isLoading ||
@@ -467,7 +582,8 @@ const pollTransactionStatus = useCallback(
                   !paymentPropertyId ||
                   !paymentUnitType ||
                   !paymentPhone ||
-                  !paymentAmount
+                  !paymentAmount ||
+                  !csrfToken
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-[#012a4a] hover:bg-[#014a7a]"
                 }`}
@@ -489,8 +605,8 @@ const pollTransactionStatus = useCallback(
       >
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a] mb-4"></div>
-          <p className="text-gray-700 text-sm sm:text-base">
-            Processing your payment. Please wait...
+          <p className={`text-sm sm:text-base ${statusMessage.includes("failed") || statusMessage.includes("cancelled") || statusMessage.includes("timed out") ? "text-red-700" : statusMessage.includes("successful") ? "text-green-700" : "text-gray-700"}`}>
+            {statusMessage}
           </p>
         </div>
       </Modal>

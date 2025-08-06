@@ -1268,7 +1268,6 @@ export default function TenantsPage() {
             initialUnitType={pendingTenantData?.unitType ?? ""}
             initialPhone={pendingTenantData?.phone ?? ""}
             userId={userId ?? ""}
-            csrfToken={csrfToken}
           />
         </main>
       </div>
