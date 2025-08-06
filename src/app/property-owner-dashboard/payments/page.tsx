@@ -19,7 +19,7 @@ interface Payment {
   type: "Rent" | "Utility" | "ManagementFee";
   phoneNumber: string;
   reference: string;
-  unitType: string; // Format: "type-index", e.g., "Single-0"
+  unitType: string;
 }
 
 interface Property {
@@ -58,63 +58,41 @@ export default function PaymentsPage() {
   });
 
   // Fetch CSRF token
-  useEffect(() => {
-    const fetchCsrfToken = async () => {
-      const existingToken = Cookies.get("csrf-token");
-      if (existingToken) {
-        setCsrfToken(existingToken);
-        console.log("Using existing CSRF token:", existingToken);
-        return;
+  const fetchCsrfToken = useCallback(async () => {
+    try {
+      const res = await fetch("/api/csrf-token", {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errorMessage = `HTTP error: ${res.status}`;
+        console.error("CSRF fetch failed", { status: res.status, statusText: res.statusText });
+        throw new Error(errorMessage);
       }
 
-      try {
-        const res = await fetch("/api/csrf-token", {
-          method: "GET",
-          credentials: "include",
-        });
-        if (!res.ok) {
-          let errorMessage = `HTTP error: ${res.status}`;
-          try {
-            const text = await res.text();
-            errorMessage += `, Response: ${text || "No response body"}`;
-            console.error("CSRF fetch failed", { status: res.status, statusText: res.statusText, headers: Object.fromEntries(res.headers), body: text });
-          } catch {
-            errorMessage += ", Failed to read response body";
-            console.error("CSRF fetch failed", { status: res.status, statusText: res.statusText, headers: Object.fromEntries(res.headers) });
-          }
-          throw new Error(errorMessage);
-        }
-
-        const csrfToken = res.headers.get("X-CSRF-Token");
-        if (!csrfToken) {
-          let responseBody;
-          try {
-            responseBody = await res.text();
-          } catch {
-            responseBody = "Failed to read response body";
-          }
-          const errorMessage = "CSRF token not found in response headers";
-          console.error("Failed to fetch CSRF token:", errorMessage, {
-            status: res.status,
-            headers: Object.fromEntries(res.headers),
-            body: responseBody,
-          });
-          setError(errorMessage);
-          return;
-        }
-
-        Cookies.set("csrf-token", csrfToken, { sameSite: "strict", expires: 7 });
-        setCsrfToken(csrfToken);
-        console.log("Fetched new CSRF token from headers:", csrfToken);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Failed to connect to server for CSRF token";
-        setError(errorMessage);
-        console.error("Error fetching CSRF token:", errorMessage, { error });
+      const data = await res.json();
+      if (!data.success || !data.csrfToken) {
+        const errorMessage = data.message || "CSRF token not found in response";
+        console.error("Failed to fetch CSRF token:", errorMessage);
+        throw new Error(errorMessage);
       }
-    };
 
-    fetchCsrfToken();
+      setCsrfToken(data.csrfToken);
+      Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 }); // Reduced expiration to 1 day
+      console.log("Fetched new CSRF token:", data.csrfToken);
+      return data.csrfToken;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect to server for CSRF token";
+      setError(errorMessage);
+      console.error("Error fetching CSRF token:", errorMessage, { error });
+      return null;
+    }
   }, []);
+
+  // Initialize CSRF token on mount
+  useEffect(() => {
+    fetchCsrfToken();
+  }, [fetchCsrfToken]);
 
   // Check cookies and redirect if unauthorized
   useEffect(() => {
@@ -128,7 +106,7 @@ export default function PaymentsPage() {
     }
   }, [router]);
 
-  // Fetch properties
+  // Fetch properties with CSRF retry
   const fetchProperties = useCallback(async () => {
     if (!userId || !csrfToken) return;
     try {
@@ -141,6 +119,37 @@ export default function PaymentsPage() {
         credentials: "include",
       });
       if (!res.ok) {
+        if (res.status === 403) {
+          console.warn("CSRF token invalid, attempting to refetch");
+          const newToken = await fetchCsrfToken();
+          if (newToken) {
+            const retryRes = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": newToken,
+              },
+              credentials: "include",
+            });
+            if (!retryRes.ok) {
+              throw new Error(`Retry failed: HTTP error ${retryRes.status}`);
+            }
+            const retryData = await retryRes.json();
+            if (retryData.success) {
+              const properties = retryData.properties?.map((p: Property) => ({
+                ...p,
+                unitTypes: p.unitTypes?.map((u, index) => ({
+                  ...u,
+                  uniqueType: `${u.type}-${index}`,
+                })) || [],
+              })) || [];
+              setProperties(properties);
+              return;
+            } else {
+              throw new Error(retryData.message || "Retry failed to fetch properties");
+            }
+          }
+        }
         throw new Error(`HTTP error: ${res.status}`);
       }
       const data: { success: boolean; properties?: Property[]; message?: string } = await res.json();
@@ -162,9 +171,9 @@ export default function PaymentsPage() {
       setError(errorMessage);
       console.error("Error fetching properties:", errorMessage, { error });
     }
-  }, [userId, csrfToken]);
+  }, [userId, csrfToken, fetchCsrfToken]);
 
-  // Fetch payments with pagination and filters
+  // Fetch payments with pagination, filters, and CSRF retry
   const fetchPayments = useCallback(async () => {
     if (!userId || !csrfToken) return;
     setIsLoading(true);
@@ -190,9 +199,35 @@ export default function PaymentsPage() {
       });
       if (!res.ok) {
         if (res.status === 403) {
-          setError("Unauthorized request. Please try logging in again.");
-          console.warn("Unauthorized request to /api/payments:", res.status);
-          return;
+          console.warn("CSRF token invalid, attempting to refetch");
+          const newToken = await fetchCsrfToken();
+          if (newToken) {
+            const retryRes = await fetch(`/api/payments?${queryParams}`, {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": newToken,
+              },
+              credentials: "include",
+            });
+            if (!retryRes.ok) {
+              throw new Error(`Retry failed: HTTP error ${retryRes.status}`);
+            }
+            const retryData = await retryRes.json();
+            if (retryData.success) {
+              setPayments(retryData.payments || []);
+              setTotalPayments(retryData.total || 0);
+              setTotalPages(retryData.totalPages || 1);
+              if (retryData.totalPages && currentPage > retryData.totalPages) {
+                setCurrentPage(retryData.totalPages);
+              } else if (currentPage < 1) {
+                setCurrentPage(1);
+              }
+              return;
+            } else {
+              throw new Error(retryData.message || "Retry failed to fetch payments");
+            }
+          }
         }
         throw new Error(`HTTP error: ${res.status}`);
       }
@@ -228,7 +263,7 @@ export default function PaymentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedPropertyId, currentPage, itemsPerPage, csrfToken, filters]);
+  }, [userId, selectedPropertyId, currentPage, itemsPerPage, csrfToken, filters, fetchCsrfToken]);
 
   // Fetch data when dependencies change
   useEffect(() => {
