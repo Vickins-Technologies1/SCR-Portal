@@ -4,10 +4,9 @@ import { ObjectId, Db, Filter } from "mongodb";
 import { validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 
-// Interface for API response
 interface Payment {
   _id: string;
-  tenantId: string;
+  tenantId: string | null;
   amount: number;
   propertyId: string;
   paymentDate: string;
@@ -18,13 +17,13 @@ interface Payment {
   phoneNumber?: string;
   reference?: string;
   date: string;
-  tenantName?: string;
+  tenantName: string;
+  unitType?: string;
 }
 
-// Interface for database model
 interface PaymentDb {
   _id: ObjectId;
-  tenantId: string;
+  tenantId: string | null;
   amount: number;
   propertyId: string;
   paymentDate: string;
@@ -36,6 +35,7 @@ interface PaymentDb {
   reference?: string;
   date: string;
   tenantName?: string;
+  unitType?: string;
 }
 
 interface Tenant {
@@ -49,11 +49,12 @@ interface Tenant {
   paymentStatus: string;
   leaseStart: string;
   walletBalance: number;
+  unitType?: string;
 }
 
 interface Property {
   _id: ObjectId;
-  ownerId: string;
+  ownerId: string | ObjectId;
   name: string;
 }
 
@@ -77,11 +78,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   const tenantName = searchParams.get("tenantName");
   const type = searchParams.get("type") as "Rent" | "Utility" | undefined;
   const status = searchParams.get("status") as "completed" | "pending" | "failed" | undefined;
+  const unitType = searchParams.get("unitType");
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "10")));
   const sort = searchParams.get("sort") || "-paymentDate";
 
-  // Log request details for debugging
   logger.debug("GET /api/payments request", {
     userId,
     role,
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     tenantName,
     type,
     status,
+    unitType,
     page,
     limit,
     sort,
@@ -104,7 +106,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
   // Validate CSRF token
   try {
-    if (!csrfToken || !validateCsrfToken(request, csrfToken)) {
+    if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
       logger.error("Invalid or missing CSRF token", { userId, csrfToken });
       return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
     }
@@ -115,14 +117,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
-    const skip = (page - 1) * limit;
 
     const query: Filter<PaymentDb> = {};
 
     if (role === "propertyOwner") {
       const properties = await db
         .collection<Property>("properties")
-        .find({ ownerId: userId }, { projection: { _id: 1 } })
+        .find(
+          {
+            $or: [{ ownerId: userId }, { ownerId: new ObjectId(userId) }],
+          },
+          { projection: { _id: 1 } }
+        )
         .toArray();
       const propertyIds = properties.map((p) => p._id.toString());
 
@@ -134,6 +140,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         );
       }
 
+      logger.debug("Properties found", { userId, propertyIds });
+
       if (propertyId && propertyId !== "all" && !propertyIds.includes(propertyId)) {
         logger.error("Unauthorized property access", { userId, propertyId });
         return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
@@ -141,40 +149,105 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
       query.propertyId = propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds };
 
-      const tenants = await db
-        .collection<Tenant>("tenants")
-        .find({ propertyId: query.propertyId }, { projection: { _id: 1 } })
-        .toArray();
-      const tenantIds = tenants.map((t) => t._id.toString());
-      query.tenantId = tenantIds.length ? { $in: tenantIds } : { $in: [] };
+      if (tenantId) {
+        query.tenantId = tenantId;
+        if (unitType) {
+          const tenant = await db
+            .collection<Tenant>("tenants")
+            .findOne({ _id: new ObjectId(tenantId), unitType, propertyId: { $in: propertyIds } });
+          if (!tenant) {
+            logger.debug("Tenant does not match unitType or property", { tenantId, unitType, propertyIds });
+            return NextResponse.json(
+              { success: true, payments: [], total: 0, page, limit, totalPages: 0 },
+              { status: 200 }
+            );
+          }
+        }
+      } else {
+        const tenantQuery: Filter<Tenant> = { propertyId: { $in: propertyIds } };
+        if (unitType) {
+          tenantQuery.unitType = unitType;
+        }
+        const tenants = await db
+          .collection<Tenant>("tenants")
+          .find(tenantQuery, { projection: { _id: 1 } })
+          .toArray();
+        const tenantIds = tenants.map((t) => t._id.toString());
+        logger.debug("Tenants found", { userId, tenantIds, unitType });
+
+        query.$or = [
+          ...(tenantIds.length ? [{ tenantId: { $in: tenantIds } }] : []),
+          { tenantId: { $eq: null } },
+          { tenantId: { $exists: false } },
+        ];
+      }
     } else if (role === "tenant") {
       if (!tenantId || tenantId !== userId) {
         logger.error("Unauthorized tenant access", { userId, tenantId });
         return NextResponse.json({ success: false, message: "Unauthorized: Tenant ID mismatch" }, { status: 403 });
       }
       query.tenantId = tenantId;
+      if (unitType) {
+        const tenant = await db
+          .collection<Tenant>("tenants")
+          .findOne({ _id: new ObjectId(tenantId), unitType });
+        if (!tenant) {
+          logger.debug("Tenant does not match unitType", { tenantId, unitType });
+          return NextResponse.json(
+            { success: true, payments: [], total: 0, page, limit, totalPages: 0 },
+            { status: 200 }
+          );
+        }
+      }
     } else if (role === "admin") {
-      if (tenantId) query.tenantId = tenantId;
+      if (tenantId) {
+        query.tenantId = tenantId;
+        if (unitType) {
+          const tenant = await db
+            .collection<Tenant>("tenants")
+            .findOne({ _id: new ObjectId(tenantId), unitType });
+          if (!tenant) {
+            logger.debug("Tenant does not match unitType", { tenantId, unitType });
+            return NextResponse.json(
+              { success: true, payments: [], total: 0, page, limit, totalPages: 0 },
+              { status: 200 }
+            );
+          }
+        }
+      } else if (unitType) {
+        const tenantUnitTypes = await db
+          .collection<Tenant>("tenants")
+          .find({ unitType }, { projection: { _id: 1 } })
+          .toArray();
+        const tenantIdsWithUnitType = tenantUnitTypes.map((t) => t._id.toString());
+        logger.debug("Admin unitType filter", { unitType, tenantIdsWithUnitType });
+        query.$or = [
+          ...(tenantIdsWithUnitType.length ? [{ tenantId: { $in: tenantIdsWithUnitType } }] : []),
+          { tenantId: { $eq: null } },
+          { tenantId: { $exists: false } },
+        ];
+      }
       if (propertyId && propertyId !== "all") query.propertyId = propertyId;
     }
 
-    // Apply filters
     if (tenantName) query.tenantName = { $regex: tenantName, $options: "i" };
     if (type) query.type = type;
     if (status) query.status = status;
-
-    await db.collection<PaymentDb>("payments").createIndex({ propertyId: 1, paymentDate: -1 });
-    await db.collection<PaymentDb>("payments").createIndex({ tenantId: 1 });
+    if (unitType && !query.tenantId && !query.$or) {
+      query.unitType = unitType;
+    }
 
     const total = await db.collection<PaymentDb>("payments").countDocuments(query);
-    const totalPages = Math.ceil(total / limit) || 1;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    const adjustedPage = Math.min(page, totalPages);
 
     const payments = (await db
       .collection<PaymentDb>("payments")
       .aggregate([
         { $match: query },
         { $sort: { paymentDate: sort === "-paymentDate" ? -1 : 1 } },
-        { $skip: skip },
+        { $skip: (adjustedPage - 1) * limit },
         { $limit: limit },
         {
           $lookup: {
@@ -182,7 +255,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             let: { tenantId: { $toObjectId: "$tenantId" } },
             pipeline: [
               { $match: { $expr: { $eq: ["$_id", "$$tenantId"] } } },
-              { $project: { name: 1 } },
+              { $project: { name: 1, unitType: 1 } },
             ],
             as: "tenant",
           },
@@ -191,7 +264,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         {
           $project: {
             _id: { $toString: "$_id" },
-            tenantId: 1,
+            tenantId: { $ifNull: ["$tenantId", null] },
             amount: 1,
             propertyId: 1,
             paymentDate: 1,
@@ -202,10 +275,24 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             reference: 1,
             tenantName: { $ifNull: ["$tenant.name", "Unknown"] },
             date: "$paymentDate",
+            unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },
           },
         },
       ])
       .toArray()) as Payment[];
+
+    if (total === 0) {
+      logger.info("No payments found for query", {
+        userId,
+        role,
+        tenantId,
+        propertyId,
+        tenantName,
+        type,
+        status,
+        unitType,
+      });
+    }
 
     logger.info("Payments fetched successfully", {
       userId,
@@ -215,7 +302,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       tenantName,
       type,
       status,
-      page,
+      unitType,
+      page: adjustedPage,
       limit,
       total,
       paymentsCount: payments.length,
@@ -225,7 +313,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       success: true,
       payments,
       total,
-      page,
+      page: adjustedPage,
       limit,
       totalPages,
     });
@@ -249,7 +337,6 @@ export async function POST(request: NextRequest) {
   try {
     console.log("Handling POST request to /api/payments");
 
-    // Validate environment variables
     if (!UMS_PAY_API_KEY || !UMS_PAY_EMAIL || !UMS_PAY_ACCOUNT_ID) {
       console.error("Missing UMS Pay configuration:", {
         hasApiKey: !!UMS_PAY_API_KEY,
@@ -274,7 +361,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "initiate") {
-      // Validate initiate request
       if (!amount || !msisdn || !reference) {
         console.log("Missing required fields for initiate:", { amount, msisdn, reference });
         return NextResponse.json(
@@ -315,7 +401,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "status") {
-      // Validate status request
       if (!transactionRequestId) {
         console.log("Missing transactionRequestId for status check:", body);
         return NextResponse.json(

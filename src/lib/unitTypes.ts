@@ -12,7 +12,7 @@ export const UNIT_TYPES = [
     },
   },
   {
-    type: "Studio",
+    type: "Bedsitter",
     pricing: {
       RentCollection: [
         { range: [5, 20], fee: 2500 },
@@ -78,6 +78,7 @@ export const UNIT_TYPES = [
       FullManagement: 0,
     },
   },
+  
 ];
 
 export function getManagementFee(unit: { type: string; managementType: "RentCollection" | "FullManagement"; quantity: number }): number {

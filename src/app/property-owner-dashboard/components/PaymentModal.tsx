@@ -4,7 +4,7 @@ import Modal from "./Modal";
 interface Property {
   _id: string;
   name: string;
-  unitTypes: { type: string; price: number; deposit: number; managementType: "RentCollection" | "FullManagement"; managementFee: number }[];
+  unitTypes: { type: string; price: number; deposit: number; managementType: "RentCollection" | "FullManagement"; managementFee: number; uniqueType: string }[];
 }
 
 interface Invoice {
@@ -55,7 +55,6 @@ export default function PaymentModal({
   const [csrfToken, setCsrfToken] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("Processing your payment. Please wait...");
 
-  // Fetch CSRF token when modal opens
   useEffect(() => {
     if (isOpen) {
       const fetchCsrfToken = async () => {
@@ -181,7 +180,6 @@ export default function PaymentModal({
             throw new Error(statusData.message || `HTTP error! Status: ${statusRes.status}`);
           }
 
-          // Parse MpesaResponse with robust error handling
           let mpesaErrorCode = "";
           let mpesaErrorMessage = "";
           try {
@@ -195,24 +193,21 @@ export default function PaymentModal({
             mpesaErrorMessage = "";
           }
 
-          // Check for cancellation condition
           const isCancelled = mpesaErrorCode === "500.001.1001" && mpesaErrorMessage.includes("user pressed Cancel Button");
           if (isCancelled) {
             console.log("Cancellation detected:", { transactionRequestId, mpesaErrorCode, mpesaErrorMessage });
             setStatusMessage("Payment cancelled on your phone. Please retry or confirm.");
             onError("Payment cancelled by user");
-            await new Promise((resolve) => setTimeout(resolve, 2000)); // Delay to show message
+            await new Promise((resolve) => setTimeout(resolve, 2000));
             setIsPaymentLoadingModalOpen(false);
             setIsLoading(false);
-            return true; // Stop polling immediately
+            return true;
           }
 
-          // Update status message for the loader
           if (statusData.TransactionStatus === "Pending") {
             setStatusMessage("Transaction pending, please complete the payment on your phone.");
           }
 
-          // Check for terminal states
           if (statusData.TransactionStatus === "Completed") {
             try {
               const updateRes = await fetch("/api/invoices", {
@@ -236,7 +231,7 @@ export default function PaymentModal({
               }
               setStatusMessage("Payment successful!");
               onSuccess();
-              await new Promise((resolve) => setTimeout(resolve, 2000)); // Delay to show message
+              await new Promise((resolve) => setTimeout(resolve, 2000));
               setIsPaymentLoadingModalOpen(false);
               setIsLoading(false);
               return true;
@@ -267,7 +262,7 @@ export default function PaymentModal({
           }
 
           console.log("Continuing polling:", { transactionRequestId, status: statusData.TransactionStatus, attempts: attempts + 1 });
-          return false; // Continue polling for non-terminal states
+          return false;
         } catch (error) {
           console.error("Error checking transaction status:", error, { transactionRequestId });
           const errorMessage = error instanceof Error ? error.message : "Failed to check transaction status";
@@ -276,7 +271,7 @@ export default function PaymentModal({
           await new Promise((resolve) => setTimeout(resolve, 2000));
           setIsPaymentLoadingModalOpen(false);
           setIsLoading(false);
-          return true; // Stop polling on error
+          return true;
         }
       };
 
@@ -286,7 +281,7 @@ export default function PaymentModal({
           const done = await checkStatus();
           if (done) {
             console.log(`Stopping polling: Transaction ${transactionRequestId} reached terminal state or error after ${attempts + 1} attempts`);
-            break; // Exit polling loop immediately
+            break;
           }
           console.log(`Polling attempt ${attempts + 1}/${maxAttempts} for transaction ${transactionRequestId}`);
           await new Promise((resolve) => setTimeout(resolve, interval));
@@ -496,9 +491,9 @@ export default function PaymentModal({
                   <option value="">Select Unit Type</option>
                   {properties
                     .find((p) => p._id === paymentPropertyId)
-                    ?.unitTypes.map((u) => (
-                      <option key={u.type} value={u.type}>
-                        {u.type} ({u.managementType}: Ksh {u.managementFee}/mo)
+                    ?.unitTypes.map((u, index) => (
+                      <option key={u.uniqueType} value={u.uniqueType}>
+                        {u.type} #{index + 1} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
                       </option>
                     ))}
                 </select>
@@ -507,25 +502,6 @@ export default function PaymentModal({
                 )}
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Payment Amount (Ksh)</label>
-              <div className="relative">
-                <input
-                  placeholder={isFetchingAmount ? "Fetching amount..." : "Amount (auto-filled after selecting unit type)"}
-                  value={isFetchingAmount ? "Loading..." : paymentAmount}
-                  readOnly
-                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${
-                    paymentFormErrors.paymentInvoice ? "border-red-500" : "border-gray-300"
-                  }`}
-                />
-                {isFetchingAmount && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-[#012a4a]"></div>
-                )}
-              </div>
-              {paymentFormErrors.paymentInvoice && (
-                <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentInvoice}</p>
-              )}
-            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Phone Number</label>
               <input
@@ -538,7 +514,7 @@ export default function PaymentModal({
                     paymentPhone: e.target.value.trim()
                       ? /^\+?\d{10,15}$/.test(e.target.value)
                         ? undefined
-                        : "Invalid phone number (10-15 digits, optional +)"
+                        : "Valid phone number is required (10-15 digits, optional +)"
                       : "Phone number is required",
                   }));
                 }}
@@ -549,6 +525,20 @@ export default function PaymentModal({
               />
               {paymentFormErrors.paymentPhone && (
                 <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentPhone}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Amount (Ksh)</label>
+              <input
+                placeholder="Amount (auto-filled)"
+                value={isFetchingAmount ? "Fetching amount..." : paymentAmount}
+                readOnly
+                className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${
+                  paymentFormErrors.paymentInvoice ? "border-red-500" : "border-gray-300"
+                }`}
+              />
+              {paymentFormErrors.paymentInvoice && (
+                <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentInvoice}</p>
               )}
             </div>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
@@ -571,9 +561,7 @@ export default function PaymentModal({
                   Object.values(paymentFormErrors).some((v) => v !== undefined) ||
                   !paymentPropertyId ||
                   !paymentUnitType ||
-                  !paymentPhone ||
-                  !paymentAmount ||
-                  !csrfToken
+                  !paymentAmount
                 }
                 className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
                   isLoading ||
@@ -581,33 +569,30 @@ export default function PaymentModal({
                   Object.values(paymentFormErrors).some((v) => v !== undefined) ||
                   !paymentPropertyId ||
                   !paymentUnitType ||
-                  !paymentPhone ||
-                  !paymentAmount ||
-                  !csrfToken
+                  !paymentAmount
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-[#012a4a] hover:bg-[#014a7a]"
                 }`}
-                aria-label="Confirm payment"
+                aria-label="Initiate payment"
               >
                 {isLoading && (
                   <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
                 )}
-                Confirm Payment
+                Pay Now
               </button>
             </div>
           </form>
         )}
       </Modal>
       <Modal
-        title="Processing Payment"
+        title="Payment Processing"
         isOpen={isPaymentLoadingModalOpen}
         onClose={() => {}}
+        disableClose={true}
       >
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a] mb-4"></div>
-          <p className={`text-sm sm:text-base ${statusMessage.includes("failed") || statusMessage.includes("cancelled") || statusMessage.includes("timed out") ? "text-red-700" : statusMessage.includes("successful") ? "text-green-700" : "text-gray-700"}`}>
-            {statusMessage}
-          </p>
+        <div className="flex flex-col items-center justify-center py-4">
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#012a4a] mb-4"></div>
+          <p className="text-gray-700 text-sm sm:text-base">{statusMessage}</p>
         </div>
       </Modal>
     </>

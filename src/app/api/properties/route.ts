@@ -1,3 +1,4 @@
+// src/app/api/properties/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate unit types and assign management fees
-    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: UnitType) => {
+    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: UnitType, index: number) => {
       const validUnitType = UNIT_TYPES.find((ut) => ut.type === unit.type);
       if (
         !unit.type ||
@@ -202,7 +203,7 @@ export async function POST(request: NextRequest) {
         unit.deposit < 0 ||
         !['RentCollection', 'FullManagement'].includes(unit.managementType)
       ) {
-        throw new Error(`Invalid unit type: ${JSON.stringify(unit)}`);
+        throw new Error(`Invalid unit type at index ${index}: ${JSON.stringify(unit)}`);
       }
       const managementFee = getManagementFee({
         type: unit.type,
@@ -233,8 +234,8 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection<Property>('properties').insertOne(newProperty);
 
-    // Generate a separate invoice for each unit type with a non-zero management fee
-    for (const unit of validatedUnitTypes) {
+    // Generate invoices for each unit type with a non-zero management fee
+    for (const [index, unit] of validatedUnitTypes.entries()) {
       if (unit.managementFee && unit.managementFee > 0) {
         const createdAt = new Date();
         const expiresAt = new Date(createdAt);
@@ -243,26 +244,28 @@ export async function POST(request: NextRequest) {
         const invoice: Omit<Invoice, '_id'> = {
           userId: ownerId,
           propertyId: result.insertedId.toString(),
-          unitType: unit.type,
+          unitType: `${unit.type}-${index}`, // Append index to differentiate same unit types
           amount: unit.managementFee,
-          reference: `PROPERTY-INVOICE-${ownerId}-${unit.type}-${Date.now()}`,
+          reference: `PROPERTY-INVOICE-${ownerId}-${unit.type}-${index}-${Date.now()}`,
           status: 'pending',
           createdAt,
           updatedAt: createdAt,
           expiresAt,
-          description: `Property creation fee for ${name} - Unit Type: ${unit.type}`,
+          description: `Property creation fee for ${name} - Unit Type: ${unit.type} (${index + 1})`,
         };
 
         const invoiceResult = await db.collection<Omit<Invoice, '_id'>>('invoices').insertOne(invoice);
         console.log('Generated invoice for unit type:', {
           invoiceId: invoiceResult.insertedId.toString(),
           unitType: unit.type,
+          unitIndex: index,
           propertyId: result.insertedId.toString(),
           invoice,
         });
       } else {
         console.log('No management fee for unit type, skipping invoice generation:', {
           unitType: unit.type,
+          unitIndex: index,
           propertyId: result.insertedId.toString(),
         });
       }

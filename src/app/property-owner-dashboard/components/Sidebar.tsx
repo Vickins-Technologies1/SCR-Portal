@@ -73,7 +73,7 @@ export default function Sidebar() {
     {
       key: "payments",
       href: "/property-owner-dashboard/payments",
-      label: "Payments",
+      label: "Transactions",
       icon: <CreditCard size={18} />,
     },
     {
@@ -85,7 +85,7 @@ export default function Sidebar() {
     {
       key: "reports",
       href: "/property-owner-dashboard/reports",
-      label: "Reports/Invoices",
+      label: "Reports & Invoices",
       icon: <BarChart size={18} />,
     },
     {

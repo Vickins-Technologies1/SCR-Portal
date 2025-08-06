@@ -9,28 +9,31 @@ import Sidebar from "../components/Sidebar";
 
 interface Payment {
   _id: string;
-  tenantId: string;
+  tenantId: string | null;
   amount: number;
   propertyId: string;
   paymentDate: string;
   transactionId: string;
   status: "completed" | "pending" | "failed";
   tenantName: string;
-  type?: "Rent" | "Utility";
-  phoneNumber?: string;
-  reference?: string;
+  type: "Rent" | "Utility" | "ManagementFee";
+  phoneNumber: string;
+  reference: string;
+  unitType: string; // Format: "type-index", e.g., "Single-0"
 }
 
 interface Property {
   _id: string;
   name: string;
   ownerId: string;
+  unitTypes: { type: string; price: number; deposit: number; managementType: "RentCollection" | "FullManagement"; managementFee: number; uniqueType: string }[];
 }
 
 interface FilterConfig {
   tenantName: string;
   type: string;
   status: string;
+  unitType: string;
 }
 
 export default function PaymentsPage() {
@@ -46,41 +49,70 @@ export default function PaymentsPage() {
   const [itemsPerPage] = useState(10);
   const [totalPayments, setTotalPayments] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [csrfToken, setCsrfToken] = useState<string>("");
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterConfig>({
     tenantName: "",
     type: "",
     status: "",
+    unitType: "",
   });
 
-  // Fetch CSRF token with retry
+  // Fetch CSRF token
   useEffect(() => {
-    const fetchCsrfToken = async (retries = 3, delay = 1000) => {
-      for (let i = 0; i < retries; i++) {
-        try {
-          setIsLoading(true);
-          const res = await fetch("/api/csrf-token", {
-            method: "GET",
-            credentials: "include",
-          });
-          const data = await res.json();
-          if (data.success) {
-            setCsrfToken(data.csrfToken);
-            Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
-            return;
-          } else {
-            setError(data.message || "Failed to fetch CSRF token.");
+    const fetchCsrfToken = async () => {
+      const existingToken = Cookies.get("csrf-token");
+      if (existingToken) {
+        setCsrfToken(existingToken);
+        console.log("Using existing CSRF token:", existingToken);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/csrf-token", {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!res.ok) {
+          let errorMessage = `HTTP error: ${res.status}`;
+          try {
+            const text = await res.text();
+            errorMessage += `, Response: ${text || "No response body"}`;
+            console.error("CSRF fetch failed", { status: res.status, statusText: res.statusText, headers: Object.fromEntries(res.headers), body: text });
+          } catch {
+            errorMessage += ", Failed to read response body";
+            console.error("CSRF fetch failed", { status: res.status, statusText: res.statusText, headers: Object.fromEntries(res.headers) });
           }
-        } catch {
-          if (i < retries - 1) {
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            continue;
-          }
-          setError("Failed to connect to server for CSRF token.");
+          throw new Error(errorMessage);
         }
-        setIsLoading(false);
+
+        const csrfToken = res.headers.get("X-CSRF-Token");
+        if (!csrfToken) {
+          let responseBody;
+          try {
+            responseBody = await res.text();
+          } catch {
+            responseBody = "Failed to read response body";
+          }
+          const errorMessage = "CSRF token not found in response headers";
+          console.error("Failed to fetch CSRF token:", errorMessage, {
+            status: res.status,
+            headers: Object.fromEntries(res.headers),
+            body: responseBody,
+          });
+          setError(errorMessage);
+          return;
+        }
+
+        Cookies.set("csrf-token", csrfToken, { sameSite: "strict", expires: 7 });
+        setCsrfToken(csrfToken);
+        console.log("Fetched new CSRF token from headers:", csrfToken);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Failed to connect to server for CSRF token";
+        setError(errorMessage);
+        console.error("Error fetching CSRF token:", errorMessage, { error });
       }
     };
+
     fetchCsrfToken();
   }, []);
 
@@ -108,14 +140,27 @@ export default function PaymentsPage() {
         },
         credentials: "include",
       });
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(`HTTP error: ${res.status}`);
+      }
+      const data: { success: boolean; properties?: Property[]; message?: string } = await res.json();
       if (data.success) {
-        setProperties(data.properties || []);
+        const properties = data.properties?.map((p: Property) => ({
+          ...p,
+          unitTypes: p.unitTypes?.map((u, index) => ({
+            ...u,
+            uniqueType: `${u.type}-${index}`,
+          })) || [],
+        })) || [];
+        setProperties(properties);
       } else {
         setError(data.message || "Failed to fetch properties.");
+        console.error("Failed to fetch properties:", data.message);
       }
-    } catch {
-      setError("Failed to connect to the server.");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect to the server.";
+      setError(errorMessage);
+      console.error("Error fetching properties:", errorMessage, { error });
     }
   }, [userId, csrfToken]);
 
@@ -133,6 +178,7 @@ export default function PaymentsPage() {
         ...(filters.tenantName && { tenantName: filters.tenantName }),
         ...(filters.type && { type: filters.type }),
         ...(filters.status && { status: filters.status }),
+        ...(filters.unitType && { unitType: filters.unitType }),
       });
       const res = await fetch(`/api/payments?${queryParams}`, {
         method: "GET",
@@ -145,30 +191,40 @@ export default function PaymentsPage() {
       if (!res.ok) {
         if (res.status === 403) {
           setError("Unauthorized request. Please try logging in again.");
+          console.warn("Unauthorized request to /api/payments:", res.status);
           return;
         }
         throw new Error(`HTTP error: ${res.status}`);
       }
-      const data = await res.json();
+      const data: {
+        success: boolean;
+        payments?: Payment[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
+        message?: string;
+      } = await res.json();
       if (data.success) {
         setPayments(data.payments || []);
         setTotalPayments(data.total || 0);
         setTotalPages(data.totalPages || 1);
-        setCurrentPage(data.page || 1);
-        if (data.payments?.length === 0 && data.total > 0) {
-          setError(`No payments found for page ${currentPage}. Try another page or adjust filters.`);
+        if (data.totalPages && currentPage > data.totalPages) {
+          setCurrentPage(data.totalPages);
+        } else if (currentPage < 1) {
+          setCurrentPage(1);
         }
       } else {
         setError(data.message || "Failed to fetch payments.");
         setPayments([]);
         setTotalPayments(0);
         setTotalPages(1);
+        console.error("Failed to fetch payments:", data.message);
       }
-    } catch {
-      setError("Failed to connect to the server.");
-      setPayments([]);
-      setTotalPayments(0);
-      setTotalPages(1);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect to the server.";
+      setError(errorMessage);
+      console.error("Error fetching payments:", errorMessage, { error });
     } finally {
       setIsLoading(false);
     }
@@ -199,7 +255,7 @@ export default function PaymentsPage() {
 
   // Clear filters
   const clearFilters = () => {
-    setFilters({ tenantName: "", type: "", status: "" });
+    setFilters({ tenantName: "", type: "", status: "", unitType: "" });
     setCurrentPage(1);
     setError(null);
   };
@@ -209,6 +265,7 @@ export default function PaymentsPage() {
     if (newPage >= 1 && newPage <= totalPages && !isLoading) {
       setCurrentPage(newPage);
       setError(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -224,6 +281,39 @@ export default function PaymentsPage() {
       default:
         return "text-gray-600 bg-gray-100";
     }
+  };
+
+  // Get unique unit types for filter (base types without index)
+  const uniqueUnitTypes = [
+    ...new Set(
+      payments
+        .map((payment) => payment.unitType?.split('-')[0])
+        .filter((ut): ut is string => !!ut)
+    ),
+  ];
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const maxPagesToShow = 5;
+    const pages: (number | string)[] = [];
+    const startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+
+    if (startPage > 1) {
+      pages.push(1);
+      if (startPage > 2) pages.push("...");
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) pages.push("...");
+      pages.push(totalPages);
+    }
+
+    return pages;
   };
 
   return (
@@ -256,7 +346,7 @@ export default function PaymentsPage() {
           </div>
           <div className="mb-6 bg-white p-4 rounded-lg shadow">
             <h2 className="text-lg font-semibold mb-4">Filter Payments</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Name</label>
                 <select
@@ -266,11 +356,12 @@ export default function PaymentsPage() {
                   className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
                 >
                   <option value="">All Tenants</option>
-                  {[...new Set(payments.map((payment) => payment.tenantName))].map((tenantName) => (
+                  {[...new Set(payments.map((payment) => payment.tenantName).filter((tn): tn is string => tn !== "Unknown"))].map((tenantName) => (
                     <option key={tenantName} value={tenantName}>
                       {tenantName}
                     </option>
                   ))}
+                  <option value="Unknown">Non-tenant Payments</option>
                 </select>
               </div>
               <div>
@@ -284,6 +375,7 @@ export default function PaymentsPage() {
                   <option value="">All Types</option>
                   <option value="Rent">Rent</option>
                   <option value="Utility">Utility</option>
+                  <option value="ManagementFee">Management Fee</option>
                 </select>
               </div>
               <div>
@@ -300,10 +392,27 @@ export default function PaymentsPage() {
                   <option value="failed">Failed</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unit Type</label>
+                <select
+                  name="unitType"
+                  value={filters.unitType}
+                  onChange={handleFilterChange}
+                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                >
+                  <option value="">All Unit Types</option>
+                  {uniqueUnitTypes.map((unitType) => (
+                    <option key={unitType} value={unitType}>
+                      {unitType}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <button
               onClick={clearFilters}
               className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-md hover:bg-[#024a7a] transition"
+              disabled={isLoading}
             >
               Clear Filters
             </button>
@@ -330,35 +439,45 @@ export default function PaymentsPage() {
                     <th className="px-4 py-3 text-left">#</th>
                     <th className="px-4 py-3 text-left">Transaction ID</th>
                     <th className="px-4 py-3 text-left">Tenant</th>
+                    <th className="px-4 py-3 text-left">Property</th>
+                    <th className="px-4 py-3 text-left">Unit Type</th>
                     <th className="px-4 py-3 text-left">Amount (Ksh)</th>
                     <th className="px-4 py-3 text-left">Payment Date</th>
                     <th className="px-4 py-3 text-left">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((payment, index) => (
-                    <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
-                      <td className="px-4 py-3">{index + 1 + (currentPage - 1) * itemsPerPage}</td>
-                      <td className="px-4 py-3">{payment.transactionId}</td>
-                      <td className="px-4 py-3">{payment.tenantName || payment.tenantId}</td>
-                      <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
-                      <td className="px-4 py-3">{new Date(payment.paymentDate).toLocaleDateString()}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusStyles(payment.status)}`}>
-                          {payment.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {payments.map((payment, index) => {
+                    const [baseUnitType] = payment.unitType?.split('-') || ['N/A'];
+                    return (
+                      <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
+                        <td className="px-4 py-3">{index + 1 + (currentPage - 1) * itemsPerPage}</td>
+                        <td className="px-4 py-3">{payment.transactionId}</td>
+                        <td className="px-4 py-3">{payment.tenantName || payment.tenantId || "Unknown"}</td>
+                        <td className="px-4 py-3">
+                          {properties.find((p) => p._id === payment.propertyId)?.name || "N/A"}
+                        </td>
+                        <td className="px-4 py-3">{`${baseUnitType} (${payment.unitType})`}</td>
+                        <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
+                        <td className="px-4 py-3">{new Date(payment.paymentDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusStyles(payment.status)}`}>
+                            {payment.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {totalPayments > 0 && (
                 <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4 p-4">
                   <div className="text-sm text-gray-600">
-                    Showing {Math.min(payments.length, itemsPerPage)} of {totalPayments} payments
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                    {Math.min(currentPage * itemsPerPage, totalPayments)} of {totalPayments} payments
                   </div>
-                  {totalPayments > itemsPerPage && (
-                    <div className="flex gap-2">
+                  {totalPages > 1 && (
+                    <div className="flex gap-2 items-center">
                       <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1 || isLoading}
@@ -367,9 +486,23 @@ export default function PaymentsPage() {
                       >
                         <ChevronLeft className="h-5 w-5" />
                       </button>
-                      <span className="px-3 py-1 text-sm text-gray-600">
-                        Page {currentPage} of {totalPages}
-                      </span>
+                      {getPageNumbers().map((page, index) => (
+                        <button
+                          key={index}
+                          onClick={() => typeof page === "number" && handlePageChange(page)}
+                          disabled={page === "..." || page === currentPage || isLoading}
+                          className={`px-3 py-1 rounded-lg transition ${
+                            page === currentPage
+                              ? "bg-[#012a4a] text-white"
+                              : page === "..."
+                              ? "bg-gray-100 text-gray-500 cursor-default"
+                              : "bg-gray-200 hover:bg-gray-300"
+                          }`}
+                          aria-label={typeof page === "number" ? `Page ${page}` : "Ellipsis"}
+                        >
+                          {page}
+                        </button>
+                      ))}
                       <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage >= totalPages || isLoading}

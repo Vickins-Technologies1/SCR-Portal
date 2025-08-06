@@ -16,7 +16,7 @@ interface Tenant {
   email: string;
   phone: string;
   propertyId: string;
-  unitType: string;
+  unitType: string; // Now includes index, e.g., "Single-0"
   price: number;
   deposit: number;
   houseNumber: string;
@@ -29,7 +29,14 @@ interface Tenant {
 interface Property {
   _id: string;
   name: string;
-  unitTypes: { type: string; price: number; deposit: number; managementType: "RentCollection" | "FullManagement"; managementFee: number }[];
+  unitTypes: {
+    type: string;
+    price: number;
+    deposit: number;
+    managementType: "RentCollection" | "FullManagement";
+    managementFee: number;
+    uniqueType: string;
+  }[];
 }
 
 interface SortConfig {
@@ -194,9 +201,10 @@ export default function TenantsPage() {
       if (data.success) {
         const properties = data.properties.map((p: Property) => ({
           ...p,
-          unitTypes: p.unitTypes.map((u: Property["unitTypes"][0]) => ({
+          unitTypes: p.unitTypes.map((u: Property["unitTypes"][0], index: number) => ({
             ...u,
             managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
+            uniqueType: `${u.type}-${index}`,
           })),
         }));
         setProperties(properties || []);
@@ -231,14 +239,14 @@ export default function TenantsPage() {
     }
   }, [userId, csrfToken]);
 
-  // Update fetchInvoiceStatus with detailed logging and error handling
+  // Update fetchInvoiceStatus to handle unique unit type identifiers
   const fetchInvoiceStatus = useCallback(
-    async (propertyId: string, unitType: string) => {
-      if (!userId || !propertyId || !unitType) {
+    async (propertyId: string, uniqueType: string) => {
+      if (!userId || !propertyId || !uniqueType) {
         console.warn("Missing required parameters for fetchInvoiceStatus", {
           userId,
           propertyId,
-          unitType,
+          uniqueType,
         });
         setError("Missing required parameters to check invoice status.");
         return null;
@@ -246,8 +254,8 @@ export default function TenantsPage() {
       try {
         const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(
           propertyId
-        )}&unitType=${encodeURIComponent(unitType)}`;
-        console.log("Fetching invoice status", { url, userId, propertyId, unitType });
+        )}&unitType=${encodeURIComponent(uniqueType)}`;
+        console.log("Fetching invoice status", { url, userId, propertyId, uniqueType });
 
         const res = await fetch(url, {
           method: "GET",
@@ -258,13 +266,13 @@ export default function TenantsPage() {
           credentials: "include",
         });
         const data = await res.json();
-        console.log("Invoice status response", { data, propertyId, unitType });
+        console.log("Invoice status response", { data, propertyId, uniqueType });
 
         if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
           if (data.status === null) {
-            console.log("No invoice found", { propertyId, unitType });
+            console.log("No invoice found", { propertyId, uniqueType });
           } else {
-            console.log("Invoice status", { status: data.status, propertyId, unitType });
+            console.log("Invoice status", { status: data.status, propertyId, uniqueType });
           }
           return data.status;
         }
@@ -283,7 +291,7 @@ export default function TenantsPage() {
     [userId, csrfToken, setError]
   );
 
-  // Update useEffect for data fetching to optimize dependencies
+  // Update useEffect for data fetching
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
       Promise.all([
@@ -318,7 +326,7 @@ export default function TenantsPage() {
         filtered = filtered.filter((tenant) => tenant.propertyId === filters.propertyId);
       }
       if (filters.unitType) {
-        filtered = filtered.filter((tenant) => tenant.unitType === filters.unitType);
+        filtered = filtered.filter((tenant) => tenant.unitType.split('-')[0] === filters.unitType);
       }
       setFilteredTenants(filtered);
       setTotalTenants(filtered.length);
@@ -758,47 +766,50 @@ export default function TenantsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTenants.slice((page - 1) * limit, page * limit).map((t) => (
-                    <tr
-                      key={t._id}
-                      className="border-t hover:bg-gray-50 transition cursor-pointer"
-                      onClick={() => router.push(`/property-owner-dashboard/tenants/${t._id}`)}
-                    >
-                      <td className="px-4 py-3">{t.name}</td>
-                      <td className="px-4 py-3">{t.email}</td>
-                      <td className="px-4 py-3">{t.phone}</td>
-                      <td className="px-4 py-3">
-                        {properties.find((p) => p._id === t.propertyId)?.name || "N/A"}
-                      </td>
-                      <td className="px-4 py-3">{t.unitType}</td>
-                      <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
-                      <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
-                      <td className="px-4 py-3">{t.houseNumber}</td>
-                      <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
-                      <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
-                      <td
-                        className="px-4 py-3 flex gap-2"
-                        onClick={(e) => e.stopPropagation()}
+                  {filteredTenants.slice((page - 1) * limit, page * limit).map((t) => {
+                    const [baseUnitType] = t.unitType.split('-');
+                    return (
+                      <tr
+                        key={t._id}
+                        className="border-t hover:bg-gray-50 transition cursor-pointer"
+                        onClick={() => router.push(`/property-owner-dashboard/tenants/${t._id}`)}
                       >
-                        <button
-                          onClick={() => openEditModal(t)}
-                          className="text-[#012a4a] hover:text-[#014a7a] transition"
-                          title="Edit Tenant"
-                          aria-label={`Edit tenant ${t.name}`}
+                        <td className="px-4 py-3">{t.name}</td>
+                        <td className="px-4 py-3">{t.email}</td>
+                        <td className="px-4 py-3">{t.phone}</td>
+                        <td className="px-4 py-3">
+                          {properties.find((p) => p._id === t.propertyId)?.name || "N/A"}
+                        </td>
+                        <td className="px-4 py-3">{`${baseUnitType} (${t.unitType})`}</td>
+                        <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
+                        <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
+                        <td className="px-4 py-3">{t.houseNumber}</td>
+                        <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
+                        <td
+                          className="px-4 py-3 flex gap-2"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Pencil className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(t._id)}
-                          className="text-red-600 hover:text-red-800 transition"
-                          title="Delete Tenant"
-                          aria-label={`Delete tenant ${t.name}`}
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          <button
+                            onClick={() => openEditModal(t)}
+                            className="text-[#012a4a] hover:text-[#014a7a] transition"
+                            title="Edit Tenant"
+                            aria-label={`Edit tenant ${t.name}`}
+                          >
+                            <Pencil className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(t._id)}
+                            className="text-red-600 hover:text-red-800 transition"
+                            title="Delete Tenant"
+                            aria-label={`Delete tenant ${t.name}`}
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -856,8 +867,7 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantName ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantName ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.tenantName && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.tenantName}</p>
@@ -881,8 +891,7 @@ export default function TenantsPage() {
                   }}
                   required
                   type="email"
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantEmail ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantEmail ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.tenantEmail && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.tenantEmail}</p>
@@ -905,8 +914,7 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPhone ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPhone ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.tenantPhone && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>
@@ -927,8 +935,7 @@ export default function TenantsPage() {
                     }}
                     type="password"
                     required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPassword ? "border-red-500" : "border-gray-300"
-                      }`}
+                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPassword ? "border-red-500" : "border-gray-300"}`}
                   />
                   {formErrors.tenantPassword && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>
@@ -965,8 +972,7 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedPropertyId ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedPropertyId ? "border-red-500" : "border-gray-300"}`}
                 >
                   <option value="">Select Property</option>
                   {properties.map((p) => (
@@ -980,33 +986,32 @@ export default function TenantsPage() {
                 )}
               </div>
               {selectedPropertyId && (
-                // Update the unit type selection handler in the Modal form
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Unit Type</label>
                   <select
                     value={selectedUnitType}
                     onChange={async (e) => {
-                      const unitType = e.target.value;
-                      setSelectedUnitType(unitType);
+                      const uniqueType = e.target.value;
+                      setSelectedUnitType(uniqueType);
+                      const [baseUnitType, index] = uniqueType.split('-');
                       const unit = properties
                         .find((p) => p._id === selectedPropertyId)
-                        ?.unitTypes.find((u) => u.type === unitType);
+                        ?.unitTypes[parseInt(index)];
                       if (unit) {
                         setPrice(unit.price.toString());
                         setDeposit(unit.deposit.toString());
                         setFormErrors((prev) => ({
                           ...prev,
-                          selectedUnitType: unitType ? undefined : "Unit type is required",
+                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
                           price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
                           deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
                         }));
-                        // Check invoice status only if tenants.length >= 3 and in add mode
-                        if (tenants.length >= 3 && unitType && modalMode === "add") {
-                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, unitType);
+                        if (tenants.length >= 3 && uniqueType && modalMode === "add") {
+                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, uniqueType);
                           console.log("Invoice status check result", {
                             invoiceStatus,
                             propertyId: selectedPropertyId,
-                            unitType,
+                            uniqueType,
                           });
                           if (invoiceStatus !== "completed") {
                             const tenantData: Partial<TenantRequest> = {
@@ -1015,7 +1020,7 @@ export default function TenantsPage() {
                               phone: tenantPhone,
                               password: tenantPassword,
                               propertyId: selectedPropertyId,
-                              unitType,
+                              unitType: uniqueType,
                               price: parseFloat(price) || unit.price,
                               deposit: parseFloat(deposit) || unit.deposit,
                               houseNumber,
@@ -1027,13 +1032,10 @@ export default function TenantsPage() {
                             setPendingTenantData(tenantData);
                             setError(
                               invoiceStatus === "pending"
-                                ? `Cannot add more tenants until the pending invoice for unit type ${unitType} in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"
-                                } is paid.`
+                                ? `Cannot add more tenants until the pending invoice for unit type ${baseUnitType} (#${parseInt(index) + 1}) in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"} is paid.`
                                 : invoiceStatus === "failed"
-                                  ? `Cannot add tenants because the invoice for unit type ${unitType} in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"
-                                  } has failed. Please contact support.`
-                                  : `No invoice found for unit type ${unitType} in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"
-                                  }. Please create an invoice.`
+                                  ? `Cannot add tenants because the invoice for unit type ${baseUnitType} (#${parseInt(index) + 1}) in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"} has failed. Please contact support.`
+                                  : `No invoice found for unit type ${baseUnitType} (#${parseInt(index) + 1}) in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"}. Please create an invoice.`
                             );
                             setIsModalOpen(false);
                             setIsPaymentPromptOpen(true);
@@ -1052,7 +1054,7 @@ export default function TenantsPage() {
                         setDeposit("");
                         setFormErrors((prev) => ({
                           ...prev,
-                          selectedUnitType: unitType ? undefined : "Unit type is required",
+                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
                           price: undefined,
                           deposit: undefined,
                         }));
@@ -1062,15 +1064,14 @@ export default function TenantsPage() {
                       }
                     }}
                     required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"
-                      }`}
+                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"}`}
                   >
                     <option value="">Select Unit Type</option>
                     {properties
                       .find((p) => p._id === selectedPropertyId)
-                      ?.unitTypes.map((u) => (
-                        <option key={u.type} value={u.type}>
-                          {u.type} ({u.managementType}: Ksh {u.managementFee}/mo)
+                      ?.unitTypes.map((u, index) => (
+                        <option key={`${u.type}-${index}`} value={`${u.type}-${index}`}>
+                          {u.type} #{index + 1} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
                         </option>
                       ))}
                   </select>
@@ -1085,8 +1086,7 @@ export default function TenantsPage() {
                   placeholder="Price (auto-filled)"
                   value={price}
                   readOnly
-                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.price ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.price ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.price && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
@@ -1098,8 +1098,7 @@ export default function TenantsPage() {
                   placeholder="Deposit (auto-filled)"
                   value={deposit}
                   readOnly
-                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.deposit ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.deposit ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.deposit && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.deposit}</p>
@@ -1118,8 +1117,7 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.houseNumber ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.houseNumber ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.houseNumber && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>
@@ -1142,8 +1140,7 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.leaseStartDate && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>
@@ -1166,8 +1163,7 @@ export default function TenantsPage() {
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"
-                    }`}
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"}`}
                 />
                 {formErrors.leaseEndDate && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
@@ -1195,13 +1191,14 @@ export default function TenantsPage() {
                     !selectedPropertyId ||
                     !selectedUnitType
                   }
-                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${isLoading ||
+                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
+                    isLoading ||
                     Object.values(formErrors).some((v) => v !== undefined) ||
                     !selectedPropertyId ||
                     !selectedUnitType
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#012a4a] hover:bg-[#014a7a]"
-                    }`}
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-[#012a4a] hover:bg-[#014a7a]"
+                  }`}
                   aria-label={modalMode === "add" ? "Add tenant" : "Update tenant"}
                 >
                   {isLoading && (
@@ -1245,23 +1242,23 @@ export default function TenantsPage() {
             isOpen={isPaymentPromptOpen}
             onClose={() => {
               setIsPaymentPromptOpen(false);
-              setIsModalOpen(true); // Reopen tenant form
+              setIsModalOpen(true);
               setError(null);
             }}
             onSuccess={() => {
               setSuccessMessage("Payment processed successfully!");
-              setPendingTenantData(null); // Clear pending data after successful payment
+              setPendingTenantData(null);
               fetchUserData();
               fetchPendingInvoices();
-              fetchTenants(); // Refresh tenants to reflect any changes
+              fetchTenants();
               setIsPaymentPromptOpen(false);
-              setIsModalOpen(true); // Reopen tenant form
+              setIsModalOpen(true);
               setError(null);
             }}
             onError={(message) => {
               setError(message);
               setIsPaymentPromptOpen(false);
-              setIsModalOpen(true); // Reopen tenant form
+              setIsModalOpen(true);
             }}
             properties={properties}
             initialPropertyId={pendingTenantData?.propertyId ?? ""}
