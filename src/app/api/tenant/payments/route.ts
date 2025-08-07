@@ -1,4 +1,3 @@
-// src/app/api/tenant/payments/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
@@ -53,6 +52,26 @@ interface UmsPayErrorResponse {
   transaction_request_id?: string;
 }
 
+interface PaymentRequestBody {
+  tenantId?: string;
+  amount?: number;
+  propertyId?: string;
+  userId?: string;
+  type?: "Rent" | "Utility" | "Deposit" | "Other";
+  phoneNumber?: string;
+  reference?: string;
+}
+
+const normalizePhoneNumber = (phone: string): string => {
+  let normalized = phone.replace(/\D/g, ""); // Remove non-digits
+  if (normalized.startsWith("07")) {
+    normalized = "254" + normalized.slice(1);
+  } else if (normalized.startsWith("+254")) {
+    normalized = normalized.slice(1);
+  }
+  return normalized;
+};
+
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
@@ -78,11 +97,10 @@ export async function GET(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
     const skip = (page - 1) * limit;
 
-  const query: {
-  tenantId?: string;
-  propertyId?: string | { $in: string[] };
-} = {};
-
+    const query: {
+      tenantId?: string;
+      propertyId?: string | { $in: string[] };
+    } = {};
 
     if (role === "propertyOwner") {
       const properties = await db
@@ -199,6 +217,7 @@ export async function POST(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
+  let body: PaymentRequestBody | null = null;
 
   if (!userId || !role || !["tenant", "propertyOwner"].includes(role)) {
     logger.error("Unauthorized access attempt", { userId, role });
@@ -211,7 +230,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    body = await request.json();
+    if (!body) {
+      logger.error("Invalid request body", { userId });
+      return NextResponse.json({ success: false, message: "Invalid request body" }, { status: 400 });
+    }
+
     const { tenantId, amount, propertyId, userId: submittedUserId, type, phoneNumber, reference } = body;
 
     // Input validation
@@ -222,6 +246,13 @@ export async function POST(request: NextRequest) {
     if (!type) return NextResponse.json({ success: false, message: "Missing payment type" }, { status: 400 });
     if (!phoneNumber) return NextResponse.json({ success: false, message: "Missing phone number" }, { status: 400 });
     if (!reference) return NextResponse.json({ success: false, message: "Missing transaction reference" }, { status: 400 });
+
+    // Validate phone number format
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (!/^\+?2547\d{8}$/.test(normalizedPhone)) {
+      logger.error("Invalid phone number format", { phoneNumber: normalizedPhone.replace(/\d{4}$/, "****") });
+      return NextResponse.json({ success: false, message: "Invalid phone number format. Use +2547xxxxxxxx or 07xxxxxxxx" }, { status: 400 });
+    }
 
     const { db }: { db: Db } = await connectToDatabase();
 
@@ -251,6 +282,8 @@ export async function POST(request: NextRequest) {
       umsPayApiKey: umsPayApiKey ? "[REDACTED]" : "MISSING",
       umsPayEmail: umsPayEmail || "MISSING",
       umsPayAccountId: umsPayAccountId || "MISSING",
+      phoneNumber: normalizedPhone.replace(/\d{4}$/, "****"),
+      timestamp: "2025-08-07T14:49:00+03:00"
     });
 
     if (!umsPayApiKey || !umsPayEmail || !umsPayAccountId) {
@@ -284,7 +317,7 @@ export async function POST(request: NextRequest) {
         api_key: umsPayApiKey,
         email: umsPayEmail,
         amount,
-        msisdn: phoneNumber,
+        msisdn: normalizedPhone, // Use normalized phone number
         reference,
         account_id: umsPayAccountId,
       },
@@ -294,10 +327,18 @@ export async function POST(request: NextRequest) {
     );
 
     const umsPayData = umsPayResponse.data as UmsPayErrorResponse;
-    logger.debug("UMS Pay STK Push response", umsPayData);
+    logger.debug("UMS Pay STK Push response", {
+      ...umsPayData,
+      phoneNumber: normalizedPhone.replace(/\d{4}$/, "****"),
+      timestamp: "2025-08-07T14:49:00+03:00"
+    });
 
     if (umsPayData.success !== "200") {
-      logger.error("Failed to initiate STK Push", { errorMessage: umsPayData.errorMessage });
+      logger.error("Failed to initiate STK Push", {
+        errorMessage: umsPayData.errorMessage,
+        phoneNumber: normalizedPhone.replace(/\d{4}$/, "****"),
+        timestamp: "2025-08-07T14:49:00+03:00"
+      });
       return NextResponse.json(
         { success: false, message: umsPayData.errorMessage || "Failed to initiate STK Push" },
         { status: 400 }
@@ -311,22 +352,16 @@ export async function POST(request: NextRequest) {
       tenantId,
       amount: Number(amount),
       propertyId,
-      paymentDate: new Date().toISOString(),
+      paymentDate: new Date("2025-08-07T14:49:00+03:00").toISOString(),
       transactionId,
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: new Date("2025-08-07T14:49:00+03:00").toISOString(),
       type,
-      phoneNumber,
+      phoneNumber: normalizedPhone,
       reference,
     };
 
     await db.collection<Payment>("payments").insertOne(payment);
-
-    // Update tenant wallet balance
-    await db.collection<Tenant>("tenants").updateOne(
-      { _id: new ObjectId(tenantId) },
-      { $inc: { walletBalance: Number(amount) } }
-    );
 
     return NextResponse.json({
       success: true,
@@ -350,6 +385,8 @@ export async function POST(request: NextRequest) {
     logger.error("POST Payment Error", {
       message: error instanceof Error ? error.message : "Unknown error",
       response: axiosError.response?.data || null,
+      phoneNumber: body?.phoneNumber ? normalizePhoneNumber(body.phoneNumber).replace(/\d{4}$/, "****") : "MISSING",
+      timestamp: "2025-08-07T14:49:00+03:00"
     });
     return NextResponse.json(
       {

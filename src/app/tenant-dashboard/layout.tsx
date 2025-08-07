@@ -8,7 +8,6 @@ import {
   X,
   LayoutDashboard,
   CreditCard,
-  Wrench,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -65,11 +64,7 @@ export default function TenantDashboardLayout({
       label: "Payments",
       icon: <CreditCard size={18} />,
     },
-    {
-      href: "/tenant-dashboard/maintenance-requests",
-      label: "Maintenance Requests",
-      icon: <Wrench size={18} />,
-    },
+
     {
       href: "/tenant-dashboard/settings",
       label: "Settings",
@@ -187,6 +182,8 @@ export default function TenantDashboardLayout({
 
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 shadow-inner py-4 text-center text-sm text-gray-600 mt-auto">
+        <span className="text-[#03a678] font-semibold">Smart Choice Rental Management</span>
+        <br />
         Created by{" "}
         <a
           href="https://vickinstech.com"

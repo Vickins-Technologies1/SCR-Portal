@@ -34,6 +34,17 @@ interface ReminderEmailOptions {
   reminderType: "fiveDaysBefore" | "paymentDate";
 }
 
+interface ConfirmationEmailOptions {
+  to: string;
+  name: string;
+  propertyName: string;
+  amount: number;
+  paymentType: string;
+  transactionId: string;
+  paymentDate: string;
+  tenantName?: string; // Optional for owner emails
+}
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT || "587"),
@@ -182,5 +193,57 @@ export async function sendReminderEmail({
   } catch (error) {
     console.error(`Error sending reminder email to ${to}:`, error);
     throw new Error("Failed to send reminder email");
+  }
+}
+
+export async function sendConfirmationEmail({
+  to,
+  name,
+  propertyName,
+  amount,
+  paymentType,
+  transactionId,
+  paymentDate,
+  tenantName,
+}: ConfirmationEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const title = "Payment Confirmation";
+    const intro = tenantName
+      ? `A payment by ${tenantName} for ${propertyName} has been successfully processed.`
+      : `Your payment for ${propertyName} has been successfully processed.`;
+
+    const detailItems = [
+      `<li><strong>Property:</strong> ${propertyName}</li>`,
+      tenantName ? `<li><strong>Tenant:</strong> ${tenantName}</li>` : "",
+      `<li><strong>Amount:</strong> Ksh. ${amount.toFixed(2)}</li>`,
+      `<li><strong>Payment Type:</strong> ${paymentType}</li>`,
+      `<li><strong>Transaction ID:</strong> ${transactionId}</li>`,
+      `<li><strong>Payment Date:</strong> ${paymentDate}</li>`,
+    ].filter(Boolean).join("");
+
+    const html = generateStyledTemplate({
+      name,
+      title,
+      intro,
+      details: `
+        <ul>${detailItems}</ul>
+        <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal" class="button">View Payment History</a></p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Payment Confirmation",
+      html,
+    });
+    console.log(`Confirmation email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending confirmation email to ${to}:`, error);
+    throw new Error("Failed to send confirmation email");
   }
 }

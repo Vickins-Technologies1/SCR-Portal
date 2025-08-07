@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useCallback, useEffect } from "react";
 import Modal from "./Modal";
 
@@ -85,7 +87,7 @@ export default function PaymentModal({
     setPaymentFormErrors({});
     setIsFetchingAmount(false);
     setStatusMessage("Processing your payment. Please wait...");
-  }, [initialPropertyId, initialUnitType, initialPhone]);
+  }, [initialPropertyId, initialUnitType, initialPhone, onError]);
 
   const validatePaymentForm = useCallback(
     async () => {
@@ -412,7 +414,7 @@ export default function PaymentModal({
       >
         {properties.length === 0 ? (
           <>
-            <p className="mb-6 text-gray-700 text-sm sm:text-base">
+            <p className="mb-6 text-gray-700 text-sm">
               You need an active payment status and a minimum wallet balance to add a tenant. Please complete the payment process.
             </p>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
@@ -421,14 +423,14 @@ export default function PaymentModal({
                   onClose();
                   resetPaymentForm();
                 }}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
+                className="px-4 py-2 bg-gray-200 rounded-full hover:bg-gray-300 transition text-sm text-[#1E3A8A]"
                 aria-label="Cancel payment prompt"
               >
                 Cancel
               </button>
               <button
                 onClick={() => (window.location.href = "/property-owner-dashboard/payments")}
-                className="px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition text-sm sm:text-base"
+                className="px-4 py-2 bg-[#1E3A8A] text-white rounded-full hover:bg-[#1E40AF] transition text-sm"
                 aria-label="Go to payments"
               >
                 Go to Payments
@@ -438,7 +440,7 @@ export default function PaymentModal({
         ) : (
           <form onSubmit={handlePayment} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Property</label>
+              <label className="block text-sm font-medium text-[#1E3A8A]">Property</label>
               <select
                 value={paymentPropertyId}
                 onChange={(e) => {
@@ -453,8 +455,8 @@ export default function PaymentModal({
                   }));
                 }}
                 required
-                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                  paymentFormErrors.paymentPropertyId ? "border-red-500" : "border-gray-300"
+                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition text-sm bg-gray-50 text-[#1E3A8A] ${
+                  paymentFormErrors.paymentPropertyId ? "border-red-500" : "border-gray-200"
                 }`}
               >
                 <option value="">Select Property</option>
@@ -470,7 +472,7 @@ export default function PaymentModal({
             </div>
             {paymentPropertyId && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">Unit Type</label>
+                <label className="block text-sm font-medium text-[#1E3A8A]">Unit Type</label>
                 <select
                   value={paymentUnitType}
                   onChange={(e) => {
@@ -484,8 +486,8 @@ export default function PaymentModal({
                     }));
                   }}
                   required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                    paymentFormErrors.paymentUnitType ? "border-red-500" : "border-gray-300"
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition text-sm bg-gray-50 text-[#1E3A8A] ${
+                    paymentFormErrors.paymentUnitType ? "border-red-500" : "border-gray-200"
                   }`}
                 >
                   <option value="">Select Unit Type</option>
@@ -493,7 +495,7 @@ export default function PaymentModal({
                     .find((p) => p._id === paymentPropertyId)
                     ?.unitTypes.map((u, index) => (
                       <option key={u.uniqueType} value={u.uniqueType}>
-                        {u.type} #{index + 1} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
+                        {u.type} #{index + 1} (Price: KES {u.price.toLocaleString()}, Deposit: KES {u.deposit.toLocaleString()}, {u.managementType}: KES {u.managementFee.toLocaleString()}/mo)
                       </option>
                     ))}
                 </select>
@@ -503,7 +505,7 @@ export default function PaymentModal({
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Phone Number</label>
+              <label className="block text-sm font-medium text-[#1E3A8A]">Phone Number</label>
               <input
                 placeholder="Enter phone number (e.g., +254123456789)"
                 value={paymentPhone}
@@ -519,8 +521,8 @@ export default function PaymentModal({
                   }));
                 }}
                 required
-                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${
-                  paymentFormErrors.paymentPhone ? "border-red-500" : "border-gray-300"
+                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition text-sm bg-gray-50 text-[#1E3A8A] ${
+                  paymentFormErrors.paymentPhone ? "border-red-500" : "border-gray-200"
                 }`}
               />
               {paymentFormErrors.paymentPhone && (
@@ -528,13 +530,13 @@ export default function PaymentModal({
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Amount (Ksh)</label>
+              <label className="block text-sm font-medium text-[#1E3A8A]">Amount (KES)</label>
               <input
                 placeholder="Amount (auto-filled)"
                 value={isFetchingAmount ? "Fetching amount..." : paymentAmount}
                 readOnly
-                className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${
-                  paymentFormErrors.paymentInvoice ? "border-red-500" : "border-gray-300"
+                className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm text-[#1E3A8A] ${
+                  paymentFormErrors.paymentInvoice ? "border-red-500" : "border-gray-200"
                 }`}
               />
               {paymentFormErrors.paymentInvoice && (
@@ -548,7 +550,7 @@ export default function PaymentModal({
                   onClose();
                   resetPaymentForm();
                 }}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
+                className="px-4 py-2 bg-gray-200 rounded-full hover:bg-gray-300 transition text-sm text-[#1E3A8A]"
                 aria-label="Cancel payment"
               >
                 Cancel
@@ -563,7 +565,7 @@ export default function PaymentModal({
                   !paymentUnitType ||
                   !paymentAmount
                 }
-                className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
+                className={`px-4 py-2 text-white rounded-full transition flex items-center gap-2 text-sm ${
                   isLoading ||
                   isFetchingAmount ||
                   Object.values(paymentFormErrors).some((v) => v !== undefined) ||
@@ -571,7 +573,7 @@ export default function PaymentModal({
                   !paymentUnitType ||
                   !paymentAmount
                     ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#012a4a] hover:bg-[#014a7a]"
+                    : "bg-[#1E3A8A] hover:bg-[#1E40AF]"
                 }`}
                 aria-label="Initiate payment"
               >
@@ -591,8 +593,8 @@ export default function PaymentModal({
         disableClose={true}
       >
         <div className="flex flex-col items-center justify-center py-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#012a4a] mb-4"></div>
-          <p className="text-gray-700 text-sm sm:text-base">{statusMessage}</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#1E3A8A] mb-4"></div>
+          <p className="text-[#1E3A8A] text-sm">{statusMessage}</p>
         </div>
       </Modal>
     </>

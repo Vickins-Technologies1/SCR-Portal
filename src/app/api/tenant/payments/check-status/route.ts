@@ -4,6 +4,8 @@ import { ObjectId, Db } from "mongodb";
 import axios from "axios";
 import { validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
+import { sendConfirmationEmail } from "../../../../../lib/email";
+import { sendWelcomeSms } from "../../../../../lib/sms";
 
 interface Tenant {
   _id: ObjectId;
@@ -21,6 +23,7 @@ interface Tenant {
 interface Property {
   _id: ObjectId;
   ownerId: string;
+  name: string;
 }
 
 interface PaymentSettings {
@@ -40,9 +43,17 @@ interface Payment {
   transactionId: string;
   status: "completed" | "pending" | "failed" | "cancelled";
   createdAt: string;
-  type: "Rent" | "Utility";
+  type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber: string;
   reference: string;
+}
+
+interface User {
+  _id: ObjectId;
+  name: string;
+  email: string;
+  phone: string;
+  role: "tenant" | "propertyOwner" | "admin";
 }
 
 export async function POST(request: NextRequest) {
@@ -124,6 +135,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const payment = await db
+      .collection<Payment>("payments")
+      .findOne({ transactionId: transaction_request_id });
+
+    if (!payment) {
+      logger.error("Payment not found", { transaction_request_id });
+      return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
+    }
+
     const umsPayResponse = await axios.post(
       "https://api.umspay.co.ke/api/v1/transactionstatus",
       {
@@ -198,10 +218,117 @@ export async function POST(request: NextRequest) {
     );
 
     if (status === "completed") {
+      // Update tenant wallet balance
       await db.collection<Tenant>("tenants").updateOne(
         { _id: new ObjectId(tenantId) },
         { $inc: { walletBalance: Number(umsPayData.TransactionAmount) } }
       );
+
+      // Fetch property owner details
+      const owner = await db
+        .collection<User>("users")
+        .findOne({ _id: new ObjectId(property.ownerId), role: "propertyOwner" });
+
+      if (!owner) {
+        logger.error("Property owner not found", { ownerId: property.ownerId });
+      } else {
+        // Send confirmation email and SMS to tenant
+        const paymentDate = new Date(umsPayData.TransactionDate || new Date()).toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        });
+
+        try {
+          await sendConfirmationEmail({
+            to: tenant.email,
+            name: tenant.name,
+            propertyName: property.name,
+            amount: Number(umsPayData.TransactionAmount),
+            paymentType: payment.type || "Other",
+            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            paymentDate,
+          });
+          logger.info("Payment confirmation email sent to tenant", {
+            tenantId,
+            email: tenant.email,
+            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+          });
+        } catch (emailError) {
+          logger.error("Failed to send payment confirmation email to tenant", {
+            tenantId,
+            email: tenant.email,
+            error: emailError instanceof Error ? emailError.message : "Unknown error",
+          });
+        }
+
+        if (tenant.phone) {
+          try {
+            const smsMessage = `Payment of Ksh. ${umsPayData.TransactionAmount} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDate}. Ref: ${umsPayData.TransactionReceipt || transaction_request_id}`;
+            await sendWelcomeSms({
+              phone: tenant.phone,
+              message: smsMessage.slice(0, 160),
+            });
+            logger.info("Payment confirmation SMS sent to tenant", {
+              tenantId,
+              phone: tenant.phone,
+              transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            });
+          } catch (smsError) {
+            logger.error("Failed to send payment confirmation SMS to tenant", {
+              tenantId,
+              phone: tenant.phone,
+              error: smsError instanceof Error ? smsError.message : "Unknown error",
+            });
+          }
+        }
+
+        // Send confirmation email and SMS to property owner
+        try {
+          await sendConfirmationEmail({
+            to: owner.email,
+            name: owner.name,
+            propertyName: property.name,
+            amount: Number(umsPayData.TransactionAmount),
+            paymentType: payment.type || "Other",
+            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            paymentDate,
+            tenantName: tenant.name,
+          });
+          logger.info("Payment confirmation email sent to property owner", {
+            ownerId: property.ownerId,
+            email: owner.email,
+            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+          });
+        } catch (emailError) {
+          logger.error("Failed to send payment confirmation email to property owner", {
+            ownerId: property.ownerId,
+            email: owner.email,
+            error: emailError instanceof Error ? emailError.message : "Unknown error",
+          });
+        }
+
+        if (owner.phone) {
+          try {
+            const smsMessage = `Payment of Ksh. ${umsPayData.TransactionAmount} by ${tenant.name} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDate}. Ref: ${umsPayData.TransactionReceipt || transaction_request_id}`;
+            await sendWelcomeSms({
+              phone: owner.phone,
+              message: smsMessage.slice(0, 160),
+            });
+            logger.info("Payment confirmation SMS sent to property owner", {
+              ownerId: property.ownerId,
+              phone: owner.phone,
+              transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            });
+          } catch (smsError) {
+            logger.error("Failed to send payment confirmation SMS to property owner", {
+              ownerId: property.ownerId,
+              phone: owner.phone,
+              error: smsError instanceof Error ? smsError.message : "Unknown error",
+            });
+          }
+        }
+      }
     }
 
     return NextResponse.json({
