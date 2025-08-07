@@ -36,7 +36,6 @@ interface Message {
 export default function PaymentsPage() {
   const [isClient, setIsClient] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
-  const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [displayedPayments, setDisplayedPayments] = useState<Payment[]>([]);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -126,7 +125,7 @@ export default function PaymentsPage() {
       setTenant(tenantData.tenant);
       setPhoneNumber(tenantData.tenant.phone || "");
 
-      const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}`, {
+      const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}&page=${page}&limit=${limit}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -137,10 +136,9 @@ export default function PaymentsPage() {
       const paymentsData = await paymentsRes.json();
       if (paymentsData.success) {
         const fetchedPayments = paymentsData.payments || [];
-        setAllPayments(fetchedPayments);
-        setTotal(fetchedPayments.length);
-        setTotalPages(Math.ceil(fetchedPayments.length / limit));
-        setDisplayedPayments(fetchedPayments.slice((page - 1) * limit, page * limit));
+        setDisplayedPayments(fetchedPayments);
+        setTotal(paymentsData.total || fetchedPayments.length);
+        setTotalPages(Math.ceil(paymentsData.total / limit));
         if (fetchedPayments.length === 0) {
           setMessages((prev) => [
             ...prev,
@@ -162,16 +160,11 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, csrfToken, limit]); // Removed 'page' from dependency array
+  }, [tenantId, csrfToken, page, limit]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  useEffect(() => {
-    setDisplayedPayments(allPayments.slice((page - 1) * limit, page * limit));
-    setTotalPages(Math.ceil(allPayments.length / limit));
-  }, [page, allPayments, limit]);
 
   const validatePhoneNumber = (phone: string): boolean => {
     const regex = /^(?:\+2547|07)\d{8}$/;
@@ -179,7 +172,7 @@ export default function PaymentsPage() {
   };
 
   const formatPhoneNumber = (phone: string): string => {
-    const normalized = phone.replace(/\D/g, ""); // Changed let to const
+    const normalized = phone.replace(/\D/g, "");
     if (normalized.startsWith("07")) {
       return `254${normalized.slice(1)}`;
     } else if (normalized.startsWith("+254")) {
@@ -344,17 +337,17 @@ export default function PaymentsPage() {
   if (!isClient) return null;
 
   return (
-    <div className="min-h-screen bg-white p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-white p-4 sm:p-6 font-sans">
+      <div className="max-w-full sm:max-w-7xl mx-auto space-y-6 sm:space-y-8">
         {/* Header Section */}
-        <section className="bg-[#1E3A8A] text-white rounded-2xl p-8 shadow-xl">
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Payment Dashboard</h1>
-          <p className="text-gray-200 text-sm">Manage your rent and utility payments seamlessly.</p>
+        <section className="bg-[#1E3A8A] text-white rounded-xl sm:rounded-2xl p-6 sm:p-8 shadow-xl">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Payment Dashboard</h1>
+          <p className="text-gray-200 text-xs sm:text-sm">Manage your rent and utility payments seamlessly.</p>
           {tenant && (
             <div className="mt-4 bg-[#1E3A8A]/20 p-4 rounded-lg">
-              <p className="text-sm font-medium">
+              <p className="text-xs sm:text-sm font-medium">
                 Wallet Balance:{" "}
-                <span className="font-bold text-lg text-[#6EE7B7]">
+                <span className="font-bold text-base sm:text-lg text-[#6EE7B7]">
                   KES {typeof tenant.walletBalance === "number" ? tenant.walletBalance.toLocaleString() : "0"}
                 </span>
               </p>
@@ -362,7 +355,7 @@ export default function PaymentsPage() {
           )}
           <button
             onClick={() => setIsModalOpen(true)}
-            className="mt-6 bg-[#6EE7B7] text-[#1E3A8A] font-semibold px-6 py-2 rounded-full shadow-md hover:bg-[#4ADE80] transition-all duration-300 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+            className="mt-4 sm:mt-6 bg-[#6EE7B7] text-[#1E3A8A] font-semibold px-4 sm:px-6 py-2 rounded-full shadow-md hover:bg-[#4ADE80] transition-all duration-300 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
             disabled={!tenantId || !tenant?.propertyId || !csrfToken}
           >
             Make a Payment
@@ -370,24 +363,24 @@ export default function PaymentsPage() {
         </section>
 
         {/* Payments Table */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg overflow-x-auto border border-gray-200">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#1E3A8A]">Type</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#1E3A8A]">Amount (KES)</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#1E3A8A]">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#1E3A8A]">Payment Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-[#1E3A8A]">Transaction ID</th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Type</th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Amount (KES)</th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Status</th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Payment Date</th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Transaction ID</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500">
                     <div className="flex justify-center items-center">
-                      <div className="animate-spin w-6 h-6 border-4 border-[#1E3A8A] border-t-transparent rounded-full"></div>
-                      <span className="ml-2">Loading payments...</span>
+                      <div className="animate-spin w-5 sm:w-6 h-5 sm:h-6 border-4 border-[#1E3A8A] border-t-transparent rounded-full"></div>
+                      <span className="ml-2 text-sm">Loading payments...</span>
                     </div>
                   </td>
                 </tr>
@@ -398,13 +391,13 @@ export default function PaymentsPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="hover:bg-gray-50 transition-colors"
+                    className="hover:bg-gray-50 transition-colors text-xs sm:text-sm"
                   >
-                    <td className="px-6 py-4 font-medium text-[#1E3A8A] capitalize">{p.type || "Other"}</td>
-                    <td className="px-6 py-4 text-gray-600">KES {p.amount.toLocaleString()}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-[#1E3A8A] capitalize">{p.type || "Other"}</td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-600">KES {p.amount.toLocaleString()}</td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4">
                       <span
-                        className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`inline-flex px-2 sm:px-3 py-1 rounded-full text-xs font-semibold ${
                           p.status === "completed"
                             ? "bg-[#6EE7B7]/20 text-[#6EE7B7]"
                             : p.status === "pending"
@@ -415,15 +408,15 @@ export default function PaymentsPage() {
                         {p.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-600">
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-600 whitespace-nowrap">
                       {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString() : "—"}
                     </td>
-                    <td className="px-6 py-4 text-gray-600">{p.transactionId}</td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-600 break-all">{p.transactionId}</td>
                   </motion.tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-sm">
                     No payment records found.
                   </td>
                 </tr>
@@ -434,25 +427,41 @@ export default function PaymentsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6 bg-white p-4 rounded-2xl shadow-md border border-gray-200">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 sm:mt-6 bg-white p-4 rounded-xl sm:rounded-2xl shadow-md border border-gray-200">
             <button
               onClick={() => handlePageChange(page - 1)}
               disabled={page === 1 || loading}
-              className="flex items-center px-4 py-2 text-sm font-medium text-[#1E3A8A] bg-[#6EE7B7]/20 rounded-full hover:bg-[#6EE7B7]/30 disabled:bg-gray-100 disabled:text-gray-400 transition-all duration-300"
+              className="flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-[#1E3A8A] bg-[#6EE7B7]/20 rounded-full hover:bg-[#6EE7B7]/30 disabled:bg-gray-100 disabled:text-gray-400 transition-all duration-300"
             >
-              <ChevronLeft size={16} className="mr-1" />
+              <ChevronLeft size={14} className="mr-1" />
               Previous
             </button>
-            <span className="text-sm text-[#1E3A8A] font-medium">
+            <div className="flex items-center gap-2">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => handlePageChange(p)}
+                  disabled={p === page || loading}
+                  className={`px-3 py-1 text-xs sm:text-sm font-medium rounded-full ${
+                    p === page
+                      ? "bg-[#1E3A8A] text-white"
+                      : "bg-gray-100 text-[#1E3A8A] hover:bg-[#6EE7B7]/20"
+                  } transition-all duration-300`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs sm:text-sm text-[#1E3A8A] font-medium">
               Page {page} of {totalPages} ({total} total payments)
             </span>
             <button
               onClick={() => handlePageChange(page + 1)}
               disabled={page === totalPages || loading}
-              className="flex items-center px-4 py-2 text-sm font-medium text-[#1E3A8A] bg-[#6EE7B7]/20 rounded-full hover:bg-[#6EE7B7]/30 disabled:bg-gray-100 disabled:text-gray-400 transition-all duration-300"
+              className="flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-[#1E3A8A] bg-[#6EE7B7]/20 rounded-full hover:bg-[#6EE7B7]/30 disabled:bg-gray-100 disabled:text-gray-400 transition-all duration-300"
             >
               Next
-              <ChevronRight size={16} className="ml-1" />
+              <ChevronRight size={14} className="ml-1" />
             </button>
           </div>
         )}
@@ -471,14 +480,14 @@ export default function PaymentsPage() {
                 initial={{ scale: 0.95, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.95, y: 20 }}
-                className="bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl"
+                className="bg-white rounded-xl sm:rounded-2xl p-6 sm:p-8 w-full max-w-md sm:max-w-lg shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
-                <h2 className="text-2xl font-bold text-[#1E3A8A] mb-6">Make a Payment</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-[#1E3A8A] mb-4 sm:mb-6">Make a Payment</h2>
                 <label className="block mb-4">
-                  <span className="text-sm font-medium text-[#1E3A8A]">Payment Type</span>
+                  <span className="text-xs sm:text-sm font-medium text-[#1E3A8A]">Payment Type</span>
                   <select
-                    className="mt-1 block w-full rounded-lg border border-gray-200 py-3 px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A]"
+                    className="mt-1 block w-full rounded-lg border border-gray-200 py-2 sm:py-3 px-3 sm:px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A] text-sm"
                     value={paymentType}
                     onChange={(e) => setPaymentType(e.target.value as "Rent" | "Utility" | "Deposit" | "Other")}
                   >
@@ -489,21 +498,21 @@ export default function PaymentsPage() {
                   </select>
                 </label>
                 <label className="block mb-4">
-                  <span className="text-sm font-medium text-[#1E3A8A]">Amount (KES)</span>
+                  <span className="text-xs sm:text-sm font-medium text-[#1E3A8A]">Amount (KES)</span>
                   <input
                     type="number"
-                    className="mt-1 block w-full rounded-lg border border-gray-200 py-3 px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A]"
+                    className="mt-1 block w-full rounded-lg border border-gray-200 py-2 sm:py-3 px-3 sm:px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A] text-sm"
                     value={amount || ""}
                     onChange={(e) => setAmount(Number(e.target.value))}
                     min="10"
                     required
                   />
                 </label>
-                <label className="block mb-6">
-                  <span className="text-sm font-medium text-[#1E3A8A]">Phone Number</span>
+                <label className="block mb-4 sm:mb-6">
+                  <span className="text-xs sm:text-sm font-medium text-[#1E3A8A]">Phone Number</span>
                   <input
                     type="text"
-                    className="mt-1 block w-full rounded-lg border border-gray-200 py-3 px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A]"
+                    className="mt-1 block w-full rounded-lg border border-gray-200 py-2 sm:py-3 px-3 sm:px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A] text-sm"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="+2547xxxxxxxx or 07xxxxxxxx"
@@ -513,14 +522,14 @@ export default function PaymentsPage() {
                 <div className="flex justify-end gap-3">
                   <button
                     onClick={() => setIsModalOpen(false)}
-                    className="px-6 py-2 text-sm font-medium text-[#1E3A8A] bg-gray-100 rounded-full hover:bg-gray-200 transition-all duration-300"
+                    className="px-4 sm:px-6 py-2 text-xs sm:text-sm font-medium text-[#1E3A8A] bg-gray-100 rounded-full hover:bg-gray-200 transition-all duration-300"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handlePayment}
                     disabled={isProcessing || amount < 10 || !validatePhoneNumber(phoneNumber) || !csrfToken}
-                    className="px-6 py-2 text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-300"
+                    className="px-4 sm:px-6 py-2 text-xs sm:text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-300"
                   >
                     Pay Now
                   </button>
@@ -546,11 +555,11 @@ export default function PaymentsPage() {
                 initial={{ scale: 0.95, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.95, y: 20 }}
-                className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl text-center"
+                className="bg-white rounded-xl sm:rounded-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl text-center"
                 onClick={(e) => e.stopPropagation()}
               >
                 {isProcessing && (
-                  <div className="relative w-16 h-16 mx-auto mb-6">
+                  <div className="relative w-12 sm:w-16 h-12 sm:h-16 mx-auto mb-4 sm:mb-6">
                     <motion.div
                       className="absolute inset-0 border-4 border-[#6EE7B7]/50 rounded-full"
                       animate={{ rotate: 360 }}
@@ -563,26 +572,26 @@ export default function PaymentsPage() {
                     />
                   </div>
                 )}
-                <h3 className="text-xl font-bold text-[#1E3A8A]">
+                <h3 className="text-lg sm:text-xl font-bold text-[#1E3A8A]">
                   {isProcessing ? "Processing Payment" : "Payment Status"}
                 </h3>
                 {isProcessing && (
-                  <p className="text-sm text-gray-500 mt-3">
+                  <p className="text-xs sm:text-sm text-gray-500 mt-2 sm:mt-3">
                     Please check your phone and enter your M-Pesa PIN to complete the payment.
                   </p>
                 )}
                 {messages.length > 0 && (
-                  <div className="mt-6 space-y-3 max-h-64 overflow-y-auto">
+                  <div className="mt-4 sm:mt-6 space-y-3 max-h-64 overflow-y-auto">
                     {messages.map((msg, index) => (
                       <div
                         key={`message-${index}`}
-                        className={`p-4 rounded-lg flex items-start gap-3 ${
+                        className={`p-3 sm:p-4 rounded-lg flex items-start gap-2 sm:gap-3 ${
                           msg.type === "success" ? "bg-[#6EE7B7]/20 text-[#6EE7B7]" : "bg-red-50 text-red-700"
                         }`}
                       >
-                        {msg.type === "success" ? <CheckCircle size="20" /> : <AlertCircle size="20" />}
+                        {msg.type === "success" ? <CheckCircle size={16} className="sm:h-5 sm:w-5" /> : <AlertCircle size={16} className="sm:h-5 sm:w-5" />}
                         <div>
-                          <p className="text-sm font-medium">{msg.text}</p>
+                          <p className="text-xs sm:text-sm font-medium">{msg.text}</p>
                           <p className="text-xs text-gray-500">
                             {new Date(msg.timestamp).toLocaleString("en-US", {
                               hour: "numeric",
@@ -598,13 +607,13 @@ export default function PaymentsPage() {
                   </div>
                 )}
                 {messages.length > 0 && (
-                  <div className="mt-6 flex justify-end">
+                  <div className="mt-4 sm:mt-6 flex justify-end">
                     <button
                       onClick={() => {
                         setMessages([]);
                         setIsProcessing(false);
                       }}
-                      className="px-6 py-2 text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] transition-all duration-300"
+                      className="px-4 sm:px-6 py-2 text-xs sm:text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] transition-all duration-300"
                     >
                       Close
                     </button>

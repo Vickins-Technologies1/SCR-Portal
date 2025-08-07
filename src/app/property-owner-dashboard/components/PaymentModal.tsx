@@ -87,7 +87,7 @@ export default function PaymentModal({
     setPaymentFormErrors({});
     setIsFetchingAmount(false);
     setStatusMessage("Processing your payment. Please wait...");
-  }, [initialPropertyId, initialUnitType, initialPhone, onError]);
+  }, [initialPropertyId, initialUnitType, initialPhone]);
 
   const validatePaymentForm = useCallback(
     async () => {
@@ -213,7 +213,7 @@ export default function PaymentModal({
           if (statusData.TransactionStatus === "Completed") {
             try {
               const updateRes = await fetch("/api/invoices", {
-                method: "POST",
+                method: "POSTA",
                 headers: {
                   "Content-Type": "application/json",
                   "X-CSRF-Token": csrfToken,
@@ -302,7 +302,7 @@ export default function PaymentModal({
 
       poll();
     },
-    [onError, onSuccess, paymentPropertyId, paymentUnitType, userId, csrfToken]
+    [onSuccess, paymentPropertyId, paymentUnitType, userId, csrfToken, onError]
   );
 
   const handlePayment = useCallback(
@@ -321,7 +321,6 @@ export default function PaymentModal({
       if (!(await validatePaymentForm())) return;
 
       setIsLoading(true);
-      onError("");
       setIsPaymentLoadingModalOpen(true);
       setStatusMessage("Processing your payment. Please wait...");
 
@@ -399,7 +398,7 @@ export default function PaymentModal({
         setIsLoading(false);
       }
     },
-    [userId, paymentPhone, paymentUnitType, paymentPropertyId, validatePaymentForm, pollTransactionStatus, csrfToken]
+    [userId, paymentPhone, paymentUnitType, paymentPropertyId, validatePaymentForm, pollTransactionStatus, csrfToken, onError]
   );
 
   return (
