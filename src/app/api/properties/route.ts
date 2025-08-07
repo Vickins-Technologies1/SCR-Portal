@@ -1,4 +1,3 @@
-// src/app/api/properties/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
@@ -33,7 +32,8 @@ export async function GET(request: NextRequest) {
   try {
     console.log('Handling GET request to /api/properties');
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId') || searchParams.get('tenantId');
+    // Check for userId, tenantId, or ownerId in query parameters
+    const userId = searchParams.get('userId') || searchParams.get('tenantId') || searchParams.get('ownerId');
     const cookieStore = await cookies();
     const role = cookieStore.get('role')?.value;
 

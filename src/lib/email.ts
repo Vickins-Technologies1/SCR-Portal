@@ -21,6 +21,19 @@ interface UpdateEmailOptions {
   houseNumber?: string;
 }
 
+interface ReminderEmailOptions {
+  to: string;
+  name: string;
+  propertyName: string;
+  houseNumber: string;
+  rentDue: number;
+  utilityDue: number;
+  depositDue: number;
+  totalDue: number;
+  dueDate: string;
+  reminderType: "fiveDaysBefore" | "paymentDate";
+}
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT || "587"),
@@ -88,7 +101,7 @@ export async function sendUpdateEmail({
 
     const detailItems = [
       `<li><strong>Email:</strong> ${email}</li>`,
-      propertyName ? `<li><strong>Property ID:</strong> ${propertyName}</li>` : "",
+      propertyName ? `<li><strong>Property:</strong> ${propertyName}</li>` : "",
       houseNumber ? `<li><strong>House Number:</strong> ${houseNumber}</li>` : "",
     ].filter(Boolean).join("");
 
@@ -109,5 +122,65 @@ export async function sendUpdateEmail({
   } catch (error) {
     console.error(`Error sending update email to ${to}:`, error);
     throw new Error("Failed to send update email");
+  }
+}
+
+export async function sendReminderEmail({
+  to,
+  name,
+  propertyName,
+  houseNumber,
+  rentDue,
+  utilityDue,
+  depositDue,
+  totalDue,
+  dueDate,
+  reminderType,
+}: ReminderEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const title =
+      reminderType === "fiveDaysBefore"
+        ? "Upcoming Payment Reminder"
+        : "Payment Due Today";
+    const intro =
+      reminderType === "fiveDaysBefore"
+        ? `This is a reminder that your payment for ${propertyName} is due in 5 days.`
+        : `This is a reminder that your payment for ${propertyName} is due today.`;
+
+    const detailItems = [
+      `<li><strong>Property:</strong> ${propertyName}</li>`,
+      `<li><strong>House Number:</strong> ${houseNumber}</li>`,
+      rentDue > 0 ? `<li><strong>Rent Due:</strong> Ksh. ${rentDue.toFixed(2)}</li>` : "",
+      utilityDue > 0 ? `<li><strong>Utilities Due:</strong> Ksh. ${utilityDue.toFixed(2)}</li>` : "",
+      depositDue > 0 ? `<li><strong>Deposit Due:</strong> Ksh. ${depositDue.toFixed(2)}</li>` : "",
+      `<li><strong>Total Due:</strong> Ksh. ${totalDue.toFixed(2)}</li>`,
+      `<li><strong>Due Date:</strong> ${dueDate}</li>`,
+      `<li><strong>Action:</strong> Please make your payment by the due date to avoid late fees.</li>`,
+    ].filter(Boolean).join("");
+
+    const html = generateStyledTemplate({
+      name,
+      title,
+      intro,
+      details: `
+        <ul>${detailItems}</ul>
+        <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal" class="button">Go to Tenant Portal</a></p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      to,
+      subject: title,
+      html,
+    });
+    console.log(`Reminder email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending reminder email to ${to}:`, error);
+    throw new Error("Failed to send reminder email");
   }
 }

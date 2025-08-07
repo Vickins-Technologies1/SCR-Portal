@@ -21,6 +21,7 @@ export interface Tenant {
   createdAt: Date;
   updatedAt?: Date;
   walletBalance: number;
+  deliveryMethod: "app" | "sms" | "email" | "both";
 }
 
 export interface ResponseTenant {
