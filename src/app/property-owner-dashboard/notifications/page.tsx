@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Bell, ArrowUpDown, Plus, Send } from "lucide-react";
+import { Bell, ArrowUpDown, Plus, Send, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -13,16 +13,16 @@ interface Tenant {
   _id: string;
   name: string;
   phone: string;
+  email: string;
 }
 
 interface Notification {
   _id: string;
   userId: string;
   message: string;
-  type: "Payment" | "Maintenance" | "Tenant" | "Other";
+  type: "payment" | "maintenance" | "tenant" | "other";
   createdAt: string;
-  read: boolean;
-  deliveryMethod: "app" | "sms";
+  deliveryMethod: "app" | "sms" | "email" | "both";
   deliveryStatus?: "pending" | "success" | "failed";
   tenantId: string;
   tenantName: string;
@@ -41,14 +41,18 @@ export default function NotificationsPage() {
   const [role, setRole] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [notificationToDelete, setNotificationToDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
   const [newNotification, setNewNotification] = useState({
     message: "",
-    tenantId: "all",
-    type: "Other" as Notification["type"],
+    tenantId: "",
+    type: "other" as Notification["type"],
     deliveryMethod: "app" as Notification["deliveryMethod"],
   });
 
@@ -95,6 +99,12 @@ export default function NotificationsPage() {
       const data = await res.json();
       if (data.success) {
         setTenants(data.tenants || []);
+        setNewNotification((prev) => ({
+          ...prev,
+          tenantId: data.tenants?.length > 0 ? "all" : "",
+        }));
+      } else {
+        setError(data.message || "Failed to fetch tenants.");
       }
     } catch {
       setError("Failed to fetch tenants.");
@@ -108,47 +118,67 @@ export default function NotificationsPage() {
     }
   }, [userId, role, fetchNotifications, fetchTenants]);
 
-  const markAsRead = useCallback(
+  const deleteNotification = useCallback(
     async (notificationId: string) => {
       setIsLoading(true);
+      const previousNotifications = notifications;
+      setNotifications((prev) => prev.filter((n) => n._id !== notificationId));
       try {
-        const res = await fetch(`/api/notifications`, {
-          method: "POST",
+        const res = await fetch(`/api/notifications?notificationId=${encodeURIComponent(notificationId)}`, {
+          method: "DELETE",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ notificationId, action: "mark-read" }),
         });
         const data = await res.json();
-        if (data.success) {
-          setNotifications((prev) =>
-            prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n))
-          );
-        } else {
-          setError(data.message || "Failed to mark notification as read.");
+        if (!data.success) {
+          setNotifications(previousNotifications);
+          setError(data.message || "Failed to delete notification.");
         }
       } catch {
+        setNotifications(previousNotifications);
         setError("Failed to connect to the server.");
       } finally {
         setIsLoading(false);
+        setIsDeleteModalOpen(false);
+        setNotificationToDelete(null);
       }
     },
-    []
+    [notifications]
   );
 
   const createNotification = async () => {
+    if (!newNotification.tenantId) {
+      setError("Please select a tenant or 'All Tenants' to send the notification.");
+      return;
+    }
+    if (!newNotification.type || !["payment", "maintenance", "tenant", "other"].includes(newNotification.type)) {
+      setError("Please select a valid notification type.");
+      return;
+    }
+    if (!newNotification.deliveryMethod || !["app", "sms", "email", "both"].includes(newNotification.deliveryMethod)) {
+      setError("Please select a valid delivery method.");
+      return;
+    }
+    if (newNotification.type !== "payment" && !newNotification.message.trim()) {
+      setError("Please enter a message for non-payment notifications.");
+      return;
+    }
     setIsLoading(true);
+    const payload = { ...newNotification, userId };
+    console.log("Sending notification payload:", payload);
     try {
       const res = await fetch("/api/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ ...newNotification, userId }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
         setNotifications((prev) => [data.data, ...prev]);
         setIsCreateModalOpen(false);
-        setNewNotification({ message: "", tenantId: "all", type: "Other", deliveryMethod: "app" });
+        setNewNotification({ message: "", tenantId: tenants.length > 0 ? "all" : "", type: "other", deliveryMethod: "app" });
+        setCurrentPage(1); // Reset to first page on new notification
       } else {
         setError(data.message || "Failed to create notification.");
       }
@@ -168,11 +198,6 @@ export default function NotificationsPage() {
             return direction === "asc"
               ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
               : new Date(b[key]).getTime() - new Date(a[key]).getTime();
-          }
-          if (key === "read") {
-            return direction === "asc"
-              ? Number(a[key]) - Number(b[key])
-              : Number(b[key]) - Number(a[key]);
           }
           return direction === "asc"
             ? String(a[key]).localeCompare(String(b[key]))
@@ -197,44 +222,62 @@ export default function NotificationsPage() {
     [sortConfig]
   );
 
-  const openNotificationDetails = useCallback(
-    (notification: Notification) => {
-      setSelectedNotification(notification);
-      setIsModalOpen(true);
-      if (!notification.read) {
-        markAsRead(notification._id);
-      }
-    },
-    [markAsRead]
+  const openNotificationDetails = useCallback((notification: Notification) => {
+    setSelectedNotification(notification);
+    setIsModalOpen(true);
+  }, []);
+
+  const openDeleteConfirmation = useCallback((notificationId: string) => {
+    setNotificationToDelete(notificationId);
+    setIsDeleteModalOpen(true);
+  }, []);
+
+  // Pagination logic
+  const totalPages = Math.ceil(notifications.length / pageSize);
+  const paginatedNotifications = notifications.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   );
 
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setPageSize(Number(e.target.value));
+    setCurrentPage(1); // Reset to first page when page size changes
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen bg-white font-sans">
       <Navbar />
       <Sidebar />
       <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
+        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
           <motion.div
-            className="flex justify-between items-center mb-6"
+            className="flex justify-between items-center mb-8"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: 0.5 }}
           >
-            <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2 text-gray-800">
-              <Bell className="text-[#012a4a]" />
+            <h1 className="text-3xl font-bold flex items-center gap-3 text-[#012a4a]">
+              <Bell className="text-[#03a678] h-8 w-8" />
               Notifications
             </h1>
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="bg-[#03a678] hover:bg-[#02956a] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              className="bg-gradient-to-r from-[#03a678] to-[#02956a] text-white px-5 py-3 rounded-xl flex items-center gap-2 transition-transform transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={tenants.length === 0}
             >
-              <Plus size={16} />
+              <Plus size={18} />
               Create Notification
             </button>
           </motion.div>
           {error && (
             <motion.div
-              className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow"
+              className="bg-red-50 text-red-600 p-4 mb-6 rounded-xl shadow-sm border border-red-200"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
@@ -244,83 +287,144 @@ export default function NotificationsPage() {
           )}
           {isLoading ? (
             <motion.div
-              className="text-center text-gray-600"
+              className="text-center text-[#012a4a]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <span className="ml-2">Loading notifications...</span>
+              <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#03a678]"></div>
+              <span className="ml-3 text-lg">Loading notifications...</span>
             </motion.div>
           ) : notifications.length === 0 ? (
             <motion.div
-              className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center"
+              className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm text-[#012a4a] text-center"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
+              transition={{ duration: 0.5 }}
             >
-              No notifications found.
+              <p className="text-lg font-medium">No notifications found.</p>
+              <p className="text-sm text-gray-500 mt-2">Create a new notification to get started.</p>
             </motion.div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {notifications.map((n, index) => (
-                <motion.div
-                  key={n._id}
-                  className={`bg-white rounded-lg shadow-sm border p-4 hover:shadow-md transition-shadow cursor-pointer ${
-                    n.read ? "opacity-80" : ""
-                  }`}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: index * 0.1 }}
-                  onClick={() => openNotificationDetails(n)}
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-800 truncate">{n.message}</h3>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs ${
-                        n.read ? "bg-gray-100 text-gray-700" : "bg-blue-100 text-blue-700"
-                      }`}
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-[#012a4a] text-left text-sm font-semibold">
+                    {["message", "type", "tenantName", "createdAt", "deliveryMethod"].map((key) => (
+                      <th
+                        key={key}
+                        className="px-4 py-3 cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSort(key as keyof Notification)}
+                      >
+                        {key === "tenantName"
+                          ? "Tenant"
+                          : key === "createdAt"
+                          ? "Date"
+                          : key === "deliveryMethod"
+                          ? "Delivery"
+                          : key.charAt(0).toUpperCase() + key.slice(1)}
+                        {getSortIcon(key as keyof Notification)}
+                      </th>
+                    ))}
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedNotifications.map((n, index) => (
+                    <motion.tr
+                      key={n._id}
+                      className="border-t border-gray-200 hover:bg-gray-50 cursor-pointer"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.1 }}
+                      onClick={() => openNotificationDetails(n)}
                     >
-                      {n.read ? "Read" : "Unread"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Type: {n.type}</p>
-                  <p className="text-xs text-gray-500">Tenant: {n.tenantName}</p>
-                  <p className="text-xs text-gray-500">
-                    Date: {new Date(n.createdAt).toLocaleDateString()}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Delivery: {n.deliveryMethod === "sms" ? `SMS (${n.deliveryStatus || "Pending"})` : "App"}
-                  </p>
-                </motion.div>
-              ))}
+                      <td className="px-4 py-3 text-sm text-[#012a4a] truncate max-w-xs">{n.message}</td>
+                      <td className="px-4 py-3 text-sm text-[#012a4a]">
+                        {n.type.charAt(0).toUpperCase() + n.type.slice(1)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#012a4a]">{n.tenantName}</td>
+                      <td className="px-4 py-3 text-sm text-[#012a4a]">
+                        {new Date(n.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#012a4a]">
+                        {n.deliveryMethod === "both"
+                          ? "SMS & Email"
+                          : n.deliveryMethod === "sms"
+                          ? `SMS (${n.deliveryStatus || "Pending"})`
+                          : n.deliveryMethod === "email"
+                          ? "Email"
+                          : "App"}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteConfirmation(n._id);
+                          }}
+                          className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                        >
+                          <Trash2 size={16} />
+                          Delete
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-[#012a4a]">Items per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={handlePageSizeChange}
+                    className="px-2 py-1 border border-gray-200 rounded-lg text-[#012a4a] text-sm focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 bg-gray-200 text-[#012a4a] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <span className="text-sm text-[#012a4a]">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 bg-gray-200 text-[#012a4a] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
-          <div className="mt-6 flex gap-4">
-            <button
-              onClick={() => handleSort("message")}
-              className="text-sm text-[#012a4a] hover:text-[#03a678] flex items-center gap-1"
-            >
-              Sort by Message {getSortIcon("message")}
-            </button>
-            <button
-              onClick={() => handleSort("type")}
-              className="text-sm text-[#012a4a] hover:text-[#03a678] flex items-center gap-1"
-            >
-              Sort by Type {getSortIcon("type")}
-            </button>
-            <button
-              onClick={() => handleSort("createdAt")}
-              className="text-sm text-[#012a4a] hover:text-[#03a678] flex items-center gap-1"
-            >
-              Sort by Date {getSortIcon("createdAt")}
-            </button>
-            <button
-              onClick={() => handleSort("read")}
-              className="text-sm text-[#012a4a] hover:text-[#03a678] flex items-center gap-1"
-            >
-              Sort by Status {getSortIcon("read")}
-            </button>
+          <div className="mt-8 flex gap-6">
+            {["message", "type", "tenantName", "createdAt", "deliveryMethod"].map((key) => (
+              <button
+                key={key}
+                onClick={() => handleSort(key as keyof Notification)}
+                className="text-sm font-medium text-[#012a4a] hover:text-[#03a678] flex items-center gap-1 transition-colors"
+              >
+                Sort by{" "}
+                {key === "tenantName"
+                  ? "Tenant"
+                  : key === "createdAt"
+                  ? "Date"
+                  : key === "deliveryMethod"
+                  ? "Delivery"
+                  : key.charAt(0).toUpperCase() + key.slice(1)}{" "}
+                {getSortIcon(key as keyof Notification)}
+              </button>
+            ))}
           </div>
           <AnimatePresence>
             {isModalOpen && (
@@ -333,48 +437,40 @@ export default function NotificationsPage() {
                 }}
               >
                 {selectedNotification && (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Message</label>
-                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                      <label className="block text-sm font-medium text-[#012a4a]">Message</label>
+                      <p className="w-full border border-gray-200 px-4 py-3 rounded-lg bg-gray-50 text-[#012a4a]">
                         {selectedNotification.message}
                       </p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Type</label>
-                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
-                        {selectedNotification.type}
+                      <label className="block text-sm font-medium text-[#012a4a]">Type</label>
+                      <p className="w-full border border-gray-200 px-4 py-3 rounded-lg bg-gray-50 text-[#012a4a]">
+                        {selectedNotification.type.charAt(0).toUpperCase() + selectedNotification.type.slice(1)}
                       </p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Tenant</label>
-                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                      <label className="block text-sm font-medium text-[#012a4a]">Tenant</label>
+                      <p className="w-full border border-gray-200 px-4 py-3 rounded-lg bg-gray-50 text-[#012a4a]">
                         {selectedNotification.tenantName}
                       </p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Date</label>
-                      <p className="w-full border border-gray-300 px-3 py-2 rounded-lg bg-gray-100">
+                      <label className="block text-sm font-medium text-[#012a4a]">Date</label>
+                      <p className="w-full border border-gray-200 px-4 py-3 rounded-lg bg-gray-50 text-[#012a4a]">
                         {new Date(selectedNotification.createdAt).toLocaleDateString()}
                       </p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Status</label>
-                      <p
-                        className={`w-full border px-3 py-2 rounded-lg ${
-                          selectedNotification.read
-                            ? "bg-gray-100 text-gray-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {selectedNotification.read ? "Read" : "Unread"}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">Delivery Method</label>
-                      <p className="w-full border px-3 py-2 rounded-lg bg-gray-100">
-                        {selectedNotification.deliveryMethod === "sms"
+                      <label className="block text-sm font-medium text-[#012a4a]">Delivery Method</label>
+                      <p className="w-full border border-gray-200 px-4 py-3 rounded-lg bg-gray-50 text-[#012a4a]">
+                        {selectedNotification.deliveryMethod === "both"
+                          ? "SMS & Email"
+                          : selectedNotification.deliveryMethod === "sms"
                           ? `SMS (${selectedNotification.deliveryStatus || "Pending"})`
+                          : selectedNotification.deliveryMethod === "email"
+                          ? "Email"
                           : "App"}
                       </p>
                     </div>
@@ -384,7 +480,7 @@ export default function NotificationsPage() {
                           setIsModalOpen(false);
                           setSelectedNotification(null);
                         }}
-                        className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                        className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors text-[#012a4a] font-medium"
                       >
                         Close
                       </button>
@@ -399,34 +495,40 @@ export default function NotificationsPage() {
                 isOpen={isCreateModalOpen}
                 onClose={() => {
                   setIsCreateModalOpen(false);
-                  setNewNotification({ message: "", tenantId: "all", type: "Other", deliveryMethod: "app" });
+                  setNewNotification({ message: "", tenantId: tenants.length > 0 ? "all" : "", type: "other", deliveryMethod: "app" });
                 }}
               >
-                <div className="space-y-4">
+                <div className="space-y-5">
+                  {tenants.length === 0 && (
+                    <div className="bg-yellow-50 text-yellow-700 p-4 rounded-lg border border-yellow-200">
+                      No tenants available. Please add tenants to send notifications.
+                    </div>
+                  )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Message</label>
+                    <label className="block text-sm font-medium text-[#012a4a]">Message</label>
                     <textarea
                       value={newNotification.message}
                       onChange={(e) =>
                         setNewNotification({ ...newNotification, message: e.target.value })
                       }
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                      className="mt-1 w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent bg-white text-[#012a4a] placeholder-gray-400"
                       placeholder="Enter notification message"
                       rows={4}
                       maxLength={160}
-                      disabled={newNotification.type === "Payment"}
+                      disabled={newNotification.type === "payment"}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Tenant</label>
+                    <label className="block text-sm font-medium text-[#012a4a]">Tenant</label>
                     <select
                       value={newNotification.tenantId}
                       onChange={(e) =>
                         setNewNotification({ ...newNotification, tenantId: e.target.value })
                       }
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                      className="mt-1 w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent bg-white text-[#012a4a] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                      disabled={tenants.length === 0}
                     >
-                      <option value="all">All Tenants</option>
+                      {tenants.length > 0 && <option value="all">All Tenants</option>}
                       {tenants.map((tenant) => (
                         <option key={tenant._id} value={tenant._id}>
                           {tenant.name}
@@ -435,58 +537,86 @@ export default function NotificationsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Type</label>
+                    <label className="block text-sm font-medium text-[#012a4a]">Type</label>
                     <select
                       value={newNotification.type}
                       onChange={(e) =>
                         setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })
                       }
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                      className="mt-1 w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent bg-white text-[#012a4a]"
                     >
-                      <option value="Payment">Payment</option>
-                      <option value="Maintenance">Maintenance</option>
-                      <option value="Tenant">Tenant</option>
-                      <option value="Other">Other</option>
+                      <option value="payment">Payment</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="tenant">Tenant</option>
+                      <option value="other">Other</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Delivery Method</label>
-                    <div className="flex items-center gap-4 mt-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">App</span>
-                        <div
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-                            newNotification.deliveryMethod === "app" ? "bg-[#03a678]" : "bg-gray-300"
-                          }`}
-                          onClick={() => setNewNotification({ ...newNotification, deliveryMethod: "app" })}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                              newNotification.deliveryMethod === "app" ? "translate-x-6" : "translate-x-1"
-                            }`}
-                          />
-                        </div>
-                        <span className="text-sm text-gray-600">SMS</span>
-                      </div>
-                    </div>
+                    <label className="block text-sm font-medium text-[#012a4a]">Delivery Method</label>
+                    <select
+                      value={newNotification.deliveryMethod}
+                      onChange={(e) =>
+                        setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })
+                      }
+                      className="mt-1 w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent bg-white text-[#012a4a]"
+                    >
+                      <option value="app">App</option>
+                      <option value="sms">SMS Only</option>
+                      <option value="email">Email Only</option>
+                      <option value="both">SMS & Email</option>
+                    </select>
                   </div>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-3">
                     <button
                       onClick={() => {
                         setIsCreateModalOpen(false);
-                        setNewNotification({ message: "", tenantId: "all", type: "Other", deliveryMethod: "app" });
+                        setNewNotification({ message: "", tenantId: tenants.length > 0 ? "all" : "", type: "other", deliveryMethod: "app" });
                       }}
-                      className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                      className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors text-[#012a4a] font-medium"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={createNotification}
-                      className="px-4 py-2 bg-[#03a678] hover:bg-[#02956a] text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
-                      disabled={isLoading || (newNotification.deliveryMethod === "sms" && !tenants.length)}
+                      className="px-5 py-2 bg-gradient-to-r from-[#03a678] to-[#02956a] text-white rounded-lg flex items-center gap-2 transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isLoading || !newNotification.tenantId || !newNotification.type || !newNotification.deliveryMethod || (newNotification.type !== "payment" && !newNotification.message.trim()) || (["sms", "both"].includes(newNotification.deliveryMethod) && !tenants.some(t => t.phone)) || (["email", "both"].includes(newNotification.deliveryMethod) && !tenants.some(t => t.email))}
                     >
-                      <Send size={16} />
+                      <Send size={18} />
                       {isLoading ? "Sending..." : "Send Notification"}
+                    </button>
+                  </div>
+                </div>
+              </Modal>
+            )}
+            {isDeleteModalOpen && (
+              <Modal
+                title="Confirm Deletion"
+                isOpen={isDeleteModalOpen}
+                onClose={() => {
+                  setIsDeleteModalOpen(false);
+                  setNotificationToDelete(null);
+                }}
+              >
+                <div className="space-y-5">
+                  <p className="text-[#012a4a] text-sm">
+                    Are you sure you want to delete this notification? This action cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => {
+                        setIsDeleteModalOpen(false);
+                        setNotificationToDelete(null);
+                      }}
+                      className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors text-[#012a4a] font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => notificationToDelete && deleteNotification(notificationToDelete)}
+                      className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                    >
+                      <Trash2 size={18} />
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -499,6 +629,14 @@ export default function NotificationsPage() {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
           font-family: 'Inter', sans-serif;
+        }
+        table {
+          width: 100%;
+          table-layout: auto;
+        }
+        th, td {
+          text-align: left;
+          vertical-align: middle;
         }
       `}</style>
     </div>

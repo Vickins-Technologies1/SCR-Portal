@@ -30,3 +30,4 @@
 {"csrfToken":"42a78b6b-e2a8-4287-94ce-2be8033111b8","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-05T09:44:48.780Z","userId":"6880fc9059dc87d900661fd2"}
 {"csrfToken":"91777892-4a5d-434c-94d8-231601011579","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-06T14:42:52.118Z","userId":"6880fc9059dc87d900661fd2"}
 {"csrfToken":"44a5edbc-1860-4986-967d-9418cbb68d20","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-06T18:23:54.139Z","userId":"6880fc9059dc87d900661fd2"}
+{"csrfToken":"eb8cd3a0-7161-4391-9b5f-87b830593f81","level":"error","message":"Invalid or missing CSRF token","timestamp":"2025-08-07T08:08:13.840Z","userId":"6880fc9059dc87d900661fd2"}
