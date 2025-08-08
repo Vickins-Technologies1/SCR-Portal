@@ -326,7 +326,7 @@ export async function POST(request: NextRequest) {
         name: requestData.name,
         email: requestData.email,
         password: requestData.password!,
-        loginUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal`,
+        loginUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}`,
         propertyName: property.name,
         houseNumber: requestData.houseNumber,
       });
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
         : property.name;
       
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-      const shortUrl = baseUrl.length > 30 ? "scr-portal.com/login" : baseUrl;
+      const shortUrl = baseUrl.length > 30 ? "https://app.smartchoicerentalmanagement.com/" : baseUrl;
       
       const smsMessage = `Welcome, ${requestData.name}! Log in at ${shortUrl} with email: ${requestData.email}, pass: ${requestData.password}. Unit: ${truncatedPropertyName} ${requestData.houseNumber}.`;
       
