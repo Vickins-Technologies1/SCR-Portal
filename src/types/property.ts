@@ -1,5 +1,7 @@
+// src/types/property.ts
 export interface UnitType {
   type: string;
+  uniqueType: string; 
   price: number;
   deposit: number;
   managementType: "RentCollection" | "FullManagement";

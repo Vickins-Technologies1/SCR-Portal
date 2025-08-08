@@ -212,6 +212,7 @@ export async function POST(request: NextRequest) {
       });
       return {
         type: unit.type,
+        uniqueType: `${unit.type}-${index}`, // Add uniqueType field
         quantity: unit.quantity,
         price: unit.price,
         deposit: unit.deposit,
@@ -244,7 +245,7 @@ export async function POST(request: NextRequest) {
         const invoice: Omit<Invoice, '_id'> = {
           userId: ownerId,
           propertyId: result.insertedId.toString(),
-          unitType: `${unit.type}-${index}`, // Append index to differentiate same unit types
+          unitType: unit.uniqueType, // Use uniqueType
           amount: unit.managementFee,
           reference: `PROPERTY-INVOICE-${ownerId}-${unit.type}-${index}-${Date.now()}`,
           status: 'pending',
@@ -257,14 +258,14 @@ export async function POST(request: NextRequest) {
         const invoiceResult = await db.collection<Omit<Invoice, '_id'>>('invoices').insertOne(invoice);
         console.log('Generated invoice for unit type:', {
           invoiceId: invoiceResult.insertedId.toString(),
-          unitType: unit.type,
+          unitType: unit.uniqueType,
           unitIndex: index,
           propertyId: result.insertedId.toString(),
           invoice,
         });
       } else {
         console.log('No management fee for unit type, skipping invoice generation:', {
-          unitType: unit.type,
+          unitType: unit.uniqueType,
           unitIndex: index,
           propertyId: result.insertedId.toString(),
         });

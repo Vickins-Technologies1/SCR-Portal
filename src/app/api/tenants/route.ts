@@ -11,6 +11,7 @@ import { sendWelcomeSms } from "../../../lib/sms";
 interface UnitType {
   type: string;
   price: number;
+  uniqueType: string; 
   deposit: number;
   managementType: "RentCollection" | "FullManagement";
   managementFee: number;
@@ -226,9 +227,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const unit = property.unitTypes.find((u) => u.type === requestData.unitType);
+    const unit = property.unitTypes.find((u) => u.uniqueType === requestData.unitType);
     if (!unit || unit.quantity <= 0) {
-      logger.warn("Validation failed - Unit type not found or no available units", { unitType: requestData.unitType });
+      logger.warn("Validation failed - Unit type not found or no available units", {
+        unitType: requestData.unitType,
+        availableUnitTypes: property.unitTypes.map((u) => u.uniqueType),
+      });
       return NextResponse.json(
         { success: false, message: "Unit type not found or no available units" },
         { status: 400 }
@@ -265,7 +269,7 @@ export async function POST(request: NextRequest) {
       const unitInvoice = await db.collection("invoices").findOne({
         userId,
         propertyId: requestData.propertyId,
-        unitType: requestData.unitType,
+        unitType: requestData.unitType, // Use uniqueType
         status: "completed",
       });
 
@@ -294,7 +298,7 @@ export async function POST(request: NextRequest) {
       password: await bcrypt.hash(requestData.password!, 10),
       role: "tenant",
       propertyId: requestData.propertyId,
-      unitType: requestData.unitType,
+      unitType: requestData.unitType, // Store uniqueType
       price: requestData.price,
       deposit: requestData.deposit,
       houseNumber: requestData.houseNumber,
@@ -311,7 +315,7 @@ export async function POST(request: NextRequest) {
     });
 
     await db.collection<Property>("properties").updateOne(
-      { _id: new ObjectId(requestData.propertyId), "unitTypes.type": requestData.unitType },
+      { _id: new ObjectId(requestData.propertyId), "unitTypes.uniqueType": requestData.unitType },
       { $inc: { "unitTypes.$.quantity": -1 } }
     );
 
@@ -337,14 +341,13 @@ export async function POST(request: NextRequest) {
 
     // Send welcome SMS
     try {
-      // Truncate property name to ensure message fits within 160 characters
-      const maxPropertyNameLength = 20; // Adjust based on testing
+      const maxPropertyNameLength = 20;
       const truncatedPropertyName = property.name.length > maxPropertyNameLength
         ? `${property.name.substring(0, maxPropertyNameLength)}...`
         : property.name;
       
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-      const shortUrl = baseUrl.length > 30 ? "scr-portal.com/login" : baseUrl; // Use a short URL alias
+      const shortUrl = baseUrl.length > 30 ? "scr-portal.com/login" : baseUrl;
       
       const smsMessage = `Welcome, ${requestData.name}! Log in at ${shortUrl} with email: ${requestData.email}, pass: ${requestData.password}. Unit: ${truncatedPropertyName} ${requestData.houseNumber}.`;
       
@@ -353,7 +356,6 @@ export async function POST(request: NextRequest) {
           phone: requestData.phone,
           messageLength: smsMessage.length,
         });
-        // Fallback to even shorter message
         const fallbackMessage = `Welcome, ${requestData.name}! Log in: ${shortUrl}, email: ${requestData.email}, pass: ${requestData.password}.`;
         await sendWelcomeSms({
           phone: requestData.phone,

@@ -203,8 +203,8 @@ export default function TenantsPage() {
           ...p,
           unitTypes: p.unitTypes.map((u: Property["unitTypes"][0], index: number) => ({
             ...u,
+            uniqueType: u.uniqueType || `${u.type}-${index}`, // Fallback for backward compatibility
             managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
-            uniqueType: `${u.type}-${index}`,
           })),
         }));
         setProperties(properties || []);
@@ -269,11 +269,6 @@ export default function TenantsPage() {
         console.log("Invoice status response", { data, propertyId, uniqueType });
 
         if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
-          if (data.status === null) {
-            console.log("No invoice found", { propertyId, uniqueType });
-          } else {
-            console.log("Invoice status", { status: data.status, propertyId, uniqueType });
-          }
           return data.status;
         }
         console.warn("Invalid invoice status response", { data });
@@ -767,7 +762,7 @@ export default function TenantsPage() {
                 </thead>
                 <tbody>
                   {filteredTenants.slice((page - 1) * limit, page * limit).map((t) => {
-                    const [baseUnitType] = t.unitType.split('-');
+                    const [baseUnitType, index] = t.unitType.split('-');
                     return (
                       <tr
                         key={t._id}
@@ -780,7 +775,7 @@ export default function TenantsPage() {
                         <td className="px-4 py-3">
                           {properties.find((p) => p._id === t.propertyId)?.name || "N/A"}
                         </td>
-                        <td className="px-4 py-3">{`${baseUnitType} (${t.unitType})`}</td>
+                        <td className="px-4 py-3">{`${baseUnitType} #${parseInt(index) + 1}`}</td>
                         <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
                         <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
                         <td className="px-4 py-3">{t.houseNumber}</td>
@@ -1191,14 +1186,13 @@ export default function TenantsPage() {
                     !selectedPropertyId ||
                     !selectedUnitType
                   }
-                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
-                    isLoading ||
-                    Object.values(formErrors).some((v) => v !== undefined) ||
-                    !selectedPropertyId ||
-                    !selectedUnitType
+                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${isLoading ||
+                      Object.values(formErrors).some((v) => v !== undefined) ||
+                      !selectedPropertyId ||
+                      !selectedUnitType
                       ? "bg-gray-400 cursor-not-allowed"
                       : "bg-[#012a4a] hover:bg-[#014a7a]"
-                  }`}
+                    }`}
                   aria-label={modalMode === "add" ? "Add tenant" : "Update tenant"}
                 >
                   {isLoading && (

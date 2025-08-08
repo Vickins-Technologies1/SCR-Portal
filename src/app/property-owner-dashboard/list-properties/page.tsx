@@ -29,7 +29,7 @@ interface Property {
 
 const UNIT_TYPES = [
   "Single",
-  "Studio",
+  "Bed-Sitter",
   "1-Bedroom",
   "2-Bedroom",
   "3-Bedroom",
