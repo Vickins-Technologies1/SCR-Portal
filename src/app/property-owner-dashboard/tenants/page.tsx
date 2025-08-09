@@ -16,7 +16,7 @@ interface Tenant {
   email: string;
   phone: string;
   propertyId: string;
-  unitType: string; // Now includes index, e.g., "Single-0"
+  unitType: string; // Format: "type-index" (e.g., "Single-0", "1-Bedroom-1")
   price: number;
   deposit: number;
   houseNumber: string;
@@ -35,7 +35,7 @@ interface Property {
     deposit: number;
     managementType: "RentCollection" | "FullManagement";
     managementFee: number;
-    uniqueType: string;
+    uniqueType: string; // Format: "type-index"
   }[];
 }
 
@@ -203,7 +203,7 @@ export default function TenantsPage() {
           ...p,
           unitTypes: p.unitTypes.map((u: Property["unitTypes"][0], index: number) => ({
             ...u,
-            uniqueType: u.uniqueType || `${u.type}-${index}`, // Fallback for backward compatibility
+            uniqueType: u.uniqueType || `${u.type}-${index}`, // Ensure uniqueType is set
             managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
           })),
         }));
@@ -239,7 +239,7 @@ export default function TenantsPage() {
     }
   }, [userId, csrfToken]);
 
-  // Update fetchInvoiceStatus to handle unique unit type identifiers
+  // Fetch invoice status
   const fetchInvoiceStatus = useCallback(
     async (propertyId: string, uniqueType: string) => {
       if (!userId || !propertyId || !uniqueType) {
@@ -283,10 +283,10 @@ export default function TenantsPage() {
         return null;
       }
     },
-    [userId, csrfToken, setError]
+    [userId, csrfToken]
   );
 
-  // Update useEffect for data fetching
+  // Update fetchInvoiceStatus to handle unique unit type identifiers
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
       Promise.all([
@@ -988,10 +988,8 @@ export default function TenantsPage() {
                     onChange={async (e) => {
                       const uniqueType = e.target.value;
                       setSelectedUnitType(uniqueType);
-                      const [baseUnitType, index] = uniqueType.split('-');
-                      const unit = properties
-                        .find((p) => p._id === selectedPropertyId)
-                        ?.unitTypes[parseInt(index)];
+                      const selectedProperty = properties.find((p) => p._id === selectedPropertyId);
+                      const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === uniqueType);
                       if (unit) {
                         setPrice(unit.price.toString());
                         setDeposit(unit.deposit.toString());
@@ -1027,10 +1025,10 @@ export default function TenantsPage() {
                             setPendingTenantData(tenantData);
                             setError(
                               invoiceStatus === "pending"
-                                ? `Cannot add more tenants until the pending invoice for unit type ${baseUnitType} (#${parseInt(index) + 1}) in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"} is paid.`
+                                ? `Cannot add more tenants until the pending invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} is paid.`
                                 : invoiceStatus === "failed"
-                                  ? `Cannot add tenants because the invoice for unit type ${baseUnitType} (#${parseInt(index) + 1}) in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"} has failed. Please contact support.`
-                                  : `No invoice found for unit type ${baseUnitType} (#${parseInt(index) + 1}) in property ${properties.find((p) => p._id === selectedPropertyId)?.name || "unknown"}. Please create an invoice.`
+                                  ? `Cannot add tenants because the invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} has failed. Please contact support.`
+                                  : `No invoice found for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"}. Please create an invoice.`
                             );
                             setIsModalOpen(false);
                             setIsPaymentPromptOpen(true);
@@ -1055,7 +1053,7 @@ export default function TenantsPage() {
                         }));
                         setPendingTenantData(null);
                         setIsPaymentPromptOpen(false);
-                        setError(null);
+                        setError("Selected unit type not found.");
                       }
                     }}
                     required
@@ -1064,9 +1062,9 @@ export default function TenantsPage() {
                     <option value="">Select Unit Type</option>
                     {properties
                       .find((p) => p._id === selectedPropertyId)
-                      ?.unitTypes.map((u, index) => (
-                        <option key={`${u.type}-${index}`} value={`${u.type}-${index}`}>
-                          {u.type} #{index + 1} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
+                      ?.unitTypes.map((u) => (
+                        <option key={u.uniqueType} value={u.uniqueType}>
+                          {u.type} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
                         </option>
                       ))}
                   </select>
