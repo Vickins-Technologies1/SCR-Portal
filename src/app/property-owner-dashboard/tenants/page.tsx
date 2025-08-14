@@ -24,6 +24,9 @@ interface Tenant {
   leaseEndDate: string;
   createdAt: string;
   walletBalance?: number;
+  totalRentPaid?: number;
+  totalUtilityPaid?: number;
+  totalDepositPaid?: number;
 }
 
 interface Property {
@@ -78,6 +81,9 @@ export default function TenantsPage() {
   const [houseNumber, setHouseNumber] = useState("");
   const [leaseStartDate, setLeaseStartDate] = useState("");
   const [leaseEndDate, setLeaseEndDate] = useState("");
+  const [totalRentPaid, setTotalRentPaid] = useState("");
+  const [totalUtilityPaid, setTotalUtilityPaid] = useState("");
+  const [totalDepositPaid, setTotalDepositPaid] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -172,8 +178,14 @@ export default function TenantsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setTenants(data.tenants || []);
-        setFilteredTenants(data.tenants || []);
+        const normalizedTenants = (data.tenants || []).map((tenant: Tenant) => ({
+          ...tenant,
+          totalRentPaid: tenant.totalRentPaid ?? 0,
+          totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
+          totalDepositPaid: tenant.totalDepositPaid ?? 0,
+        }));
+        setTenants(normalizedTenants);
+        setFilteredTenants(normalizedTenants);
         setTotalTenants(data.total || 0);
       } else {
         setError(data.message || "Failed to fetch tenants.");
@@ -203,7 +215,7 @@ export default function TenantsPage() {
           ...p,
           unitTypes: p.unitTypes.map((u: Property["unitTypes"][0], index: number) => ({
             ...u,
-            uniqueType: u.uniqueType || `${u.type}-${index}`, // Ensure uniqueType is set
+            uniqueType: u.uniqueType || `${u.type}-${index}`,
             managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
           })),
         }));
@@ -303,7 +315,7 @@ export default function TenantsPage() {
     }
   }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
-  // Apply filters
+  // Apply filters and sort by createdAt
   useEffect(() => {
     const applyFilters = () => {
       let filtered = [...tenants];
@@ -323,6 +335,8 @@ export default function TenantsPage() {
       if (filters.unitType) {
         filtered = filtered.filter((tenant) => tenant.unitType.split('-')[0] === filters.unitType);
       }
+      // Sort by createdAt in descending order to show latest tenants first
+      filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setFilteredTenants(filtered);
       setTotalTenants(filtered.length);
     };
@@ -339,8 +353,6 @@ export default function TenantsPage() {
   // Clear filters
   const clearFilters = () => {
     setFilters({ tenantName: "", tenantEmail: "", propertyId: "", unitType: "" });
-    setFilteredTenants(tenants);
-    setTotalTenants(tenants.length);
     setPage(1);
   };
 
@@ -357,6 +369,9 @@ export default function TenantsPage() {
     setHouseNumber("");
     setLeaseStartDate("");
     setLeaseEndDate("");
+    setTotalRentPaid("");
+    setTotalUtilityPaid("");
+    setTotalDepositPaid("");
     setFormErrors({});
     setError(null);
   }, []);
@@ -382,6 +397,9 @@ export default function TenantsPage() {
       setHouseNumber(pendingTenantData.houseNumber || "");
       setLeaseStartDate(pendingTenantData.leaseStartDate || "");
       setLeaseEndDate(pendingTenantData.leaseEndDate || "");
+      setTotalRentPaid(pendingTenantData.totalRentPaid?.toString() || "");
+      setTotalUtilityPaid(pendingTenantData.totalUtilityPaid?.toString() || "");
+      setTotalDepositPaid(pendingTenantData.totalDepositPaid?.toString() || "");
     }
     setIsModalOpen(true);
   }, [paymentStatus, walletBalance, pendingTenantData, resetForm]);
@@ -404,6 +422,9 @@ export default function TenantsPage() {
     setHouseNumber(tenant.houseNumber);
     setLeaseStartDate(tenant.leaseStartDate);
     setLeaseEndDate(tenant.leaseEndDate);
+    setTotalRentPaid((tenant.totalRentPaid ?? 0).toString());
+    setTotalUtilityPaid((tenant.totalUtilityPaid ?? 0).toString());
+    setTotalDepositPaid((tenant.totalDepositPaid ?? 0).toString());
     setTenantPassword("");
     setFormErrors({});
     setError(null);
@@ -462,9 +483,12 @@ export default function TenantsPage() {
     if (!leaseStartDate || isNaN(Date.parse(leaseStartDate))) errors.leaseStartDate = "Valid lease start date is required";
     if (!leaseEndDate || isNaN(Date.parse(leaseEndDate))) errors.leaseEndDate = "Valid lease end date is required";
     else if (new Date(leaseEndDate) <= new Date(leaseStartDate)) errors.leaseEndDate = "Lease end date must be after start date";
+    if (totalRentPaid && (isNaN(parseFloat(totalRentPaid)) || parseFloat(totalRentPaid) < 0)) errors.totalRentPaid = "Total rent paid must be a non-negative number";
+    if (totalUtilityPaid && (isNaN(parseFloat(totalUtilityPaid)) || parseFloat(totalUtilityPaid) < 0)) errors.totalUtilityPaid = "Total utility paid must be a non-negative number";
+    if (totalDepositPaid && (isNaN(parseFloat(totalDepositPaid)) || parseFloat(totalDepositPaid) < 0)) errors.totalDepositPaid = "Total deposit paid must be a non-negative number";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, modalMode]);
+  }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, modalMode]);
 
   // Handle tenant form submission
   const handleSubmit = useCallback(
@@ -493,6 +517,9 @@ export default function TenantsPage() {
         leaseStartDate,
         leaseEndDate,
         ownerId: userId,
+        totalRentPaid: parseFloat(totalRentPaid) || 0,
+        totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
+        totalDepositPaid: parseFloat(totalDepositPaid) || 0,
       };
 
       try {
@@ -531,7 +558,7 @@ export default function TenantsPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm, csrfToken]
+    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm, csrfToken]
   );
 
   // Handle table sorting
@@ -539,10 +566,10 @@ export default function TenantsPage() {
     setSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
       const sortedTenants = [...filteredTenants].sort((a, b) => {
-        if (key === "price" || key === "deposit") {
-          return direction === "asc"
-            ? (a[key] as number) - (b[key] as number)
-            : (b[key] as number) - (a[key] as number);
+        if (key === "price" || key === "deposit" || key === "totalRentPaid" || key === "totalUtilityPaid" || key === "totalDepositPaid") {
+          const aVal = (a[key] ?? 0) as number;
+          const bVal = (b[key] ?? 0) as number;
+          return direction === "asc" ? aVal - bVal : bVal - aVal;
         }
 
         if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
@@ -581,6 +608,15 @@ export default function TenantsPage() {
       <span className="inline ml-1">↓</span>
     );
   }, [sortConfig]);
+
+  // Handle navigation to tenant details
+  const handleTenantClick = useCallback((tenantId: string) => {
+    if (!csrfToken) {
+      setError("CSRF token is missing. Please refresh the page.");
+      return;
+    }
+    router.push(`/property-owner-dashboard/tenants/${tenantId}`);
+  }, [csrfToken, router]);
 
   const totalPages = Math.ceil(totalTenants / limit);
 
@@ -757,54 +793,77 @@ export default function TenantsPage() {
                     >
                       Lease End {getSortIcon("leaseEndDate")}
                     </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("totalRentPaid")}
+                    >
+                      Total Rent Paid {getSortIcon("totalRentPaid")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("totalUtilityPaid")}
+                    >
+                      Total Utility Paid {getSortIcon("totalUtilityPaid")}
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                      onClick={() => handleSort("totalDepositPaid")}
+                    >
+                      Total Deposit Paid {getSortIcon("totalDepositPaid")}
+                    </th>
                     <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTenants.slice((page - 1) * limit, page * limit).map((t) => {
-                    const [baseUnitType, index] = t.unitType.split('-');
-                    return (
-                      <tr
-                        key={t._id}
-                        className="border-t hover:bg-gray-50 transition cursor-pointer"
-                        onClick={() => router.push(`/property-owner-dashboard/tenants/${t._id}`)}
-                      >
-                        <td className="px-4 py-3">{t.name}</td>
-                        <td className="px-4 py-3">{t.email}</td>
-                        <td className="px-4 py-3">{t.phone}</td>
-                        <td className="px-4 py-3">
-                          {properties.find((p) => p._id === t.propertyId)?.name || "N/A"}
-                        </td>
-                        <td className="px-4 py-3">{`${baseUnitType} #${parseInt(index) + 1}`}</td>
-                        <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
-                        <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
-                        <td className="px-4 py-3">{t.houseNumber}</td>
-                        <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
-                        <td
-                          className="px-4 py-3 flex gap-2"
-                          onClick={(e) => e.stopPropagation()}
+                  {filteredTenants
+                    .slice((page - 1) * limit, page * limit)
+                    .map((t) => {
+                      const [baseUnitType, index] = t.unitType.split('-');
+                      return (
+                        <tr
+                          key={t._id}
+                          className="border-t hover:bg-gray-50 transition cursor-pointer"
+                          onClick={() => handleTenantClick(t._id)}
                         >
-                          <button
-                            onClick={() => openEditModal(t)}
-                            className="text-[#012a4a] hover:text-[#014a7a] transition"
-                            title="Edit Tenant"
-                            aria-label={`Edit tenant ${t.name}`}
+                          <td className="px-4 py-3">{t.name}</td>
+                          <td className="px-4 py-3">{t.email}</td>
+                          <td className="px-4 py-3">{t.phone}</td>
+                          <td className="px-4 py-3">
+                            {properties.find((p) => p._id === t.propertyId)?.name || "N/A"}
+                          </td>
+                          <td className="px-4 py-3">{`${baseUnitType} #${parseInt(index) + 1}`}</td>
+                          <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
+                          <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
+                          <td className="px-4 py-3">{t.houseNumber}</td>
+                          <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-3">Ksh {(t.totalRentPaid ?? 0).toFixed(2)}</td>
+                          <td className="px-4 py-3">Ksh {(t.totalUtilityPaid ?? 0).toFixed(2)}</td>
+                          <td className="px-4 py-3">Ksh {(t.totalDepositPaid ?? 0).toFixed(2)}</td>
+                          <td
+                            className="px-4 py-3 flex gap-2"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <Pencil className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(t._id)}
-                            className="text-red-600 hover:text-red-800 transition"
-                            title="Delete Tenant"
-                            aria-label={`Delete tenant ${t.name}`}
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            <button
+                              onClick={() => openEditModal(t)}
+                              className="text-[#012a4a] hover:text-[#014a7a] transition"
+                              title="Edit Tenant"
+                              aria-label={`Edit tenant ${t.name}`}
+                            >
+                              <Pencil className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(t._id)}
+                              className="text-red-600 hover:text-red-800 transition"
+                              title="Delete Tenant"
+                              aria-label={`Delete tenant ${t.name}`}
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -1019,6 +1078,9 @@ export default function TenantsPage() {
                               houseNumber,
                               leaseStartDate,
                               leaseEndDate,
+                              totalRentPaid: parseFloat(totalRentPaid) || 0,
+                              totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
+                              totalDepositPaid: parseFloat(totalDepositPaid) || 0,
                               role: "tenant",
                               ownerId: userId || "",
                             };
@@ -1162,6 +1224,72 @@ export default function TenantsPage() {
                   <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
                 )}
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Total Rent Paid (Ksh)</label>
+                <input
+                  placeholder="Enter total rent paid"
+                  value={totalRentPaid}
+                  onChange={(e) => {
+                    setTotalRentPaid(e.target.value);
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      totalRentPaid: e.target.value && (isNaN(parseFloat(e.target.value)) || parseFloat(e.target.value) < 0)
+                        ? "Total rent paid must be a non-negative number"
+                        : undefined,
+                    }));
+                  }}
+                  type="number"
+                  step="0.01"
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalRentPaid ? "border-red-500" : "border-gray-300"}`}
+                />
+                {formErrors.totalRentPaid && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.totalRentPaid}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Total Utility Paid (Ksh)</label>
+                <input
+                  placeholder="Enter total utility paid"
+                  value={totalUtilityPaid}
+                  onChange={(e) => {
+                    setTotalUtilityPaid(e.target.value);
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      totalUtilityPaid: e.target.value && (isNaN(parseFloat(e.target.value)) || parseFloat(e.target.value) < 0)
+                        ? "Total utility paid must be a non-negative number"
+                        : undefined,
+                    }));
+                  }}
+                  type="number"
+                  step="0.01"
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalUtilityPaid ? "border-red-500" : "border-gray-300"}`}
+                />
+                {formErrors.totalUtilityPaid && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.totalUtilityPaid}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Total Deposit Paid (Ksh)</label>
+                <input
+                  placeholder="Enter total deposit paid"
+                  value={totalDepositPaid}
+                  onChange={(e) => {
+                    setTotalDepositPaid(e.target.value);
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      totalDepositPaid: e.target.value && (isNaN(parseFloat(e.target.value)) || parseFloat(e.target.value) < 0)
+                        ? "Total deposit paid must be a non-negative number"
+                        : undefined,
+                    }));
+                  }}
+                  type="number"
+                  step="0.01"
+                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalDepositPaid ? "border-red-500" : "border-gray-300"}`}
+                />
+                {formErrors.totalDepositPaid && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.totalDepositPaid}</p>
+                )}
+              </div>
               <div className="flex flex-col sm:flex-row justify-end gap-3">
                 <button
                   type="button"
@@ -1265,7 +1393,8 @@ export default function TenantsPage() {
         body {
           font-family: 'Inter', sans-serif;
         }
-      `}</style>
+      `}
+      </style>
     </div>
   );
 }

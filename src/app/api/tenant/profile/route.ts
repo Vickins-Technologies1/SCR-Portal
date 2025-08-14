@@ -54,6 +54,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Convert updatedAt to Date if it’s a string, or handle undefined
+    const updatedAt = tenant.updatedAt
+      ? tenant.updatedAt instanceof Date
+        ? tenant.updatedAt
+        : new Date(tenant.updatedAt)
+      : undefined;
+
     console.log("Tenant fetched successfully:", { tenantId: userId });
     return NextResponse.json(
       {
@@ -62,10 +69,10 @@ export async function GET(request: NextRequest) {
           ...tenant,
           _id: tenant._id.toString(),
           createdAt: tenant.createdAt.toISOString(),
-          updatedAt: tenant.updatedAt?.toISOString(),
+          updatedAt: updatedAt ? updatedAt.toISOString() : undefined, // Only call toISOString if updatedAt exists
           wallet: tenant.walletBalance ?? 0,
-          status: tenant.status || "active", // Default to "active" if not set
-          paymentStatus: tenant.paymentStatus || "N/A", // Default if not set
+          status: tenant.status || "active",
+          paymentStatus: tenant.paymentStatus || "N/A",
         },
       },
       { status: 200 }

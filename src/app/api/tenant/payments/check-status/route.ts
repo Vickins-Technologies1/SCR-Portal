@@ -18,6 +18,9 @@ interface Tenant {
   paymentStatus: string;
   leaseStartDate: string;
   walletBalance: number;
+  totalRentPaid: number;
+  totalUtilityPaid: number;
+  totalDepositPaid: number;
 }
 
 interface Property {
@@ -223,6 +226,42 @@ export async function POST(request: NextRequest) {
         { _id: new ObjectId(tenantId) },
         { $inc: { walletBalance: Number(umsPayData.TransactionAmount) } }
       );
+
+      // Update tenant payment fields (totalRentPaid, totalUtilityPaid, totalDepositPaid)
+      try {
+        const updateResponse = await axios.post(
+          `${process.env.NEXT_PUBLIC_BASE_URL}/api/tenant/payments/update-fields`,
+          {
+            paymentId: payment._id.toString(),
+            userId,
+            csrfToken,
+          },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+              Cookie: `userId=${userId};role=${role};csrf-token=${csrfToken}`,
+            },
+          }
+        );
+
+        if (!updateResponse.data.success) {
+          logger.warn("Failed to update tenant payment fields", {
+            paymentId: payment._id.toString(),
+            error: updateResponse.data.message,
+          });
+        } else {
+          logger.info("Tenant payment fields updated via update-fields API", {
+            paymentId: payment._id.toString(),
+            updatedFields: updateResponse.data.updatedFields,
+          });
+        }
+      } catch (updateError) {
+        logger.error("Error calling update-fields API", {
+          paymentId: payment._id.toString(),
+          error: updateError instanceof Error ? updateError.message : "Unknown error",
+        });
+      }
 
       // Fetch property owner details
       const owner = await db

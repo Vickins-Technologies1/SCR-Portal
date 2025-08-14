@@ -49,12 +49,9 @@ const logger = {
   },
 };
 
-// Helper function to check if today is 5 days before or on the rent payment date
 const isReminderDay = (rentPaymentDate: number, currentDate: Date): "fiveDaysBefore" | "paymentDate" | null => {
   const today = currentDate.getDate();
   const fiveDaysBefore = rentPaymentDate - 5;
-
-  // Handle edge case where rentPaymentDate - 5 is negative (early month)
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const adjustedFiveDaysBefore = fiveDaysBefore <= 0 ? fiveDaysBefore + daysInMonth : fiveDaysBefore;
 
@@ -67,7 +64,6 @@ const isReminderDay = (rentPaymentDate: number, currentDate: Date): "fiveDaysBef
   return null;
 };
 
-// Helper function to calculate due payments for a tenant
 const calculateDuePayments = async (
   db: Db,
   tenant: Tenant,
@@ -87,14 +83,12 @@ const calculateDuePayments = async (
 
   const unit = property.unitTypes.find((u) => u.type === tenant.unitType);
   const rentAmount = unit ? unit.price : tenant.price;
-  const depositAmount = tenant.deposit || 0; // Use tenant.deposit if available
-  const utilityAmount = 1000; // Placeholder utility fee; replace with actual if available
+  const depositAmount = tenant.deposit || 0;
+  const utilityAmount = 1000;
 
-  // Define the current billing period (month) for rent and utilities
   const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-  // Fetch completed payments
   const payments = await db
     .collection<Payment>("payments")
     .find({
@@ -102,7 +96,6 @@ const calculateDuePayments = async (
       propertyId: property._id.toString(),
       status: "completed",
       type: { $in: ["Rent", "Utility", "Deposit"] },
-      // For rent and utilities, check current month; for deposit, check all time
       $or: [
         { type: { $in: ["Rent", "Utility"] }, paymentDate: { $gte: startOfMonth.toISOString(), $lte: endOfMonth.toISOString() } },
         { type: "Deposit" },
@@ -210,11 +203,9 @@ export async function POST() {
     const { db }: { db: Db } = await connectToDatabase();
     logger.debug("Connected to database", { database: "rentaldb", collections: ["properties", "tenants", "notifications", "payments"] });
 
-    // Get current date (EAT timezone, based on provided date: August 7, 2025, 01:31 PM EAT)
-    const currentDate = new Date("2025-08-07T13:31:00+03:00");
+    const currentDate = new Date("2025-08-14T15:49:00+03:00");
     logger.debug("Current date for reminder check", { date: currentDate.toISOString() });
 
-    // Fetch properties owned by the user
     const properties = await db
       .collection<Property>("properties")
       .find({ ownerId: userId })
@@ -244,10 +235,9 @@ export async function POST() {
         continue;
       }
 
-      // Fetch tenants for the property
       const tenants = await db
         .collection<Tenant>("tenants")
-        .find({ propertyId: property._id, ownerId: userId }) // Use ObjectId directly
+        .find({ propertyId: property._id.toString(), ownerId: userId })
         .toArray();
       logger.debug("Fetched tenants for property", {
         propertyId: property._id.toString(),
@@ -263,7 +253,6 @@ export async function POST() {
         continue;
       }
 
-      // Prepare due date
       const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), property.rentPaymentDate);
       const formattedDueDate = dueDate.toLocaleDateString("en-US", {
         month: "long",
@@ -272,7 +261,6 @@ export async function POST() {
       });
 
       for (const tenant of tenants) {
-        // Check lease start date
         const leaseStartDate = new Date(tenant.leaseStartDate);
         if (leaseStartDate > currentDate) {
           logger.debug("Skipping tenant with future lease start date", {
@@ -283,7 +271,6 @@ export async function POST() {
           continue;
         }
 
-        // Check for duplicate notifications
         const startOfDay = new Date(currentDate);
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(currentDate);
@@ -303,7 +290,6 @@ export async function POST() {
           continue;
         }
 
-        // Calculate due payments
         const { rentDue, utilityDue, depositDue, totalDue } = await calculateDuePayments(db, tenant, property, currentDate);
 
         if (totalDue <= 0) {
@@ -317,7 +303,6 @@ export async function POST() {
           continue;
         }
 
-        // Prepare reminder message
         const messageItems = [
           rentDue > 0 ? `Rent: Ksh. ${rentDue.toFixed(2)}` : "",
           utilityDue > 0 ? `Utilities: Ksh. ${utilityDue.toFixed(2)}` : "",
@@ -344,10 +329,9 @@ export async function POST() {
         let smsSuccess = true;
         let emailSuccess = true;
 
-        // Send SMS if deliveryMethod is 'sms' or 'both'
         if (["sms", "both"].includes(tenant.deliveryMethod) && tenant.phone) {
           try {
-            const smsMessage = message.slice(0, 160); // Truncate to 160 characters
+            const smsMessage = message.slice(0, 160);
             await sendWelcomeSms({
               phone: tenant.phone,
               message: smsMessage,
@@ -375,14 +359,13 @@ export async function POST() {
           }
         }
 
-        // Send email if deliveryMethod is 'email' or 'both'
         if (["email", "both"].includes(tenant.deliveryMethod) && tenant.email) {
           try {
             await sendReminderEmail({
               to: tenant.email,
               name: tenant.name,
               propertyName: property.name,
-              houseNumber: tenant.houseNumber,
+              houseNumber: tenant.houseNumber, // No fallback needed, houseNumber is string
               rentDue,
               utilityDue,
               depositDue,
@@ -413,14 +396,12 @@ export async function POST() {
           }
         }
 
-        // Set deliveryStatus to 'success' only if both SMS and email (if applicable) succeeded
         if (["sms", "email", "both"].includes(tenant.deliveryMethod)) {
           notification.deliveryStatus = smsSuccess && emailSuccess ? "success" : "failed";
         } else {
-          notification.deliveryStatus = "success"; // For 'app' deliveryMethod
+          notification.deliveryStatus = "success";
         }
 
-        // Insert notification into the database
         await db.collection<Notification>("notifications").insertOne(notification);
         logger.debug("Notification recorded", {
           notificationId: notification._id,

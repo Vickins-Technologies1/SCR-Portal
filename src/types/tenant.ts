@@ -1,15 +1,14 @@
-// src/types/tenant.ts
-import { ObjectId } from 'mongodb';
+import { ObjectId } from "mongodb";
 
 export interface Tenant {
   _id: ObjectId;
+  ownerId: string;
   name: string;
   email: string;
   phone: string;
   password: string;
-  role: 'tenant';
-  ownerId: string;
-  propertyId: ObjectId;
+  role: string;
+  propertyId: string;
   unitType: string;
   price: number;
   deposit: number;
@@ -20,17 +19,20 @@ export interface Tenant {
   paymentStatus: string;
   createdAt: Date;
   updatedAt?: Date;
+  totalRentPaid: number;
+  totalUtilityPaid: number;
+  totalDepositPaid: number;
   walletBalance: number;
-  deliveryMethod: "app" | "sms" | "email" | "both";
+  deliveryMethod: 'sms' | 'email' | 'both' | 'app'; // Added to match route.ts usage
 }
 
 export interface ResponseTenant {
   _id: string;
+  ownerId: string;
   name: string;
   email: string;
   phone: string;
-  role: 'tenant';
-  ownerId: string;
+  role: string;
   propertyId: string;
   unitType: string;
   price: number;
@@ -42,24 +44,36 @@ export interface ResponseTenant {
   paymentStatus: string;
   createdAt: string;
   updatedAt?: string;
+  totalRentPaid: number;
+  totalUtilityPaid: number;
+  totalDepositPaid: number;
   walletBalance: number;
+  dues?: {
+    rentDues: number;
+    utilityDues: number;
+    depositDues: number;
+    totalRemainingDues: number;
+  };
 }
 
 export interface TenantRequest {
-  name: string;
-  email: string;
-  phone: string;
+  name?: string;
+  email?: string;
+  phone?: string;
   password?: string;
-  role: 'tenant';
-  propertyId: string;
-  unitType: string;
-  price: number;
-  deposit: number;
-  houseNumber: string;
-  leaseStartDate: string;
-  leaseEndDate: string;
+  role?: string;
+  propertyId?: string;
+  unitType?: string;
+  price?: number;
+  deposit?: number;
+  houseNumber?: string;
+  leaseStartDate?: string;
+  leaseEndDate?: string;
   status?: string;
   paymentStatus?: string;
+  totalRentPaid?: number;
+  totalUtilityPaid?: number;
+  totalDepositPaid?: number;
   walletBalance?: number;
-  ownerId: string;
+  ownerId?: string;
 }

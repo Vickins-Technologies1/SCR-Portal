@@ -1,4 +1,3 @@
-// src/app/api/properties/[propertyId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { validateCsrfToken } from '@/lib/csrf';
@@ -42,6 +41,7 @@ interface Tenant {
   createdAt: Date;
   updatedAt?: Date;
   walletBalance: number;
+  status?: string; // Added to include computed status
 }
 
 interface PropertyRequest {
@@ -50,6 +50,25 @@ interface PropertyRequest {
   unitTypes?: UnitType[];
   requiresAdminApproval?: boolean;
 }
+
+// Utility function to compute tenant status
+const getTenantStatus = (leaseStartDate: string, leaseEndDate: string): string => {
+  const currentDate = new Date();
+  const startDate = leaseStartDate ? new Date(leaseStartDate) : null;
+  const endDate = leaseEndDate ? new Date(leaseEndDate) : null;
+
+  if (!startDate || !endDate) {
+    return 'Unknown';
+  }
+
+  if (currentDate < startDate) {
+    return 'Pending';
+  } else if (currentDate >= startDate && currentDate <= endDate) {
+    return 'Active';
+  } else {
+    return 'Expired';
+  }
+};
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ propertyId: string }> }) {
   try {
@@ -117,22 +136,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .toArray();
 
     console.log('Property fetched successfully', { propertyId, userId, tenantCount: tenants.length });
+
     return NextResponse.json({
       success: true,
       property: {
         ...property,
         _id: property._id.toString(),
         ownerId: property.ownerId,
-        createdAt: property.createdAt.toISOString(),
-        updatedAt: property.updatedAt?.toISOString(),
+        createdAt: property.createdAt instanceof Date ? property.createdAt.toISOString() : property.createdAt,
+        updatedAt: property.updatedAt instanceof Date ? property.updatedAt.toISOString() : property.updatedAt || undefined,
       },
       tenants: tenants.map((tenant) => ({
         ...tenant,
         _id: tenant._id.toString(),
         propertyId: tenant.propertyId.toString(),
-        createdAt: tenant.createdAt.toISOString(),
-        updatedAt: tenant.updatedAt?.toISOString(),
+        ownerId: tenant.ownerId,
+        createdAt: tenant.createdAt instanceof Date ? tenant.createdAt.toISOString() : tenant.createdAt,
+        updatedAt: tenant.updatedAt instanceof Date ? tenant.updatedAt.toISOString() : tenant.updatedAt || undefined,
         walletBalance: tenant.walletBalance ?? 0,
+        status: getTenantStatus(tenant.leaseStartDate, tenant.leaseEndDate),
       })),
     });
   } catch (error: unknown) {
@@ -292,8 +314,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         ...result,
         _id: result._id.toString(),
         ownerId: result.ownerId,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt?.toISOString(),
+        createdAt: result.createdAt instanceof Date ? result.createdAt.toISOString() : result.createdAt,
+        updatedAt: result.updatedAt instanceof Date ? result.updatedAt.toISOString() : result.updatedAt || undefined,
       },
     });
   } catch (error: unknown) {

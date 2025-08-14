@@ -15,6 +15,28 @@ interface Property {
   rentPaymentDate?: number;
 }
 
+interface Tenant {
+  _id: ObjectId;
+  name: string;
+  email: string;
+  phone: string;
+  propertyId: string;
+  unitType: string;
+  houseNumber: string;
+  price: number;
+  deposit: number;
+  leaseStartDate: string;
+  leaseEndDate: string;
+  status: string;
+  paymentStatus: string;
+  createdAt: string;
+  updatedAt?: string;
+  walletBalance: number;
+  totalRentPaid?: number;
+  totalUtilityPaid?: number;
+  totalDepositPaid?: number;
+}
+
 interface Stats {
   activeProperties: number;
   totalTenants: number;
@@ -41,7 +63,11 @@ export async function GET(request: NextRequest) {
   }
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
-    logger.error("Invalid CSRF token in ownerstats request", { userId });
+    logger.error("Invalid CSRF token in ownerstats request", {
+      userId,
+      storedToken: request.cookies.get("csrf-token")?.value,
+      headerToken: request.headers.get("x-csrf-token"),
+    });
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
@@ -73,7 +99,7 @@ export async function GET(request: NextRequest) {
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
     // Define current month range (August 2025, EAT)
-    const today = new Date("2025-08-14T13:29:00+03:00");
+    const today = new Date("2025-08-14T15:33:00+03:00");
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
@@ -170,7 +196,7 @@ export async function GET(request: NextRequest) {
       propertyIds,
     });
 
-    // Total rent payments aggregation (only completed rent payments)
+    // Total payments aggregation (all completed payments, all types)
     const paymentsResult = await db
       .collection("payments")
       .aggregate<{
@@ -320,6 +346,137 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error("Error fetching owner stats", {
       userId,
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return NextResponse.json(
+      { success: false, message: error instanceof Error ? error.message : "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const { tenantId } = body;
+
+  if (!tenantId) {
+    logger.error("Missing tenantId in check-dues request", { tenantId });
+    return NextResponse.json(
+      { success: false, message: "tenantId is required" },
+      { status: 400 }
+    );
+  }
+
+  if (!ObjectId.isValid(tenantId)) {
+    logger.error("Invalid tenantId format", { tenantId });
+    return NextResponse.json(
+      { success: false, message: "Invalid tenantId format" },
+      { status: 400 }
+    );
+  }
+
+  const csrfHeader = request.headers.get("x-csrf-token");
+  const csrfCookie = request.cookies.get("csrf-token")?.value;
+  if (!validateCsrfToken(request, csrfHeader)) {
+    logger.error("Invalid CSRF token in check-dues request", {
+      tenantId,
+      storedToken: csrfCookie,
+      headerToken: csrfHeader,
+    });
+    return NextResponse.json(
+      { success: false, message: "Invalid CSRF token" },
+      { status: 403 }
+    );
+  }
+
+  try {
+    const { db } = await connectToDatabase();
+    const today = new Date("2025-08-14T15:33:00+03:00");
+
+    // Fetch tenant
+    const tenant = await db
+      .collection("tenants")
+      .findOne<WithId<Tenant>>({ _id: new ObjectId(tenantId) });
+    if (!tenant) {
+      logger.error("Tenant not found", { tenantId });
+      return NextResponse.json(
+        { success: false, message: "Tenant not found" },
+        { status: 404 }
+      );
+    }
+
+    // Calculate months stayed
+    const leaseStart = tenant.leaseStartDate ? new Date(tenant.leaseStartDate) : null;
+    const monthsStayed = leaseStart
+      ? Math.max(
+          0,
+          Math.floor(
+            (today.getTime() - leaseStart.getTime()) / (1000 * 60 * 60 * 24 * 30)
+          )
+        )
+      : 0;
+
+    // Calculate dues
+    const totalRentDue = leaseStart && tenant.price
+      ? tenant.price * monthsStayed
+      : 0;
+    const totalDepositDue = tenant.deposit || 0;
+    const totalUtilityDue = 0; // Utility dues not tracked
+    const totalPaid = (tenant.totalRentPaid || 0) +
+                      (tenant.totalUtilityPaid || 0) +
+                      (tenant.totalDepositPaid || 0);
+    const totalRemainingDues = Math.max(0, totalRentDue + totalDepositDue + totalUtilityDue - totalPaid);
+
+    // Update tenant payment status
+    const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
+    await db.collection("tenants").updateOne(
+      { _id: new ObjectId(tenantId) },
+      { $set: { paymentStatus, updatedAt: today.toISOString() } }
+    );
+
+    const dues = {
+      rentDues: Math.max(0, totalRentDue - (tenant.totalRentPaid || 0)),
+      utilityDues: totalUtilityDue,
+      depositDues: Math.max(0, totalDepositDue - (tenant.totalDepositPaid || 0)),
+      totalRemainingDues,
+    };
+
+    logger.debug("Successfully fetched tenant dues", {
+      tenantId,
+      dues,
+      monthsStayed,
+    });
+
+    return NextResponse.json({
+      success: true,
+      tenant: {
+        _id: tenant._id.toString(),
+        name: tenant.name,
+        email: tenant.email,
+        phone: tenant.phone,
+        propertyId: tenant.propertyId,
+        unitType: tenant.unitType,
+        houseNumber: tenant.houseNumber,
+        price: tenant.price,
+        deposit: tenant.deposit,
+        leaseStartDate: tenant.leaseStartDate,
+        leaseEndDate: tenant.leaseEndDate,
+        status: tenant.status,
+        paymentStatus,
+        createdAt: tenant.createdAt,
+        updatedAt: tenant.updatedAt,
+        walletBalance: tenant.walletBalance,
+        totalRentPaid: tenant.totalRentPaid,
+        totalUtilityPaid: tenant.totalUtilityPaid,
+        totalDepositPaid: tenant.totalDepositPaid,
+      },
+      dues,
+      monthsStayed,
+    });
+  } catch (error) {
+    logger.error("Error fetching tenant dues", {
+      tenantId,
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
     });

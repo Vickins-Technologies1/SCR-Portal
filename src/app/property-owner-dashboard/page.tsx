@@ -3,11 +3,11 @@
 import { Inter } from "next/font/google";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Users, DollarSign, AlertCircle, BarChart2 } from "lucide-react";
+import { Building2, Users, DollarSign, AlertCircle, BarChart2 } from "lucide-react"; // Removed Wrench
 import Cookies from "js-cookie";
-import { Line, Pie } from "react-chartjs-2";
+import { Line, Pie, Bar } from "react-chartjs-2"; // Kept Bar since we’ll use it
 import {
   Chart as ChartJS,
   LineElement,
@@ -18,6 +18,8 @@ import {
   Tooltip,
   Legend,
   ArcElement,
+  BarElement,
+  TooltipItem, // Added for typing tooltip
 } from "chart.js";
 
 const inter = Inter({
@@ -25,7 +27,7 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
-ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
+ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement, BarElement);
 
 interface Property {
   _id: string;
@@ -74,12 +76,20 @@ interface Stats {
   totalOverdueAmount: number;
 }
 
+interface ChartData {
+  months: string[];
+  rentPayments: number[];
+  utilityPayments: number[];
+  maintenanceRequests: number[];
+}
+
 export default function PropertyOwnerDashboard() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isChartsLoading, setIsChartsLoading] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -94,6 +104,7 @@ export default function PropertyOwnerDashboard() {
     totalPayments: 0,
     totalOverdueAmount: 0,
   });
+  const [chartData, setChartData] = useState<ChartData | null>(null);
 
   // Load cookies and fetch CSRF token
   useEffect(() => {
@@ -145,6 +156,42 @@ export default function PropertyOwnerDashboard() {
       setCsrfToken(token);
     }
   }, [router]);
+
+  // Fetch owner charts data
+  const fetchOwnerCharts = useCallback(async () => {
+    if (!userId || !csrfToken) return;
+
+    setIsChartsLoading(true);
+    setError(null);
+
+    try {
+      const fetchUrl = `/api/ownercharts?tenantId=null&propertyOwnerId=${encodeURIComponent(userId)}`;
+      const res = await fetch(fetchUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Fetch failed for /api/ownercharts: ${res.status} ${res.statusText} - ${text.slice(0, 50)}`);
+      }
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Failed to fetch chart data");
+
+      setChartData(data.chartData);
+      console.log("Chart data fetched:", data.chartData);
+    } catch (err) {
+      console.error("Chart data fetch error:", err);
+      setError(`Failed to load chart data: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsChartsLoading(false);
+    }
+  }, [userId, csrfToken]);
 
   // Fetch dashboard data
   useEffect(() => {
@@ -226,6 +273,8 @@ export default function PropertyOwnerDashboard() {
         setTenants(tenantsList);
         setPayments(paymentsList);
         setStats(statsData);
+
+        await fetchOwnerCharts();
       } catch (err) {
         console.error("Dashboard fetch error:", err);
         setError("Failed to load dashboard data: " + (err instanceof Error ? err.message : String(err)));
@@ -235,86 +284,7 @@ export default function PropertyOwnerDashboard() {
     };
 
     fetchDashboardData();
-  }, [userId, role, csrfToken]);
-
-  // Calculate current month's completed payments
-  const getCurrentMonthPayments = () => {
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-    const currentMonthPayments = payments
-      .filter((payment) => {
-        if (payment.status !== "completed" || !payment.paymentDate) return false;
-        const paymentDate = new Date(payment.paymentDate);
-        const isCurrentMonth = paymentDate >= startOfMonth && paymentDate <= endOfMonth && !isNaN(paymentDate.getTime());
-        console.log("Payment check:", {
-          paymentId: payment._id,
-          paymentDate: payment.paymentDate,
-          isCurrentMonth,
-          amount: payment.amount,
-          status: payment.status,
-          type: payment.type,
-        });
-        return isCurrentMonth;
-      })
-      .reduce((sum, payment) => sum + payment.amount, 0);
-    console.log("Current month payments total (August 2025):", currentMonthPayments, "Number of payments:", payments.length);
-    return currentMonthPayments;
-  };
-
-  // Generate all months for the revenue chart
-  const generateMonthLabels = (startDate: Date, endDate: Date): string[] => {
-    const months: string[] = [];
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-    while (current <= endDate) {
-      months.push(current.toLocaleString("default", { year: "numeric", month: "short" }));
-      current.setMonth(current.getMonth() + 1);
-    }
-    return months;
-  };
-
-  // Revenue chart data
-  const revenueData = payments.reduce((acc, payment) => {
-    if (payment.status !== "completed" || !payment.paymentDate) return acc;
-    const paymentDate = new Date(payment.paymentDate);
-    if (isNaN(paymentDate.getTime())) return acc;
-    const month = paymentDate.toLocaleString("default", { year: "numeric", month: "short" });
-    acc[month] = (acc[month] || 0) + payment.amount;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Determine the date range for the chart
-  const paymentDates = payments
-    .filter((p) => p.paymentDate && p.status === "completed" && !isNaN(new Date(p.paymentDate).getTime()))
-    .map((p) => new Date(p.paymentDate));
-  const minDate = paymentDates.length > 0 ? new Date(Math.min(...paymentDates.map((d) => d.getTime()))) : new Date();
-  const maxDate = new Date();
-  const chartLabels = generateMonthLabels(minDate, maxDate);
-  const chartValues = chartLabels.map((label) => revenueData[label] || 0);
-
-  const lineChartData = {
-    labels: chartLabels,
-    datasets: [
-      {
-        label: "Monthly Revenue (Ksh)",
-        data: chartValues,
-        borderColor: "#012a4a",
-        backgroundColor: "rgba(1, 42, 74, 0.2)",
-        fill: true,
-        tension: 0.4,
-      },
-    ],
-  };
-
-  const lineChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
-      y: { title: { display: true, text: "Revenue (Ksh)", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
-    },
-    plugins: { legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } }, tooltip: { enabled: true } },
-  };
+  }, [userId, role, csrfToken, fetchOwnerCharts]);
 
   // Payment status pie chart
   const paymentStatusData = tenants.reduce(
@@ -366,6 +336,86 @@ export default function PropertyOwnerDashboard() {
     },
   };
 
+// Line chart data for payment trends
+const paymentChartData = {
+  labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
+  datasets: [
+    {
+      label: "Rent Payments (Ksh)",
+      data: chartData?.rentPayments || [0, 0, 0, 0, 0, 0],
+      borderColor: "#36A2EB",
+      backgroundColor: "rgba(54, 162, 235, 0.2)",
+      fill: true,
+      tension: 0.4,
+    },
+    {
+      label: "Utility Payments (Ksh)",
+      data: chartData?.utilityPayments || [0, 0, 0, 0, 0, 0],
+      borderColor: "#FF6384",
+      backgroundColor: "rgba(255, 99, 132, 0.2)",
+      fill: true,
+      tension: 0.4,
+    },
+  ],
+};
+
+const paymentChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
+    y: { title: { display: true, text: "Amount (Ksh)", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
+  },
+  plugins: {
+    legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } },
+    title: { display: true, text: "Payment Trends", color: "#012a4a", font: { size: 16 } },
+    tooltip: {
+      callbacks: {
+        label: (context: TooltipItem<"line">) => {
+          const value = context.raw as number; // Type assertion
+          return `${context.dataset.label}: Ksh ${value.toFixed(2)}`;
+        },
+      },
+    },
+  },
+};
+
+// Bar chart data for maintenance requests
+const maintenanceChartData = {
+  labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
+  datasets: [
+    {
+      label: "Maintenance Requests",
+      data: chartData?.maintenanceRequests || [0, 0, 0, 0, 0, 0],
+      backgroundColor: "#4BC0C0",
+      hoverBackgroundColor: "#36A2EB",
+      borderWidth: 1,
+    },
+  ],
+};
+
+// Bar chart options for maintenance requests
+const maintenanceChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
+    y: { title: { display: true, text: "Requests", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
+  },
+  plugins: {
+    legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } },
+    title: { display: true, text: "Maintenance Requests", color: "#012a4a", font: { size: 16 } },
+    tooltip: {
+      callbacks: {
+        label: (context: TooltipItem<"bar">) => {
+          const value = context.raw as number; // Type assertion
+          return `${context.dataset.label}: ${value}`;
+        },
+      },
+    },
+  },
+};
+
   if (!userId || role !== "propertyOwner") {
     return (
       <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-white ${inter.className}`}>
@@ -397,13 +447,19 @@ export default function PropertyOwnerDashboard() {
               Loading dashboard...
             </div>
           )}
+          {isChartsLoading && (
+            <div className="mb-4 sm:mb-6 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl p-4 flex items-center gap-2 text-sm sm:text-base">
+              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-[#012a4a]"></div>
+              Loading chart data...
+            </div>
+          )}
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
             {[
               {
                 title: "Monthly Rent",
-                value: `Ksh ${getCurrentMonthPayments().toFixed(2)}`,
+                value: `Ksh ${stats.totalMonthlyRent.toFixed(2)}`,
                 icon: <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />,
                 color: "teal",
               },
@@ -450,27 +506,27 @@ export default function PropertyOwnerDashboard() {
             ))}
           </div>
 
-          {/* Revenue Trends Chart */}
-          {chartLabels.length > 0 && (
-            <section className="mb-6 sm:mb-8">
-              <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Revenue Trends</h2>
+          {/* Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+            <section>
+              <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Payment Trends</h2>
               <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-200 h-80 sm:h-96">
-                <Line data={lineChartData} options={lineChartOptions} />
+                <Line data={paymentChartData} options={paymentChartOptions} />
               </div>
             </section>
-          )}
-
-          {/* Tenant Payment Status Chart */}
-          {tenants.length > 0 && (
-            <section className="mb-6 sm:mb-8">
-              <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">
-                Tenant Payment Status
-              </h2>
+            <section>
+              <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Tenant Payment Status</h2>
               <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-200 h-80 sm:h-96">
                 <Pie data={pieChartData} options={pieChartOptions} />
               </div>
             </section>
-          )}
+            <section>
+              <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Maintenance Requests</h2>
+              <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-200 h-80 sm:h-96">
+                <Bar data={maintenanceChartData} options={maintenanceChartOptions} /> {/* Added Bar chart */}
+              </div>
+            </section>
+          </div>
 
           {/* Properties Section */}
           <section className="mb-6 sm:mb-8">

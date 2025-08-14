@@ -23,7 +23,7 @@ function customRateLimiter(ip: string): { success: boolean; remaining: number } 
 
   record.count += 1;
   if (record.count > RATE_LIMIT_MAX) {
-    logger.warn(`Rate limit exceeded - IP: ${key}, Count: ${record.count}`);
+    logger.warn(`Rate limit exceeded - IP: ${key}`, { count: record.count });
     return { success: false, remaining: 0 };
   }
 
@@ -44,7 +44,6 @@ interface SignupRequestBody {
 }
 
 export async function POST(request: NextRequest) {
-  // Define variables accessible in both try and catch
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
   let body: SignupRequestBody | undefined;
 
@@ -55,20 +54,31 @@ export async function POST(request: NextRequest) {
       throw new Error("Too many signup attempts. Please try again later.");
     }
 
+    // Parse request body
     body = await request.json() as SignupRequestBody;
-    logger.debug("Received signup request:", { email: body.email, ip });
+    logger.debug("Received signup request:", { email: body?.email ?? "unknown", ip });
+
+    // Explicitly check if body is undefined
+    if (!body) {
+      logger.warn("Request body is missing", {});
+      return NextResponse.json(
+        { success: false, message: "Request body is missing" },
+        { status: 400 }
+      );
+    }
+
     const { name, email, password, phone, confirmPassword, role, csrfToken } = body;
 
     // Validate input
     if (!name || !email || !password || !phone || !confirmPassword || !role || !csrfToken) {
-      logger.warn("Missing fields:", body);
+      logger.warn("Missing fields:", { ...body });
       return NextResponse.json(
         { success: false, message: "All fields are required" },
         { status: 400 }
       );
     }
 
-    // Validate CSRF token using utility function
+    // Validate CSRF token
     if (!validateCsrfToken(request, csrfToken)) {
       logger.warn("Invalid CSRF token:", { provided: csrfToken });
       return NextResponse.json(
@@ -77,8 +87,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (role !== "propertyOwner") {
-      logger.warn("Invalid role:", role);
+    if (role !== "不動産所有者") {
+      logger.warn("Invalid role:", { role });
       return NextResponse.json(
         { success: false, message: "Role must be 'propertyOwner'" },
         { status: 400 }
@@ -92,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     // Validate email
     if (!validator.isEmail(sanitizedEmail)) {
-      logger.warn("Invalid email:", sanitizedEmail);
+      logger.warn("Invalid email:", { email: sanitizedEmail });
       return NextResponse.json(
         { success: false, message: "Invalid email format" },
         { status: 400 }
@@ -101,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     // Validate phone (Kenyan format: +2547xxxxxxxx or 07xxxxxxxx)
     if (!/^(?:\+2547|7)\d{8}$/.test(sanitizedPhone)) {
-      logger.warn("Invalid phone:", sanitizedPhone);
+      logger.warn("Invalid phone:", { phone: sanitizedPhone });
       return NextResponse.json(
         { success: false, message: "Invalid phone number (e.g., +2547xxxxxxxx or 7xxxxxxxx)" },
         { status: 400 }
@@ -111,7 +121,7 @@ export async function POST(request: NextRequest) {
     // Validate password complexity
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     if (!passwordRegex.test(password)) {
-      logger.warn("Weak password");
+      logger.warn("Weak password", { passwordLength: password.length });
       return NextResponse.json(
         { success: false, message: "Password must be at least 8 characters long and include uppercase, lowercase, numbers, and special characters" },
         { status: 400 }
@@ -119,7 +129,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (password !== confirmPassword) {
-      logger.warn("Passwords do not match");
+      logger.warn("Passwords do not match", {});
       return NextResponse.json(
         { success: false, message: "Passwords do not match" },
         { status: 400 }
@@ -128,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Check environment variables
     if (!process.env.MONGODB_URI) {
-      logger.error("Missing MONGODB_URI");
+      logger.error("Missing MONGODB_URI", {});
       throw new Error("Database configuration error");
     }
 
@@ -140,18 +150,18 @@ export async function POST(request: NextRequest) {
       email: new RegExp(`^${sanitizedEmail}$`, "i"),
     });
     if (existingUser) {
-      logger.warn("Email already exists:", sanitizedEmail);
+      logger.warn("Email already exists:", { email: sanitizedEmail });
       return NextResponse.json(
         { success: false, message: "Email already registered" },
         { status: 400 }
       );
     }
 
-    // Create new user without custom _id
+    // Create new user
     const newUser = {
       name: sanitizedName,
       email: sanitizedEmail.toLowerCase(),
-      password: password, // Store password in plain text
+      password: password, // TODO: Hash password in production
       phone: sanitizedPhone,
       role: "propertyOwner",
       createdAt: new Date().toISOString(),
@@ -166,6 +176,7 @@ export async function POST(request: NextRequest) {
       action: "signup",
       userId,
       email: sanitizedEmail,
+ Protocols:
       ip,
       timestamp: new Date().toISOString(),
       status: "success",
@@ -184,53 +195,53 @@ export async function POST(request: NextRequest) {
     response.headers.set("Content-Security-Policy", "default-src 'self';");
 
     return response;
-  } catch (error) {
-    logger.error("Signup error:", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-      requestBody: body || "Failed to parse request body",
-      ip: ip,
+} catch (error) {
+  logger.error("Signup error:", {
+    message: error instanceof Error ? error.message : "Unknown error",
+    stack: error instanceof Error ? error.stack : undefined,
+    requestBody: body ? { ...body } : { error: "Failed to parse request body" },
+    ip,
+  });
+
+  // Log failed signup attempt
+  try {
+    const { db } = await connectToDatabase();
+    await db.collection("auditLogs").insertOne({
+      action: "signup",
+      email: body?.email || "unknown",
+      ip,
+      timestamp: new Date().toISOString(),
+      status: "failed",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
-
-    // Log failed signup attempt
-    try {
-      const { db } = await connectToDatabase();
-      await db.collection("auditLogs").insertOne({
-        action: "signup",
-        email: body?.email || "unknown",
-        ip: ip,
-        timestamp: new Date().toISOString(),
-        status: "failed",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    } catch (logError) {
-      logger.error("Failed to log signup error:", logError);
-    }
-
-    if (error instanceof Error) {
-      if (error.message === "Too many signup attempts. Please try again later.") {
-        return NextResponse.json(
-          { success: false, message: error.message },
-          { status: 429 }
-        );
-      }
-      if (error.message.includes("Database configuration error")) {
-        return NextResponse.json(
-          { success: false, message: "Database configuration error: Please check environment variables" },
-          { status: 500 }
-        );
-      }
-      if (error.message.includes("Failed to connect to the database")) {
-        return NextResponse.json(
-          { success: false, message: "Unable to connect to the database. Please try again later." },
-          { status: 503 }
-        );
-      }
-    }
-
-    return NextResponse.json(
-      { success: false, message: "Internal server error" },
-      { status: 500 }
-    );
+  } catch (logError) {
+    logger.error("Failed to log signup error:", { error: logError });
   }
+
+  if (error instanceof Error) {
+    if (error.message === "Too many signup attempts. Please try again later.") {
+      return NextResponse.json(
+        { success: false, message: error.message },
+        { status: 429 }
+      );
+    }
+    if (error.message.includes("Database configuration error")) {
+      return NextResponse.json(
+        { success: false, message: "Database configuration error: Please check environment variables" },
+        { status: 500 }
+      );
+    }
+    if (error.message.includes("Failed to connect to the database")) {
+      return NextResponse.json(
+        { success: false, message: "Unable to connect to the database. Please try again later." },
+        { status: 503 }
+      );
+    }
+  }
+
+  return NextResponse.json(
+    { success: false, message: "Internal server error" },
+    { status: 500 }
+  );
+}
 }

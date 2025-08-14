@@ -1,14 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import {
   Home,
   DollarSign,
-  Wrench,
   User,
-  Send,
   AlertCircle,
   Wallet,
   LogOut,
@@ -29,6 +27,18 @@ interface Tenant {
   createdAt: string;
   updatedAt?: string;
   wallet: number;
+  leaseStartDate?: string;
+  leaseEndDate?: string;
+  totalRentPaid?: number;
+  totalUtilityPaid?: number;
+  totalDepositPaid?: number;
+  dues?: {
+    rentDues: number;
+    utilityDues: number;
+    depositDues: number;
+    totalRemainingDues: number;
+  };
+  monthsStayed?: number;
 }
 
 interface Property {
@@ -46,15 +56,88 @@ export default function TenantDashboardPage() {
   const [property, setProperty] = useState<Property | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDuesLoading, setIsDuesLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [maintenanceRequest, setMaintenanceRequest] = useState({
     description: "",
     urgency: "low",
   });
+  const [maintenanceErrors, setMaintenanceErrors] = useState<{
+    [key: string]: string | undefined;
+  }>({}); // Added for form validation
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [csrfToken, setCsrfToken] = useState<string | null>(Cookies.get("csrf-token") || null);
+  const requestInProgress = useRef(false);
+  const lastRequestTime = useRef(0);
+  const rateLimitDelay = 1000; // 1 second delay for rate limiting
 
+  // Fetch CSRF token with retry logic
+  const fetchCsrfToken = useCallback(async () => {
+    if (requestInProgress.current) {
+      console.log("[DEBUG] Skipping CSRF token fetch, request in progress");
+      return csrfToken;
+    }
+    requestInProgress.current = true;
+    const now = Date.now();
+    if (now - lastRequestTime.current < rateLimitDelay) {
+      await new Promise((resolve) => setTimeout(resolve, rateLimitDelay - (now - lastRequestTime.current)));
+    }
+    try {
+      console.log("[DEBUG] Fetching CSRF token");
+      const res = await fetch("/api/csrf-token", {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("[ERROR] Failed to fetch CSRF token", {
+          status: res.status,
+          response: text,
+          headers: Object.fromEntries(res.headers),
+        });
+        if (res.status === 429) {
+          setError("Too many requests. Please try again later.");
+          return null;
+        }
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("[ERROR] Non-JSON response from /api/csrf-token", {
+          status: res.status,
+          response: text,
+          headers: Object.fromEntries(res.headers),
+        });
+        throw new Error("Received non-JSON response from server");
+      }
+      const data = await res.json();
+      if (data.success && data.csrfToken) {
+        const token = data.csrfToken;
+        setCsrfToken(token);
+        Cookies.set("csrf-token", token, {
+          path: "/",
+          secure: window.location.protocol === "https:",
+          sameSite: "strict",
+          expires: 1, // 1 day
+        });
+        console.log("[INFO] Fetched and stored CSRF token", { csrfToken: token });
+        return token;
+      }
+      throw new Error(data.message || "Failed to fetch CSRF token");
+    } catch (err) {
+      console.error("[ERROR] Failed to fetch CSRF token", {
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+      return null;
+    } finally {
+      requestInProgress.current = false;
+      lastRequestTime.current = Date.now();
+    }
+  }, [csrfToken]);
+
+  // Check cookies and redirect if unauthorized
   useEffect(() => {
-    // Unified cookie getter with fallback
     const getCookie = (name: string): string | null => {
       const value = Cookies.get(name);
       if (value !== undefined) return value;
@@ -101,6 +184,7 @@ export default function TenantDashboardPage() {
     }
   }, [router]);
 
+  // Fetch tenant and property data
   useEffect(() => {
     if (!userId) return;
 
@@ -108,9 +192,20 @@ export default function TenantDashboardPage() {
       setIsLoading(true);
       setError(null);
       try {
+        let token = csrfToken;
+        if (!token) {
+          token = await fetchCsrfToken();
+          if (!token) {
+            throw new Error("CSRF token not received");
+          }
+        }
+
         const tenantRes = await fetch("/api/tenant/profile", {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": token,
+          },
           credentials: "include",
         });
         const tenantData = await tenantRes.json();
@@ -121,12 +216,20 @@ export default function TenantDashboardPage() {
           return;
         }
 
-        setTenant(tenantData.tenant);
+        setTenant({
+          ...tenantData.tenant,
+          totalRentPaid: tenantData.tenant.totalRentPaid || 0,
+          totalUtilityPaid: tenantData.tenant.totalUtilityPaid || 0,
+          totalDepositPaid: tenantData.tenant.totalDepositPaid || 0,
+        });
 
         if (tenantData.tenant?.propertyId) {
           const propertyRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
             method: "GET",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": token,
+            },
             credentials: "include",
           });
           const propertyData = await propertyRes.json();
@@ -138,6 +241,8 @@ export default function TenantDashboardPage() {
             console.log(`Failed to fetch property data - Error: ${propertyData.message}`);
           }
         }
+
+        await fetchDues(token);
       } catch (err) {
         console.error("Tenant fetch error:", err instanceof Error ? err.message : "Unknown error");
         setError("Failed to connect to the server");
@@ -147,29 +252,174 @@ export default function TenantDashboardPage() {
     };
 
     fetchTenantData();
-  }, [userId]);
+  }, [userId, csrfToken, fetchCsrfToken]); 
+
+  // Fetch dues data
+  const fetchDues = useCallback(
+    async (token: string) => {
+      if (!userId || !token) {
+        setError("Missing required data or CSRF token for dues.");
+        return;
+      }
+      if (requestInProgress.current) {
+        console.log("[DEBUG] Skipping fetchDues, request in progress");
+        return;
+      }
+      requestInProgress.current = true;
+      const now = Date.now();
+      if (now - lastRequestTime.current < rateLimitDelay) {
+        await new Promise((resolve) => setTimeout(resolve, rateLimitDelay - (now - lastRequestTime.current)));
+      }
+      setIsDuesLoading(true);
+      setError(null);
+      try {
+        console.log("[DEBUG] Sending fetchDues request", { csrfToken: token, userId });
+        const res = await fetch("/api/tenant/dues", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": token,
+          },
+          credentials: "include",
+          body: JSON.stringify({ tenantId: userId, userId }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          console.error("[ERROR] Failed to fetch dues", {
+            status: res.status,
+            response: text,
+            headers: Object.fromEntries(res.headers),
+          });
+          if (res.status === 403) {
+            const newToken = await fetchCsrfToken();
+            if (!newToken) {
+              setError("Session expired. Please refresh the page.");
+              return;
+            }
+            console.log("[INFO] Retrying fetchDues with new CSRF token", { newToken });
+            const retryRes = await fetch("/api/tenant/dues", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": newToken,
+              },
+              credentials: "include",
+              body: JSON.stringify({ tenantId: userId, userId }),
+            });
+            if (!retryRes.ok) {
+              const retryText = await retryRes.text();
+              console.error("[ERROR] Retry failed for fetchDues", {
+                status: retryRes.status,
+                response: retryText,
+                headers: Object.fromEntries(retryRes.headers),
+              });
+              throw new Error(`Retry failed! Status: ${retryRes.status}`);
+            }
+            const retryData = await retryRes.json();
+            if (retryData.success && retryData.dues) {
+              setTenant((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      dues: {
+                        rentDues: retryData.dues.rentDues,
+                        utilityDues: retryData.dues.utilityDues,
+                        depositDues: retryData.dues.depositDues,
+                        totalRemainingDues: retryData.dues.totalRemainingDues,
+                      },
+                      monthsStayed: retryData.monthsStayed,
+                    }
+                  : null
+              );
+              return;
+            }
+            throw new Error(retryData.message || "Retry failed to fetch dues.");
+          } else if (res.status === 429) {
+            setError("Too many requests. Please try again later.");
+            return;
+          }
+          throw new Error(`HTTP error! Status: ${res.status}`);
+        }
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await res.text();
+          console.error("[ERROR] Non-JSON response from /api/tenant/dues", {
+            status: res.status,
+            response: text,
+            headers: Object.fromEntries(res.headers),
+          });
+          throw new Error("Received non-JSON response from server");
+        }
+        const data = await res.json();
+        if (data.success && data.dues) {
+          setTenant((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  dues: {
+                    rentDues: data.dues.rentDues,
+                    utilityDues: data.dues.utilityDues,
+                    depositDues: data.dues.depositDues,
+                    totalRemainingDues: data.dues.totalRemainingDues,
+                  },
+                  monthsStayed: data.monthsStayed,
+                }
+              : null
+          );
+        } else {
+          throw new Error(data.message || "Failed to fetch dues.");
+        }
+      } catch (error) {
+        console.error("[ERROR] Failed to fetch dues", {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        setError(
+          error instanceof Error
+            ? error.message.includes("non-JSON")
+              ? "Invalid server response. Please try again later."
+              : error.message.includes("CSRF")
+              ? "Session expired. Please refresh the page."
+              : error.message
+            : "Failed to fetch dues."
+        );
+      } finally {
+        setIsDuesLoading(false);
+        requestInProgress.current = false;
+        lastRequestTime.current = Date.now();
+      }
+    },
+    [userId, fetchCsrfToken]
+  );
 
   const handleMaintenanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Validate form inputs
+    const errors: { [key: string]: string | undefined } = {};
+    if (!maintenanceRequest.description.trim()) {
+      errors.description = "Description is required";
+    }
+    setMaintenanceErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      const csrfRes = await fetch("/api/csrf-token", {
-        method: "GET",
-        credentials: "include",
-      });
-      const { csrfToken } = await csrfRes.json();
-
-      if (!csrfToken) {
-        throw new Error("CSRF token not received");
+      let token = csrfToken;
+      if (!token) {
+        token = await fetchCsrfToken();
+        if (!token) {
+          throw new Error("CSRF token not received");
+        }
       }
 
       const res = await fetch("/api/maintenance", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-CSRF-Token": token,
         },
         credentials: "include",
         body: JSON.stringify({
@@ -177,7 +427,6 @@ export default function TenantDashboardPage() {
           propertyId: tenant?.propertyId,
           description: maintenanceRequest.description,
           urgency: maintenanceRequest.urgency,
-          csrfToken,
         }),
       });
       const data = await res.json();
@@ -186,6 +435,7 @@ export default function TenantDashboardPage() {
         setSuccessMessage("Maintenance request submitted successfully!");
         setMaintenanceRequest({ description: "", urgency: "low" });
         setIsModalOpen(false);
+        setMaintenanceErrors({});
       } else {
         setError(data.message || "Failed to submit maintenance request");
         console.log(`Maintenance request failed - Error: ${data.message}`);
@@ -204,23 +454,22 @@ export default function TenantDashboardPage() {
     setSuccessMessage(null);
 
     try {
-      const csrfRes = await fetch("/api/csrf-token", {
-        method: "GET",
-        credentials: "include",
-      });
-      const { csrfToken } = await csrfRes.json();
-
-      if (!csrfToken) {
-        throw new Error("CSRF token not received");
+      let token = csrfToken;
+      if (!token) {
+        token = await fetchCsrfToken();
+        if (!token) {
+          throw new Error("CSRF token not received");
+        }
       }
 
       const res = await fetch("/api/impersonate/revert", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-CSRF-Token": token,
         },
         credentials: "include",
-        body: JSON.stringify({ csrfToken }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
 
@@ -252,16 +501,37 @@ export default function TenantDashboardPage() {
             <h1 className="text-2xl font-bold mb-2">Welcome, {tenant?.name || "Tenant"}!</h1>
             <p>Manage your lease, track payments, and submit maintenance requests with ease.</p>
           </div>
-          {isImpersonated && (
+          <div className="flex gap-4">
             <button
-              onClick={handleRevertImpersonation}
-              disabled={isLoading}
-              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-2"
+              onClick={() => setIsModalOpen(true)}
+              className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 flex items-center gap-2"
             >
-              <LogOut size={18} />
-              Revert Impersonation
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
+                />
+              </svg>
+              Submit Maintenance Request
             </button>
-          )}
+            {isImpersonated && (
+              <button
+                onClick={handleRevertImpersonation}
+                disabled={isLoading}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-2"
+              >
+                <LogOut size={18} />
+                Revert Impersonation
+              </button>
+            )}
+          </div>
         </section>
 
         {error && (
@@ -284,13 +554,16 @@ export default function TenantDashboardPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card icon={<Home />} title="Leased Property">
-            {property ? (
+            {property && tenant ? (
               <>
                 <p className="font-medium">{property.name}</p>
                 <p className="text-gray-500">{property.address}</p>
-                <p className="mt-2">Unit: {tenant?.houseNumber} ({tenant?.unitType})</p>
-                <p>Rent: Ksh {tenant?.price?.toFixed(2)}</p>
-                <p>Deposit: Ksh {tenant?.deposit?.toFixed(2)}</p>
+                <p className="mt-2">Unit: {tenant.houseNumber} ({tenant.unitType})</p>
+                <p>Rent: Ksh {tenant.price?.toFixed(2)}</p>
+                <p>Deposit: Ksh {tenant.deposit?.toFixed(2)}</p>
+                <p>Lease Start: {tenant.leaseStartDate ? new Date(tenant.leaseStartDate).toLocaleDateString("en-GB") : "N/A"}</p>
+                <p>Lease End: {tenant.leaseEndDate ? new Date(tenant.leaseEndDate).toLocaleDateString("en-GB") : "N/A"}</p>
+                <p>Months Stayed: {tenant.monthsStayed ?? "N/A"}</p>
               </>
             ) : (
               <p className="text-sm text-gray-500">No property assigned.</p>
@@ -315,9 +588,27 @@ export default function TenantDashboardPage() {
                     {tenant.paymentStatus || "N/A"}
                   </span>
                 </p>
+                <p className="mt-2">Total Rent Paid: Ksh {tenant.totalRentPaid?.toFixed(2) ?? "0.00"}</p>
+                <p>Total Utility Paid: Ksh {tenant.totalUtilityPaid?.toFixed(2) ?? "0.00"}</p>
+                <p>Total Deposit Paid: Ksh {tenant.totalDepositPaid?.toFixed(2) ?? "0.00"}</p>
               </>
             ) : (
               <p className="text-sm text-gray-500">No payment info.</p>
+            )}
+          </Card>
+
+          <Card icon={<DollarSign />} title="Outstanding Dues">
+            {isDuesLoading ? (
+              <p className="text-sm text-gray-500">Loading dues...</p>
+            ) : tenant?.dues ? (
+              <>
+                <p>Rent Dues: Ksh {tenant.dues.rentDues.toFixed(2)}</p>
+                <p>Utility Dues: Ksh {tenant.dues.utilityDues.toFixed(2)}</p>
+                <p>Deposit Dues: Ksh {tenant.dues.depositDues.toFixed(2)}</p>
+                <p className="font-medium mt-2">Total: Ksh {tenant.dues.totalRemainingDues.toFixed(2)}</p>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">No dues information available.</p>
             )}
           </Card>
 
@@ -338,78 +629,89 @@ export default function TenantDashboardPage() {
                 <p className="font-medium">{tenant.name}</p>
                 <p className="text-gray-500">{tenant.email}</p>
                 <p className="mt-2">{tenant.phone || "No phone provided"}</p>
+                <p>Status: 
+                  <span
+                    className={`ml-2 inline-block px-3 py-1 text-sm font-medium rounded-full ${
+                      tenant.status === "Active"
+                        ? "bg-green-100 text-green-800"
+                        : tenant.status === "Pending"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-red-100 text-red-800"
+                    }`}
+                  >
+                    {tenant.status || "N/A"}
+                  </span>
+                </p>
               </>
             ) : (
               <p className="text-sm text-gray-500">No profile info.</p>
             )}
           </Card>
         </div>
+      </main>
 
-        <section className="mt-10">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Wrench size={20} className="text-teal-600" /> Maintenance Requests
-            </h2>
-            <button
-              className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700"
-              onClick={() => setIsModalOpen(true)}
-            >
-              Submit Request
-            </button>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-5 border border-gray-100">
-            <p className="text-sm text-gray-500">No maintenance requests submitted yet.</p>
-          </div>
-        </section>
-
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-xl">
-              <h2 className="text-lg font-semibold mb-4">Submit Maintenance Request</h2>
-              <form onSubmit={handleMaintenanceSubmit}>
-                <label className="block mb-2 font-medium text-sm">Description</label>
+      {/* Maintenance Request Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h2 className="text-lg font-semibold mb-4">Submit Maintenance Request</h2>
+            <form onSubmit={handleMaintenanceSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Description
+                </label>
                 <textarea
-                  className="w-full border border-gray-300 rounded-md p-2 mb-4"
-                  rows={4}
-                  required
                   value={maintenanceRequest.description}
                   onChange={(e) =>
                     setMaintenanceRequest({ ...maintenanceRequest, description: e.target.value })
                   }
-                ></textarea>
-                <label className="block mb-2 font-medium text-sm">Urgency</label>
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-600 focus:ring-teal-600"
+                  required
+                  rows={4}
+                />
+                {maintenanceErrors.description && (
+                  <p className="mt-1 text-sm text-red-600">{maintenanceErrors.description}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Urgency
+                </label>
                 <select
-                  className="w-full border border-gray-300 rounded-md p-2 mb-4"
                   value={maintenanceRequest.urgency}
                   onChange={(e) =>
                     setMaintenanceRequest({ ...maintenanceRequest, urgency: e.target.value })
                   }
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-600 focus:ring-teal-600"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
                 </select>
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300"
-                    onClick={() => setIsModalOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 flex items-center gap-2"
-                  >
-                    <Send size={18} /> Submit
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+              <div className="flex justify-end gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setMaintenanceErrors({});
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition disabled:opacity-50"
+                >
+                  {isLoading ? "Submitting..." : "Submit Request"}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }

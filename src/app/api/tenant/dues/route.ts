@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
     // Define current month range (August 2025, EAT)
-    const today = new Date("2025-08-14T13:29:00+03:00");
+    const today = new Date("2025-08-14T13:19:00+03:00");
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
       propertyIds,
     });
 
-    // Total rent payments aggregation (only completed rent payments)
+    // Total payments aggregation (all completed payments)
     const paymentsResult = await db
       .collection("payments")
       .aggregate<{
