@@ -433,18 +433,26 @@ export default function TenantDetailsPage() {
     [userId, tenantId, role, fetchCsrfToken]
   );
 
-  // Update payment modal with dues data
+  // Update payment modal with dues data based on payment type
   useEffect(() => {
     if (tenant?.dues && showPaymentModal) {
       const dues = tenant.dues;
-      if (dues.rentDues > 0) {
-        setPaymentData((prev) => ({
-          ...prev,
-          amount: dues.rentDues.toString(),
-        }));
+      let amount = "";
+      if (paymentData.type === "Rent" && dues.rentDues > 0) {
+        amount = dues.rentDues.toFixed(2);
+      } else if (paymentData.type === "Utility" && dues.utilityDues > 0) {
+        amount = dues.utilityDues.toFixed(2);
+      } else if (paymentData.type === "Deposit" && dues.depositDues > 0) {
+        amount = dues.depositDues.toFixed(2);
+      } else if (paymentData.type === "Other") {
+        amount = dues.totalRemainingDues.toFixed(2);
       }
+      setPaymentData((prev) => ({
+        ...prev,
+        amount,
+      }));
     }
-  }, [tenant, showPaymentModal]);
+  }, [tenant?.dues, showPaymentModal, paymentData.type]);
 
   const handleImpersonate = async () => {
     if (!tenant || !userId || !csrfToken) {

@@ -1,3 +1,4 @@
+// src/app/api/tenant/payments/update-fields/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
@@ -64,13 +65,11 @@ export async function POST(request: NextRequest) {
     const body: UpdatePaymentFieldsRequestBody = await request.json();
     const { paymentId, userId: submittedUserId } = body;
 
-    // Validate CSRF token
     if (!validateCsrfToken(request, paymentId)) {
       logger.error("Invalid CSRF token", { userId, paymentId });
       return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
     }
 
-    // Input validation
     if (!paymentId || !ObjectId.isValid(paymentId)) {
       logger.error("Invalid or missing paymentId", { paymentId });
       return NextResponse.json({ success: false, message: "Invalid or missing payment ID" }, { status: 400 });
@@ -82,12 +81,6 @@ export async function POST(request: NextRequest) {
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    // Ensure indexes for performance
-    await db.collection<Payment>("payments").createIndex({ _id: 1, tenantId: 1, status: 1, type: 1 });
-    await db.collection<Tenant>("tenants").createIndex({ _id: 1, propertyId: 1 });
-    await db.collection<Property>("properties").createIndex({ _id: 1, ownerId: 1 });
-
-    // Find the payment
     const payment = await db.collection<Payment>("payments").findOne({
       _id: new ObjectId(paymentId),
     });
@@ -97,16 +90,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
 
-    // Only process completed payments
     if (payment.status !== "completed") {
       logger.warn("Payment is not completed, skipping update", { paymentId, status: payment.status });
-      return NextResponse.json({
-        success: false,
-        message: "Payment is not in completed status",
-      }, { status: 400 });
+      return NextResponse.json({ success: false, message: "Payment is not in completed status" }, { status: 400 });
     }
 
-    // Validate property
     const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(payment.propertyId),
       ownerId: userId,
@@ -116,7 +104,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Property not found or not owned" }, { status: 404 });
     }
 
-    // Validate tenant and fetch current state
     const tenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(payment.tenantId),
       propertyId: payment.propertyId,
@@ -126,45 +113,95 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    // Log tenant state before update
     logger.debug("Tenant state before update", {
       tenantId: payment.tenantId,
-      paymentId,
       walletBalance: tenant.walletBalance,
       totalRentPaid: tenant.totalRentPaid,
       totalUtilityPaid: tenant.totalUtilityPaid,
       totalDepositPaid: tenant.totalDepositPaid,
-      paymentType: payment.type,
-      paymentAmount: payment.amount,
     });
 
-    // Determine which field to update based on payment type
-    const updateFields: Partial<Tenant> = {};
+    const today = new Date();
+    const leaseStartDate = new Date(tenant.leaseStartDate);
+    const monthsStayed = Math.max(0, Math.floor((today.getTime() - leaseStartDate.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+
+    const rentDue = Math.max(0, tenant.price * monthsStayed - (tenant.totalRentPaid || 0));
+    const depositDue = Math.max(0, (tenant.deposit || 0) - (tenant.totalDepositPaid || 0));
+    const utilityDue = 0;
+
+    let walletBalance = tenant.walletBalance || 0;
+    let remainingAmount = payment.amount;
+    const updateFields: Partial<Tenant> = {
+      totalRentPaid: tenant.totalRentPaid || 0,
+      totalUtilityPaid: tenant.totalUtilityPaid || 0,
+      totalDepositPaid: tenant.totalDepositPaid || 0,
+    };
+
+    const applyPayment = (due: number, currentPaid: number, maxPay: number) => {
+      const applied = Math.min(due, maxPay);
+      return { applied, remaining: maxPay - applied };
+    };
+
     switch (payment.type) {
-      case "Rent":
-        updateFields.totalRentPaid = (tenant.totalRentPaid || 0) + payment.amount;
+      case "Rent": {
+        const { applied, remaining } = applyPayment(rentDue, updateFields.totalRentPaid!, remainingAmount);
+        updateFields.totalRentPaid! += applied;
+        remainingAmount = remaining;
         break;
-      case "Utility":
-        updateFields.totalUtilityPaid = (tenant.totalUtilityPaid || 0) + payment.amount;
+      }
+      case "Utility": {
+        const { applied, remaining } = applyPayment(utilityDue, updateFields.totalUtilityPaid!, remainingAmount);
+        updateFields.totalUtilityPaid! += applied;
+        remainingAmount = remaining;
         break;
-      case "Deposit":
-        updateFields.totalDepositPaid = (tenant.totalDepositPaid || 0) + payment.amount;
+      }
+      case "Deposit": {
+        const { applied, remaining } = applyPayment(depositDue, updateFields.totalDepositPaid!, remainingAmount);
+        updateFields.totalDepositPaid! += applied;
+        remainingAmount = remaining;
         break;
+      }
       case "Other":
-        // "Other" payments do not update specific fields
         break;
-      default:
-        logger.warn("Invalid payment type", { paymentId, type: payment.type });
-        return NextResponse.json({ success: false, message: "Invalid payment type" }, { status: 400 });
     }
 
-    // Update tenant fields with timestamp
+    walletBalance += remainingAmount;
+
+    if (walletBalance > 0 && rentDue > updateFields.totalRentPaid!) {
+      const { applied, remaining } = applyPayment(
+        rentDue - updateFields.totalRentPaid!,
+        updateFields.totalRentPaid!,
+        walletBalance
+      );
+      updateFields.totalRentPaid! += applied;
+      walletBalance = remaining;
+    }
+
+    if (walletBalance > 0 && utilityDue > updateFields.totalUtilityPaid!) {
+      const { applied, remaining } = applyPayment(
+        utilityDue - updateFields.totalUtilityPaid!,
+        updateFields.totalUtilityPaid!,
+        walletBalance
+      );
+      updateFields.totalUtilityPaid! += applied;
+      walletBalance = remaining;
+    }
+
+    if (walletBalance > 0 && depositDue > updateFields.totalDepositPaid!) {
+      const { applied, remaining } = applyPayment(
+        depositDue - updateFields.totalDepositPaid!,
+        updateFields.totalDepositPaid!,
+        walletBalance
+      );
+      updateFields.totalDepositPaid! += applied;
+      walletBalance = remaining;
+    }
+
+    updateFields.walletBalance = walletBalance;
+
     const updateTime = new Date().toISOString();
-    const updateResult = await db.collection<Tenant>("tenants").updateOne(
-      {
-        _id: new ObjectId(payment.tenantId),
-        updatedAt: tenant.updatedAt || { $exists: false }, // Handle undefined updatedAt
-      },
+    await db.collection<Tenant>("tenants").updateOne(
+      { _id: new ObjectId(payment.tenantId) },
       {
         $set: {
           ...updateFields,
@@ -173,78 +210,16 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    if (updateResult.modifiedCount === 0) {
-      // Check if the document exists but wasn't updated (possible concurrent update)
-      const exists = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(payment.tenantId) });
-      if (exists) {
-        logger.warn("No changes made to tenant fields, possible concurrent update", {
-          tenantId: payment.tenantId,
-          paymentId,
-          updatedAt: tenant.updatedAt,
-        });
-        return NextResponse.json(
-          { success: false, message: "Failed to update tenant fields, possible concurrent update" },
-          { status: 409 }
-        );
-      } else {
-        logger.error("Tenant not found during update", { tenantId: payment.tenantId });
-        return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
-      }
-    }
-
-    // Fetch updated tenant state
     const updatedTenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(payment.tenantId),
     });
 
-    if (!updatedTenant) {
-      logger.error("Failed to fetch updated tenant", { tenantId: payment.tenantId });
-      return NextResponse.json({ success: false, message: "Failed to fetch updated tenant data" }, { status: 500 });
-    }
-
-    // Recalculate totalRentPaid from payments to ensure consistency
-    const payments = await db
-      .collection<Payment>("payments")
-      .find({
-        tenantId: payment.tenantId,
-        type: "Rent",
-        status: "completed",
-        createdAt: { $gte: tenant.leaseStartDate },
-      })
-      .toArray();
-    const calculatedTotalRentPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
-
-    if (updatedTenant.totalRentPaid !== calculatedTotalRentPaid) {
-      logger.warn("Discrepancy in totalRentPaid after update", {
-        tenantId: payment.tenantId,
-        storedTotalRentPaid: updatedTenant.totalRentPaid,
-        calculatedTotalRentPaid,
-      });
-      await db.collection<Tenant>("tenants").updateOne(
-        { _id: new ObjectId(payment.tenantId) },
-        { $set: { totalRentPaid: calculatedTotalRentPaid, updatedAt: new Date().toISOString() } }
-      );
-      updatedTenant.totalRentPaid = calculatedTotalRentPaid;
-    }
-
     logger.info("Tenant payment fields updated", {
       tenantId: payment.tenantId,
-      paymentId,
-      type: payment.type,
-      amount: payment.amount,
-      updateFields,
-      previousState: {
-        walletBalance: tenant.walletBalance,
-        totalRentPaid: tenant.totalRentPaid,
-        totalUtilityPaid: tenant.totalUtilityPaid,
-        totalDepositPaid: tenant.totalDepositPaid,
-      },
-      newState: {
-        walletBalance: updatedTenant.walletBalance,
-        totalRentPaid: updatedTenant.totalRentPaid,
-        totalUtilityPaid: updatedTenant.totalUtilityPaid,
-        totalDepositPaid: updatedTenant.totalDepositPaid,
-      },
+      paymentId: payment._id,
+      paymentType: payment.type,
+      appliedAmount: payment.amount - remainingAmount,
+      walletBalance: updatedTenant?.walletBalance,
     });
 
     return NextResponse.json({
@@ -263,25 +238,8 @@ export async function POST(request: NextRequest) {
         reference: payment.reference,
       },
       tenant: {
-        _id: updatedTenant._id.toString(),
-        name: updatedTenant.name,
-        email: updatedTenant.email,
-        phone: updatedTenant.phone,
-        propertyId: updatedTenant.propertyId,
-        unitType: updatedTenant.unitType,
-        houseNumber: updatedTenant.houseNumber,
-        price: updatedTenant.price,
-        deposit: updatedTenant.deposit,
-        leaseStartDate: updatedTenant.leaseStartDate,
-        leaseEndDate: updatedTenant.leaseEndDate,
-        status: updatedTenant.status,
-        paymentStatus: updatedTenant.paymentStatus,
-        createdAt: updatedTenant.createdAt,
-        updatedAt: updatedTenant.updatedAt,
-        walletBalance: updatedTenant.walletBalance,
-        totalRentPaid: updatedTenant.totalRentPaid,
-        totalUtilityPaid: updatedTenant.totalUtilityPaid,
-        totalDepositPaid: updatedTenant.totalDepositPaid,
+        ...updatedTenant,
+        _id: updatedTenant?._id.toString(),
       },
     }, { status: 200 });
   } catch (error: unknown) {

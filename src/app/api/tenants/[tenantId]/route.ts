@@ -146,7 +146,10 @@ const validateCsrfToken = async (request: NextRequest, tenantId: string): Promis
   return true;
 };
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ tenantId: string }> }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
   const rateLimitResponse = await applyRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -159,50 +162,97 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   if (!userId || !role || !["propertyOwner", "admin"].includes(role)) {
     logger.error("Unauthorized access attempt", { userId, role, tenantId });
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    );
   }
 
   if (!(await validateCsrfToken(request, tenantId))) {
-    logger.error("Invalid CSRF token", { userId, tenantId, cookies: request.cookies.getAll() });
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    logger.error("Invalid CSRF token", {
+      userId,
+      tenantId,
+      cookies: request.cookies.getAll(),
+    });
+    return NextResponse.json(
+      { success: false, message: "Invalid CSRF token" },
+      { status: 403 }
+    );
   }
 
   if (!ObjectId.isValid(tenantId) || !ObjectId.isValid(userId)) {
     logger.error("Invalid tenantId or userId", { tenantId, userId });
-    return NextResponse.json({ success: false, message: "Invalid tenant ID or user ID" }, { status: 400 });
+    return NextResponse.json(
+      { success: false, message: "Invalid tenant ID or user ID" },
+      { status: 400 }
+    );
   }
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
     const startTime = Date.now();
 
-    // Ensure indexes for performance
     await db.collection<Tenant>("tenants").createIndex({ _id: 1, ownerId: 1 });
-    await db.collection<Property>("properties").createIndex({ _id: 1, ownerId: 1 });
+    await db
+      .collection<Property>("properties")
+      .createIndex({ _id: 1, ownerId: 1 });
 
-    // Fetch tenant
-    const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
+    const tenant = await db
+      .collection<Tenant>("tenants")
+      .findOne({ _id: new ObjectId(tenantId) });
 
     if (!tenant) {
       logger.error("Tenant not found", { tenantId });
-      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
-    }
-
-    // Fetch property using tenant's propertyId and verify owner
-    const property = await db.collection<Property>("properties").findOne({
-      _id: new ObjectId(tenant.propertyId),
-      ownerId: userId,
-    }) as WithId<Property> | null;
-
-    if (!property) {
-      logger.error("Property not found or not owned", { propertyId: tenant.propertyId, userId });
       return NextResponse.json(
-        { success: false, message: "Property not found for this tenant or not owned by user" },
+        { success: false, message: "Tenant not found" },
         { status: 404 }
       );
     }
 
-    // Initialize tenant data for response
+    const property = (await db.collection<Property>("properties").findOne({
+      _id: new ObjectId(tenant.propertyId),
+      ownerId: userId,
+    })) as WithId<Property> | null;
+
+    if (!property) {
+      logger.error("Property not found or not owned", {
+        propertyId: tenant.propertyId,
+        userId,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Property not found for this tenant or not owned by user",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ---- Fetch Payment Totals from payments collection ----
+    const paymentTotals = await db
+      .collection("payments")
+      .aggregate([
+        { $match: { tenantId: tenant._id.toString() } },
+        {
+          $group: {
+            _id: "$type",
+            total: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+
+    let totalRentPaid = 0,
+      totalUtilityPaid = 0,
+      totalDepositPaid = 0;
+
+    paymentTotals.forEach((p) => {
+      if (p._id === "rent") totalRentPaid = p.total;
+      if (p._id === "utility") totalUtilityPaid = p.total;
+      if (p._id === "deposit") totalDepositPaid = p.total;
+    });
+
+    // ---- Build tenant data ----
     let tenantData: ResponseTenant = {
       _id: tenant._id.toString(),
       ownerId: tenant.ownerId,
@@ -219,44 +269,54 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       leaseEndDate: tenant.leaseEndDate,
       status: tenant.status,
       paymentStatus: tenant.paymentStatus,
-      createdAt: typeof tenant.createdAt === 'string' ? tenant.createdAt : new Date(tenant.createdAt).toISOString(),
-      updatedAt: tenant.updatedAt ? (typeof tenant.updatedAt === 'string' ? tenant.updatedAt : new Date(tenant.updatedAt).toISOString()) : undefined,
-      totalRentPaid: tenant.totalRentPaid ?? 0,
-      totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
-      totalDepositPaid: tenant.totalDepositPaid ?? 0,
+      createdAt:
+        typeof tenant.createdAt === "string"
+          ? tenant.createdAt
+          : new Date(tenant.createdAt).toISOString(),
+      updatedAt: tenant.updatedAt
+        ? typeof tenant.updatedAt === "string"
+          ? tenant.updatedAt
+          : new Date(tenant.updatedAt).toISOString()
+        : undefined,
+      totalRentPaid,
+      totalUtilityPaid,
+      totalDepositPaid,
       walletBalance: tenant.walletBalance ?? 0,
     };
 
-    // Initialize property data for response
-    const propertyData = {
-      _id: property._id.toString(),
-      name: property.name,
-      createdAt: typeof property.createdAt === 'string' ? property.createdAt : new Date(property.createdAt).toISOString(),
-      updatedAt: property.updatedAt ? (typeof property.updatedAt === 'string' ? property.updatedAt : new Date(property.updatedAt).toISOString()) : undefined,
-    };
-
+    // ---- Fetch Dues if requested ----
     if (includeDues) {
       if (!csrfToken) {
-        logger.error("CSRF token missing for check-dues request", { tenantId, userId });
-        return NextResponse.json({ success: false, message: "CSRF token required for dues check" }, { status: 403 });
+        logger.error("CSRF token missing for check-dues request", {
+          tenantId,
+          userId,
+        });
+        return NextResponse.json(
+          { success: false, message: "CSRF token required for dues check" },
+          { status: 403 }
+        );
       }
 
-      // Call /api/tenants/check-dues to get updated payment stats and dues
       try {
         const cookieHeader = request.headers.get("cookie") || "";
-        const checkDuesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/tenants/check-dues`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-            "Cookie": cookieHeader,
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            tenantId,
-            userId,
-          }),
-        });
+        const checkDuesResponse = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+          }/api/tenants/check-dues`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+              Cookie: cookieHeader,
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              tenantId,
+              userId,
+            }),
+          }
+        );
 
         const checkDuesData = await checkDuesResponse.json();
 
@@ -268,12 +328,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             status: checkDuesResponse.status,
           });
           return NextResponse.json(
-            { success: false, message: checkDuesData.message || "Failed to fetch dues" },
+            {
+              success: false,
+              message: checkDuesData.message || "Failed to fetch dues",
+            },
             { status: checkDuesResponse.status }
           );
         }
 
-        // Update tenantData with payment stats and dues from check-dues
         tenantData = {
           ...tenantData,
           totalRentPaid: checkDuesData.tenant.totalRentPaid,
@@ -284,22 +346,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           updatedAt: checkDuesData.tenant.updatedAt,
           dues: checkDuesData.dues,
         };
-
-        logger.debug("Fetched dues from check-dues API", {
-          tenantId,
-          userId,
-          totalRentPaid: checkDuesData.tenant.totalRentPaid,
-          totalUtilityPaid: checkDuesData.tenant.totalUtilityPaid,
-          totalDepositPaid: checkDuesData.tenant.totalDepositPaid,
-          walletBalance: checkDuesData.tenant.walletBalance,
-          paymentStatus: checkDuesData.tenant.paymentStatus,
-          totalRemainingDues: checkDuesData.dues.totalRemainingDues,
-        });
       } catch (error) {
         logger.error("Error calling check-dues API", {
           tenantId,
           userId,
-          message: error instanceof Error ? error.message : "Unknown error",
+          message:
+            error instanceof Error ? error.message : "Unknown error",
         });
         return NextResponse.json(
           { success: false, message: "Failed to fetch dues from check-dues API" },
@@ -307,6 +359,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         );
       }
     }
+
+    const propertyData = {
+      _id: property._id.toString(),
+      name: property.name,
+      createdAt:
+        typeof property.createdAt === "string"
+          ? property.createdAt
+          : new Date(property.createdAt).toISOString(),
+      updatedAt: property.updatedAt
+        ? typeof property.updatedAt === "string"
+          ? property.updatedAt
+          : new Date(property.updatedAt).toISOString()
+        : undefined,
+    };
 
     logger.info("Tenant data fetched successfully", {
       tenantId,
@@ -332,7 +398,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       tenantId,
       includeDues,
     });
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 

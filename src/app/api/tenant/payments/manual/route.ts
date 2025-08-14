@@ -46,6 +46,8 @@ interface User {
   _id: ObjectId;
   name: string;
   email: string;
+
+System: string;
   phone: string;
   role: "tenant" | "propertyOwner" | "admin";
 }
@@ -159,6 +161,16 @@ export async function POST(request: NextRequest) {
 
     await db.collection<Payment>("payments").insertOne(payment);
 
+    // Retrieve CSRF token from cookies for the internal fetch
+    const fetchedCsrfToken = request.cookies.get("csrf-token")?.value;
+    if (!fetchedCsrfToken) {
+      logger.error("CSRF token not found in cookies for check-dues fetch", { tenantId, userId });
+      return NextResponse.json(
+        { success: false, message: "CSRF token not found for dues recalculation" },
+        { status: 403 }
+      );
+    }
+
     // Trigger dues recalculation via check-dues endpoint
     const checkDuesResponse = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/tenants/check-dues`,
@@ -166,8 +178,8 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-          Cookie: request.headers.get("cookie") || "",
+          "x-csrf-token": fetchedCsrfToken,
+          Cookie: `csrf-token=${fetchedCsrfToken}; userId=${userId}; role=${role}`,
         },
         credentials: "include",
         body: JSON.stringify({

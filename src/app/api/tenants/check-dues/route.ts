@@ -1,8 +1,9 @@
+// src/app/api/tenants/check-dues/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
+import { ObjectId, WithId } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { WithId, ObjectId } from "mongodb";
 
 interface Property {
   _id: string;
@@ -62,11 +63,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid userId format" }, { status: 400 });
   }
 
-  if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
+  const csrfHeader = request.headers.get("x-csrf-token");
+  if (!validateCsrfToken(request, csrfHeader)) {
     logger.error("Invalid CSRF token in ownerstats request", {
       userId,
       storedToken: request.cookies.get("csrf-token")?.value,
-      headerToken: request.headers.get("x-csrf-token"),
+      headerToken: csrfHeader,
     });
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
