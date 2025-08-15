@@ -28,7 +28,7 @@ interface Property {
 
 const UNIT_TYPES = [
   "Single",
-  "Bed-Sitter",
+  "Bedsitter",
   "1-Bedroom",
   "2-Bedroom",
   "3-Bedroom",
