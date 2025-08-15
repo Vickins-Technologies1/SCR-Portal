@@ -579,8 +579,8 @@ export default function ListPropertiesPage() {
       throw new Error("CSRF token not available");
     }
     const formData = new FormData();
-    files.forEach((file, index) => {
-      formData.append(`image${index}`, file);
+    files.forEach((file) => {
+      formData.append('images', file);
     });
 
     try {
