@@ -9,7 +9,7 @@ import logger from '@/lib/logger';
 // Maximum file size (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 // Maximum number of files
-const MAX_FILES = 9;
+const MAX_FILES = 10;
 // Allowed file types
 const VALID_FILE_TYPES = ['image/jpeg', 'image/png'];
 

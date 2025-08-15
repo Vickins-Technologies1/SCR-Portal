@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -117,6 +116,7 @@ const PropertyModal: React.FC<PropertyModalProps> = ({ property, onClose }) => {
                   className="w-full h-full object-cover rounded-lg"
                   width={500}
                   height={300}
+                  style={{ width: "auto", height: "auto" }}
                   priority={currentImageIndex === 0}
                   placeholder="blur"
                   blurDataURL="/logo.png"
@@ -244,6 +244,7 @@ const PropertyModal: React.FC<PropertyModalProps> = ({ property, onClose }) => {
                 className="max-w-full max-h-[90vh] object-contain rounded-lg"
                 width={1200}
                 height={800}
+                style={{ width: "auto", height: "auto" }}
                 priority={currentImageIndex === 0}
                 placeholder="blur"
                 blurDataURL="/logo.png"
@@ -307,10 +308,51 @@ export default function ListPropertiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
+
+  // Validate form dynamically
+  useEffect(() => {
+    const errors: { [key: string]: string } = {};
+    if (!propertyName.trim()) errors.propertyName = "Property name is required";
+    if (!address.trim()) errors.address = "Address is required";
+    if (description.length > 500) errors.description = "Description cannot exceed 500 characters";
+    if (modalMode === "add" && facilities.length === 0) {
+      errors.facilities = "At least one facility is required for new properties";
+    }
+    if (facilities.length > 10) {
+      errors.facilities = "Maximum 10 facilities allowed";
+    }
+    const unitTypeSet = new Set();
+    unitTypes.forEach((unit, index) => {
+      if (!unit.type || !UNIT_TYPES.includes(unit.type)) {
+        errors[`unitType_${index}`] = `Unit type ${index + 1} must be selected from the list`;
+      } else if (unitTypeSet.has(unit.type)) {
+        errors[`unitType_${index}`] = `Unit type ${index + 1} must be unique`;
+      } else {
+        unitTypeSet.add(unit.type);
+      }
+      if (!unit.price || isNaN(parseFloat(unit.price)) || parseFloat(unit.price) < 0) {
+        errors[`unitPrice_${index}`] = `Price for unit ${index + 1} must be a non-negative number`;
+      }
+      if (!unit.deposit || isNaN(parseFloat(unit.deposit)) || parseFloat(unit.deposit) < 0) {
+        errors[`unitDeposit_${index}`] = `Deposit for unit ${index + 1} must be a non-negative number`;
+      }
+      if (!unit.quantity || isNaN(parseInt(unit.quantity)) || parseInt(unit.quantity) < 0) {
+        errors[`unitQuantity_${index}`] = `Quantity for unit ${index + 1} must be a non-negative integer`;
+      }
+    });
+    const totalImages = imagePreviews.length;
+    if (modalMode === "add" && totalImages === 0) {
+      errors.images = "At least one image is required for new properties";
+    }
+    if (totalImages > 10) {
+      errors.images = "Maximum 10 images allowed";
+    }
+    setFormErrors(errors);
+  }, [propertyName, address, description, facilities, unitTypes, imagePreviews, modalMode]);
 
   useEffect(() => {
     const uid = Cookies.get("userId") ?? null;
@@ -487,43 +529,6 @@ export default function ListPropertiesPage() {
     }
   }, [propertyToDelete, csrfToken, fetchProperties]);
 
-  const validateForm = useCallback(() => {
-    const errors: { [key: string]: string | undefined } = {};
-    if (!propertyName.trim()) errors.propertyName = "Property name is required";
-    if (!address.trim()) errors.address = "Address is required";
-    if (description.length > 500) errors.description = "Description cannot exceed 500 characters";
-    if (modalMode === "add" && facilities.length === 0) {
-      errors.facilities = "At least one facility is required for new properties";
-    }
-    if (facilities.length > 10) {
-      errors.facilities = "Maximum 10 facilities allowed";
-    }
-    const unitTypeSet = new Set();
-    unitTypes.forEach((unit, index) => {
-      if (!unit.type || !UNIT_TYPES.includes(unit.type)) {
-        errors[`unitType_${index}`] = `Unit type ${index + 1} must be selected from the list`;
-      } else if (unitTypeSet.has(unit.type)) {
-        errors[`unitType_${index}`] = `Unit type ${index + 1} must be unique`;
-      } else {
-        unitTypeSet.add(unit.type);
-      }
-      if (!unit.price || isNaN(parseFloat(unit.price)) || parseFloat(unit.price) < 0)
-        errors[`unitPrice_${index}`] = `Price for unit ${index + 1} must be a non-negative number`;
-      if (!unit.deposit || isNaN(parseFloat(unit.deposit)) || parseFloat(unit.deposit) < 0)
-        errors[`unitDeposit_${index}`] = `Deposit for unit ${index + 1} must be a non-negative number`;
-      if (!unit.quantity || isNaN(parseInt(unit.quantity)) || parseInt(unit.quantity) < 0)
-        errors[`unitQuantity_${index}`] = `Quantity for unit ${index + 1} must be a non-negative integer`;
-    });
-    if (modalMode === "add" && images.length === 0 && imagePreviews.length === 0) {
-      errors.images = "At least one image is required for new properties";
-    }
-    if (images.length + imagePreviews.length > 9) {
-      errors.images = "Maximum 9 images allowed";
-    }
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [propertyName, address, description, facilities, unitTypes, images, imagePreviews, modalMode]);
-
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const newFiles = Array.from(e.target.files);
@@ -541,9 +546,9 @@ export default function ListPropertiesPage() {
     });
 
     const totalImages = validFiles.length + imagePreviews.length;
-    if (totalImages > 9) {
-      errors.push("Maximum 9 images allowed");
-      validFiles.splice(9 - imagePreviews.length);
+    if (totalImages > 10) {
+      errors.push("Maximum 10 images allowed");
+      validFiles.splice(10 - imagePreviews.length);
     }
 
     setImages((prev) => [...prev, ...validFiles]);
@@ -556,23 +561,26 @@ export default function ListPropertiesPage() {
 
   const removeImage = useCallback((index: number) => {
     setImages((prev) => {
-      const newImages = prev.filter((_, i) => i !== index - imagePreviews.length);
-      if (index >= imagePreviews.length) {
-        URL.revokeObjectURL(imagePreviews[index]);
-      }
+      const newImages = prev.filter((_, i) => i !== (index - (imagePreviews.length - prev.length)));
       return newImages;
     });
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => {
+      const newPreviews = prev.filter((_, i) => i !== index);
+      if (index >= prev.length - images.length) {
+        URL.revokeObjectURL(prev[index]);
+      }
+      return newPreviews;
+    });
     setImageUploadError(null);
-  }, [imagePreviews]);
+  }, [imagePreviews, images]);
 
   const uploadImages = useCallback(async (files: File[]): Promise<string[]> => {
     if (!csrfToken) {
       throw new Error("CSRF token not available");
     }
     const formData = new FormData();
-    files.forEach((file) => {
-      formData.append("image0", file); // Use the same key "image0" for all files
+    files.forEach((file, index) => {
+      formData.append(`image${index}`, file);
     });
 
     try {
@@ -585,34 +593,27 @@ export default function ListPropertiesPage() {
         },
       });
       const data = await res.json();
-      if (data.success) {
-        return data.urls;
+      if (data.success && data.urls) {
+        return Array.isArray(data.urls) ? data.urls : [data.urls];
       } else {
         throw new Error(data.message || "Image upload failed");
       }
     } catch (err) {
       console.error("Image upload error:", err instanceof Error ? err.message : "Unknown error");
-      throw new Error(err instanceof Error ? err.message : "Unknown error");
+      setImageUploadError(err instanceof Error ? err.message : "Failed to upload images");
+      throw err;
     }
   }, [csrfToken]);
 
   const handleFacilitiesChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedOptions = Array.from(e.target.selectedOptions).map((option) => option.value);
     setFacilities(selectedOptions);
-    setFormErrors((prev) => ({
-      ...prev,
-      facilities: modalMode === "add" && selectedOptions.length === 0
-        ? "At least one facility is required for new properties"
-        : selectedOptions.length > 10
-        ? "Maximum 10 facilities allowed"
-        : undefined,
-    }));
-  }, [modalMode]);
+  }, []);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!validateForm()) return;
+      if (Object.keys(formErrors).length > 0) return;
       if (!userId || !csrfToken) {
         setError("User ID or CSRF token is missing.");
         return;
@@ -623,7 +624,7 @@ export default function ListPropertiesPage() {
       setSuccessMessage(null);
 
       try {
-        let imageUrls = [...imagePreviews];
+        let imageUrls = modalMode === "edit" ? [...imagePreviews] : [];
         if (images.length > 0) {
           const uploadedUrls = await uploadImages(images);
           imageUrls = modalMode === "edit" ? [...imagePreviews, ...uploadedUrls] : uploadedUrls;
@@ -668,13 +669,13 @@ export default function ListPropertiesPage() {
         }
       } catch (err) {
         console.error("Property submit error:", err instanceof Error ? err.message : "Unknown error");
-        setError("Failed to connect to the server.");
+        setError(err instanceof Error ? err.message : "Failed to connect to the server.");
       } finally {
         setIsLoading(false);
         setIsUploading(false);
       }
     },
-    [userId, csrfToken, modalMode, editingPropertyId, propertyName, address, description, facilities, status, isAdvertised, unitTypes, images, imagePreviews, fetchProperties, resetForm, validateForm, uploadImages]
+    [userId, csrfToken, modalMode, editingPropertyId, propertyName, address, description, facilities, status, isAdvertised, unitTypes, images, imagePreviews, fetchProperties, resetForm, formErrors, uploadImages]
   );
 
   const sortedProperties = useMemo(() => {
@@ -898,13 +899,7 @@ export default function ListPropertiesPage() {
                     <input
                       placeholder="Enter property name"
                       value={propertyName}
-                      onChange={(e) => {
-                        setPropertyName(e.target.value);
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          propertyName: e.target.value.trim() ? undefined : "Property name is required",
-                        }));
-                      }}
+                      onChange={(e) => setPropertyName(e.target.value)}
                       required
                       className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                         formErrors.propertyName ? "border-red-500" : "border-gray-300"
@@ -919,13 +914,7 @@ export default function ListPropertiesPage() {
                     <input
                       placeholder="Enter address"
                       value={address}
-                      onChange={(e) => {
-                        setAddress(e.target.value);
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          address: e.target.value.trim() ? undefined : "Address is required",
-                        }));
-                      }}
+                      onChange={(e) => setAddress(e.target.value)}
                       required
                       className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                         formErrors.address ? "border-red-500" : "border-gray-300"
@@ -940,13 +929,7 @@ export default function ListPropertiesPage() {
                     <textarea
                       placeholder="Enter property description"
                       value={description}
-                      onChange={(e) => {
-                        setDescription(e.target.value);
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          description: e.target.value.length > 500 ? "Description cannot exceed 500 characters" : undefined,
-                        }));
-                      }}
+                      onChange={(e) => setDescription(e.target.value)}
                       className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${
                         formErrors.description ? "border-red-500" : "border-gray-300"
                       } text-sm sm:text-base resize-y min-h-[100px]`}
@@ -988,14 +971,6 @@ export default function ListPropertiesPage() {
                               onClick={() => {
                                 const newFacilities = facilities.filter((f) => f !== facility);
                                 setFacilities(newFacilities);
-                                setFormErrors((prev) => ({
-                                  ...prev,
-                                  facilities: modalMode === "add" && newFacilities.length === 0
-                                    ? "At least one facility is required for new properties"
-                                    : newFacilities.length > 10
-                                    ? "Maximum 10 facilities allowed"
-                                    : undefined,
-                                }));
                               }}
                               className="ml-2 text-red-600 hover:text-red-800"
                               aria-label={`Remove ${facility}`}
@@ -1011,7 +986,7 @@ export default function ListPropertiesPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Images (Max 9, JPEG/PNG, 5MB each)</label>
+                    <label className="block text-sm font-medium text-gray-700">Images (Max 10, JPEG/PNG, 5MB each)</label>
                     <input
                       type="file"
                       multiple
@@ -1030,6 +1005,7 @@ export default function ListPropertiesPage() {
                               className="h-24 w-full object-cover rounded-lg"
                               width={200}
                               height={96}
+                              style={{ width: "auto", height: "auto" }}
                               placeholder="blur"
                               blurDataURL="/logo.png"
                             />
@@ -1182,9 +1158,9 @@ export default function ListPropertiesPage() {
                     </button>
                     <button
                       type="submit"
-                      disabled={isLoading || isUploading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken}
+                      disabled={isLoading || isUploading || Object.keys(formErrors).length > 0 || !csrfToken}
                       className={`px-4 py-2 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base ${
-                        isLoading || isUploading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken
+                        isLoading || isUploading || Object.keys(formErrors).length > 0 || !csrfToken
                           ? "bg-gray-400 cursor-not-allowed"
                           : "bg-[#012a4a] hover:bg-[#014a7a]"
                       }`}

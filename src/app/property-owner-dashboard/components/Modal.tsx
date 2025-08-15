@@ -8,7 +8,7 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   className?: string;
-  disableClose?: boolean; // Added disableClose prop
+  disableClose?: boolean;
 }
 
 export default function Modal({
@@ -17,7 +17,7 @@ export default function Modal({
   isOpen,
   onClose,
   className = "",
-  disableClose = false, // Default to false
+  disableClose = false,
 }: ModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -27,17 +27,17 @@ export default function Modal({
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [isOpen, onClose, disableClose]); // Added disableClose to dependencies
+  }, [isOpen, onClose, disableClose]);
 
   if (!isOpen) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 animate-fade-in px-2 sm:px-4 overflow-y-auto"
-      onClick={disableClose ? undefined : onClose} // Prevent closing on overlay click if disableClose is true
+      onClick={disableClose ? undefined : onClose}
     >
       <div
-        className={`bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full sm:w-auto max-w-[95vw] sm:max-w-2xl mx-auto transform transition-all duration-300 max-h-[90vh] overflow-y-auto ${className}`}
+        className={`bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full lg:w-auto min-w-[90vw] lg:min-w-[50vw] max-w-[95vw] lg:max-w-5xl mx-auto transform transition-all duration-300 max-h-[90vh] overflow-y-auto ${className}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="modal-title"
@@ -48,7 +48,7 @@ export default function Modal({
           <h2 id="modal-title" className="text-lg sm:text-xl font-semibold text-gray-900">
             {title}
           </h2>
-          {!disableClose && ( // Only render close button if disableClose is false
+          {!disableClose && (
             <button
               onClick={onClose}
               className="text-gray-500 hover:text-gray-700 transition-colors duration-200"

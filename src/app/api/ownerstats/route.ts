@@ -24,6 +24,8 @@ interface Stats {
   overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
+  totalDepositPaid: number;
+  totalUtilityPaid: number;
 }
 
 export async function GET(request: NextRequest) {
@@ -66,6 +68,8 @@ export async function GET(request: NextRequest) {
         overduePayments: 0,
         totalPayments: 0,
         totalOverdueAmount: 0,
+        totalDepositPaid: 0,
+        totalUtilityPaid: 0,
       };
       return NextResponse.json({ success: true, stats });
     }
@@ -192,6 +196,52 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalPayments = paymentsResult[0]?.totalPayments || 0;
 
+    // Total deposit payments aggregation
+    const depositPaymentsResult = await db
+      .collection("payments")
+      .aggregate<{
+        totalDepositPaid: number;
+      }>([
+        {
+          $match: {
+            propertyId: { $in: propertyIds },
+            status: "completed",
+            type: "Deposit",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalDepositPaid: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+    const totalDepositPaid = depositPaymentsResult[0]?.totalDepositPaid || 0;
+
+    // Total utility payments aggregation
+    const utilityPaymentsResult = await db
+      .collection("payments")
+      .aggregate<{
+        totalUtilityPaid: number;
+      }>([
+        {
+          $match: {
+            propertyId: { $in: propertyIds },
+            status: "completed",
+            type: "Utility",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalUtilityPaid: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+    const totalUtilityPaid = utilityPaymentsResult[0]?.totalUtilityPaid || 0;
+
     // Overdue payments aggregation
     const overdueResult = await db
       .collection("tenants")
@@ -313,6 +363,8 @@ export async function GET(request: NextRequest) {
       overduePayments,
       totalPayments,
       totalOverdueAmount,
+      totalDepositPaid,
+      totalUtilityPaid,
     };
 
     logger.debug("Successfully fetched owner stats", { userId, stats });

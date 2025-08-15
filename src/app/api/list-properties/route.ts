@@ -1,5 +1,3 @@
-
-// src/app/api/list-properties/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { connectToDatabase } from '@/lib/mongodb';
@@ -202,10 +200,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (images.length > 9) {
+    if (images.length > 10) {
       logger.error('Too many images', { imageCount: images.length });
       return NextResponse.json(
-        { success: false, message: 'Maximum 9 images allowed' },
+        { success: false, message: 'Maximum 10 images allowed' },
         { status: 400 }
       );
     }
@@ -378,10 +376,10 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (images.length > 9) {
+    if (images.length > 10) {
       logger.error('Too many images', { imageCount: images.length });
       return NextResponse.json(
-        { success: false, message: 'Maximum 9 images allowed' },
+        { success: false, message: 'Maximum 10 images allowed' },
         { status: 400 }
       );
     }
@@ -469,7 +467,7 @@ export async function PUT(request: NextRequest) {
           ...updateData,
           _id: _id,
           createdAt: existingProperty.createdAt.toISOString(),
-          updatedAt: updateData.updatedAt.toISOString(), // Now safe because updatedAt is guaranteed
+          updatedAt: updateData.updatedAt.toISOString(),
           adExpiration: updateData.adExpiration ? updateData.adExpiration.toISOString() : undefined,
         },
       },

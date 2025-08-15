@@ -5,9 +5,9 @@ import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Users, DollarSign, AlertCircle, BarChart2 } from "lucide-react"; // Removed Wrench
+import { Building2, Users, DollarSign, AlertCircle, BarChart2 } from "lucide-react";
 import Cookies from "js-cookie";
-import { Line, Pie, Bar } from "react-chartjs-2"; // Kept Bar since we’ll use it
+import { Line, Pie, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   LineElement,
@@ -19,7 +19,7 @@ import {
   Legend,
   ArcElement,
   BarElement,
-  TooltipItem, // Added for typing tooltip
+  TooltipItem,
 } from "chart.js";
 
 const inter = Inter({
@@ -59,7 +59,7 @@ interface Payment {
   paymentDate: string;
   transactionId: string;
   status: "completed" | "pending" | "failed";
-  type?: "Rent" | "Utility";
+  type?: "Rent" | "Utility" | "Deposit";
   phoneNumber?: string;
   reference?: string;
   tenantName: string;
@@ -74,6 +74,8 @@ interface Stats {
   overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
+  totalDepositPaid: number;
+  totalUtilityPaid: number;
 }
 
 interface ChartData {
@@ -103,6 +105,8 @@ export default function PropertyOwnerDashboard() {
     overduePayments: 0,
     totalPayments: 0,
     totalOverdueAmount: 0,
+    totalDepositPaid: 0,
+    totalUtilityPaid: 0,
   });
   const [chartData, setChartData] = useState<ChartData | null>(null);
 
@@ -336,85 +340,85 @@ export default function PropertyOwnerDashboard() {
     },
   };
 
-// Line chart data for payment trends
-const paymentChartData = {
-  labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
-  datasets: [
-    {
-      label: "Rent Payments (Ksh)",
-      data: chartData?.rentPayments || [0, 0, 0, 0, 0, 0],
-      borderColor: "#36A2EB",
-      backgroundColor: "rgba(54, 162, 235, 0.2)",
-      fill: true,
-      tension: 0.4,
-    },
-    {
-      label: "Utility Payments (Ksh)",
-      data: chartData?.utilityPayments || [0, 0, 0, 0, 0, 0],
-      borderColor: "#FF6384",
-      backgroundColor: "rgba(255, 99, 132, 0.2)",
-      fill: true,
-      tension: 0.4,
-    },
-  ],
-};
+  // Line chart data for payment trends
+  const paymentChartData = {
+    labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
+    datasets: [
+      {
+        label: "Rent Payments (Ksh)",
+        data: chartData?.rentPayments || [0, 0, 0, 0, 0, 0],
+        borderColor: "#36A2EB",
+        backgroundColor: "rgba(54, 162, 235, 0.2)",
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: "Utility Payments (Ksh)",
+        data: chartData?.utilityPayments || [0, 0, 0, 0, 0, 0],
+        borderColor: "#FF6384",
+        backgroundColor: "rgba(255, 99, 132, 0.2)",
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
 
-const paymentChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  scales: {
-    x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
-    y: { title: { display: true, text: "Amount (Ksh)", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
-  },
-  plugins: {
-    legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } },
-    title: { display: true, text: "Payment Trends", color: "#012a4a", font: { size: 16 } },
-    tooltip: {
-      callbacks: {
-        label: (context: TooltipItem<"line">) => {
-          const value = context.raw as number; // Type assertion
-          return `${context.dataset.label}: Ksh ${value.toFixed(2)}`;
+  const paymentChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
+      y: { title: { display: true, text: "Amount (Ksh)", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
+    },
+    plugins: {
+      legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } },
+      title: { display: true, text: "Payment Trends", color: "#012a4a", font: { size: 16 } },
+      tooltip: {
+        callbacks: {
+          label: (context: TooltipItem<"line">) => {
+            const value = context.raw as number;
+            return `${context.dataset.label}: Ksh ${value.toFixed(2)}`;
+          },
         },
       },
     },
-  },
-};
+  };
 
-// Bar chart data for maintenance requests
-const maintenanceChartData = {
-  labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
-  datasets: [
-    {
-      label: "Maintenance Requests",
-      data: chartData?.maintenanceRequests || [0, 0, 0, 0, 0, 0],
-      backgroundColor: "#4BC0C0",
-      hoverBackgroundColor: "#36A2EB",
-      borderWidth: 1,
+  // Bar chart data for maintenance requests
+  const maintenanceChartData = {
+    labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
+    datasets: [
+      {
+        label: "Maintenance Requests",
+        data: chartData?.maintenanceRequests || [0, 0, 0, 0, 0, 0],
+        backgroundColor: "#4BC0C0",
+        hoverBackgroundColor: "#36A2EB",
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // Bar chart options for maintenance requests
+  const maintenanceChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
+      y: { title: { display: true, text: "Requests", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
     },
-  ],
-};
-
-// Bar chart options for maintenance requests
-const maintenanceChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  scales: {
-    x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
-    y: { title: { display: true, text: "Requests", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
-  },
-  plugins: {
-    legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } },
-    title: { display: true, text: "Maintenance Requests", color: "#012a4a", font: { size: 16 } },
-    tooltip: {
-      callbacks: {
-        label: (context: TooltipItem<"bar">) => {
-          const value = context.raw as number; // Type assertion
-          return `${context.dataset.label}: ${value}`;
+    plugins: {
+      legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } },
+      title: { display: true, text: "Maintenance Requests", color: "#012a4a", font: { size: 16 } },
+      tooltip: {
+        callbacks: {
+          label: (context: TooltipItem<"bar">) => {
+            const value = context.raw as number;
+            return `${context.dataset.label}: ${value}`;
+          },
         },
       },
     },
-  },
-};
+  };
 
   if (!userId || role !== "propertyOwner") {
     return (
@@ -455,7 +459,7 @@ const maintenanceChartOptions = {
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
             {[
               {
                 title: "Monthly Rent",
@@ -474,6 +478,18 @@ const maintenanceChartOptions = {
                 value: `Ksh ${stats.totalOverdueAmount.toFixed(2)}`,
                 icon: <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6" />,
                 color: "red",
+              },
+              {
+                title: "Total Deposit Paid",
+                value: `Ksh ${stats.totalDepositPaid.toFixed(2)}`,
+                icon: <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />,
+                color: "indigo",
+              },
+              {
+                title: "Total Utility Paid",
+                value: `Ksh ${stats.totalUtilityPaid.toFixed(2)}`,
+                icon: <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />,
+                color: "pink",
               },
               {
                 title: "Active Properties",
@@ -523,7 +539,7 @@ const maintenanceChartOptions = {
             <section>
               <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Maintenance Requests</h2>
               <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-200 h-80 sm:h-96">
-                <Bar data={maintenanceChartData} options={maintenanceChartOptions} /> {/* Added Bar chart */}
+                <Bar data={maintenanceChartData} options={maintenanceChartOptions} />
               </div>
             </section>
           </div>
@@ -566,5 +582,6 @@ const maintenanceChartOptions = {
         </main>
       </div>
     </div>
+    
   );
 }

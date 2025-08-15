@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Users, Pencil, Trash2, Plus, ArrowUpDown } from "lucide-react";
+import { Users, Pencil, Trash2, Plus, ArrowUpDown, EyeIcon, EyeOffIcon } from "lucide-react";
 import { TenantRequest } from "../../../types/tenant";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -74,6 +74,7 @@ export default function TenantsPage() {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
   const [tenantPassword, setTenantPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // State for password visibility
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [selectedUnitType, setSelectedUnitType] = useState("");
   const [price, setPrice] = useState("");
@@ -100,6 +101,11 @@ export default function TenantsPage() {
     propertyId: "",
     unitType: "",
   });
+
+  // Toggle password visibility
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
 
   // Fetch CSRF token
   useEffect(() => {
@@ -362,6 +368,7 @@ export default function TenantsPage() {
     setTenantEmail("");
     setTenantPhone("");
     setTenantPassword("");
+    setShowPassword(false); // Reset password visibility
     setSelectedPropertyId("");
     setSelectedUnitType("");
     setPrice("");
@@ -426,6 +433,7 @@ export default function TenantsPage() {
     setTotalUtilityPaid((tenant.totalUtilityPaid ?? 0).toString());
     setTotalDepositPaid((tenant.totalDepositPaid ?? 0).toString());
     setTenantPassword("");
+    setShowPassword(false); // Reset password visibility
     setFormErrors({});
     setError(null);
     setIsModalOpen(true);
@@ -977,20 +985,34 @@ export default function TenantsPage() {
               {modalMode === "add" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Temporary Password</label>
-                  <input
-                    placeholder="Enter temporary password"
-                    value={tenantPassword}
-                    onChange={(e) => {
-                      setTenantPassword(e.target.value);
-                      setFormErrors((prev) => ({
-                        ...prev,
-                        tenantPassword: e.target.value.trim() ? undefined : "Password is required",
-                      }));
-                    }}
-                    type="password"
-                    required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPassword ? "border-red-500" : "border-gray-300"}`}
-                  />
+                  <div className="relative">
+                    <input
+                      placeholder="Enter temporary password"
+                      value={tenantPassword}
+                      onChange={(e) => {
+                        setTenantPassword(e.target.value);
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          tenantPassword: e.target.value.trim() ? undefined : "Password is required",
+                        }));
+                      }}
+                      type={showPassword ? "text" : "password"}
+                      required
+                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPassword ? "border-red-500" : "border-gray-300"}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={togglePasswordVisibility}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? (
+                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                   {formErrors.tenantPassword && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>
                   )}
@@ -999,13 +1021,27 @@ export default function TenantsPage() {
               {modalMode === "edit" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">New Password (optional)</label>
-                  <input
-                    placeholder="Enter new password (optional)"
-                    value={tenantPassword}
-                    onChange={(e) => setTenantPassword(e.target.value)}
-                    type="password"
-                    className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base"
-                  />
+                  <div className="relative">
+                    <input
+                      placeholder="Enter new password (optional)"
+                      value={tenantPassword}
+                      onChange={(e) => setTenantPassword(e.target.value)}
+                      type={showPassword ? "text" : "password"}
+                      className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base"
+                    />
+                    <button
+                      type="button"
+                      onClick={togglePasswordVisibility}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? (
+                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
               <div>
