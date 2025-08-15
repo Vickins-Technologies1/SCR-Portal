@@ -32,6 +32,36 @@ const logger = {
   },
 };
 
+// Helper to convert potential string or Date to ISO string
+const toISOStringSafe = (value: Date | string | undefined | null, field: string): string => {
+  if (!value) {
+    logger.warn(`Empty value for ${field}, returning empty string`, { value, field });
+    return "";
+  }
+  try {
+    if (typeof value === "string") {
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+      logger.warn(`Invalid date string for ${field}, returning original string`, { value, field });
+      return value;
+    }
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return value.toISOString();
+    }
+    logger.warn(`Invalid Date object for ${field}, returning empty string`, { value, field });
+    return "";
+  } catch (error) {
+    logger.error(`Error converting ${field} to ISO string`, {
+      value,
+      field,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+    return "";
+  }
+};
+
 // Helper to extract client IP
 const getClientIp = (request: NextRequest): string => {
   const xForwardedFor = request.headers.get("x-forwarded-for");
@@ -193,9 +223,7 @@ export async function GET(
     const startTime = Date.now();
 
     await db.collection<Tenant>("tenants").createIndex({ _id: 1, ownerId: 1 });
-    await db
-      .collection<Property>("properties")
-      .createIndex({ _id: 1, ownerId: 1 });
+    await db.collection<Property>("properties").createIndex({ _id: 1, ownerId: 1 });
 
     const tenant = await db
       .collection<Tenant>("tenants")
@@ -209,10 +237,10 @@ export async function GET(
       );
     }
 
-    const property = (await db.collection<Property>("properties").findOne({
+    const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(tenant.propertyId),
       ownerId: userId,
-    })) as WithId<Property> | null;
+    }) as WithId<Property> | null;
 
     if (!property) {
       logger.error("Property not found or not owned", {
@@ -228,11 +256,11 @@ export async function GET(
       );
     }
 
-    // ---- Fetch Payment Totals from payments collection ----
+    // Validate and update payment fields from payments collection
     const paymentTotals = await db
       .collection("payments")
       .aggregate([
-        { $match: { tenantId: tenant._id.toString() } },
+        { $match: { tenantId: tenant._id.toString(), status: "completed" } },
         {
           $group: {
             _id: "$type",
@@ -244,15 +272,53 @@ export async function GET(
 
     let totalRentPaid = 0,
       totalUtilityPaid = 0,
-      totalDepositPaid = 0;
+      totalDepositPaid = 0,
+      walletBalance = tenant.walletBalance ?? 0;
 
     paymentTotals.forEach((p) => {
-      if (p._id === "rent") totalRentPaid = p.total;
-      if (p._id === "utility") totalUtilityPaid = p.total;
-      if (p._id === "deposit") totalDepositPaid = p.total;
+      if (p._id === "Rent") totalRentPaid = p.total;
+      if (p._id === "Utility") totalUtilityPaid = p.total;
+      if (p._id === "Deposit") totalDepositPaid = p.total;
+      if (p._id === "Other") walletBalance += p.total;
     });
 
-    // ---- Build tenant data ----
+    if (
+      tenant.totalRentPaid !== totalRentPaid ||
+      tenant.totalUtilityPaid !== totalUtilityPaid ||
+      tenant.totalDepositPaid !== totalDepositPaid ||
+      tenant.walletBalance !== walletBalance
+    ) {
+      logger.warn("Payment field discrepancies detected, updating tenant", {
+        tenantId,
+        stored: {
+          totalRentPaid: tenant.totalRentPaid,
+          totalUtilityPaid: tenant.totalUtilityPaid,
+          totalDepositPaid: tenant.totalDepositPaid,
+          walletBalance: tenant.walletBalance,
+        },
+        calculated: {
+          totalRentPaid,
+          totalUtilityPaid,
+          totalDepositPaid,
+          walletBalance,
+        },
+      });
+
+      await db.collection<Tenant>("tenants").updateOne(
+        { _id: new ObjectId(tenantId) },
+        {
+          $set: {
+            totalRentPaid,
+            totalUtilityPaid,
+            totalDepositPaid,
+            walletBalance,
+            updatedAt: new Date(),
+          },
+        }
+      );
+    }
+
+    // Build tenant data
     let tenantData: ResponseTenant = {
       _id: tenant._id.toString(),
       ownerId: tenant.ownerId,
@@ -269,22 +335,15 @@ export async function GET(
       leaseEndDate: tenant.leaseEndDate,
       status: tenant.status,
       paymentStatus: tenant.paymentStatus,
-      createdAt:
-        typeof tenant.createdAt === "string"
-          ? tenant.createdAt
-          : new Date(tenant.createdAt).toISOString(),
-      updatedAt: tenant.updatedAt
-        ? typeof tenant.updatedAt === "string"
-          ? tenant.updatedAt
-          : new Date(tenant.updatedAt).toISOString()
-        : undefined,
+      createdAt: toISOStringSafe(tenant.createdAt, "tenant.createdAt"),
+      updatedAt: toISOStringSafe(tenant.updatedAt, "tenant.updatedAt"),
       totalRentPaid,
       totalUtilityPaid,
       totalDepositPaid,
-      walletBalance: tenant.walletBalance ?? 0,
+      walletBalance,
     };
 
-    // ---- Fetch Dues if requested ----
+    // Fetch dues if requested
     if (includeDues) {
       if (!csrfToken) {
         logger.error("CSRF token missing for check-dues request", {
@@ -300,9 +359,7 @@ export async function GET(
       try {
         const cookieHeader = request.headers.get("cookie") || "";
         const checkDuesResponse = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
-          }/api/tenants/check-dues`,
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/tenants/check-dues`,
           {
             method: "POST",
             headers: {
@@ -338,20 +395,15 @@ export async function GET(
 
         tenantData = {
           ...tenantData,
-          totalRentPaid: checkDuesData.tenant.totalRentPaid,
-          totalUtilityPaid: checkDuesData.tenant.totalUtilityPaid,
-          totalDepositPaid: checkDuesData.tenant.totalDepositPaid,
-          walletBalance: checkDuesData.tenant.walletBalance,
           paymentStatus: checkDuesData.tenant.paymentStatus,
-          updatedAt: checkDuesData.tenant.updatedAt,
+          updatedAt: toISOStringSafe(checkDuesData.tenant.updatedAt, "checkDues.tenant.updatedAt"),
           dues: checkDuesData.dues,
         };
       } catch (error) {
         logger.error("Error calling check-dues API", {
           tenantId,
           userId,
-          message:
-            error instanceof Error ? error.message : "Unknown error",
+          message: error instanceof Error ? error.message : "Unknown error",
         });
         return NextResponse.json(
           { success: false, message: "Failed to fetch dues from check-dues API" },
@@ -363,15 +415,8 @@ export async function GET(
     const propertyData = {
       _id: property._id.toString(),
       name: property.name,
-      createdAt:
-        typeof property.createdAt === "string"
-          ? property.createdAt
-          : new Date(property.createdAt).toISOString(),
-      updatedAt: property.updatedAt
-        ? typeof property.updatedAt === "string"
-          ? property.updatedAt
-          : new Date(property.updatedAt).toISOString()
-        : undefined,
+      createdAt: toISOStringSafe(property.createdAt, "property.createdAt"),
+      updatedAt: toISOStringSafe(property.updatedAt, "property.updatedAt"),
     };
 
     logger.info("Tenant data fetched successfully", {
@@ -405,7 +450,10 @@ export async function GET(
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ tenantId: string }> }) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
   const rateLimitResponse = await applyRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
@@ -669,8 +717,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           leaseEndDate: updatedTenant.leaseEndDate,
           status: updatedTenant.status,
           paymentStatus: updatedTenant.paymentStatus,
-          createdAt: updatedTenant.createdAt.toISOString(),
-          updatedAt: updatedTenant.updatedAt?.toISOString(),
+          createdAt: toISOStringSafe(updatedTenant.createdAt, "updatedTenant.createdAt"),
+          updatedAt: toISOStringSafe(updatedTenant.updatedAt, "updatedTenant.updatedAt"),
           totalRentPaid: updatedTenant.totalRentPaid ?? 0,
           totalUtilityPaid: updatedTenant.totalUtilityPaid ?? 0,
           totalDepositPaid: updatedTenant.totalDepositPaid ?? 0,
@@ -692,7 +740,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ tenantId: string }> }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
   const rateLimitResponse = await applyRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 

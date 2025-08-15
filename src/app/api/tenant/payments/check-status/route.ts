@@ -21,6 +21,7 @@ interface Tenant {
   totalRentPaid: number;
   totalUtilityPaid: number;
   totalDepositPaid: number;
+  requiredDeposit?: number;
 }
 
 interface Property {
@@ -221,46 +222,60 @@ export async function POST(request: NextRequest) {
     );
 
     if (status === "completed") {
-      // Update tenant wallet balance
+      // Calculate required amounts and update tenant fields
+      const updateFields: { [key: string]: number } = {};
+      let overpayment = 0;
+      const amount = Number(umsPayData.TransactionAmount);
+      const requiredDepositAmount = tenant.requiredDeposit || tenant.price;
+
+      if (payment.type === "Rent") {
+        const requiredRentAmount = tenant.price;
+        if (amount >= requiredRentAmount) {
+          updateFields.totalRentPaid = tenant.totalRentPaid + requiredRentAmount;
+          overpayment = amount - requiredRentAmount;
+        } else {
+          updateFields.totalRentPaid = tenant.totalRentPaid + amount;
+        }
+      } else if (payment.type === "Utility") {
+        updateFields.totalUtilityPaid = tenant.totalUtilityPaid + amount;
+      } else if (payment.type === "Deposit") {
+        if (tenant.totalDepositPaid < requiredDepositAmount) {
+          const remainingDepositNeeded = requiredDepositAmount - tenant.totalDepositPaid;
+          if (amount >= remainingDepositNeeded) {
+            updateFields.totalDepositPaid = tenant.totalDepositPaid + remainingDepositNeeded;
+            overpayment = amount - remainingDepositNeeded;
+          } else {
+            updateFields.totalDepositPaid = tenant.totalDepositPaid + amount;
+          }
+        } else {
+          overpayment = amount; // Deposit already fulfilled, all goes to wallet
+        }
+      } else {
+        overpayment = amount; // Other payments go to wallet
+      }
+
+      // Add overpayment to walletBalance
+      if (overpayment > 0) {
+        updateFields.walletBalance = tenant.walletBalance + overpayment;
+      }
+
+      // Update tenant with calculated fields
       await db.collection<Tenant>("tenants").updateOne(
         { _id: new ObjectId(tenantId) },
-        { $inc: { walletBalance: Number(umsPayData.TransactionAmount) } }
+        { $set: updateFields }
       );
 
-      // Update tenant payment fields (totalRentPaid, totalUtilityPaid, totalDepositPaid)
-      try {
-        const updateResponse = await axios.post(
-          `${process.env.NEXT_PUBLIC_BASE_URL}/api/tenant/payments/update-fields`,
-          {
-            paymentId: payment._id.toString(),
-            userId,
-            csrfToken,
-          },
-          {
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": csrfToken,
-              Cookie: `userId=${userId};role=${role};csrf-token=${csrfToken}`,
-            },
-          }
-        );
+      // Fetch updated tenant data
+      const updatedTenant = await db.collection<Tenant>("tenants").findOne({
+        _id: new ObjectId(tenantId),
+      });
 
-        if (!updateResponse.data.success) {
-          logger.warn("Failed to update tenant payment fields", {
-            paymentId: payment._id.toString(),
-            error: updateResponse.data.message,
-          });
-        } else {
-          logger.info("Tenant payment fields updated via update-fields API", {
-            paymentId: payment._id.toString(),
-            updatedFields: updateResponse.data.updatedFields,
-          });
-        }
-      } catch (updateError) {
-        logger.error("Error calling update-fields API", {
-          paymentId: payment._id.toString(),
-          error: updateError instanceof Error ? updateError.message : "Unknown error",
-        });
+      if (!updatedTenant) {
+        logger.error("Failed to fetch updated tenant data", { tenantId });
+        return NextResponse.json(
+          { success: false, message: "Failed to fetch updated tenant data" },
+          { status: 500 }
+        );
       }
 
       // Fetch property owner details
