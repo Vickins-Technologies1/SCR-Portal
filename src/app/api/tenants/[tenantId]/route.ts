@@ -807,6 +807,16 @@ export async function DELETE(
       );
     }
 
+    // Delete all payments associated with the tenant
+    const paymentDeleteResult = await db.collection("payments").deleteMany({
+      tenantId: tenant._id.toString(),
+    });
+
+    logger.info("Payments deleted for tenant", {
+      tenantId,
+      deletedCount: paymentDeleteResult.deletedCount,
+    });
+
     const deleteResult = await db.collection<Tenant>("tenants").deleteOne({
       _id: new ObjectId(tenantId),
       ownerId: userId,
@@ -831,7 +841,8 @@ export async function DELETE(
     return NextResponse.json(
       {
         success: true,
-        message: "Tenant deleted successfully",
+        message: "Tenant and associated payments deleted successfully",
+        deletedPaymentsCount: paymentDeleteResult.deletedCount,
       },
       { status: 200 }
     );

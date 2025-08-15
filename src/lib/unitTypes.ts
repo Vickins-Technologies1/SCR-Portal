@@ -4,7 +4,7 @@ export const UNIT_TYPES = [
     type: "Single",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 5000 },
         { range: [51, 100], fee: 8000 },
         { range: [101, Infinity], fee: 0 }, 
