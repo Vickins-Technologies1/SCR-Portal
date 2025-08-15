@@ -530,8 +530,13 @@ export default function ListPropertiesPage() {
   }, [propertyToDelete, csrfToken, fetchProperties]);
 
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
+    if (!e.target.files || e.target.files.length === 0) {
+      setImageUploadError("No files selected. Please select at least one image.");
+      console.log("No files selected in handleImageChange");
+      return;
+    }
     const newFiles = Array.from(e.target.files);
+    console.log("Files selected:", newFiles.map((file) => ({ name: file.name, type: file.type, size: file.size })));
     const validFiles: File[] = [];
     const errors: string[] = [];
 
@@ -578,6 +583,11 @@ export default function ListPropertiesPage() {
     if (!csrfToken) {
       throw new Error("CSRF token not available");
     }
+    if (files.length === 0) {
+      console.log("No files to upload in uploadImages");
+      throw new Error("No files to upload");
+    }
+
     const formData = new FormData();
     files.forEach((file, index) => {
       formData.append('images', file);
