@@ -1,4 +1,3 @@
-// src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { put } from '@vercel/blob';
@@ -56,7 +55,18 @@ export async function POST(request: NextRequest) {
 
     // Parse form data
     const formData = await request.formData();
-    const files = formData.getAll('image0') as File[];
+    const formDataEntries = Array.from(formData.entries());
+    logger.debug('FormData entries received:', {
+      userId,
+      entries: formDataEntries.map(([key, value]) => ({ key, name: value instanceof File ? value.name : value })),
+    });
+
+    const files = formData.getAll('images') as File[];
+    logger.debug('Files extracted from FormData:', {
+      userId,
+      fileCount: files.length,
+      fileNames: files.map((file) => file.name),
+    });
 
     // Validate number of files
     if (files.length === 0) {
@@ -103,12 +113,12 @@ export async function POST(request: NextRequest) {
       const fileContent = Buffer.from(await file.arrayBuffer());
 
       try {
-        // Use put() as shown in the example, adapted for image files
         const { url } = await put(fileName, fileContent, {
           access: 'public',
           token: process.env.BLOB_READ_WRITE_TOKEN,
         });
         urls.push(url);
+        logger.debug('File uploaded successfully', { userId, fileName, url });
       } catch (error) {
         logger.error('Failed to upload file to Vercel Blob', {
           userId,
@@ -116,8 +126,17 @@ export async function POST(request: NextRequest) {
           message: error instanceof Error ? error.message : 'Unknown error',
           stack: error instanceof Error ? error.stack : undefined,
         });
-        throw new Error(`Failed to upload file: ${fileName}`);
+        // Continue with the next file instead of throwing
+        validationErrors.push(`Failed to upload file: ${fileName}`);
       }
+    }
+
+    if (urls.length === 0) {
+      logger.error('No files were uploaded successfully', { userId, errors: validationErrors });
+      return NextResponse.json(
+        { success: false, message: validationErrors.join('; ') || 'Failed to upload any files' },
+        { status: 500 }
+      );
     }
 
     logger.info('Images uploaded successfully', { userId, fileCount: urls.length, urls });
@@ -145,6 +164,6 @@ export async function POST(request: NextRequest) {
 
 // Configure runtime for Vercel serverless
 export const config = {
-  runtime: 'edge', // Use Edge runtime for faster execution
-  maxDuration: 30, // Set timeout to 30 seconds to handle larger uploads
+  runtime: 'edge',
+  maxDuration: 30,
 };

@@ -579,9 +579,14 @@ export default function ListPropertiesPage() {
       throw new Error("CSRF token not available");
     }
     const formData = new FormData();
-    files.forEach((file) => {
+    files.forEach((file, index) => {
       formData.append('images', file);
+      console.log(`Appending file ${index}:`, file.name, file.type, file.size);
     });
+
+    // Log FormData contents for debugging
+    const formDataEntries = Array.from(formData.entries());
+    console.log('FormData contents:', formDataEntries.map(([key, value]) => ({ key, name: value instanceof File ? value.name : value })));
 
     try {
       const res = await fetch("/api/upload", {
@@ -593,6 +598,7 @@ export default function ListPropertiesPage() {
         },
       });
       const data = await res.json();
+      console.log('Upload response:', data);
       if (data.success && data.urls) {
         return Array.isArray(data.urls) ? data.urls : [data.urls];
       } else {
@@ -627,6 +633,7 @@ export default function ListPropertiesPage() {
         let imageUrls = modalMode === "edit" ? [...imagePreviews] : [];
         if (images.length > 0) {
           const uploadedUrls = await uploadImages(images);
+          console.log('Uploaded image URLs:', uploadedUrls);
           imageUrls = modalMode === "edit" ? [...imagePreviews, ...uploadedUrls] : uploadedUrls;
         }
 
