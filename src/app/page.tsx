@@ -69,7 +69,7 @@ export default function Home() {
           <h2 className="text-4xl font-extrabold tracking-wide">Smart Choice Rentals</h2>
           <p className="text-xl leading-relaxed">
             Unlock your perfect rental experience. <br />
-            Join us today and find your dream home!
+            Seamless management for tenants and property owners.
           </p>
         </div>
         <div className="absolute top-0 left-0 w-full h-full opacity-10 animate-pulse-slow">
