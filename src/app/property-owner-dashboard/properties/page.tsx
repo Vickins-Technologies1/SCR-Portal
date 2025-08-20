@@ -25,8 +25,8 @@ const UNIT_TYPES = [
     pricing: {
       RentCollection: [
         { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 5000 },
-        { range: [51, 100], fee: 8000 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
@@ -37,8 +37,8 @@ const UNIT_TYPES = [
     pricing: {
       RentCollection: [
         { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 5000 },
-        { range: [51, 100], fee: 8000 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
@@ -48,9 +48,10 @@ const UNIT_TYPES = [
     type: "1-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -59,9 +60,10 @@ const UNIT_TYPES = [
     type: "2-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -70,9 +72,10 @@ const UNIT_TYPES = [
     type: "3-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -81,9 +84,10 @@ const UNIT_TYPES = [
     type: "Duplex",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -92,9 +96,10 @@ const UNIT_TYPES = [
     type: "Commercial",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -273,6 +278,8 @@ export default function PropertiesPage() {
     if (!address.trim()) errors.address = "Address is required";
     if (!rentPaymentDate || isNaN(parseInt(rentPaymentDate)) || parseInt(rentPaymentDate) < 1 || parseInt(rentPaymentDate) > 28)
       errors.rentPaymentDate = "Rent payment date must be a number between 1 and 28";
+    if (unitTypes.length === 0 || unitTypes.every((unit) => !unit.type || parseInt(unit.quantity) === 0))
+      errors.unitTypes = "At least one valid unit type with non-zero quantity is required";
 
     unitTypes.forEach((unit, index) => {
       if (!unit.type || !UNIT_TYPES.find((ut) => ut.type === unit.type)) {
@@ -291,21 +298,21 @@ export default function PropertiesPage() {
     return Object.keys(errors).length === 0;
   }, [propertyName, address, rentPaymentDate, unitTypes]);
 
-
-  const getManagementFee = (unitType: string, managementType: "RentCollection" | "FullManagement", quantity: string): string => {
-    const unit = UNIT_TYPES.find((ut) => ut.type === unitType);
-    if (!unit) return "0 Ksh/mo";
-    const parsedQuantity = parseInt(quantity) || 0;
-    const pricing = unit.pricing[managementType];
-    if (typeof pricing === "number") return `${pricing} Ksh/mo`;
+  const getManagementFee = (quantity: number): string => {
+    const unit = UNIT_TYPES[0]; // Use first unit type for pricing tier lookup
+    const pricing = unit.pricing.RentCollection; // Use RentCollection as default
     for (const tier of pricing) {
       const [min, max] = tier.range;
-      if (parsedQuantity >= min && parsedQuantity <= max) {
+      if (quantity >= min && quantity <= max) {
         return `${tier.fee} Ksh/mo`;
       }
     }
     return "0 Ksh/mo";
   };
+
+  const calculateTotalUnits = useCallback(() => {
+    return unitTypes.reduce((sum, unit) => sum + (parseInt(unit.quantity) || 0), 0);
+  }, [unitTypes]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -513,7 +520,7 @@ export default function PropertiesPage() {
                       <td className="px-4 py-3">{p.rentPaymentDate}</td>
                       <td className="px-4 py-3">{new Date(p.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
-                        {p.unitTypes.map((u) => `${u.type} (x${u.quantity}, ${u.managementFee} Ksh/mo)`).join(", ") || "N/A"}
+                        {p.unitTypes.map((u) => `${u.type} (x${u.quantity})`).join(", ") || "N/A"}
                       </td>
                       <td
                         className="px-4 py-3 flex gap-2"
@@ -690,12 +697,8 @@ export default function PropertiesPage() {
                           className={`w-full sm:w-40 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors[`unitManagementType_${index}`] ? "border-red-500" : "border-gray-300"
                             } text-sm sm:text-base`}
                         >
-                          <option value="RentCollection">
-                            Rent Collection ({getManagementFee(unit.type, "RentCollection", unit.quantity)})
-                          </option>
-                          <option value="FullManagement">
-                            Full Management ({getManagementFee(unit.type, "FullManagement", unit.quantity)})
-                          </option>
+                          <option value="RentCollection">Rent Collection</option>
+                          <option value="FullManagement">Full Management</option>
                         </select>
                         {unitTypes.length > 1 && (
                           <button
@@ -728,6 +731,17 @@ export default function PropertiesPage() {
                         )}
                       </div>
                     ))}
+                    {formErrors.unitTypes && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.unitTypes}</p>
+                    )}
+                    <div className="mt-2">
+                      <p className="text-sm font-medium text-gray-700">
+                        Total Units: {calculateTotalUnits()}
+                      </p>
+                      <p className="text-sm font-medium text-gray-700">
+                        Management Fee: {getManagementFee(calculateTotalUnits())}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={addUnitType}

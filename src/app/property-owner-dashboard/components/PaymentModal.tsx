@@ -2,12 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Modal from "./Modal";
-
-interface Property {
-  _id: string;
-  name: string;
-  unitTypes: { type: string; price: number; deposit: number; managementType: "RentCollection" | "FullManagement"; managementFee: number; uniqueType: string }[];
-}
+import { Property, UnitType } from "../../../types/property";
 
 interface Invoice {
   _id: string;
@@ -106,7 +101,7 @@ export default function PaymentModal({
         try {
           const encodedUnitType = encodeURIComponent(paymentUnitType);
           const invoiceRes = await fetch(
-            `/api/invoices?userId=${userId}&propertyId=${paymentPropertyId}&unitType=${encodedUnitType}`,
+            `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=${encodedUnitType}`,
             {
               headers: { "X-CSRF-Token": csrfToken },
             }
@@ -213,7 +208,7 @@ export default function PaymentModal({
           if (statusData.TransactionStatus === "Completed") {
             try {
               const updateRes = await fetch("/api/invoices", {
-                method: "POSTA",
+                method: "POST",
                 headers: {
                   "Content-Type": "application/json",
                   "X-CSRF-Token": csrfToken,
@@ -327,7 +322,7 @@ export default function PaymentModal({
       try {
         const encodedUnitType = encodeURIComponent(paymentUnitType);
         const invoiceRes = await fetch(
-          `/api/invoices?userId=${userId}&propertyId=${paymentPropertyId}&unitType=${encodedUnitType}`,
+          `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=${encodedUnitType}`,
           {
             headers: { "X-CSRF-Token": csrfToken },
           }
@@ -401,6 +396,12 @@ export default function PaymentModal({
     [userId, paymentPhone, paymentUnitType, paymentPropertyId, validatePaymentForm, pollTransactionStatus, csrfToken, onError]
   );
 
+  const calculateTotalUnits = (propertyId: string): number => {
+    const property = properties.find((p) => p._id.toString() === propertyId);
+    if (!property) return 0;
+    return property.unitTypes.reduce((sum: number, unit: UnitType) => sum + (unit.quantity || 0), 0);
+  };
+
   return (
     <>
       <Modal
@@ -460,8 +461,8 @@ export default function PaymentModal({
               >
                 <option value="">Select Property</option>
                 {properties.map((p) => (
-                  <option key={p._id} value={p._id}>
-                    {p.name}
+                  <option key={p._id.toString()} value={p._id.toString()}>
+                    {p.name} (Total Units: {calculateTotalUnits(p._id.toString())})
                   </option>
                 ))}
               </select>
@@ -491,10 +492,10 @@ export default function PaymentModal({
                 >
                   <option value="">Select Unit Type</option>
                   {properties
-                    .find((p) => p._id === paymentPropertyId)
-                    ?.unitTypes.map((u, index) => (
+                    .find((p) => p._id.toString() === paymentPropertyId)
+                    ?.unitTypes.map((u: UnitType, index: number) => (
                       <option key={u.uniqueType} value={u.uniqueType}>
-                        {u.type} #{index + 1} (Price: KES {u.price.toLocaleString()}, Deposit: KES {u.deposit.toLocaleString()}, {u.managementType}: KES {u.managementFee.toLocaleString()}/mo)
+                        {u.type} #{index + 1} (Price: KES {u.price.toLocaleString()}, Deposit: KES {u.deposit.toLocaleString()}, Management: {u.managementType})
                       </option>
                     ))}
                 </select>

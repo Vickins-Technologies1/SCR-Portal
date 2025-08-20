@@ -6,8 +6,7 @@ import { ObjectId } from "mongodb";
 interface Invoice {
   _id: ObjectId;
   userId: string;
-  propertyId?: string; // Optional to handle legacy data
-  unitType: string;
+  propertyId: string; // Required for property-wide invoices
   amount: number;
   status: "pending" | "completed" | "failed";
   reference: string;
@@ -52,12 +51,11 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get("propertyId");
-    const unitType = searchParams.get("unitType");
 
     const { db } = await connectToDatabase();
     console.log("Connected to MongoDB");
 
-    if (propertyId && unitType) {
+    if (propertyId) {
       // Validate propertyId
       if (!ObjectId.isValid(propertyId)) {
         console.log("Invalid property ID:", propertyId);
@@ -67,15 +65,14 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Query for invoices with case-insensitive unitType, no status filter
+      // Query for invoices by userId and propertyId
       const invoices = await db.collection<Invoice>("invoices").find({
         userId,
-        propertyId: propertyId || { $exists: false },
-        unitType: { $regex: `^${unitType}$`, $options: "i" },
+        propertyId,
       }).toArray();
 
       console.log(
-        `Checked invoices for userId: ${userId}, propertyId: ${propertyId}, unitType: ${unitType}`,
+        `Checked invoices for userId: ${userId}, propertyId: ${propertyId}`,
         { found: invoices.length > 0, invoices }
       );
 
@@ -93,8 +90,7 @@ export async function GET(request: NextRequest) {
       const formattedInvoices = invoices.map((invoice) => ({
         _id: invoice._id.toString(),
         userId: invoice.userId,
-        propertyId: invoice.propertyId || "",
-        unitType: invoice.unitType,
+        propertyId: invoice.propertyId,
         amount: invoice.amount,
         status: invoice.status,
         reference: invoice.reference,
@@ -139,8 +135,7 @@ export async function GET(request: NextRequest) {
       return {
         _id: invoice._id.toString(),
         userId: invoice.userId,
-        propertyId: invoice.propertyId || "",
-        unitType: invoice.unitType,
+        propertyId: invoice.propertyId,
         amount: invoice.amount,
         status: invoice.status,
         reference: invoice.reference,
@@ -197,14 +192,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized: Only property owners or admins can update invoices",
+          message: "Unauthorized: Only property owners or admins can create or update invoices",
         },
         { status: 401 }
       );
     }
 
     const body = await request.json();
-    const { userId: bodyUserId, propertyId, unitType, amount, status, reference } = body;
+    const { userId: bodyUserId, propertyId, amount, status, reference, description } = body;
 
     if (!bodyUserId || !ObjectId.isValid(bodyUserId) || bodyUserId !== userId) {
       console.log("Invalid or mismatched userId in body:", { bodyUserId, userId });
@@ -218,14 +213,6 @@ export async function POST(request: NextRequest) {
       console.log("Invalid property ID:", propertyId);
       return NextResponse.json(
         { success: false, message: "Valid property ID is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!unitType || typeof unitType !== "string") {
-      console.log("Invalid unit type:", unitType);
-      return NextResponse.json(
-        { success: false, message: "Valid unit type is required" },
         { status: 400 }
       );
     }
@@ -254,18 +241,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!description || typeof description !== "string") {
+      console.log("Invalid description:", description);
+      return NextResponse.json(
+        { success: false, message: "Valid description is required" },
+        { status: 400 }
+      );
+    }
+
     const { db } = await connectToDatabase();
     console.log("Connected to MongoDB");
 
     const existingInvoice = await db.collection<Invoice>("invoices").findOne({
       userId,
       propertyId,
-      unitType: { $regex: `^${unitType}$`, $options: "i" },
       reference,
     });
 
     if (!existingInvoice) {
-      console.log("Invoice not found for update:", { userId, propertyId, unitType, reference });
+      console.log("Invoice not found for update:", { userId, propertyId, reference });
       return NextResponse.json(
         { success: false, message: "Invoice not found" },
         { status: 404 }
@@ -287,6 +281,7 @@ export async function POST(request: NextRequest) {
           status,
           amount,
           updatedAt: new Date(),
+          description,
         },
       }
     );
@@ -314,14 +309,13 @@ export async function POST(request: NextRequest) {
           _id: existingInvoice._id.toString(),
           userId,
           propertyId,
-          unitType,
           amount,
           status,
           reference,
           createdAt: existingInvoice.createdAt.toISOString(),
           updatedAt: new Date().toISOString(),
           expiresAt: existingInvoice.expiresAt.toISOString(),
-          description: existingInvoice.description,
+          description,
         },
       },
       { status: 200 }

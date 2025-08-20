@@ -1,15 +1,14 @@
-// src/lib/unitTypes.ts
 export const UNIT_TYPES = [
   {
     type: "Single",
     pricing: {
       RentCollection: [
-        { range: [1, 20], fee: 2500 },
-        { range: [21, 50], fee: 5000 },
-        { range: [51, 100], fee: 8000 },
-        { range: [101, Infinity], fee: 0 }, 
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
-      FullManagement: 0, 
+      FullManagement: 0,
     },
   },
   {
@@ -17,8 +16,8 @@ export const UNIT_TYPES = [
     pricing: {
       RentCollection: [
         { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 5000 },
-        { range: [51, 100], fee: 8000 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
@@ -28,9 +27,10 @@ export const UNIT_TYPES = [
     type: "1-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -39,9 +39,10 @@ export const UNIT_TYPES = [
     type: "2-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -50,9 +51,10 @@ export const UNIT_TYPES = [
     type: "3-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -61,9 +63,10 @@ export const UNIT_TYPES = [
     type: "Duplex",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
@@ -72,14 +75,14 @@ export const UNIT_TYPES = [
     type: "Commercial",
     pricing: {
       RentCollection: [
-        { range: [1, 15], fee: 5000 },
-        { range: [16, 25], fee: 8000 },
-        { range: [26, Infinity], fee: 15000 },
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
       ],
       FullManagement: 0,
     },
   },
-  
 ];
 
 export function getManagementFee(unit: { type: string; managementType: "RentCollection" | "FullManagement"; quantity: number }): number {
@@ -95,5 +98,5 @@ export function getManagementFee(unit: { type: string; managementType: "RentColl
       return tier.fee;
     }
   }
-  return 0; 
+  return 0;
 }

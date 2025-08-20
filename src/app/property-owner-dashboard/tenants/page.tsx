@@ -29,18 +29,7 @@ interface Tenant {
   totalDepositPaid?: number;
 }
 
-interface Property {
-  _id: string;
-  name: string;
-  unitTypes: {
-    type: string;
-    price: number;
-    deposit: number;
-    managementType: "RentCollection" | "FullManagement";
-    managementFee: number;
-    uniqueType: string; // Format: "type-index"
-  }[];
-}
+import type { Property } from "../../../types/property";
 
 interface SortConfig {
   key: keyof Tenant | "propertyName";
@@ -53,6 +42,93 @@ interface FilterConfig {
   propertyId: string;
   unitType: string;
 }
+
+const UNIT_TYPES = [
+  {
+    type: "Single",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
+      ],
+      FullManagement: 0,
+    },
+  },
+  {
+    type: "Bedsitter",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
+      ],
+      FullManagement: 0,
+    },
+  },
+  {
+    type: "1-Bedroom",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
+      ],
+      FullManagement: 0,
+    },
+  },
+  {
+    type: "2-Bedroom",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
+      ],
+      FullManagement: 0,
+    },
+  },
+  {
+    type: "3-Bedroom",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
+      ],
+      FullManagement: 0,
+    },
+  },
+  {
+    type: "Duplex",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
+      ],
+      FullManagement: 0,
+    },
+  },
+  {
+    type: "Commercial",
+    pricing: {
+      RentCollection: [
+        { range: [5, 20], fee: 2500 },
+        { range: [21, 50], fee: 4500 },
+        { range: [51, 100], fee: 7000 },
+        { range: [101, Infinity], fee: 0 },
+      ],
+      FullManagement: 0,
+    },
+  },
+];
 
 export default function TenantsPage() {
   const router = useRouter();
@@ -74,7 +150,7 @@ export default function TenantsPage() {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
   const [tenantPassword, setTenantPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false); // State for password visibility
+  const [showPassword, setShowPassword] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [selectedUnitType, setSelectedUnitType] = useState("");
   const [price, setPrice] = useState("");
@@ -102,12 +178,27 @@ export default function TenantsPage() {
     unitType: "",
   });
 
-  // Toggle password visibility
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
 
-  // Fetch CSRF token
+  const getManagementFee = (totalUnits: number): number => {
+    const pricing = UNIT_TYPES[0].pricing.RentCollection;
+    for (const tier of pricing) {
+      const [min, max] = tier.range;
+      if (totalUnits >= min && totalUnits <= max) {
+        return tier.fee;
+      }
+    }
+    return 0;
+  };
+
+  const calculateTotalUnits = (propertyId: string): number => {
+    const property = properties.find((p) => p._id.toString() === propertyId);
+    if (!property) return 0;
+    return property.unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  };
+
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
@@ -126,7 +217,6 @@ export default function TenantsPage() {
     fetchCsrfToken();
   }, []);
 
-  // Check cookies and redirect if unauthorized
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
@@ -138,7 +228,6 @@ export default function TenantsPage() {
     }
   }, [router]);
 
-  // Fetch user data
   const fetchUserData = useCallback(async () => {
     if (!userId || !role) return;
     try {
@@ -169,7 +258,6 @@ export default function TenantsPage() {
     }
   }, [userId, role, router, csrfToken]);
 
-  // Fetch tenants
   const fetchTenants = useCallback(async () => {
     if (!userId) return;
     setIsLoading(true);
@@ -203,78 +291,52 @@ export default function TenantsPage() {
     }
   }, [userId, page, limit, csrfToken]);
 
-  // Fetch properties
-  const fetchProperties = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        const properties = data.properties.map((p: Property) => ({
-          ...p,
-          unitTypes: p.unitTypes.map((u: Property["unitTypes"][0], index: number) => ({
-            ...u,
-            uniqueType: u.uniqueType || `${u.type}-${index}`,
-            managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
-          })),
-        }));
-        setProperties(properties || []);
-      } else {
-        setError(data.message || "Failed to fetch properties.");
-      }
-    } catch {
-      setError("Failed to connect to the server.");
+const fetchProperties = useCallback(async () => {
+  if (!userId) return;
+  try {
+    const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (data.success) {
+      const mappedProperties = data.properties.map((p: Property) => ({
+        ...p,
+        _id: p._id.toString(),
+        unitTypes: p.unitTypes.map((u: Property['unitTypes'][number], index: number) => ({
+          ...u,
+          uniqueType: u.uniqueType || `${u.type}-${index}`,
+        })),
+        managementFee: typeof p.managementFee === "string" ? parseFloat(p.managementFee) : p.managementFee || getManagementFee(calculateTotalUnits(p._id.toString())),
+        createdAt: p.createdAt ? new Date(p.createdAt) : undefined,
+        updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
+        rentPaymentDate: p.rentPaymentDate ? new Date(p.rentPaymentDate) : undefined,
+        ownerId: p.ownerId ?? "",
+        address: p.address ?? "",
+        status: p.status ?? "",
+      }));
+      setProperties(mappedProperties || []);
+    } else {
+      setError(data.message || "Failed to fetch properties.");
     }
-  }, [userId, csrfToken]);
+  } catch {
+    setError("Failed to connect to the server.");
+  }
+}, [userId, csrfToken, calculateTotalUnits]); // Added calculateTotalUnits to dependencies
 
-  // Fetch pending invoices
-  const fetchPendingInvoices = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`/api/invoices`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPendingInvoices(data.pendingInvoices || 0);
-      } else {
-        setError(data.message || "Failed to fetch invoice status.");
-      }
-    } catch {
-      setError("Failed to connect to the server.");
-    }
-  }, [userId, csrfToken]);
-
-  // Fetch invoice status
   const fetchInvoiceStatus = useCallback(
-    async (propertyId: string, uniqueType: string) => {
-      if (!userId || !propertyId || !uniqueType) {
-        console.warn("Missing required parameters for fetchInvoiceStatus", {
-          userId,
-          propertyId,
-          uniqueType,
-        });
+    async (propertyId: string) => {
+      if (!userId || !propertyId) {
+        console.warn("Missing required parameters for fetchInvoiceStatus", { userId, propertyId });
         setError("Missing required parameters to check invoice status.");
         return null;
       }
       try {
-        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(
-          propertyId
-        )}&unitType=${encodeURIComponent(uniqueType)}`;
-        console.log("Fetching invoice status", { url, userId, propertyId, uniqueType });
-
+        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(propertyId)}`;
         const res = await fetch(url, {
           method: "GET",
           headers: {
@@ -284,12 +346,9 @@ export default function TenantsPage() {
           credentials: "include",
         });
         const data = await res.json();
-        console.log("Invoice status response", { data, propertyId, uniqueType });
-
         if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
           return data.status;
         }
-        console.warn("Invalid invoice status response", { data });
         setError(data.message || "Failed to fetch invoice status.");
         return null;
       } catch (error) {
@@ -304,7 +363,31 @@ export default function TenantsPage() {
     [userId, csrfToken]
   );
 
-  // Update fetchInvoiceStatus to handle unique unit type identifiers
+const fetchPendingInvoices = useCallback(async () => {
+  if (!userId) return;
+  try {
+    const res = await fetch(`/api/invoices?userId=${encodeURIComponent(userId)}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (data.success) {
+      const pendingCount = data.invoices.filter((invoice: { status: string }) => invoice.status === "pending").length;
+      setPendingInvoices(pendingCount);
+    } else {
+      setPendingInvoices(0);
+      setError(data.message || "Failed to fetch pending invoices.");
+    }
+  } catch {
+    setPendingInvoices(0);
+    setError("Failed to connect to the server while fetching pending invoices.");
+  }
+}, [userId, csrfToken]);
+
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
       Promise.all([
@@ -321,7 +404,6 @@ export default function TenantsPage() {
     }
   }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
-  // Apply filters and sort by createdAt
   useEffect(() => {
     const applyFilters = () => {
       let filtered = [...tenants];
@@ -341,7 +423,6 @@ export default function TenantsPage() {
       if (filters.unitType) {
         filtered = filtered.filter((tenant) => tenant.unitType.split('-')[0] === filters.unitType);
       }
-      // Sort by createdAt in descending order to show latest tenants first
       filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setFilteredTenants(filtered);
       setTotalTenants(filtered.length);
@@ -349,26 +430,23 @@ export default function TenantsPage() {
     applyFilters();
   }, [filters, tenants]);
 
-  // Handle filter changes
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFilters((prev) => ({ ...prev, [name]: value }));
     setPage(1);
   };
 
-  // Clear filters
   const clearFilters = () => {
     setFilters({ tenantName: "", tenantEmail: "", propertyId: "", unitType: "" });
     setPage(1);
   };
 
-  // Reset tenant form
   const resetForm = useCallback(() => {
     setTenantName("");
     setTenantEmail("");
     setTenantPhone("");
     setTenantPassword("");
-    setShowPassword(false); // Reset password visibility
+    setShowPassword(false);
     setSelectedPropertyId("");
     setSelectedUnitType("");
     setPrice("");
@@ -383,7 +461,6 @@ export default function TenantsPage() {
     setError(null);
   }, []);
 
-  // Open add tenant modal
   const openAddModal = useCallback(async () => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
@@ -411,7 +488,6 @@ export default function TenantsPage() {
     setIsModalOpen(true);
   }, [paymentStatus, walletBalance, pendingTenantData, resetForm]);
 
-  // Open edit tenant modal
   const openEditModal = useCallback((tenant: Tenant) => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
@@ -433,19 +509,17 @@ export default function TenantsPage() {
     setTotalUtilityPaid((tenant.totalUtilityPaid ?? 0).toString());
     setTotalDepositPaid((tenant.totalDepositPaid ?? 0).toString());
     setTenantPassword("");
-    setShowPassword(false); // Reset password visibility
+    setShowPassword(false);
     setFormErrors({});
     setError(null);
     setIsModalOpen(true);
   }, [paymentStatus, walletBalance]);
 
-  // Handle tenant deletion
   const handleDelete = useCallback((id: string) => {
     setTenantToDelete(id);
     setIsDeleteModalOpen(true);
   }, []);
 
-  // Confirm tenant deletion
   const confirmDelete = useCallback(async () => {
     if (!tenantToDelete) return;
     setIsLoading(true);
@@ -474,7 +548,6 @@ export default function TenantsPage() {
     }
   }, [tenantToDelete, fetchTenants, csrfToken]);
 
-  // Validate tenant form
   const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
     if (!tenantName.trim()) errors.tenantName = "Full name is required";
@@ -498,7 +571,6 @@ export default function TenantsPage() {
     return Object.keys(errors).length === 0;
   }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, modalMode]);
 
-  // Handle tenant form submission
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -569,7 +641,6 @@ export default function TenantsPage() {
     [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm, csrfToken]
   );
 
-  // Handle table sorting
   const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
     setSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
@@ -587,8 +658,8 @@ export default function TenantsPage() {
         }
 
         if (key === "propertyName") {
-          const aName = properties.find((p) => p._id === a.propertyId)?.name || "";
-          const bName = properties.find((p) => p._id === b.propertyId)?.name || "";
+          const aName = properties.find((p) => p._id.toString() === a.propertyId)?.name || "";
+          const bName = properties.find((p) => p._id.toString() === b.propertyId)?.name || "";
           return direction === "asc"
             ? aName.localeCompare(bName)
             : bName.localeCompare(aName);
@@ -607,17 +678,15 @@ export default function TenantsPage() {
     });
   }, [filteredTenants, properties]);
 
-  // Get sort icon for table headers
-  const getSortIcon = useCallback((key: keyof Tenant | "propertyName") => {
+  const getSortIcon = (key: keyof Tenant | "propertyName") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
       <span className="inline ml-1">↑</span>
     ) : (
       <span className="inline ml-1">↓</span>
     );
-  }, [sortConfig]);
+  };
 
-  // Handle navigation to tenant details
   const handleTenantClick = useCallback((tenantId: string) => {
     if (!csrfToken) {
       setError("CSRF token is missing. Please refresh the page.");
@@ -651,7 +720,7 @@ export default function TenantsPage() {
           </div>
           {tenants.length >= 3 && (
             <div className="bg-yellow-100 text-yellow-700 p-4 mb-4 rounded-lg shadow">
-              Note: Adding more tenants may require payment of a management fee for the selected unit type if no invoice has been paid.
+              Note: Adding more tenants may require payment of a property-wide management fee if no invoice has been paid.
             </div>
           )}
           {pendingInvoices > 0 && (
@@ -692,7 +761,7 @@ export default function TenantsPage() {
                 >
                   <option value="">All Properties</option>
                   {properties.map((property) => (
-                    <option key={property._id} value={property._id}>
+                    <option key={property._id.toString()} value={property._id.toString()}>
                       {property.name}
                     </option>
                   ))}
@@ -837,7 +906,7 @@ export default function TenantsPage() {
                           <td className="px-4 py-3">{t.email}</td>
                           <td className="px-4 py-3">{t.phone}</td>
                           <td className="px-4 py-3">
-                            {properties.find((p) => p._id === t.propertyId)?.name || "N/A"}
+                            {properties.find((p) => p._id.toString() === t.propertyId)?.name || "N/A"}
                           </td>
                           <td className="px-4 py-3">{`${baseUnitType} #${parseInt(index) + 1}`}</td>
                           <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
@@ -1066,8 +1135,8 @@ export default function TenantsPage() {
                 >
                   <option value="">Select Property</option>
                   {properties.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name}
+                    <option key={p._id.toString()} value={p._id.toString()}>
+                      {p.name} (Total Units: {calculateTotalUnits(p._id.toString())}, Fee: Ksh {p.managementFee}/mo)
                     </option>
                   ))}
                 </select>
@@ -1083,7 +1152,7 @@ export default function TenantsPage() {
                     onChange={async (e) => {
                       const uniqueType = e.target.value;
                       setSelectedUnitType(uniqueType);
-                      const selectedProperty = properties.find((p) => p._id === selectedPropertyId);
+                      const selectedProperty = properties.find((p) => p._id.toString() === selectedPropertyId);
                       const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === uniqueType);
                       if (unit) {
                         setPrice(unit.price.toString());
@@ -1094,13 +1163,8 @@ export default function TenantsPage() {
                           price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
                           deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
                         }));
-                        if (tenants.length >= 3 && uniqueType && modalMode === "add") {
-                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, uniqueType);
-                          console.log("Invoice status check result", {
-                            invoiceStatus,
-                            propertyId: selectedPropertyId,
-                            uniqueType,
-                          });
+                        if (tenants.length >= 3 && modalMode === "add") {
+                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId);
                           if (invoiceStatus !== "completed") {
                             const tenantData: Partial<TenantRequest> = {
                               name: tenantName,
@@ -1123,10 +1187,10 @@ export default function TenantsPage() {
                             setPendingTenantData(tenantData);
                             setError(
                               invoiceStatus === "pending"
-                                ? `Cannot add more tenants until the pending invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} is paid.`
+                                ? `Cannot add more tenants until the pending invoice for property ${selectedProperty?.name || "unknown"} is paid.`
                                 : invoiceStatus === "failed"
-                                  ? `Cannot add tenants because the invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} has failed. Please contact support.`
-                                  : `No invoice found for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"}. Please create an invoice.`
+                                  ? `Cannot add tenants because the invoice for property ${selectedProperty?.name || "unknown"} has failed. Please contact support.`
+                                  : `No invoice found for property ${selectedProperty?.name || "unknown"}. Please create an invoice.`
                             );
                             setIsModalOpen(false);
                             setIsPaymentPromptOpen(true);
@@ -1159,15 +1223,20 @@ export default function TenantsPage() {
                   >
                     <option value="">Select Unit Type</option>
                     {properties
-                      .find((p) => p._id === selectedPropertyId)
+                      .find((p) => p._id.toString() === selectedPropertyId)
                       ?.unitTypes.map((u) => (
                         <option key={u.uniqueType} value={u.uniqueType}>
-                          {u.type} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
+                          {u.type} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit})
                         </option>
                       ))}
                   </select>
                   {formErrors.selectedUnitType && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>
+                  )}
+                  {selectedPropertyId && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      Property Management Fee: Ksh {properties.find((p) => p._id.toString() === selectedPropertyId)?.managementFee || 0}/mo
+                    </p>
                   )}
                 </div>
               )}
@@ -1418,7 +1487,6 @@ export default function TenantsPage() {
             }}
             properties={properties}
             initialPropertyId={pendingTenantData?.propertyId ?? ""}
-            initialUnitType={pendingTenantData?.unitType ?? ""}
             initialPhone={pendingTenantData?.phone ?? ""}
             userId={userId ?? ""}
           />
