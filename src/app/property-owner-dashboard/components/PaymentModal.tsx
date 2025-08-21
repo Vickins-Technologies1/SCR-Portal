@@ -2,7 +2,13 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Modal from "./Modal";
-import { Property, UnitType } from "../../../types/property";
+import { Property } from "../../../types/property";
+
+// Define UnitType interface if not imported from elsewhere
+interface UnitType {
+  quantity?: number;
+  // Add other properties if needed
+}
 
 interface Invoice {
   _id: string;
@@ -25,7 +31,6 @@ interface PaymentModalProps {
   onError: (message: string) => void;
   properties: Property[];
   initialPropertyId?: string;
-  initialUnitType?: string;
   initialPhone?: string;
   userId: string | null;
 }
@@ -37,12 +42,10 @@ export default function PaymentModal({
   onError,
   properties,
   initialPropertyId = "",
-  initialUnitType = "",
   initialPhone = "",
   userId,
 }: PaymentModalProps) {
   const [paymentPropertyId, setPaymentPropertyId] = useState(initialPropertyId);
-  const [paymentUnitType, setPaymentUnitType] = useState(initialUnitType);
   const [paymentPhone, setPaymentPhone] = useState(initialPhone);
   const [paymentAmount, setPaymentAmount] = useState<string>("");
   const [paymentFormErrors, setPaymentFormErrors] = useState<{ [key: string]: string | undefined }>({});
@@ -76,13 +79,12 @@ export default function PaymentModal({
 
   const resetPaymentForm = useCallback(() => {
     setPaymentPropertyId(initialPropertyId);
-    setPaymentUnitType(initialUnitType);
     setPaymentPhone(initialPhone);
     setPaymentAmount("");
     setPaymentFormErrors({});
     setIsFetchingAmount(false);
     setStatusMessage("Processing your payment. Please wait...");
-  }, [initialPropertyId, initialUnitType, initialPhone]);
+  }, [initialPropertyId, initialPhone]);
 
   const validatePaymentForm = useCallback(
     async () => {
@@ -90,24 +92,18 @@ export default function PaymentModal({
       if (!paymentPropertyId) {
         errors.paymentPropertyId = "Property is required";
       }
-      if (!paymentUnitType) {
-        errors.paymentUnitType = "Unit type is required";
-      }
       if (!paymentPhone || !/^\+?\d{10,15}$/.test(paymentPhone)) {
         errors.paymentPhone = "Valid phone number is required (10-15 digits, optional +)";
       }
-      if (paymentPropertyId && paymentUnitType && userId && csrfToken) {
+      if (paymentPropertyId && userId && csrfToken) {
         setIsFetchingAmount(true);
         try {
-          const encodedUnitType = encodeURIComponent(paymentUnitType);
-          const invoiceRes = await fetch(
-            `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=${encodedUnitType}`,
-            {
-              headers: { "X-CSRF-Token": csrfToken },
-            }
-          );
+          const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=All%20Units`;
+          const invoiceRes = await fetch(url, {
+            headers: { "X-CSRF-Token": csrfToken },
+          });
           const invoiceData = await invoiceRes.json();
-          console.log("Invoice fetch response:", { userId, paymentPropertyId, paymentUnitType, encodedUnitType, invoiceData });
+          console.log("Invoice fetch response:", { userId, paymentPropertyId, invoiceData });
 
           if (!invoiceRes.ok || !invoiceData.success) {
             errors.paymentInvoice = invoiceData.message || "Failed to verify invoice status";
@@ -115,10 +111,10 @@ export default function PaymentModal({
           } else if (invoiceData.status !== "pending") {
             errors.paymentInvoice = invoiceData.status
               ? `Invoice is already ${invoiceData.status}`
-              : `No pending invoice found for ${paymentUnitType} in selected property`;
+              : `No pending invoice found for selected property`;
             setPaymentAmount("");
           } else if (!invoiceData.invoices?.[0]) {
-            errors.paymentInvoice = `No invoice details found for ${paymentUnitType} in selected property`;
+            errors.paymentInvoice = `No invoice details found for selected property`;
             setPaymentAmount("");
           } else {
             setPaymentAmount(invoiceData.invoices[0].amount.toString());
@@ -139,17 +135,17 @@ export default function PaymentModal({
       setPaymentFormErrors(errors);
       return Object.keys(errors).length === 0;
     },
-    [paymentPropertyId, paymentUnitType, paymentPhone, userId, csrfToken]
+    [paymentPropertyId, paymentPhone, userId, csrfToken]
   );
 
   useEffect(() => {
-    if (paymentPropertyId && paymentUnitType && userId && csrfToken) {
+    if (paymentPropertyId && userId && csrfToken) {
       validatePaymentForm();
     } else {
       setPaymentAmount("");
       setPaymentFormErrors((prev) => ({ ...prev, paymentInvoice: csrfToken ? undefined : "CSRF token is missing" }));
     }
-  }, [paymentPropertyId, paymentUnitType, userId, csrfToken, validatePaymentForm]);
+  }, [paymentPropertyId, userId, csrfToken, validatePaymentForm]);
 
   const pollTransactionStatus = useCallback(
     async (transactionRequestId: string, invoice: Invoice, maxAttempts = 6, interval = 5000) => {
@@ -216,7 +212,7 @@ export default function PaymentModal({
                 body: JSON.stringify({
                   userId,
                   propertyId: paymentPropertyId,
-                  unitType: paymentUnitType,
+                  unitType: "All Units",
                   amount: invoice.amount,
                   status: "completed",
                   reference: invoice.reference,
@@ -297,7 +293,7 @@ export default function PaymentModal({
 
       poll();
     },
-    [onSuccess, paymentPropertyId, paymentUnitType, userId, csrfToken, onError]
+    [onSuccess, paymentPropertyId, userId, csrfToken, onError]
   );
 
   const handlePayment = useCallback(
@@ -320,15 +316,12 @@ export default function PaymentModal({
       setStatusMessage("Processing your payment. Please wait...");
 
       try {
-        const encodedUnitType = encodeURIComponent(paymentUnitType);
-        const invoiceRes = await fetch(
-          `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=${encodedUnitType}`,
-          {
-            headers: { "X-CSRF-Token": csrfToken },
-          }
-        );
+        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=All%20Units`;
+        const invoiceRes = await fetch(url, {
+          headers: { "X-CSRF-Token": csrfToken },
+        });
         const invoiceData = await invoiceRes.json();
-        console.log("Invoice fetch in handlePayment:", { userId, paymentPropertyId, paymentUnitType, encodedUnitType, invoiceData });
+        console.log("Invoice fetch in handlePayment:", { userId, paymentPropertyId, invoiceData });
 
         if (!invoiceRes.ok) {
           onError(invoiceData.message || `Failed to fetch invoice (HTTP ${invoiceRes.status})`);
@@ -346,14 +339,14 @@ export default function PaymentModal({
           onError(
             invoiceData.status
               ? `Invoice is already ${invoiceData.status}`
-              : `No pending invoice found for ${paymentUnitType} in selected property`
+              : `No pending invoice found for selected property`
           );
           setIsPaymentLoadingModalOpen(false);
           setIsLoading(false);
           return;
         }
         if (!invoiceData.invoices || !Array.isArray(invoiceData.invoices) || invoiceData.invoices.length === 0) {
-          onError(`No invoice details found for ${paymentUnitType} in selected property`);
+          onError(`No invoice details found for selected property`);
           setIsPaymentLoadingModalOpen(false);
           setIsLoading(false);
           return;
@@ -393,7 +386,7 @@ export default function PaymentModal({
         setIsLoading(false);
       }
     },
-    [userId, paymentPhone, paymentUnitType, paymentPropertyId, validatePaymentForm, pollTransactionStatus, csrfToken, onError]
+    [userId, paymentPhone, paymentPropertyId, validatePaymentForm, pollTransactionStatus, csrfToken, onError]
   );
 
   const calculateTotalUnits = (propertyId: string): number => {
@@ -445,12 +438,10 @@ export default function PaymentModal({
                 value={paymentPropertyId}
                 onChange={(e) => {
                   setPaymentPropertyId(e.target.value);
-                  setPaymentUnitType("");
                   setPaymentAmount("");
                   setPaymentFormErrors((prev) => ({
                     ...prev,
                     paymentPropertyId: e.target.value ? undefined : "Property is required",
-                    paymentUnitType: undefined,
                     paymentInvoice: undefined,
                   }));
                 }}
@@ -470,40 +461,6 @@ export default function PaymentModal({
                 <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentPropertyId}</p>
               )}
             </div>
-            {paymentPropertyId && (
-              <div>
-                <label className="block text-sm font-medium text-[#1E3A8A]">Unit Type</label>
-                <select
-                  value={paymentUnitType}
-                  onChange={(e) => {
-                    const unitType = e.target.value;
-                    setPaymentUnitType(unitType);
-                    setPaymentAmount("");
-                    setPaymentFormErrors((prev) => ({
-                      ...prev,
-                      paymentUnitType: unitType ? undefined : "Unit type is required",
-                      paymentInvoice: undefined,
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition text-sm bg-gray-50 text-[#1E3A8A] ${
-                    paymentFormErrors.paymentUnitType ? "border-red-500" : "border-gray-200"
-                  }`}
-                >
-                  <option value="">Select Unit Type</option>
-                  {properties
-                    .find((p) => p._id.toString() === paymentPropertyId)
-                    ?.unitTypes.map((u: UnitType, index: number) => (
-                      <option key={u.uniqueType} value={u.uniqueType}>
-                        {u.type} #{index + 1} (Price: KES {u.price.toLocaleString()}, Deposit: KES {u.deposit.toLocaleString()}, Management: {u.managementType})
-                      </option>
-                    ))}
-                </select>
-                {paymentFormErrors.paymentUnitType && (
-                  <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentUnitType}</p>
-                )}
-              </div>
-            )}
             <div>
               <label className="block text-sm font-medium text-[#1E3A8A]">Phone Number</label>
               <input
@@ -562,7 +519,6 @@ export default function PaymentModal({
                   isFetchingAmount ||
                   Object.values(paymentFormErrors).some((v) => v !== undefined) ||
                   !paymentPropertyId ||
-                  !paymentUnitType ||
                   !paymentAmount
                 }
                 className={`px-4 py-2 text-white rounded-full transition flex items-center gap-2 text-sm ${
@@ -570,7 +526,6 @@ export default function PaymentModal({
                   isFetchingAmount ||
                   Object.values(paymentFormErrors).some((v) => v !== undefined) ||
                   !paymentPropertyId ||
-                  !paymentUnitType ||
                   !paymentAmount
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-[#1E3A8A] hover:bg-[#1E40AF]"

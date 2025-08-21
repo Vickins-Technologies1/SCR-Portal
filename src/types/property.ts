@@ -15,7 +15,7 @@ export interface Property {
   name: string;
   address: string;
   unitTypes: UnitType[];
-  managementFee: number; // Added for property-wide management fee
+  managementFee: number; 
   status: string;
   rentPaymentDate: Date;
   createdAt: Date;

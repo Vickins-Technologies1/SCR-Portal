@@ -427,30 +427,29 @@ export async function POST(request: NextRequest) {
     const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
     logger.debug("Tenant count", { userId, count: tenantCount });
 
-    // Check invoice status for unitType if adding 4th tenant or more
+    // Check invoice status for the entire property if adding 4th tenant or more
     if (tenantCount >= 3) {
-      const unitInvoice = await db.collection("invoices").findOne({
+      const propertyInvoice = await db.collection("invoices").findOne({
         userId,
         propertyId: requestData.propertyId,
-        unitType: requestData.unitType,
+        unitType: "All Units",
         status: "completed",
       });
 
-      if (!unitInvoice) {
-        logger.warn("Cannot add tenant - No completed invoice found for unit type", {
-          unitType: requestData.unitType,
+      if (!propertyInvoice) {
+        logger.warn("Cannot add tenant - No completed invoice found for property", {
           propertyId: requestData.propertyId,
           propertyName: property.name,
         });
         return NextResponse.json(
           {
             success: false,
-            message: `Cannot add tenant for unit type '${requestData.unitType}' in property '${property.name}'. Please complete the payment for the management fee invoice first.`,
+            message: `Cannot add more tenants to property '${property.name}' until the property management fee invoice is paid.`,
           },
           { status: 402 }
         );
       }
-      logger.debug("Invoice validation passed", { unitType: requestData.unitType, invoiceId: unitInvoice._id });
+      logger.debug("Invoice validation passed", { propertyId: requestData.propertyId, invoiceId: propertyInvoice._id });
     }
 
     const tenantData: Tenant = {

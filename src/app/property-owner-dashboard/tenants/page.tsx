@@ -291,6 +291,7 @@ export default function TenantsPage() {
     }
   }, [userId, page, limit, csrfToken]);
 
+  
 const fetchProperties = useCallback(async () => {
   if (!userId) return;
   try {
@@ -304,7 +305,7 @@ const fetchProperties = useCallback(async () => {
     });
     const data = await res.json();
     if (data.success) {
-      const mappedProperties = data.properties.map((p: Property) => ({
+      const mappedProperties: Property[] = data.properties.map((p: Property) => ({
         ...p,
         _id: p._id.toString(),
         unitTypes: p.unitTypes.map((u: Property['unitTypes'][number], index: number) => ({
@@ -326,67 +327,67 @@ const fetchProperties = useCallback(async () => {
   } catch {
     setError("Failed to connect to the server.");
   }
-}, [userId, csrfToken, calculateTotalUnits]); // Added calculateTotalUnits to dependencies
+}, [userId, csrfToken, calculateTotalUnits]);
 
-  const fetchInvoiceStatus = useCallback(
-    async (propertyId: string) => {
-      if (!userId || !propertyId) {
-        console.warn("Missing required parameters for fetchInvoiceStatus", { userId, propertyId });
-        setError("Missing required parameters to check invoice status.");
-        return null;
-      }
-      try {
-        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(propertyId)}`;
-        const res = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
-          return data.status;
-        }
-        setError(data.message || "Failed to fetch invoice status.");
-        return null;
-      } catch (error) {
-        console.error("Error in fetchInvoiceStatus", {
-          message: error instanceof Error ? error.message : "Unknown error",
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        setError("Failed to connect to the server while checking invoice status.");
-        return null;
-      }
-    },
-    [userId, csrfToken]
-  );
 
-const fetchPendingInvoices = useCallback(async () => {
-  if (!userId) return;
-  try {
-    const res = await fetch(`/api/invoices?userId=${encodeURIComponent(userId)}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrfToken,
-      },
-      credentials: "include",
-    });
-    const data = await res.json();
-    if (data.success) {
-      const pendingCount = data.invoices.filter((invoice: { status: string }) => invoice.status === "pending").length;
-      setPendingInvoices(pendingCount);
-    } else {
-      setPendingInvoices(0);
-      setError(data.message || "Failed to fetch pending invoices.");
+const fetchInvoiceStatus = useCallback(
+  async (propertyId: string) => {
+    if (!userId || !propertyId) {
+      console.warn("Missing required parameters for fetchInvoiceStatus", { userId, propertyId });
+      setError("Missing required parameters to check invoice status.");
+      return null;
     }
-  } catch {
-    setPendingInvoices(0);
-    setError("Failed to connect to the server while fetching pending invoices.");
-  }
-}, [userId, csrfToken]);
+    try {
+      const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(propertyId)}&unitType=All%20Units`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
+        return data.status;
+      }
+      setError(data.message || "Failed to fetch invoice status.");
+      return null;
+    } catch (error) {
+      console.error("Error in fetchInvoiceStatus", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      setError("Failed to connect to the server while checking invoice status.");
+      return null;
+    }
+  },
+  [userId, csrfToken]
+);
+
+  const fetchPendingInvoices = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/pending-invoices`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPendingInvoices(data.pendingInvoices || 0);
+      } else {
+        setPendingInvoices(0);
+        setError(data.message || "Failed to fetch pending invoices.");
+      }
+    } catch {
+      setPendingInvoices(0);
+      setError("Failed to connect to the server while fetching pending invoices.");
+    }
+  }, [userId, csrfToken]);
 
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
@@ -466,6 +467,11 @@ const fetchPendingInvoices = useCallback(async () => {
       setError("Unable to verify payment status. Please try again or log in.");
       return;
     }
+    if (pendingInvoices > 0) {
+      setError("You have pending invoices. Please settle them before adding new tenants.");
+      setIsPaymentPromptOpen(true);
+      return;
+    }
     resetForm();
     setModalMode("add");
     setEditingTenantId(null);
@@ -486,11 +492,16 @@ const fetchPendingInvoices = useCallback(async () => {
       setTotalDepositPaid(pendingTenantData.totalDepositPaid?.toString() || "");
     }
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, pendingTenantData, resetForm]);
+  }, [paymentStatus, walletBalance, pendingTenantData, resetForm, pendingInvoices]);
 
   const openEditModal = useCallback((tenant: Tenant) => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
+      return;
+    }
+    if (pendingInvoices > 0) {
+      setError("You have pending invoices. Please settle them before editing tenants.");
+      setIsPaymentPromptOpen(true);
       return;
     }
     setModalMode("edit");
@@ -513,7 +524,7 @@ const fetchPendingInvoices = useCallback(async () => {
     setFormErrors({});
     setError(null);
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance]);
+  }, [paymentStatus, walletBalance, pendingInvoices]);
 
   const handleDelete = useCallback((id: string) => {
     setTenantToDelete(id);
@@ -1165,7 +1176,7 @@ const fetchPendingInvoices = useCallback(async () => {
                         }));
                         if (tenants.length >= 3 && modalMode === "add") {
                           const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId);
-                          if (invoiceStatus !== "completed") {
+                          if (invoiceStatus === "pending") {
                             const tenantData: Partial<TenantRequest> = {
                               name: tenantName,
                               email: tenantEmail,
@@ -1186,11 +1197,7 @@ const fetchPendingInvoices = useCallback(async () => {
                             };
                             setPendingTenantData(tenantData);
                             setError(
-                              invoiceStatus === "pending"
-                                ? `Cannot add more tenants until the pending invoice for property ${selectedProperty?.name || "unknown"} is paid.`
-                                : invoiceStatus === "failed"
-                                  ? `Cannot add tenants because the invoice for property ${selectedProperty?.name || "unknown"} has failed. Please contact support.`
-                                  : `No invoice found for property ${selectedProperty?.name || "unknown"}. Please create an invoice.`
+                              `Cannot add more tenants until the pending invoice for property ${selectedProperty?.name || "unknown"} is paid.`
                             );
                             setIsModalOpen(false);
                             setIsPaymentPromptOpen(true);

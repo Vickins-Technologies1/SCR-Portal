@@ -504,7 +504,7 @@ export default function PropertyOwnerDashboard() {
                 color: "green",
               },
               {
-                title: "Total Units",
+                title: "Vacant Units",
                 value: stats.totalUnits,
                 icon: <Building2 className="h-5 w-5 sm:h-6 sm:w-6" />,
                 color: "purple",
@@ -562,7 +562,7 @@ export default function PropertyOwnerDashboard() {
                     <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800">{property.name}</h3>
                     <p className="text-sm sm:text-base text-gray-500 mt-1 sm:mt-2">{property.address}</p>
                     <p className="text-sm sm:text-base text-gray-500 mt-1 sm:mt-2">
-                      Total Units: {property.unitTypes.reduce((sum: number, unit: { quantity: number }) => sum + unit.quantity, 0)}
+                      Vacant Units: {property.unitTypes.reduce((sum: number, unit: { quantity: number }) => sum + unit.quantity, 0)}
                     </p>
                     <p className="text-sm sm:text-base text-gray-500 mt-1 sm:mt-2">
                       Status:{" "}
