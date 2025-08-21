@@ -193,11 +193,14 @@ export default function TenantsPage() {
     return 0;
   };
 
-  const calculateTotalUnits = (propertyId: string): number => {
-    const property = properties.find((p) => p._id.toString() === propertyId);
-    if (!property) return 0;
-    return property.unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
-  };
+const calculateTotalUnits = useCallback(
+    (propertyId: string): number => {
+      const property = properties.find((p) => p._id.toString() === propertyId);
+      if (!property) return 0;
+      return property.unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+    },
+    [properties] // Dependency: properties
+  );
 
   useEffect(() => {
     const fetchCsrfToken = async () => {
@@ -291,43 +294,42 @@ export default function TenantsPage() {
     }
   }, [userId, page, limit, csrfToken]);
 
-  
 const fetchProperties = useCallback(async () => {
-  if (!userId) return;
-  try {
-    const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrfToken,
-      },
-      credentials: "include",
-    });
-    const data = await res.json();
-    if (data.success) {
-      const mappedProperties: Property[] = data.properties.map((p: Property) => ({
-        ...p,
-        _id: p._id.toString(),
-        unitTypes: p.unitTypes.map((u: Property['unitTypes'][number], index: number) => ({
-          ...u,
-          uniqueType: u.uniqueType || `${u.type}-${index}`,
-        })),
-        managementFee: typeof p.managementFee === "string" ? parseFloat(p.managementFee) : p.managementFee || getManagementFee(calculateTotalUnits(p._id.toString())),
-        createdAt: p.createdAt ? new Date(p.createdAt) : undefined,
-        updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
-        rentPaymentDate: p.rentPaymentDate ? new Date(p.rentPaymentDate) : undefined,
-        ownerId: p.ownerId ?? "",
-        address: p.address ?? "",
-        status: p.status ?? "",
-      }));
-      setProperties(mappedProperties || []);
-    } else {
-      setError(data.message || "Failed to fetch properties.");
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        const mappedProperties: Property[] = data.properties.map((p: Property) => ({
+          ...p,
+          _id: p._id.toString(),
+          unitTypes: p.unitTypes.map((u: Property['unitTypes'][number], index: number) => ({
+            ...u,
+            uniqueType: u.uniqueType || `${u.type}-${index}`,
+          })),
+          managementFee: typeof p.managementFee === "string" ? parseFloat(p.managementFee) : p.managementFee || getManagementFee(calculateTotalUnits(p._id.toString())),
+          createdAt: p.createdAt ? new Date(p.createdAt) : undefined,
+          updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
+          rentPaymentDate: p.rentPaymentDate ? new Date(p.rentPaymentDate) : undefined,
+          ownerId: p.ownerId ?? "",
+          address: p.address ?? "",
+          status: p.status ?? "",
+        }));
+        setProperties(mappedProperties || []);
+      } else {
+        setError(data.message || "Failed to fetch properties.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
     }
-  } catch {
-    setError("Failed to connect to the server.");
-  }
-}, [userId, csrfToken, calculateTotalUnits]);
+  }, [userId, csrfToken, calculateTotalUnits]);
 
 
 const fetchInvoiceStatus = useCallback(

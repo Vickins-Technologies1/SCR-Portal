@@ -136,124 +136,6 @@ export default function TenantDashboardPage() {
     }
   }, [csrfToken]);
 
-  // Check cookies and redirect if unauthorized
-  useEffect(() => {
-    const getCookie = (name: string): string | null => {
-      const value = Cookies.get(name);
-      if (value !== undefined) return value;
-
-      const cookie = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith(`${name}=`));
-      return cookie ? cookie.split("=")[1] : null;
-    };
-
-    const uid = getCookie("userId");
-    const role = getCookie("role") ?? null;
-    const originalRole = getCookie("originalRole") ?? null;
-    const originalUserId = getCookie("originalUserId") ?? null;
-
-    console.log("Cookies retrieved:", {
-      userId: uid ?? "null",
-      role: role ?? "null",
-      originalRole: originalRole ?? "null",
-      originalUserId: originalUserId ?? "null",
-      documentCookie: document.cookie,
-    });
-
-    const isTenant = role === "tenant";
-    const isImpersonating = originalRole === "propertyOwner" && originalUserId !== null;
-
-    if (!uid || (!isTenant && !isImpersonating)) {
-      setError("Unauthorized. Please log in as a tenant or impersonate a tenant.");
-      console.log(
-        `Unauthorized access - userId: ${uid ?? "null"}, role: ${role ?? "null"}, originalRole: ${
-          originalRole ?? "null"
-        }, originalUserId: ${originalUserId ?? "null"}`
-      );
-      setTimeout(() => router.replace("/"), 2000);
-      return;
-    }
-
-    setUserId(uid);
-    if (isImpersonating) {
-      setIsImpersonated(true);
-      console.log(
-        `Impersonation session detected - userId: ${uid}, originalUserId: ${originalUserId}, originalRole: ${originalRole}`
-      );
-    }
-  }, [router]);
-
-  // Fetch tenant and property data
-  useEffect(() => {
-    if (!userId) return;
-
-    const fetchTenantData = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        let token = csrfToken;
-        if (!token) {
-          token = await fetchCsrfToken();
-          if (!token) {
-            throw new Error("CSRF token not received");
-          }
-        }
-
-        const tenantRes = await fetch("/api/tenant/profile", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": token,
-          },
-          credentials: "include",
-        });
-        const tenantData = await tenantRes.json();
-
-        if (!tenantData.success) {
-          setError(tenantData.message || "Failed to fetch tenant data");
-          console.log(`Failed to fetch tenant data - Error: ${tenantData.message}`);
-          return;
-        }
-
-        setTenant({
-          ...tenantData.tenant,
-          totalRentPaid: tenantData.tenant.totalRentPaid || 0,
-          totalUtilityPaid: tenantData.tenant.totalUtilityPaid || 0,
-          totalDepositPaid: tenantData.tenant.totalDepositPaid || 0,
-        });
-
-        if (tenantData.tenant?.propertyId) {
-          const propertyRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": token,
-            },
-            credentials: "include",
-          });
-          const propertyData = await propertyRes.json();
-
-          if (propertyData.success) {
-            setProperty(propertyData.property);
-          } else {
-            setError(propertyData.message || "Failed to fetch property data");
-            console.log(`Failed to fetch property data - Error: ${propertyData.message}`);
-          }
-        }
-
-        await fetchDues(token);
-      } catch (err) {
-        console.error("Tenant fetch error:", err instanceof Error ? err.message : "Unknown error");
-        setError("Failed to connect to the server");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTenantData();
-  }, [userId, csrfToken, fetchCsrfToken]); 
-
   // Fetch dues data
   const fetchDues = useCallback(
     async (token: string) => {
@@ -390,6 +272,124 @@ export default function TenantDashboardPage() {
     },
     [userId, fetchCsrfToken]
   );
+
+  // Check cookies and redirect if unauthorized
+  useEffect(() => {
+    const getCookie = (name: string): string | null => {
+      const value = Cookies.get(name);
+      if (value !== undefined) return value;
+
+      const cookie = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith(`${name}=`));
+      return cookie ? cookie.split("=")[1] : null;
+    };
+
+    const uid = getCookie("userId");
+    const role = getCookie("role") ?? null;
+    const originalRole = getCookie("originalRole") ?? null;
+    const originalUserId = getCookie("originalUserId") ?? null;
+
+    console.log("Cookies retrieved:", {
+      userId: uid ?? "null",
+      role: role ?? "null",
+      originalRole: originalRole ?? "null",
+      originalUserId: originalUserId ?? "null",
+      documentCookie: document.cookie,
+    });
+
+    const isTenant = role === "tenant";
+    const isImpersonating = originalRole === "propertyOwner" && originalUserId !== null;
+
+    if (!uid || (!isTenant && !isImpersonating)) {
+      setError("Unauthorized. Please log in as a tenant or impersonate a tenant.");
+      console.log(
+        `Unauthorized access - userId: ${uid ?? "null"}, role: ${role ?? "null"}, originalRole: ${
+          originalRole ?? "null"
+        }, originalUserId: ${originalUserId ?? "null"}`
+      );
+      setTimeout(() => router.replace("/"), 2000);
+      return;
+    }
+
+    setUserId(uid);
+    if (isImpersonating) {
+      setIsImpersonated(true);
+      console.log(
+        `Impersonation session detected - userId: ${uid}, originalUserId: ${originalUserId}, originalRole: ${originalRole}`
+      );
+    }
+  }, [router]);
+
+  // Fetch tenant and property data
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchTenantData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        let token = csrfToken;
+        if (!token) {
+          token = await fetchCsrfToken();
+          if (!token) {
+            throw new Error("CSRF token not received");
+          }
+        }
+
+        const tenantRes = await fetch("/api/tenant/profile", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": token,
+          },
+          credentials: "include",
+        });
+        const tenantData = await tenantRes.json();
+
+        if (!tenantData.success) {
+          setError(tenantData.message || "Failed to fetch tenant data");
+          console.log(`Failed to fetch tenant data - Error: ${tenantData.message}`);
+          return;
+        }
+
+        setTenant({
+          ...tenantData.tenant,
+          totalRentPaid: tenantData.tenant.totalRentPaid || 0,
+          totalUtilityPaid: tenantData.tenant.totalUtilityPaid || 0,
+          totalDepositPaid: tenantData.tenant.totalDepositPaid || 0,
+        });
+
+        if (tenantData.tenant?.propertyId) {
+          const propertyRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": token,
+            },
+            credentials: "include",
+          });
+          const propertyData = await propertyRes.json();
+
+          if (propertyData.success) {
+            setProperty(propertyData.property);
+          } else {
+            setError(propertyData.message || "Failed to fetch property data");
+            console.log(`Failed to fetch property data - Error: ${propertyData.message}`);
+          }
+        }
+
+        await fetchDues(token);
+      } catch (err) {
+        console.error("Tenant fetch error:", err instanceof Error ? err.message : "Unknown error");
+        setError("Failed to connect to the server");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTenantData();
+  }, [userId, csrfToken, fetchCsrfToken, fetchDues]);
 
   const handleMaintenanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -144,57 +144,6 @@ export default function TenantDetailsPage() {
     }
   }, [csrfToken]);
 
-  // Check cookies and redirect if unauthorized
-  useEffect(() => {
-    const uid = Cookies.get("userId");
-    const userRole = Cookies.get("role");
-    const storedCsrfToken = Cookies.get("csrf-token");
-    if (!uid || userRole !== "propertyOwner") {
-      setError("Unauthorized. Please log in as a property owner.");
-      router.push("/");
-    } else {
-      setUserId(uid);
-      setRole(userRole);
-      if (storedCsrfToken && !csrfToken) {
-        setCsrfToken(storedCsrfToken);
-        console.log("[INFO] Loaded CSRF token from cookie", { csrfToken: storedCsrfToken });
-      }
-    }
-  }, [router, csrfToken]);
-
-  // Initialize with CSRF token and tenant data
-  useEffect(() => {
-    let isMounted = true;
-    const initialize = async () => {
-      if (requestInProgress.current) {
-        console.log("[DEBUG] Skipping initialization, request in progress");
-        return;
-      }
-      try {
-        // Fetch CSRF token if not already set
-        let token = csrfToken;
-        if (!token) {
-          token = await fetchCsrfToken();
-          if (!token || !isMounted) return;
-        }
-
-        // Fetch tenant data and dues only after CSRF token is fetched
-        if (userId && role === "propertyOwner" && token) {
-          await fetchTenantData(token);
-          await fetchDues(token);
-        }
-      } catch {
-        if (!isMounted) return;
-        setError("Failed to initialize. Please try again.");
-        setIsLoading(false);
-      }
-    };
-    initialize();
-    return () => {
-      isMounted = false;
-    };
-  }, [userId, role, csrfToken, fetchCsrfToken]);
-
   // Fetch tenant data
   const fetchTenantData = useCallback(
     async (token: string) => {
@@ -286,9 +235,7 @@ export default function TenantDetailsPage() {
         setProperty(tenantData.property || null);
       } catch {
         console.error("[ERROR] Failed to fetch tenant data");
-        setError(
-          "Failed to connect to the server."
-        );
+        setError("Failed to connect to the server.");
       } finally {
         setIsLoading(false);
         requestInProgress.current = false;
@@ -432,6 +379,57 @@ export default function TenantDetailsPage() {
     },
     [userId, tenantId, role, fetchCsrfToken]
   );
+
+  // Check cookies and redirect if unauthorized
+  useEffect(() => {
+    const uid = Cookies.get("userId");
+    const userRole = Cookies.get("role");
+    const storedCsrfToken = Cookies.get("csrf-token");
+    if (!uid || userRole !== "propertyOwner") {
+      setError("Unauthorized. Please log in as a property owner.");
+      router.push("/");
+    } else {
+      setUserId(uid);
+      setRole(userRole);
+      if (storedCsrfToken && !csrfToken) {
+        setCsrfToken(storedCsrfToken);
+        console.log("[INFO] Loaded CSRF token from cookie", { csrfToken: storedCsrfToken });
+      }
+    }
+  }, [router, csrfToken]);
+
+  // Initialize with CSRF token and tenant data
+  useEffect(() => {
+    let isMounted = true;
+    const initialize = async () => {
+      if (requestInProgress.current) {
+        console.log("[DEBUG] Skipping initialization, request in progress");
+        return;
+      }
+      try {
+        // Fetch CSRF token if not already set
+        let token = csrfToken;
+        if (!token) {
+          token = await fetchCsrfToken();
+          if (!token || !isMounted) return;
+        }
+
+        // Fetch tenant data and dues only after CSRF token is fetched
+        if (userId && role === "propertyOwner" && token) {
+          await fetchTenantData(token);
+          await fetchDues(token);
+        }
+      } catch {
+        if (!isMounted) return;
+        setError("Failed to initialize. Please try again.");
+        setIsLoading(false);
+      }
+    };
+    initialize();
+    return () => {
+      isMounted = false;
+    };
+  }, [userId, role, csrfToken, fetchCsrfToken, fetchTenantData, fetchDues]);
 
   // Update payment modal with dues data based on payment type
   useEffect(() => {
