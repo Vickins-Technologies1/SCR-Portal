@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Users, Pencil, Trash2, Plus, ArrowUpDown, EyeIcon, EyeOffIcon } from "lucide-react";
@@ -9,6 +9,8 @@ import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
 import PaymentModal from "../components/PaymentModal";
+import { debounce } from "lodash";
+import { Property } from "../../../types/property";
 
 interface Tenant {
   _id: string;
@@ -16,7 +18,7 @@ interface Tenant {
   email: string;
   phone: string;
   propertyId: string;
-  unitType: string; // Format: "type-index" (e.g., "Single-0", "1-Bedroom-1")
+  unitType: string;
   price: number;
   deposit: number;
   houseNumber: string;
@@ -28,8 +30,6 @@ interface Tenant {
   totalUtilityPaid?: number;
   totalDepositPaid?: number;
 }
-
-import type { Property } from "../../../types/property";
 
 interface SortConfig {
   key: keyof Tenant | "propertyName";
@@ -44,91 +44,26 @@ interface FilterConfig {
 }
 
 const UNIT_TYPES = [
-  {
-    type: "Single",
-    pricing: {
-      RentCollection: [
-        { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 4500 },
-        { range: [51, 100], fee: 7000 },
-        { range: [101, Infinity], fee: 0 },
-      ],
-      FullManagement: 0,
-    },
-  },
-  {
-    type: "Bedsitter",
-    pricing: {
-      RentCollection: [
-        { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 4500 },
-        { range: [51, 100], fee: 7000 },
-        { range: [101, Infinity], fee: 0 },
-      ],
-      FullManagement: 0,
-    },
-  },
-  {
-    type: "1-Bedroom",
-    pricing: {
-      RentCollection: [
-        { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 4500 },
-        { range: [51, 100], fee: 7000 },
-        { range: [101, Infinity], fee: 0 },
-      ],
-      FullManagement: 0,
-    },
-  },
-  {
-    type: "2-Bedroom",
-    pricing: {
-      RentCollection: [
-        { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 4500 },
-        { range: [51, 100], fee: 7000 },
-        { range: [101, Infinity], fee: 0 },
-      ],
-      FullManagement: 0,
-    },
-  },
-  {
-    type: "3-Bedroom",
-    pricing: {
-      RentCollection: [
-        { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 4500 },
-        { range: [51, 100], fee: 7000 },
-        { range: [101, Infinity], fee: 0 },
-      ],
-      FullManagement: 0,
-    },
-  },
-  {
-    type: "Duplex",
-    pricing: {
-      RentCollection: [
-        { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 4500 },
-        { range: [51, 100], fee: 7000 },
-        { range: [101, Infinity], fee: 0 },
-      ],
-      FullManagement: 0,
-    },
-  },
-  {
-    type: "Commercial",
-    pricing: {
-      RentCollection: [
-        { range: [5, 20], fee: 2500 },
-        { range: [21, 50], fee: 4500 },
-        { range: [51, 100], fee: 7000 },
-        { range: [101, Infinity], fee: 0 },
-      ],
-      FullManagement: 0,
-    },
-  },
+  { type: "Single", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
+  { type: "Bedsitter", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
+  { type: "1-Bedroom", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
+  { type: "2-Bedroom", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
+  { type: "3-Bedroom", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
+  { type: "Duplex", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
+  { type: "Commercial", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
 ];
+
+// Define getManagementFee as a regular function outside the component
+const getManagementFee = (totalUnits: number): number => {
+  const pricing = UNIT_TYPES[0].pricing.RentCollection;
+  for (const tier of pricing) {
+    const [min, max] = tier.range;
+    if (totalUnits >= min && totalUnits <= max) {
+      return tier.fee;
+    }
+  }
+  return 0;
+};
 
 export default function TenantsPage() {
   const router = useRouter();
@@ -167,7 +102,7 @@ export default function TenantsPage() {
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
   const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
-  const [csrfToken, setCsrfToken] = useState("");
+  const [csrfToken, setCsrfToken] = useState<string>("");
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [totalTenants, setTotalTenants] = useState(0);
@@ -177,272 +112,259 @@ export default function TenantsPage() {
     propertyId: "",
     unitType: "",
   });
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
+  // Cache for API responses
+  const cache = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
+  const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+  const pendingRequests = useRef<Map<string, Promise<any>>>(new Map());
 
-  const getManagementFee = (totalUnits: number): number => {
-    const pricing = UNIT_TYPES[0].pricing.RentCollection;
-    for (const tier of pricing) {
-      const [min, max] = tier.range;
-      if (totalUnits >= min && totalUnits <= max) {
-        return tier.fee;
-      }
-    }
-    return 0;
-  };
-
-const calculateTotalUnits = useCallback(
-    (propertyId: string): number => {
-      const property = properties.find((p) => p._id.toString() === propertyId);
-      if (!property) return 0;
-      return property.unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
-    },
-    [properties] // Dependency: properties
-  );
-
-  useEffect(() => {
-    const fetchCsrfToken = async () => {
-      try {
-        const res = await fetch("/api/csrf-token");
-        const data = await res.json();
-        if (data.success) {
-          setCsrfToken(data.csrfToken);
-          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
-        } else {
-          setError("Failed to fetch CSRF token.");
-        }
-      } catch {
-        setError("Failed to connect to server for CSRF token.");
-      }
-    };
-    fetchCsrfToken();
+  const togglePasswordVisibility = useCallback(() => {
+    setShowPassword((prev) => !prev);
   }, []);
 
-  useEffect(() => {
-    const uid = Cookies.get("userId");
-    const userRole = Cookies.get("role");
-    setUserId(uid || null);
-    setRole(userRole || null);
-    if (!uid || userRole !== "propertyOwner") {
-      setError("Unauthorized. Please log in as a property owner.");
-      router.push("/");
-    }
-  }, [router]);
+  // Calculate total units without depending on properties state
+  const calculateTotalUnits = useCallback((propertyId: string, props: Property[]): number => {
+    const property = props.find((p) => p._id.toString() === propertyId);
+    return property ? property.unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0) : 0;
+  }, []);
 
-  const fetchUserData = useCallback(async () => {
-    if (!userId || !role) return;
-    try {
-      const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPaymentStatus(data.user.paymentStatus || "inactive");
-        setWalletBalance(data.user.walletBalance || 0);
-      } else {
-        if (res.status === 404) {
-          setError("User account not found. Please log in again.");
-          Cookies.remove("userId");
-          Cookies.remove("role");
-          router.push("/");
-        } else {
-          setError(data.message || "Failed to fetch user data.");
-        }
+  const fetchWithRetry = useCallback(
+    async (url: string, options: RequestInit, cacheKey: string, retries = 3, backoff = 1000): Promise<any> => {
+      const cached = cache.current.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        return cached.data;
       }
-    } catch {
-      setError("Failed to connect to the server. Please try again later.");
-    }
-  }, [userId, role, router, csrfToken]);
 
-  const fetchTenants = useCallback(async () => {
-    if (!userId) return;
+      if (pendingRequests.current.has(cacheKey)) {
+        return await pendingRequests.current.get(cacheKey);
+      }
+
+      const request = fetch(url, options)
+        .then(async (res) => {
+          if (res.status === 429) {
+            setError("Too many requests. Please try again later.");
+            throw new Error("Rate limit exceeded");
+          }
+          const data = await res.json();
+          if (data.success) {
+            cache.current.set(cacheKey, { data, timestamp: Date.now() });
+            pendingRequests.current.delete(cacheKey);
+            return data;
+          }
+          throw new Error(data.message || "Request failed");
+        })
+        .catch(async (err) => {
+          pendingRequests.current.delete(cacheKey);
+          if (err.message.includes("Rate limit exceeded") && retries > 0) {
+            await new Promise((resolve) => setTimeout(resolve, backoff));
+            return fetchWithRetry(url, options, cacheKey, retries - 1, backoff * 2);
+          }
+          throw err;
+        });
+
+      pendingRequests.current.set(cacheKey, request);
+      return await request;
+    },
+    []
+  );
+
+  const fetchCsrfToken = useCallback(async () => {
+    const cacheKey = "csrf-token";
+    const cachedCsrf = Cookies.get("csrf-token");
+    if (cachedCsrf) {
+      setCsrfToken(cachedCsrf);
+      cache.current.set(cacheKey, { data: { csrfToken: cachedCsrf }, timestamp: Date.now() });
+      return;
+    }
+
+    try {
+      const data = await fetchWithRetry(
+        "/api/csrf-token",
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+        },
+        cacheKey
+      );
+      setCsrfToken(data.csrfToken);
+      Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+    } catch {
+      setError("Failed to fetch CSRF token.");
+    }
+  }, [fetchWithRetry]);
+
+  const fetchInitialData = useCallback(async () => {
+    if (!userId || !csrfToken || role !== "propertyOwner" || isLoading) return;
     setIsLoading(true);
+    const cacheKey = `property-owner-data-${userId}-${page}-${limit}`;
     try {
-      const res = await fetch(`/api/tenants?userId=${encodeURIComponent(userId)}&page=${page}&limit=${limit}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
+      const data = await fetchWithRetry(
+        `/api/property-owner-data?userId=${encodeURIComponent(userId)}&page=${page}&limit=${limit}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "include",
         },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        const normalizedTenants = (data.tenants || []).map((tenant: Tenant) => ({
-          ...tenant,
-          totalRentPaid: tenant.totalRentPaid ?? 0,
-          totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
-          totalDepositPaid: tenant.totalDepositPaid ?? 0,
-        }));
-        setTenants(normalizedTenants);
-        setFilteredTenants(normalizedTenants);
-        setTotalTenants(data.total || 0);
-      } else {
-        setError(data.message || "Failed to fetch tenants.");
-      }
-    } catch {
-      setError("Failed to connect to the server.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId, page, limit, csrfToken]);
-
-const fetchProperties = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        const mappedProperties: Property[] = data.properties.map((p: Property) => ({
+        cacheKey
+      );
+      setPaymentStatus(data.user.paymentStatus || "inactive");
+      setWalletBalance(data.user.walletBalance || 0);
+      setPendingInvoices(data.pendingInvoices || 0);
+      const normalizedTenants = (data.tenants || []).map((tenant: Tenant) => ({
+        ...tenant,
+        totalRentPaid: tenant.totalRentPaid ?? 0,
+        totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
+        totalDepositPaid: tenant.totalDepositPaid ?? 0,
+      }));
+      setTenants(normalizedTenants);
+      setFilteredTenants(normalizedTenants);
+      setTotalTenants(data.totalTenants || 0);
+      setProperties(
+        (data.properties || []).map((p: Property) => ({
           ...p,
           _id: p._id.toString(),
-          unitTypes: p.unitTypes.map((u: Property['unitTypes'][number], index: number) => ({
+          unitTypes: p.unitTypes.map((u, index: number) => ({
             ...u,
             uniqueType: u.uniqueType || `${u.type}-${index}`,
           })),
-          managementFee: typeof p.managementFee === "string" ? parseFloat(p.managementFee) : p.managementFee || getManagementFee(calculateTotalUnits(p._id.toString())),
-          createdAt: p.createdAt ? new Date(p.createdAt) : undefined,
-          updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
-          rentPaymentDate: p.rentPaymentDate ? new Date(p.rentPaymentDate) : undefined,
+          managementFee: typeof p.managementFee === "string" ? parseFloat(p.managementFee) : p.managementFee || getManagementFee(calculateTotalUnits(p._id.toString(), data.properties)),
+          createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : undefined,
+          updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : undefined,
+          rentPaymentDate: p.rentPaymentDate ? new Date(p.rentPaymentDate).toISOString() : undefined,
           ownerId: p.ownerId ?? "",
           address: p.address ?? "",
           status: p.status ?? "",
-        }));
-        setProperties(mappedProperties || []);
+        }))
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("User account not found")) {
+        setError("User account not found. Please log in again.");
+        Cookies.remove("userId");
+        Cookies.remove("role");
+        router.push("/");
       } else {
-        setError(data.message || "Failed to fetch properties.");
+        setError(err instanceof Error ? err.message : "Failed to fetch initial data.");
       }
-    } catch {
-      setError("Failed to connect to the server.");
+    } finally {
+      setIsLoading(false);
     }
-  }, [userId, csrfToken, calculateTotalUnits]);
+  }, [userId, role, csrfToken, page, limit, router, fetchWithRetry]);
 
-
-const fetchInvoiceStatus = useCallback(
-  async (propertyId: string) => {
-    if (!userId || !propertyId) {
-      console.warn("Missing required parameters for fetchInvoiceStatus", { userId, propertyId });
-      setError("Missing required parameters to check invoice status.");
-      return null;
-    }
-    try {
-      const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(propertyId)}&unitType=All%20Units`;
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
-        return data.status;
+  const fetchInvoiceStatus = useCallback(
+    async (propertyId: string) => {
+      if (!userId || !propertyId || !csrfToken) {
+        setError("Missing required parameters to check invoice status.");
+        return null;
       }
-      setError(data.message || "Failed to fetch invoice status.");
-      return null;
-    } catch (error) {
-      console.error("Error in fetchInvoiceStatus", {
-        message: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      setError("Failed to connect to the server while checking invoice status.");
-      return null;
-    }
-  },
-  [userId, csrfToken]
-);
-
-  const fetchPendingInvoices = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`/api/pending-invoices`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPendingInvoices(data.pendingInvoices || 0);
-      } else {
-        setPendingInvoices(0);
-        setError(data.message || "Failed to fetch pending invoices.");
+      const cacheKey = `invoice-status-${userId}-${propertyId}`;
+      try {
+        const data = await fetchWithRetry(
+          `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(propertyId)}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+            },
+            credentials: "include",
+          },
+          cacheKey
+        );
+        if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
+          return data.status;
+        }
+        setError(data.message || "Failed to fetch invoice status.");
+        return null;
+      } catch {
+        setError("Failed to connect to the server while checking invoice status.");
+        return null;
       }
-    } catch {
-      setPendingInvoices(0);
-      setError("Failed to connect to the server while fetching pending invoices.");
-    }
-  }, [userId, csrfToken]);
+    },
+    [userId, csrfToken, fetchWithRetry]
+  );
 
   useEffect(() => {
-    if (userId && role === "propertyOwner" && csrfToken) {
-      Promise.all([
-        fetchUserData(),
-        fetchTenants(),
-        fetchProperties(),
-        fetchPendingInvoices(),
-      ]).catch((error) => {
-        console.error("Error fetching initial data", {
-          message: error instanceof Error ? error.message : "Unknown error",
-        });
-        setError("Failed to load initial data. Please try again.");
-      });
+    if (isInitialized) return;
+    const uid = Cookies.get("userId");
+    const userRole = Cookies.get("role");
+    if (!uid || userRole !== "propertyOwner") {
+      setError("Unauthorized. Please log in as a property owner.");
+      Cookies.remove("userId");
+      Cookies.remove("role");
+      router.push("/");
+      return;
     }
-  }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
+    setUserId(uid);
+    setRole(userRole);
+    setIsInitialized(true);
+  }, [router, isInitialized]);
 
   useEffect(() => {
-    const applyFilters = () => {
-      let filtered = [...tenants];
-      if (filters.tenantName) {
-        filtered = filtered.filter((tenant) =>
-          tenant.name.toLowerCase().includes(filters.tenantName.toLowerCase())
-        );
-      }
-      if (filters.tenantEmail) {
-        filtered = filtered.filter((tenant) =>
-          tenant.email.toLowerCase().includes(filters.tenantEmail.toLowerCase())
-        );
-      }
-      if (filters.propertyId) {
-        filtered = filtered.filter((tenant) => tenant.propertyId === filters.propertyId);
-      }
-      if (filters.unitType) {
-        filtered = filtered.filter((tenant) => tenant.unitType.split('-')[0] === filters.unitType);
-      }
-      filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setFilteredTenants(filtered);
-      setTotalTenants(filtered.length);
+    if (!isInitialized || !userId || !role || csrfToken) return;
+    fetchCsrfToken();
+  }, [isInitialized, userId, role, csrfToken, fetchCsrfToken]);
+
+  useEffect(() => {
+    if (!isInitialized || !userId || role !== "propertyOwner" || !csrfToken) return;
+    let isMounted = true;
+    fetchInitialData().then(() => {
+      if (isMounted) setIsLoading(false);
+    });
+    return () => {
+      isMounted = false;
     };
-    applyFilters();
-  }, [filters, tenants]);
+  }, [isInitialized, userId, role, csrfToken, page, fetchInitialData]);
 
-  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const applyFilters = useCallback((newFilters: FilterConfig, currentTenants: Tenant[]) => {
+    let filtered = [...currentTenants];
+    if (newFilters.tenantName) {
+      filtered = filtered.filter((tenant) =>
+        tenant.name.toLowerCase().includes(newFilters.tenantName.toLowerCase())
+      );
+    }
+    if (newFilters.tenantEmail) {
+      filtered = filtered.filter((tenant) =>
+        tenant.email.toLowerCase().includes(newFilters.tenantEmail.toLowerCase())
+      );
+    }
+    if (newFilters.propertyId) {
+      filtered = filtered.filter((tenant) => tenant.propertyId === newFilters.propertyId);
+    }
+    if (newFilters.unitType) {
+      filtered = filtered.filter((tenant) => tenant.unitType.split('-')[0] === newFilters.unitType);
+    }
+    filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setFilteredTenants(filtered);
+    setTotalTenants(filtered.length);
+  }, []);
+
+  const debouncedApplyFilters = useMemo(
+    () => debounce((newFilters: FilterConfig) => applyFilters(newFilters, tenants), 500),
+    [applyFilters, tenants]
+  );
+
+  useEffect(() => {
+    debouncedApplyFilters(filters);
+    return () => {
+      debouncedApplyFilters.cancel();
+    };
+  }, [filters, debouncedApplyFilters]);
+
+  const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFilters((prev) => ({ ...prev, [name]: value }));
     setPage(1);
-  };
+  }, []);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setFilters({ tenantName: "", tenantEmail: "", propertyId: "", unitType: "" });
     setPage(1);
-  };
+  }, []);
 
   const resetForm = useCallback(() => {
     setTenantName("");
@@ -494,7 +416,7 @@ const fetchInvoiceStatus = useCallback(
       setTotalDepositPaid(pendingTenantData.totalDepositPaid?.toString() || "");
     }
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, pendingTenantData, resetForm, pendingInvoices]);
+  }, [paymentStatus, walletBalance, pendingInvoices, pendingTenantData, resetForm]);
 
   const openEditModal = useCallback((tenant: Tenant) => {
     if (paymentStatus === null || walletBalance === null) {
@@ -548,7 +470,8 @@ const fetchInvoiceStatus = useCallback(
       const data = await res.json();
       if (data.success) {
         setSuccessMessage("Tenant deleted successfully!");
-        fetchTenants();
+        cache.current.delete(`property-owner-data-${userId}-${page}-${limit}`);
+        await fetchInitialData();
       } else {
         setError(data.message || "Failed to delete tenant.");
       }
@@ -559,7 +482,7 @@ const fetchInvoiceStatus = useCallback(
       setIsDeleteModalOpen(false);
       setTenantToDelete(null);
     }
-  }, [tenantToDelete, fetchTenants, csrfToken]);
+  }, [tenantToDelete, fetchInitialData, csrfToken, userId, page, limit]);
 
   const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
@@ -633,9 +556,8 @@ const fetchInvoiceStatus = useCallback(
           setIsModalOpen(false);
           setPendingTenantData(null);
           resetForm();
-          fetchTenants();
-          fetchUserData();
-          fetchPendingInvoices();
+          cache.current.delete(`property-owner-data-${userId}-${page}-${limit}`);
+          await fetchInitialData();
         } else {
           if (data.message.includes("Cannot add more tenants until the invoice")) {
             setPendingTenantData(tenantData);
@@ -651,62 +573,156 @@ const fetchInvoiceStatus = useCallback(
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm, csrfToken]
+    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, fetchInitialData, resetForm, validateForm, csrfToken]
   );
 
-  const handleSort = useCallback((key: keyof Tenant | "propertyName") => {
-    setSortConfig((prev) => {
-      const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      const sortedTenants = [...filteredTenants].sort((a, b) => {
-        if (key === "price" || key === "deposit" || key === "totalRentPaid" || key === "totalUtilityPaid" || key === "totalDepositPaid") {
-          const aVal = (a[key] ?? 0) as number;
-          const bVal = (b[key] ?? 0) as number;
-          return direction === "asc" ? aVal - bVal : bVal - aVal;
+  const debouncedHandleSort = useMemo(
+    () =>
+      debounce((key: keyof Tenant | "propertyName") => {
+        setSortConfig((prev) => {
+          const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
+          const sortedTenants = [...filteredTenants].sort((a, b) => {
+            if (key === "price" || key === "totalRentPaid" || key === "totalUtilityPaid" || key === "totalDepositPaid") {
+              const aVal = (a[key] ?? 0) as number;
+              const bVal = (b[key] ?? 0) as number;
+              return direction === "asc" ? aVal - bVal : bVal - aVal;
+            }
+            if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
+              return direction === "asc"
+                ? new Date(a[key] as string).getTime() - new Date(b[key] as string).getTime()
+                : new Date(b[key] as string).getTime() - new Date(a[key] as string).getTime();
+            }
+            if (key === "propertyName") {
+              const aName = properties.find((p) => p._id.toString() === a.propertyId)?.name || "";
+              const bName = properties.find((p) => p._id.toString() === b.propertyId)?.name || "";
+              return direction === "asc" ? aName.localeCompare(bName) : bName.localeCompare(aName);
+            }
+            const aVal = (a[key] ?? "").toString();
+            const bVal = (b[key] ?? "").toString();
+            return direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+          });
+          setFilteredTenants(sortedTenants);
+          return { key, direction };
+        });
+      }, 300),
+    [filteredTenants, properties]
+  );
+
+  const getSortIcon = useCallback(
+    (key: keyof Tenant | "propertyName") => {
+      if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
+      return sortConfig.direction === "asc" ? (
+        <span className="inline ml-1">↑</span>
+      ) : (
+        <span className="inline ml-1">↓</span>
+      );
+    },
+    [sortConfig]
+  );
+
+  const handleTenantClick = useCallback(
+    (tenantId: string) => {
+      if (!csrfToken) {
+        setError("CSRF token is missing. Please refresh the page.");
+        return;
+      }
+      router.push(`/property-owner-dashboard/tenants/${tenantId}`);
+    },
+    [csrfToken, router]
+  );
+
+  const handleUnitTypeChange = useCallback(
+    async (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const uniqueType = e.target.value;
+      setSelectedUnitType(uniqueType);
+      const selectedProperty = properties.find((p) => p._id.toString() === selectedPropertyId);
+      const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === uniqueType);
+      if (unit) {
+        setPrice(unit.price.toString());
+        setDeposit(unit.deposit.toString());
+        setFormErrors((prev) => ({
+          ...prev,
+          selectedUnitType: uniqueType ? undefined : "Unit type is required",
+          price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
+          deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
+        }));
+        if (tenants.length >= 3 && modalMode === "add") {
+          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId);
+          if (invoiceStatus === "pending") {
+            const tenantData: Partial<TenantRequest> = {
+              name: tenantName,
+              email: tenantEmail,
+              phone: tenantPhone,
+              password: tenantPassword,
+              propertyId: selectedPropertyId,
+              unitType: uniqueType,
+              price: parseFloat(price) || unit.price,
+              deposit: parseFloat(deposit) || unit.deposit,
+              houseNumber,
+              leaseStartDate,
+              leaseEndDate,
+              totalRentPaid: parseFloat(totalRentPaid) || 0,
+              totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
+              totalDepositPaid: parseFloat(totalDepositPaid) || 0,
+              role: "tenant",
+              ownerId: userId || "",
+            };
+            setPendingTenantData(tenantData);
+            setError(
+              `Cannot add more tenants until the pending invoice for property ${selectedProperty?.name || "unknown"} is paid.`
+            );
+            setIsModalOpen(false);
+            setIsPaymentPromptOpen(true);
+          } else {
+            setPendingTenantData(null);
+            setIsPaymentPromptOpen(false);
+            setError(null);
+          }
+        } else {
+          setPendingTenantData(null);
+          setIsPaymentPromptOpen(false);
+          setError(null);
         }
+      } else {
+        setPrice("");
+        setDeposit("");
+        setFormErrors((prev) => ({
+          ...prev,
+          selectedUnitType: uniqueType ? undefined : "Unit type is required",
+          price: undefined,
+          deposit: undefined,
+        }));
+        setPendingTenantData(null);
+        setIsPaymentPromptOpen(false);
+        setError("Selected unit type not found.");
+      }
+    },
+    [
+      properties,
+      selectedPropertyId,
+      tenants.length,
+      modalMode,
+      tenantName,
+      tenantEmail,
+      tenantPhone,
+      tenantPassword,
+      price,
+      deposit,
+      houseNumber,
+      leaseStartDate,
+      leaseEndDate,
+      totalRentPaid,
+      totalUtilityPaid,
+      totalDepositPaid,
+      userId,
+      fetchInvoiceStatus,
+    ]
+  );
 
-        if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
-          return direction === "asc"
-            ? new Date(a[key] as string).getTime() - new Date(b[key] as string).getTime()
-            : new Date(b[key] as string).getTime() - new Date(a[key] as string).getTime();
-        }
-
-        if (key === "propertyName") {
-          const aName = properties.find((p) => p._id.toString() === a.propertyId)?.name || "";
-          const bName = properties.find((p) => p._id.toString() === b.propertyId)?.name || "";
-          return direction === "asc"
-            ? aName.localeCompare(bName)
-            : bName.localeCompare(aName);
-        }
-
-        const aVal = (a[key] ?? "").toString();
-        const bVal = (b[key] ?? "").toString();
-
-        return direction === "asc"
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
-      });
-
-      setFilteredTenants(sortedTenants);
-      return { key, direction };
-    });
-  }, [filteredTenants, properties]);
-
-  const getSortIcon = (key: keyof Tenant | "propertyName") => {
-    if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-    return sortConfig.direction === "asc" ? (
-      <span className="inline ml-1">↑</span>
-    ) : (
-      <span className="inline ml-1">↓</span>
-    );
-  };
-
-  const handleTenantClick = useCallback((tenantId: string) => {
-    if (!csrfToken) {
-      setError("CSRF token is missing. Please refresh the page.");
-      return;
-    }
-    router.push(`/property-owner-dashboard/tenants/${tenantId}`);
-  }, [csrfToken, router]);
+  const debouncedSetPage = useMemo(
+    () => debounce((newPage: number) => setPage(newPage), 300),
+    []
+  );
 
   const totalPages = Math.ceil(totalTenants / limit);
 
@@ -738,7 +754,7 @@ const fetchInvoiceStatus = useCallback(
           )}
           {pendingInvoices > 0 && (
             <div className="bg-blue-100 text-blue-700 p-4 mb-4 rounded-lg shadow">
-              You have {pendingInvoices} pending invoice{pendingInvoices === 1 ? '' : 's'}. Please settle them to add more tenants.
+              You have {pendingInvoices} pending invoice{pendingInvoices === 1 ? "" : "s"}. Please settle them to add more tenants.
             </div>
           )}
           <div className="mb-6 bg-white p-4 rounded-lg shadow">
@@ -809,6 +825,11 @@ const fetchInvoiceStatus = useCallback(
               {successMessage}
             </div>
           )}
+          {error && (
+            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+              {error}
+            </div>
+          )}
           {isLoading ? (
             <div className="text-center text-gray-600">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
@@ -823,158 +844,108 @@ const fetchInvoiceStatus = useCallback(
               <table className="min-w-full table-auto text-sm md:text-base">
                 <thead className="bg-gray-200">
                   <tr>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("name")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("name")}>
                       Name {getSortIcon("name")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("email")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("email")}>
                       Email {getSortIcon("email")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("phone")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("phone")}>
                       Phone {getSortIcon("phone")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("propertyName")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("propertyName")}>
                       Property {getSortIcon("propertyName")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("unitType")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("unitType")}>
                       Unit {getSortIcon("unitType")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("price")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("price")}>
                       Price {getSortIcon("price")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("deposit")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("deposit")}>
                       Deposit {getSortIcon("deposit")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("houseNumber")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("houseNumber")}>
                       House # {getSortIcon("houseNumber")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("leaseStartDate")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("leaseStartDate")}>
                       Lease Start {getSortIcon("leaseStartDate")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("leaseEndDate")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("leaseEndDate")}>
                       Lease End {getSortIcon("leaseEndDate")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("totalRentPaid")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("totalRentPaid")}>
                       Total Rent Paid {getSortIcon("totalRentPaid")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("totalUtilityPaid")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("totalUtilityPaid")}>
                       Total Utility Paid {getSortIcon("totalUtilityPaid")}
                     </th>
-                    <th
-                      className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
-                      onClick={() => handleSort("totalDepositPaid")}
-                    >
+                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("totalDepositPaid")}>
                       Total Deposit Paid {getSortIcon("totalDepositPaid")}
                     </th>
                     <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTenants
-                    .slice((page - 1) * limit, page * limit)
-                    .map((t) => {
-                      const [baseUnitType, index] = t.unitType.split('-');
-                      return (
-                        <tr
-                          key={t._id}
-                          className="border-t hover:bg-gray-50 transition cursor-pointer"
-                          onClick={() => handleTenantClick(t._id)}
-                        >
-                          <td className="px-4 py-3">{t.name}</td>
-                          <td className="px-4 py-3">{t.email}</td>
-                          <td className="px-4 py-3">{t.phone}</td>
-                          <td className="px-4 py-3">
-                            {properties.find((p) => p._id.toString() === t.propertyId)?.name || "N/A"}
-                          </td>
-                          <td className="px-4 py-3">{`${baseUnitType} #${parseInt(index) + 1}`}</td>
-                          <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
-                          <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
-                          <td className="px-4 py-3">{t.houseNumber}</td>
-                          <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
-                          <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
-                          <td className="px-4 py-3">Ksh {(t.totalRentPaid ?? 0).toFixed(2)}</td>
-                          <td className="px-4 py-3">Ksh {(t.totalUtilityPaid ?? 0).toFixed(2)}</td>
-                          <td className="px-4 py-3">Ksh {(t.totalDepositPaid ?? 0).toFixed(2)}</td>
-                          <td
-                            className="px-4 py-3 flex gap-2"
-                            onClick={(e) => e.stopPropagation()}
+                  {filteredTenants.slice((page - 1) * limit, page * limit).map((t) => {
+                    const [baseUnitType, index] = t.unitType.split("-");
+                    return (
+                      <tr
+                        key={t._id}
+                        className="border-t hover:bg-gray-50 transition cursor-pointer"
+                        onClick={() => handleTenantClick(t._id)}
+                      >
+                        <td className="px-4 py-3">{t.name}</td>
+                        <td className="px-4 py-3">{t.email}</td>
+                        <td className="px-4 py-3">{t.phone}</td>
+                        <td className="px-4 py-3">{properties.find((p) => p._id.toString() === t.propertyId)?.name || "N/A"}</td>
+                        <td className="px-4 py-3">{`${baseUnitType} #${parseInt(index, 10) + 1}`}</td>
+                        <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
+                        <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
+                        <td className="px-4 py-3">{t.houseNumber}</td>
+                        <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">Ksh {(t.totalRentPaid ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-3">Ksh {(t.totalUtilityPaid ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-3">Ksh {(t.totalDepositPaid ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => openEditModal(t)}
+                            className="text-[#012a4a] hover:text-[#014a7a] transition"
+                            title="Edit Tenant"
+                            aria-label={`Edit tenant ${t.name}`}
                           >
-                            <button
-                              onClick={() => openEditModal(t)}
-                              className="text-[#012a4a] hover:text-[#014a7a] transition"
-                              title="Edit Tenant"
-                              aria-label={`Edit tenant ${t.name}`}
-                            >
-                              <Pencil className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(t._id)}
-                              className="text-red-600 hover:text-red-800 transition"
-                              title="Delete Tenant"
-                              aria-label={`Delete tenant ${t.name}`}
-                            >
-                              <Trash2 className="h-5 w-5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            <Pencil className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(t._id)}
+                            className="text-red-600 hover:text-red-800 transition"
+                            title="Delete Tenant"
+                            aria-label={`Delete tenant ${t.name}`}
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
           <div className="mt-4 flex justify-between items-center">
-            <div>
-              Showing {Math.min(filteredTenants.length, limit)} of {totalTenants} tenants
-            </div>
+            <div>Showing {Math.min(filteredTenants.length, limit)} of {totalTenants} tenants</div>
             <div className="flex gap-2">
               <button
-                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                onClick={() => debouncedSetPage(Math.max(page - 1, 1))}
                 disabled={page === 1}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
               >
                 Previous
               </button>
-              <span>
-                Page {page} of {totalPages}
-              </span>
+              <span>Page {page} of {totalPages}</span>
               <button
-                onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                onClick={() => debouncedSetPage(Math.min(page + 1, totalPages))}
                 disabled={page === totalPages}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
               >
@@ -1013,9 +984,7 @@ const fetchInvoiceStatus = useCallback(
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantName ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.tenantName && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantName}</p>
-                )}
+                {formErrors.tenantName && <p className="text-red-500 text-xs mt-1">{formErrors.tenantName}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Email</label>
@@ -1037,9 +1006,7 @@ const fetchInvoiceStatus = useCallback(
                   type="email"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantEmail ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.tenantEmail && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantEmail}</p>
-                )}
+                {formErrors.tenantEmail && <p className="text-red-500 text-xs mt-1">{formErrors.tenantEmail}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Phone</label>
@@ -1060,9 +1027,7 @@ const fetchInvoiceStatus = useCallback(
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPhone ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.tenantPhone && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>
-                )}
+                {formErrors.tenantPhone && <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>}
               </div>
               {modalMode === "add" && (
                 <div>
@@ -1088,16 +1053,10 @@ const fetchInvoiceStatus = useCallback(
                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? (
-                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
-                      ) : (
-                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
-                      )}
+                      {showPassword ? <EyeOffIcon className="h-5 w-5" aria-hidden="true" /> : <EyeIcon className="h-5 w-5" aria-hidden="true" />}
                     </button>
                   </div>
-                  {formErrors.tenantPassword && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>
-                  )}
+                  {formErrors.tenantPassword && <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>}
                 </div>
               )}
               {modalMode === "edit" && (
@@ -1117,11 +1076,7 @@ const fetchInvoiceStatus = useCallback(
                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? (
-                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
-                      ) : (
-                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
-                      )}
+                      {showPassword ? <EyeOffIcon className="h-5 w-5" aria-hidden="true" /> : <EyeIcon className="h-5 w-5" aria-hidden="true" />}
                     </button>
                   </div>
                 </div>
@@ -1149,84 +1104,18 @@ const fetchInvoiceStatus = useCallback(
                   <option value="">Select Property</option>
                   {properties.map((p) => (
                     <option key={p._id.toString()} value={p._id.toString()}>
-                      {p.name} (Total Units: {calculateTotalUnits(p._id.toString())}, Fee: Ksh {p.managementFee}/mo)
+                      {p.name} (Total Units: {calculateTotalUnits(p._id.toString(), properties)}, Fee: Ksh {p.managementFee}/mo)
                     </option>
                   ))}
                 </select>
-                {formErrors.selectedPropertyId && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.selectedPropertyId}</p>
-                )}
+                {formErrors.selectedPropertyId && <p className="text-red-500 text-xs mt-1">{formErrors.selectedPropertyId}</p>}
               </div>
               {selectedPropertyId && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Unit Type</label>
                   <select
                     value={selectedUnitType}
-                    onChange={async (e) => {
-                      const uniqueType = e.target.value;
-                      setSelectedUnitType(uniqueType);
-                      const selectedProperty = properties.find((p) => p._id.toString() === selectedPropertyId);
-                      const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === uniqueType);
-                      if (unit) {
-                        setPrice(unit.price.toString());
-                        setDeposit(unit.deposit.toString());
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
-                          price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
-                          deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
-                        }));
-                        if (tenants.length >= 3 && modalMode === "add") {
-                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId);
-                          if (invoiceStatus === "pending") {
-                            const tenantData: Partial<TenantRequest> = {
-                              name: tenantName,
-                              email: tenantEmail,
-                              phone: tenantPhone,
-                              password: tenantPassword,
-                              propertyId: selectedPropertyId,
-                              unitType: uniqueType,
-                              price: parseFloat(price) || unit.price,
-                              deposit: parseFloat(deposit) || unit.deposit,
-                              houseNumber,
-                              leaseStartDate,
-                              leaseEndDate,
-                              totalRentPaid: parseFloat(totalRentPaid) || 0,
-                              totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
-                              totalDepositPaid: parseFloat(totalDepositPaid) || 0,
-                              role: "tenant",
-                              ownerId: userId || "",
-                            };
-                            setPendingTenantData(tenantData);
-                            setError(
-                              `Cannot add more tenants until the pending invoice for property ${selectedProperty?.name || "unknown"} is paid.`
-                            );
-                            setIsModalOpen(false);
-                            setIsPaymentPromptOpen(true);
-                          } else {
-                            setPendingTenantData(null);
-                            setIsPaymentPromptOpen(false);
-                            setError(null);
-                          }
-                        } else {
-                          setPendingTenantData(null);
-                          setIsPaymentPromptOpen(false);
-                          setError(null);
-                        }
-                      } else {
-                        setPrice("");
-                        setDeposit("");
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
-                          price: undefined,
-                          deposit: undefined,
-                        }));
-                        setPendingTenantData(null);
-                        setIsPaymentPromptOpen(false);
-                        setError("Selected unit type not found.");
-                      }
-                    }}
+                    onChange={handleUnitTypeChange}
                     required
                     className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"}`}
                   >
@@ -1239,9 +1128,7 @@ const fetchInvoiceStatus = useCallback(
                         </option>
                       ))}
                   </select>
-                  {formErrors.selectedUnitType && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>
-                  )}
+                  {formErrors.selectedUnitType && <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>}
                   {selectedPropertyId && (
                     <p className="text-sm text-gray-600 mt-1">
                       Property Management Fee: Ksh {properties.find((p) => p._id.toString() === selectedPropertyId)?.managementFee || 0}/mo
@@ -1257,9 +1144,7 @@ const fetchInvoiceStatus = useCallback(
                   readOnly
                   className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.price ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.price && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
-                )}
+                {formErrors.price && <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Deposit (Ksh)</label>
@@ -1269,9 +1154,7 @@ const fetchInvoiceStatus = useCallback(
                   readOnly
                   className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.deposit ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.deposit && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.deposit}</p>
-                )}
+                {formErrors.deposit && <p className="text-red-500 text-xs mt-1">{formErrors.deposit}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">House Number</label>
@@ -1288,9 +1171,7 @@ const fetchInvoiceStatus = useCallback(
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.houseNumber ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.houseNumber && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>
-                )}
+                {formErrors.houseNumber && <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Lease Start Date</label>
@@ -1311,9 +1192,7 @@ const fetchInvoiceStatus = useCallback(
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.leaseStartDate && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>
-                )}
+                {formErrors.leaseStartDate && <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Lease End Date</label>
@@ -1334,9 +1213,7 @@ const fetchInvoiceStatus = useCallback(
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.leaseEndDate && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
-                )}
+                {formErrors.leaseEndDate && <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Total Rent Paid (Ksh)</label>
@@ -1356,9 +1233,7 @@ const fetchInvoiceStatus = useCallback(
                   step="0.01"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalRentPaid ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.totalRentPaid && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.totalRentPaid}</p>
-                )}
+                {formErrors.totalRentPaid && <p className="text-red-500 text-xs mt-1">{formErrors.totalRentPaid}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Total Utility Paid (Ksh)</label>
@@ -1378,9 +1253,7 @@ const fetchInvoiceStatus = useCallback(
                   step="0.01"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalUtilityPaid ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.totalUtilityPaid && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.totalUtilityPaid}</p>
-                )}
+                {formErrors.totalUtilityPaid && <p className="text-red-500 text-xs mt-1">{formErrors.totalUtilityPaid}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Total Deposit Paid (Ksh)</label>
@@ -1400,9 +1273,7 @@ const fetchInvoiceStatus = useCallback(
                   step="0.01"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalDepositPaid ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.totalDepositPaid && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.totalDepositPaid}</p>
-                )}
+                {formErrors.totalDepositPaid && <p className="text-red-500 text-xs mt-1">{formErrors.totalDepositPaid}</p>}
               </div>
               <div className="flex flex-col sm:flex-row justify-end gap-3">
                 <button
@@ -1420,37 +1291,22 @@ const fetchInvoiceStatus = useCallback(
                 </button>
                 <button
                   type="submit"
-                  disabled={
-                    isLoading ||
-                    Object.values(formErrors).some((v) => v !== undefined) ||
-                    !selectedPropertyId ||
-                    !selectedUnitType
-                  }
-                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${isLoading ||
-                      Object.values(formErrors).some((v) => v !== undefined) ||
-                      !selectedPropertyId ||
-                      !selectedUnitType
+                  disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined) || !selectedPropertyId || !selectedUnitType}
+                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
+                    isLoading || Object.values(formErrors).some((v) => v !== undefined) || !selectedPropertyId || !selectedUnitType
                       ? "bg-gray-400 cursor-not-allowed"
                       : "bg-[#012a4a] hover:bg-[#014a7a]"
-                    }`}
+                  }`}
                   aria-label={modalMode === "add" ? "Add tenant" : "Update tenant"}
                 >
-                  {isLoading && (
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                  )}
+                  {isLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>}
                   {modalMode === "add" ? "Add Tenant" : "Update Tenant"}
                 </button>
               </div>
             </form>
           </Modal>
-          <Modal
-            title="Confirm Delete"
-            isOpen={isDeleteModalOpen}
-            onClose={() => setIsDeleteModalOpen(false)}
-          >
-            <p className="mb-6 text-gray-700 text-sm sm:text-base">
-              Are you sure you want to delete this tenant? This action cannot be undone.
-            </p>
+          <Modal title="Confirm Delete" isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}>
+            <p className="mb-6 text-gray-700 text-sm sm:text-base">Are you sure you want to delete this tenant? This action cannot be undone.</p>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <button
                 onClick={() => setIsDeleteModalOpen(false)}
@@ -1465,9 +1321,7 @@ const fetchInvoiceStatus = useCallback(
                 disabled={isLoading}
                 aria-label="Confirm delete tenant"
               >
-                {isLoading && (
-                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                )}
+                {isLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>}
                 Delete
               </button>
             </div>
@@ -1482,9 +1336,8 @@ const fetchInvoiceStatus = useCallback(
             onSuccess={() => {
               setSuccessMessage("Payment processed successfully!");
               setPendingTenantData(null);
-              fetchUserData();
-              fetchPendingInvoices();
-              fetchTenants();
+              cache.current.delete(`property-owner-data-${userId}-${page}-${limit}`);
+              fetchInitialData();
               setIsPaymentPromptOpen(false);
               setIsModalOpen(true);
               setError(null);
@@ -1502,9 +1355,9 @@ const fetchInvoiceStatus = useCallback(
         </main>
       </div>
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
         body {
-          font-family: 'Inter', sans-serif;
+          font-family: "Inter", sans-serif;
         }
       `}
       </style>

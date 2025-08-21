@@ -236,7 +236,6 @@ export async function POST(request: NextRequest) {
       "leaseEndDate",
     ];
 
-    // Password is required for new tenants
     if (!requestData.password) {
       logger.warn("Validation failed - Missing password for new tenant");
       return NextResponse.json(
@@ -369,18 +368,49 @@ export async function POST(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
     logger.debug("Connected to database", { database: "rentaldb", collection: "tenants" });
 
-    const property = await db.collection<Property>("properties").findOne({
-      _id: new ObjectId(requestData.propertyId!),
-      ownerId: userId,
-    });
+    // Combine user and property validation into a single aggregate query
+    const [validationResult] = await db.collection("propertyOwners").aggregate([
+      {
+        $match: { _id: new ObjectId(userId) },
+      },
+      {
+        $lookup: {
+          from: "properties",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$ownerId", userId] },
+                    { $eq: ["$_id", new ObjectId(requestData.propertyId!)] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "properties",
+        },
+      },
+      {
+        $unwind: "$properties",
+      },
+      {
+        $project: {
+          property: "$properties",
+        },
+      },
+    ]).toArray();
 
-    if (!property) {
-      logger.warn("Validation failed - Property not found or not owned by user", { propertyId: requestData.propertyId });
+    if (!validationResult) {
+      logger.warn("Validation failed - User or property not found", { userId, propertyId: requestData.propertyId });
       return NextResponse.json(
-        { success: false, message: "Property not found or not owned by user" },
+        { success: false, message: "User or property not found or not owned by user" },
         { status: 404 }
       );
     }
+
+    const { property } = validationResult;
 
     if (property.requiresAdminApproval) {
       logger.warn("Property requires admin approval", { propertyId: requestData.propertyId });
@@ -390,11 +420,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const unit = property.unitTypes.find((u) => u.uniqueType === requestData.unitType);
+    const unit = property.unitTypes.find((u: UnitType) => u.uniqueType === requestData.unitType);
     if (!unit || unit.quantity <= 0) {
       logger.warn("Validation failed - Unit type not found or no available units", {
         unitType: requestData.unitType,
-        availableUnitTypes: property.unitTypes.map((u) => u.uniqueType),
+        availableUnitTypes: property.unitTypes.map((u: UnitType) => u.uniqueType),
       });
       return NextResponse.json(
         { success: false, message: "Unit type not found or no available units" },
@@ -415,19 +445,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await db.collection("propertyOwners").findOne({ _id: new ObjectId(userId) });
-    if (!user) {
-      logger.warn("User not found", { userId });
-      return NextResponse.json(
-        { success: false, message: "User not found" },
-        { status: 404 }
-      );
-    }
-
+    // Check tenant count and invoice status in a single query if needed
     const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
     logger.debug("Tenant count", { userId, count: tenantCount });
 
-    // Check invoice status for the entire property if adding 4th tenant or more
     if (tenantCount >= 3) {
       const propertyInvoice = await db.collection("invoices").findOne({
         userId,
