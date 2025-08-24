@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
 
+// Define Invoice interface for consistent typing
+interface Invoice {
+  _id: ObjectId;
+  userId: string;
+  propertyId: string;
+  amount: number;
+  status: "pending" | "completed" | "failed";
+  reference: string;
+  createdAt: Date;
+  updatedAt: Date;
+  expiresAt: Date;
+  description: string;
+}
+
 export async function PATCH(request: NextRequest) {
   const startTime = Date.now();
 
@@ -20,16 +34,20 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (role !== "admin") {
+    if (!["propertyOwner", "admin"].includes(role || "")) {
       console.log("Unauthorized role:", role);
       return NextResponse.json(
-        { success: false, message: "Unauthorized: Only admins can update invoice status" },
+        {
+          success: false,
+          message: "Unauthorized: Only property owners or admins can update invoices",
+        },
         { status: 401 }
       );
     }
 
-    const { invoiceId, status } = await request.json();
-    console.log("Request body:", { invoiceId, status });
+    const body = await request.json();
+    const { invoiceId, amount, status, description } = body;
+    console.log("Request body:", { invoiceId, amount, status, description });
 
     if (!invoiceId || !ObjectId.isValid(invoiceId)) {
       console.log("Invalid or missing invoice ID:", invoiceId);
@@ -39,10 +57,26 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (!["pending", "completed", "overdue"].includes(status)) {
+    if (!amount || typeof amount !== "number" || amount <= 0) {
+      console.log("Invalid amount:", amount);
+      return NextResponse.json(
+        { success: false, message: "Valid positive amount is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!status || !["pending", "completed", "failed"].includes(status)) {
       console.log("Invalid status:", status);
       return NextResponse.json(
-        { success: false, message: "Valid status (pending, completed, overdue) is required" },
+        { success: false, message: "Valid status (pending, completed, failed) is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!description || typeof description !== "string") {
+      console.log("Invalid description:", description);
+      return NextResponse.json(
+        { success: false, message: "Valid description is required" },
         { status: 400 }
       );
     }
@@ -50,31 +84,76 @@ export async function PATCH(request: NextRequest) {
     const { db } = await connectToDatabase();
     console.log("Connected to MongoDB");
 
-    const result = await db
-      .collection("invoices")
-      .updateOne(
-        { _id: new ObjectId(invoiceId) },
-        { $set: { status, updatedAt: new Date() } }
-      );
-    console.log("Update result:", result);
+    const existingInvoice = await db.collection<Invoice>("invoices").findOne({
+      _id: new ObjectId(invoiceId),
+      userId: role === "admin" ? { $exists: true } : userId, // Admins can update any invoice
+    });
 
-    if (result.modifiedCount === 0) {
-      console.log("No invoice found or updated for invoiceId:", invoiceId);
+    if (!existingInvoice) {
+      console.log("Invoice not found:", { invoiceId, userId });
       return NextResponse.json(
-        { success: false, message: "Invoice not found or no changes made" },
+        { success: false, message: "Invoice not found" },
         { status: 404 }
       );
     }
 
-    console.log(`Updated invoice status for invoiceId: ${invoiceId} to ${status}`);
-    console.log("PATCH /api/invoices/update-status - Completed in", Date.now() - startTime, "ms");
+    if (existingInvoice.status === "completed" || existingInvoice.status === "failed") {
+      console.log("Invoice already finalized:", { invoiceId, status: existingInvoice.status });
+      return NextResponse.json(
+        { success: false, message: `Invoice is already ${existingInvoice.status}` },
+        { status: 400 }
+      );
+    }
+
+    const updateResult = await db.collection<Invoice>("invoices").updateOne(
+      { _id: new ObjectId(invoiceId) },
+      {
+        $set: {
+          amount,
+          status,
+          description,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      console.log("Failed to update invoice: No matching document", { invoiceId });
+      return NextResponse.json(
+        { success: false, message: "Failed to update invoice" },
+        { status: 500 }
+      );
+    }
+
+    console.log("Invoice updated successfully:", {
+      invoiceId,
+      status,
+      amount,
+      description,
+      duration: Date.now() - startTime,
+    });
 
     return NextResponse.json(
-      { success: true, message: "Invoice status updated successfully" },
+      {
+        success: true,
+        message: "Invoice updated successfully",
+        invoice: {
+          _id: existingInvoice._id.toString(),
+          userId: existingInvoice.userId,
+          propertyId: existingInvoice.propertyId,
+          amount,
+          status,
+          reference: existingInvoice.reference,
+          createdAt: existingInvoice.createdAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+          expiresAt: existingInvoice.expiresAt.toISOString(),
+          description,
+        },
+      },
       { status: 200 }
     );
   } catch (error) {
-    console.error("Error updating invoice status:", {
+    console.error("Error updating invoice:", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
     });

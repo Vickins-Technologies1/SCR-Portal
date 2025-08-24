@@ -43,7 +43,7 @@ export default function InvoicesPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null); // Used in JSX for error display
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
@@ -86,7 +86,7 @@ export default function InvoicesPage() {
         });
         const data = await res.json();
         if (data.csrfToken) {
-          Cookies.set("csrf vestito-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
           setCsrfToken(data.csrfToken);
         } else {
           setError("Failed to fetch CSRF token.");
@@ -225,14 +225,15 @@ export default function InvoicesPage() {
         return;
       }
 
+      const invoice = invoices.find((inv) => inv._id === invoiceId);
+      if (!invoice) {
+        setError("Invoice not found.");
+        return;
+      }
+
       try {
-        const invoice = invoices.find((i) => i._id === invoiceId);
-        if (!invoice) {
-          setError("Invoice not found.");
-          return;
-        }
-        const res = await fetch("/api/invoices", {
-          method: "POST",
+        const res = await fetch("/api/invoices/update-status", {
+          method: "PATCH",
           headers: {
             "Content-Type": "application/json",
             "X-CSRF-Token": csrfToken,
@@ -240,19 +241,18 @@ export default function InvoicesPage() {
           credentials: "include",
           body: JSON.stringify({
             invoiceId,
-            status: newStatus,
-            userId,
-            propertyId: invoice.propertyId,
             amount: invoice.amount,
-            reference: invoice.reference,
+            status: newStatus,
             description: invoice.description,
           }),
         });
         const data = await res.json();
         if (data.success) {
           setInvoices((prev) =>
-            prev.map((invoice) =>
-              invoice._id === invoiceId ? { ...invoice, status: newStatus } : invoice
+            prev.map((inv) =>
+              inv._id === invoiceId
+                ? { ...inv, status: data.invoice.status, amount: data.invoice.amount, description: data.invoice.description, updatedAt: data.invoice.updatedAt }
+                : inv
             )
           );
         } else {
@@ -262,7 +262,7 @@ export default function InvoicesPage() {
         setError("Failed to connect to the server.");
       }
     },
-    [csrfToken, userId, invoices]
+    [csrfToken, invoices]
   );
 
   const totalPages = Math.ceil(totalInvoices / itemsPerPage);
@@ -360,12 +360,12 @@ export default function InvoicesPage() {
                           <select
                             value={i.status}
                             onChange={(e) => handleStatusChange(i._id, e.target.value as "pending" | "completed" | "failed")}
-                            className={`text-sm p-1 rounded border ${
-                              i.status === "completed"
-                                ? "text-green-600 border-green-600"
-                                : i.status === "failed"
-                                ? "text-red-600 border-red-600"
-                                : "text-yellow-600 border-yellow-600"
+                            className={`text-sm p-1 rounded border
+                            ${i.status === "completed"
+                              ? "text-green-600 border-green-600"
+                              : i.status === "failed"
+                              ? "text-red-600 border-red-600"
+                              : "text-yellow-600 border-yellow-600"
                             } bg-white focus:outline-none focus:ring-2 focus:ring-[#012a4a]`}
                             aria-label={`Change status for invoice ${i._id}`}
                           >
