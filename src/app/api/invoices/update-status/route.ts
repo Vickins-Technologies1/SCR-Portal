@@ -39,10 +39,10 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (!["pending", "completed", "failed"].includes(status)) {
+    if (!["pending", "completed", "overdue"].includes(status)) {
       console.log("Invalid status:", status);
       return NextResponse.json(
-        { success: false, message: "Valid status (pending, completed, failed) is required" },
+        { success: false, message: "Valid status (pending, completed, overdue) is required" },
         { status: 400 }
       );
     }

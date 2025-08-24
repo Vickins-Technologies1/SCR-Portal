@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -21,29 +20,20 @@ interface Property {
 
 interface Invoice {
   _id: string;
-  paymentId: string;
   userId: string;
   propertyId: string;
-  unitType: string;
   amount: number;
-  status: "pending" | "paid" | "overdue";
+  status: "pending" | "completed" | "failed";
+  reference: string;
   createdAt: string;
-  dueDate: string;
-  updatedAt?: string;
+  updatedAt: string;
+  expiresAt: string;
+  description: string;
 }
 
 interface SortConfig {
   key: keyof Invoice | "userEmail" | "propertyName";
   direction: "asc" | "desc";
-}
-
-interface ApiResponse {
-  success: boolean;
-  invoices?: Invoice[];
-  users?: User[];
-  properties?: Property[];
-  total?: number;
-  message?: string;
 }
 
 export default function InvoicesPage() {
@@ -53,24 +43,29 @@ export default function InvoicesPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // Used in JSX for error display
   const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [totalInvoices, setTotalInvoices] = useState(0);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
-  // Fetch CSRF token and check cookies
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   useEffect(() => {
     const checkCookiesAndFetchCsrf = async () => {
       const uid = Cookies.get("userId");
       const userRole = Cookies.get("role");
-      console.log("Checking cookies in InvoicesPage:", { userId: uid, role: userRole });
 
       if (!uid || userRole !== "admin") {
-        console.log("Redirecting to /admin/login due to invalid cookies:", { userId: uid, role: userRole });
-        setError("Unauthorized. Please log in as an admin.");
+        setError("Unauthorized. Redirecting to login...");
         router.push("/admin/login");
         return;
       }
@@ -91,37 +86,22 @@ export default function InvoicesPage() {
         });
         const data = await res.json();
         if (data.csrfToken) {
-          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+          Cookies.set("csrf vestito-token", data.csrfToken, { sameSite: "strict", expires: 1 });
           setCsrfToken(data.csrfToken);
         } else {
-          console.error("Failed to fetch CSRF token:", data);
-          setError("Failed to initialize session. Please try again.");
+          setError("Failed to fetch CSRF token.");
         }
-      } catch (err) {
-        console.error("CSRF token fetch error:", err);
+      } catch {
         setError("Failed to connect to server for CSRF token.");
       }
     };
 
     checkCookiesAndFetchCsrf();
-
-    const cookiePoll = setInterval(() => {
-      const uid = Cookies.get("userId");
-      const userRole = Cookies.get("role");
-      if (uid && userRole === "admin") {
-        console.log("Cookies detected on poll:", { userId: uid, role: userRole });
-        setUserId(uid);
-        setRole(userRole);
-        clearInterval(cookiePoll);
-      }
-    }, 100);
-
-    return () => clearInterval(cookiePoll);
   }, [router]);
 
   const fetchData = useCallback(async () => {
     if (!userId || role !== "admin" || !csrfToken) {
-      setError("Required authentication or CSRF token not available.");
+      setError("Authentication or CSRF token missing.");
       setIsLoading(false);
       return;
     }
@@ -129,7 +109,7 @@ export default function InvoicesPage() {
     setIsLoading(true);
     try {
       const [invoicesRes, usersRes, propertiesRes] = await Promise.all([
-        fetch(`/api/invoices?page=${currentPage}&limit=${itemsPerPage}&sort=-createdAt`, {
+        fetch(`/api/invoices?page=${currentPage}&limit=${itemsPerPage}&sort=${sortConfig.key}:${sortConfig.direction}`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -155,86 +135,40 @@ export default function InvoicesPage() {
         }),
       ]);
 
-      const responses = [invoicesRes, usersRes, propertiesRes];
-      const endpoints = ["/api/invoices", "/api/admin/users", "/api/admin/properties"];
-      const responseBodies: (ApiResponse | string)[] = [];
-
-      for (let i = 0; i < responses.length; i++) {
-        const res = responses[i];
-        if (!res.ok) {
-          const body = await res.text();
-          console.error(`Failed to fetch ${endpoints[i]}: ${res.status} ${res.statusText}`, { body });
-          responseBodies[i] = body;
-        } else {
-          responseBodies[i] = await res.json();
-        }
-      }
-
-      const [invoicesData, usersData, propertiesData] = responseBodies as [ApiResponse, ApiResponse, ApiResponse];
-
-      console.log("API responses:", { invoicesData, usersData, propertiesData });
+      const [invoicesData, usersData, propertiesData] = await Promise.all([
+        invoicesRes.ok ? invoicesRes.json() : { success: false, message: `Failed to fetch invoices: ${invoicesRes.statusText}` },
+        usersRes.ok ? usersRes.json() : { success: false, message: `Failed to fetch users: ${usersRes.statusText}` },
+        propertiesRes.ok ? propertiesRes.json() : { success: false, message: `Failed to fetch properties: ${propertiesRes.statusText}` },
+      ]);
 
       if (invoicesData.success && usersData.success && propertiesData.success) {
         setInvoices(invoicesData.invoices || []);
         setTotalInvoices(invoicesData.total || 0);
-        setPropertyOwners(usersData.users?.filter((u) => u.role === "propertyOwner") || []);
+        setPropertyOwners((usersData.users || []).filter((u: User) => u.role === "propertyOwner"));
         setProperties(propertiesData.properties || []);
       } else {
-        const errors = [
-          invoicesData.message || (invoicesRes.status === 403 && "Invalid or missing CSRF token"),
-          usersData.message || (usersRes.status === 403 && "Invalid or missing CSRF token"),
-          propertiesData.message || (propertiesRes.status === 403 && "Invalid or missing CSRF token"),
-        ].filter((msg) => msg).join("; ");
-        setError(`Failed to fetch data: ${errors || "Unknown error"}`);
+        setError([invoicesData.message, usersData.message, propertiesData.message].filter(Boolean).join("; "));
       }
-    } catch (error: unknown) {
-      console.error("Fetch data error:", error instanceof Error ? error.message : String(error));
-      setError("Failed to connect to the server. Please try again later.");
+    } catch {
+      setError("Failed to connect to the server.");
     } finally {
       setIsLoading(false);
     }
-  }, [userId, role, currentPage, itemsPerPage, csrfToken]);
+  }, [userId, role, currentPage, itemsPerPage, sortConfig, csrfToken]);
 
   useEffect(() => {
     if (userId && role === "admin" && csrfToken) {
-      console.log("Fetching data for InvoicesPage:", { userId, role, currentPage, csrfToken });
       fetchData();
     }
-  }, [userId, role, currentPage, fetchData, csrfToken]);
+  }, [userId, role, currentPage, sortConfig, fetchData, csrfToken]);
 
-  const handleSort = useCallback(
-    (key: keyof Invoice | "userEmail" | "propertyName") => {
-      setSortConfig((prev) => {
-        const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-        const sorted = [...invoices].sort((a, b) => {
-          if (key === "amount") {
-            return direction === "asc" ? a.amount - b.amount : b.amount - a.amount;
-          }
-          if (key === "createdAt" || key === "dueDate") {
-            return direction === "asc"
-              ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
-              : new Date(b[key]).getTime() - new Date(a[key]).getTime();
-          }
-          if (key === "propertyName") {
-            const aName = properties.find((p) => p._id === a.propertyId)?.name || "";
-            const bName = properties.find((p) => p._id === b.propertyId)?.name || "";
-            return direction === "asc" ? aName.localeCompare(bName) : bName.localeCompare(aName);
-          }
-          if (key === "userEmail") {
-            const aEmail = propertyOwners.find((u) => u._id === a.userId)?.email || "";
-            const bEmail = propertyOwners.find((u) => u._id === b.userId)?.email || "";
-            return direction === "asc" ? aEmail.localeCompare(bEmail) : bEmail.localeCompare(aEmail);
-          }
-          return direction === "asc"
-            ? String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
-            : String(b[key] ?? "").localeCompare(String(a[key] ?? ""));
-        });
-        setInvoices(sorted);
-        return { key, direction };
-      });
-    },
-    [invoices, propertyOwners, properties]
-  );
+  const handleSort = useCallback((key: keyof Invoice | "userEmail" | "propertyName") => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+    setCurrentPage(1);
+  }, []);
 
   const getSortIcon = useCallback(
     (key: keyof Invoice | "userEmail" | "propertyName") => {
@@ -242,7 +176,8 @@ export default function InvoicesPage() {
       return sortConfig.direction === "asc" ? (
         <ChevronUp className="inline ml-1 h-4 w-4" />
       ) : (
-        <ChevronDown className="inline ml-1 h-4 w-4" />);
+        <ChevronDown className="inline ml-1 h-4 w-4" />
+      );
     },
     [sortConfig]
   );
@@ -254,6 +189,7 @@ export default function InvoicesPage() {
         return;
       }
 
+      setIsGenerating(invoice._id);
       try {
         const res = await fetch("/api/invoices/generate", {
           method: "POST",
@@ -262,16 +198,7 @@ export default function InvoicesPage() {
             "X-CSRF-Token": csrfToken,
           },
           credentials: "include",
-          body: JSON.stringify({
-            invoiceId: invoice._id,
-            userEmail: propertyOwners.find((u) => u._id === invoice.userId)?.email || "N/A",
-            propertyName: properties.find((p) => p._id === invoice.propertyId)?.name || "N/A",
-            unitType: invoice.unitType,
-            amount: invoice.amount,
-            createdAt: invoice.createdAt,
-            dueDate: invoice.dueDate,
-            status: invoice.status,
-          }),
+          body: JSON.stringify({ invoiceId: invoice._id }),
         });
         const data = await res.json();
         if (data.success && data.pdf) {
@@ -282,30 +209,44 @@ export default function InvoicesPage() {
         } else {
           setError(data.message || "Failed to generate invoice.");
         }
-      } catch (error: unknown) {
-        console.error("Generate invoice error:", error instanceof Error ? error.message : String(error));
+      } catch {
         setError("Failed to connect to the server.");
+      } finally {
+        setIsGenerating(null);
       }
     },
-    [csrfToken, propertyOwners, properties]
+    [csrfToken]
   );
 
   const handleStatusChange = useCallback(
-    async (invoiceId: string, newStatus: "pending" | "paid" | "overdue") => {
+    async (invoiceId: string, newStatus: "pending" | "completed" | "failed") => {
       if (!csrfToken) {
         setError("CSRF token not available. Please refresh the page.");
         return;
       }
 
       try {
-        const res = await fetch("/api/invoices/update-status", {
-          method: "PATCH",
+        const invoice = invoices.find((i) => i._id === invoiceId);
+        if (!invoice) {
+          setError("Invoice not found.");
+          return;
+        }
+        const res = await fetch("/api/invoices", {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-CSRF-Token": csrfToken,
           },
           credentials: "include",
-          body: JSON.stringify({ invoiceId, status: newStatus }),
+          body: JSON.stringify({
+            invoiceId,
+            status: newStatus,
+            userId,
+            propertyId: invoice.propertyId,
+            amount: invoice.amount,
+            reference: invoice.reference,
+            description: invoice.description,
+          }),
         });
         const data = await res.json();
         if (data.success) {
@@ -317,12 +258,11 @@ export default function InvoicesPage() {
         } else {
           setError(data.message || "Failed to update invoice status.");
         }
-      } catch (error: unknown) {
-        console.error("Update invoice status error:", error instanceof Error ? error.message : String(error));
+      } catch {
         setError("Failed to connect to the server.");
       }
     },
-    [csrfToken]
+    [csrfToken, userId, invoices]
   );
 
   const totalPages = Math.ceil(totalInvoices / itemsPerPage);
@@ -338,7 +278,10 @@ export default function InvoicesPage() {
             Invoices
           </h1>
           {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+            <div
+              className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse"
+              role="alert"
+            >
               {error}
             </div>
           )}
@@ -372,9 +315,9 @@ export default function InvoicesPage() {
                     </th>
                     <th
                       className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
-                      onClick={() => handleSort("unitType")}
+                      onClick={() => handleSort("reference")}
                     >
-                      Unit Type {getSortIcon("unitType")}
+                      Reference {getSortIcon("reference")}
                     </th>
                     <th
                       className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
@@ -388,19 +331,13 @@ export default function InvoicesPage() {
                     >
                       Created At {getSortIcon("createdAt")}
                     </th>
-                    <th
-                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
-                      onClick={() => handleSort("dueDate")}
-                    >
-                      Due Date {getSortIcon("dueDate")}
-                    </th>
                     <th className="py-3 px-4 text-left text-sm font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-4 px-4 text-center text-gray-600">
+                      <td colSpan={7} className="py-4 px-4 text-center text-gray-600">
                         No invoices found.
                       </td>
                     </tr>
@@ -413,49 +350,54 @@ export default function InvoicesPage() {
                       >
                         <td className="py-3 px-4 text-sm text-gray-800">Ksh {i.amount.toFixed(2)}</td>
                         <td className="py-3 px-4 text-sm text-gray-600">
-                          {propertyOwners.find((u) => u._id === i.userId)?.email || "N/A"}
+                          {propertyOwners.find((u: User) => u._id === i.userId)?.email || "N/A"}
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-600">
-                          {properties.find((p) => p._id === i.propertyId)?.name || "N/A"}
+                          {properties.find((p: Property) => p._id === i.propertyId)?.name || "N/A"}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-600">{i.unitType}</td>
+                        <td className="py-3 px-4 text-sm text-gray-600">{i.reference}</td>
                         <td className="py-3 px-4 text-sm">
                           <select
                             value={i.status}
-                            onChange={(e) => handleStatusChange(i._id, e.target.value as "pending" | "paid" | "overdue")}
+                            onChange={(e) => handleStatusChange(i._id, e.target.value as "pending" | "completed" | "failed")}
                             className={`text-sm p-1 rounded border ${
-                              i.status === "paid"
+                              i.status === "completed"
                                 ? "text-green-600 border-green-600"
-                                : i.status === "overdue"
+                                : i.status === "failed"
                                 ? "text-red-600 border-red-600"
                                 : "text-yellow-600 border-yellow-600"
-                            } bg-white`}
+                            } bg-white focus:outline-none focus:ring-2 focus:ring-[#012a4a]`}
                             aria-label={`Change status for invoice ${i._id}`}
                           >
                             <option value="pending" className="text-yellow-600">
-                              pending
+                              Pending
                             </option>
-                            <option value="paid" className="text-green-600">
-                              paid
+                            <option value="completed" className="text-green-600">
+                              Completed
                             </option>
-                            <option value="overdue" className="text-red-600">
-                              overdue
+                            <option value="failed" className="text-red-600">
+                              Failed
                             </option>
                           </select>
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-600">
                           {new Date(i.createdAt).toLocaleDateString()}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-600">
-                          {new Date(i.dueDate).toLocaleDateString()}
-                        </td>
                         <td className="py-3 px-4 text-sm">
                           <button
                             onClick={() => handleGenerateInvoice(i)}
-                            className="px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] hover:scale-105 transform transition-all duration-300 text-sm"
+                            disabled={isGenerating === i._id}
+                            className={`px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] hover:scale-105 transform transition-all duration-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed`}
                             aria-label={`Generate PDF for invoice ${i._id}`}
                           >
-                            Generate PDF
+                            {isGenerating === i._id ? (
+                              <span className="flex items-center">
+                                <div className="inline-block animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                                Generating...
+                              </span>
+                            ) : (
+                              "Generate PDF"
+                            )}
                           </button>
                         </td>
                       </tr>
@@ -472,7 +414,7 @@ export default function InvoicesPage() {
                     <button
                       onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                       disabled={currentPage === 1}
-                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-[#012a4a]"
                       aria-label="Previous page"
                     >
                       Previous
@@ -483,7 +425,7 @@ export default function InvoicesPage() {
                     <button
                       onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                       disabled={currentPage === totalPages}
-                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-[#012a4a]"
                       aria-label="Next page"
                     >
                       Next

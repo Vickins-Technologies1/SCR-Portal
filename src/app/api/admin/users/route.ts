@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     const { db }: { db: Db } = await connectToDatabase();
     const users = await db
-      .collection("users")
+      .collection("propertyOwners")
       .find()
       .project({ _id: 1, name: 1, email: 1, role: 1 })
       .toArray();
