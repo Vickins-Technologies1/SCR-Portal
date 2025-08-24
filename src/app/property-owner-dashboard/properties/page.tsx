@@ -24,7 +24,7 @@ const UNIT_TYPES = [
     type: "Single",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 4500 },
         { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
@@ -36,7 +36,7 @@ const UNIT_TYPES = [
     type: "Bedsitter",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 4500 },
         { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
@@ -48,7 +48,7 @@ const UNIT_TYPES = [
     type: "1-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 4500 },
         { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
@@ -60,7 +60,7 @@ const UNIT_TYPES = [
     type: "2-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 4500 },
         { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
@@ -72,7 +72,7 @@ const UNIT_TYPES = [
     type: "3-Bedroom",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 4500 },
         { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
@@ -84,7 +84,7 @@ const UNIT_TYPES = [
     type: "Duplex",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 4500 },
         { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
@@ -96,7 +96,7 @@ const UNIT_TYPES = [
     type: "Commercial",
     pricing: {
       RentCollection: [
-        { range: [5, 20], fee: 2500 },
+        { range: [1, 20], fee: 2500 },
         { range: [21, 50], fee: 4500 },
         { range: [51, 100], fee: 7000 },
         { range: [101, Infinity], fee: 0 },
