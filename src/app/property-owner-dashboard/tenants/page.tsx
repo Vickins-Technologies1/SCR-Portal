@@ -1,16 +1,16 @@
+
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Users, Pencil, Trash2, Plus, ArrowUpDown, EyeIcon, EyeOffIcon } from "lucide-react";
+import { Users, Plus, EyeIcon, EyeOffIcon } from "lucide-react";
 import { TenantRequest } from "../../../types/tenant";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
 import PaymentModal from "../components/PaymentModal";
-import { debounce } from "lodash";
-import { Property } from "../../../types/property";
+import TenantsTable from "../components/TenantsTable";
 
 interface Tenant {
   _id: string;
@@ -25,15 +25,34 @@ interface Tenant {
   leaseStartDate: string;
   leaseEndDate: string;
   createdAt: string;
-  walletBalance?: number;
-  totalRentPaid?: number;
-  totalUtilityPaid?: number;
-  totalDepositPaid?: number;
+  updatedAt?: string;
+  walletBalance: number;
+  totalRentPaid: number;
+  totalUtilityPaid: number;
+  totalDepositPaid: number;
+  status: string;
+  paymentStatus: string;
 }
 
-interface SortConfig {
-  key: keyof Tenant | "propertyName";
-  direction: "asc" | "desc";
+interface ClientProperty {
+  _id: string;
+  name: string;
+  address: string;
+  unitTypes: {
+    uniqueType: string;
+    type: string;
+    price: number;
+    deposit: number;
+    managementType: "RentCollection" | "FullManagement";
+    managementFee: number;
+    quantity: number;
+  }[];
+  managementFee: number;
+  createdAt: string;
+  updatedAt: string;
+  rentPaymentDate: string;
+  ownerId: string;
+  status: string;
 }
 
 interface FilterConfig {
@@ -43,33 +62,10 @@ interface FilterConfig {
   unitType: string;
 }
 
-const UNIT_TYPES = [
-  { type: "Single", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
-  { type: "Bedsitter", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
-  { type: "1-Bedroom", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
-  { type: "2-Bedroom", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
-  { type: "3-Bedroom", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
-  { type: "Duplex", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
-  { type: "Commercial", pricing: { RentCollection: [{ range: [5, 20], fee: 2500 }, { range: [21, 50], fee: 4500 }, { range: [51, 100], fee: 7000 }, { range: [101, Infinity], fee: 0 }], FullManagement: 0 } },
-];
-
-// Define getManagementFee as a regular function outside the component
-const getManagementFee = (totalUnits: number): number => {
-  const pricing = UNIT_TYPES[0].pricing.RentCollection;
-  for (const tier of pricing) {
-    const [min, max] = tier.range;
-    if (totalUnits >= min && totalUnits <= max) {
-      return tier.fee;
-    }
-  }
-  return 0;
-};
-
 export default function TenantsPage() {
   const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [filteredTenants, setFilteredTenants] = useState<Tenant[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [properties, setProperties] = useState<ClientProperty[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"active" | "inactive" | null>(null);
@@ -100,9 +96,8 @@ export default function TenantsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
   const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
-  const [csrfToken, setCsrfToken] = useState<string>("");
+  const [csrfToken, setCsrfToken] = useState("");
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [totalTenants, setTotalTenants] = useState(0);
@@ -112,169 +107,201 @@ export default function TenantsPage() {
     propertyId: "",
     unitType: "",
   });
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Cache for API responses
-  const cache = useRef<Map<string, { data: any; timestamp: number }>>(new Map());
-  const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
-  const pendingRequests = useRef<Map<string, Promise<any>>>(new Map());
+  // Toggle password visibility
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
 
-  const togglePasswordVisibility = useCallback(() => {
-    setShowPassword((prev) => !prev);
+  // Fetch CSRF token
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const res = await fetch("/api/csrf-token");
+        const data = await res.json();
+        if (data.success) {
+          setCsrfToken(data.csrfToken);
+          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+        } else {
+          setError("Failed to fetch CSRF token.");
+        }
+      } catch {
+        setError("Failed to connect to server for CSRF token.");
+      }
+    };
+    fetchCsrfToken();
   }, []);
 
-  // Calculate total units without depending on properties state
-  const calculateTotalUnits = useCallback((propertyId: string, props: Property[]): number => {
-    const property = props.find((p) => p._id.toString() === propertyId);
-    return property ? property.unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0) : 0;
-  }, []);
-
-  const fetchWithRetry = useCallback(
-    async (url: string, options: RequestInit, cacheKey: string, retries = 3, backoff = 1000): Promise<any> => {
-      const cached = cache.current.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        return cached.data;
-      }
-
-      if (pendingRequests.current.has(cacheKey)) {
-        return await pendingRequests.current.get(cacheKey);
-      }
-
-      const request = fetch(url, options)
-        .then(async (res) => {
-          if (res.status === 429) {
-            setError("Too many requests. Please try again later.");
-            throw new Error("Rate limit exceeded");
-          }
-          const data = await res.json();
-          if (data.success) {
-            cache.current.set(cacheKey, { data, timestamp: Date.now() });
-            pendingRequests.current.delete(cacheKey);
-            return data;
-          }
-          throw new Error(data.message || "Request failed");
-        })
-        .catch(async (err) => {
-          pendingRequests.current.delete(cacheKey);
-          if (err.message.includes("Rate limit exceeded") && retries > 0) {
-            await new Promise((resolve) => setTimeout(resolve, backoff));
-            return fetchWithRetry(url, options, cacheKey, retries - 1, backoff * 2);
-          }
-          throw err;
-        });
-
-      pendingRequests.current.set(cacheKey, request);
-      return await request;
-    },
-    []
-  );
-
-  const fetchCsrfToken = useCallback(async () => {
-    const cacheKey = "csrf-token";
-    const cachedCsrf = Cookies.get("csrf-token");
-    if (cachedCsrf) {
-      setCsrfToken(cachedCsrf);
-      cache.current.set(cacheKey, { data: { csrfToken: cachedCsrf }, timestamp: Date.now() });
-      return;
+  // Check cookies and redirect if unauthorized
+  useEffect(() => {
+    const uid = Cookies.get("userId");
+    const userRole = Cookies.get("role");
+    setUserId(uid || null);
+    setRole(userRole || null);
+    if (!uid || userRole !== "propertyOwner") {
+      setError("Unauthorized. Please log in as a property owner.");
+      router.push("/");
     }
+  }, [router]);
 
+  // Fetch user data
+  const fetchUserData = useCallback(async () => {
+    if (!userId || !role) return;
     try {
-      const data = await fetchWithRetry(
-        "/api/csrf-token",
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
+      const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
         },
-        cacheKey
-      );
-      setCsrfToken(data.csrfToken);
-      Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPaymentStatus(data.user.paymentStatus || "inactive");
+        setWalletBalance(data.user.walletBalance || 0);
+      } else {
+        if (res.status === 404) {
+          setError("User account not found. Please log in again.");
+          Cookies.remove("userId");
+          Cookies.remove("role");
+          router.push("/");
+        } else {
+          setError(data.message || "Failed to fetch user data.");
+        }
+      }
     } catch {
-      setError("Failed to fetch CSRF token.");
+      setError("Failed to connect to the server. Please try again later.");
     }
-  }, [fetchWithRetry]);
+  }, [userId, role, router, csrfToken]);
 
-  const fetchInitialData = useCallback(async () => {
-    if (!userId || !csrfToken || role !== "propertyOwner" || isLoading) return;
+  // Fetch tenants
+  const fetchTenants = useCallback(async () => {
+    if (!userId) return;
     setIsLoading(true);
-    const cacheKey = `property-owner-data-${userId}-${page}-${limit}`;
     try {
-      const data = await fetchWithRetry(
-        `/api/property-owner-data?userId=${encodeURIComponent(userId)}&page=${page}&limit=${limit}`,
-        {
+      const query = new URLSearchParams({
+        userId: encodeURIComponent(userId),
+        page: page.toString(),
+        limit: limit.toString(),
+        ...(filters.tenantName && { name: filters.tenantName }),
+        ...(filters.tenantEmail && { email: filters.tenantEmail }),
+        ...(filters.propertyId && { propertyId: filters.propertyId }),
+        ...(filters.unitType && { unitType: filters.unitType }),
+      }).toString();
+      const res = await fetch(`/api/tenants?${query}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        const normalizedTenants = (data.tenants || []).map((tenant: Tenant) => ({
+          ...tenant,
+          walletBalance: tenant.walletBalance ?? 0,
+          totalRentPaid: tenant.totalRentPaid ?? 0,
+          totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
+          totalDepositPaid: tenant.totalDepositPaid ?? 0,
+          status: tenant.status || "active",
+          paymentStatus: tenant.paymentStatus || "active",
+        }));
+        setTenants(normalizedTenants);
+        setTotalTenants(data.total || 0);
+      } else {
+        setError(data.message || "Failed to fetch tenants.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId, page, limit, csrfToken, filters]);
+
+  // Fetch properties
+  const fetchProperties = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        const properties = data.properties.map((p: ClientProperty) => ({
+          ...p,
+          unitTypes: p.unitTypes.map((u: ClientProperty["unitTypes"][0], index: number) => ({
+            ...u,
+            uniqueType: u.uniqueType || `${u.type}-${index}`,
+            managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
+            quantity: u.quantity ?? 1,
+          })),
+          address: p.address || "",
+          managementFee: p.managementFee || 0,
+          createdAt: p.createdAt || new Date().toISOString(),
+          updatedAt: p.updatedAt || new Date().toISOString(),
+          rentPaymentDate: p.rentPaymentDate || "1",
+          ownerId: p.ownerId || userId,
+          status: p.status || "active",
+        }));
+        setProperties(properties || []);
+      } else {
+        setError(data.message || "Failed to fetch properties.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  }, [userId, csrfToken]);
+
+  // Fetch pending invoices
+  const fetchPendingInvoices = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/invoices`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPendingInvoices(data.pendingInvoices || 0);
+      } else {
+        setError(data.message || "Failed to fetch invoice status.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    }
+  }, [userId, csrfToken]);
+
+  // Fetch invoice status
+  const fetchInvoiceStatus = useCallback(
+    async (propertyId: string, uniqueType: string) => {
+      if (!userId || !propertyId || !uniqueType) {
+        setError("Missing required parameters to check invoice status.");
+        return null;
+      }
+      try {
+        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(
+          propertyId
+        )}&unitType=${encodeURIComponent(uniqueType)}`;
+        const res = await fetch(url, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
             "X-CSRF-Token": csrfToken,
           },
           credentials: "include",
-        },
-        cacheKey
-      );
-      setPaymentStatus(data.user.paymentStatus || "inactive");
-      setWalletBalance(data.user.walletBalance || 0);
-      setPendingInvoices(data.pendingInvoices || 0);
-      const normalizedTenants = (data.tenants || []).map((tenant: Tenant) => ({
-        ...tenant,
-        totalRentPaid: tenant.totalRentPaid ?? 0,
-        totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
-        totalDepositPaid: tenant.totalDepositPaid ?? 0,
-      }));
-      setTenants(normalizedTenants);
-      setFilteredTenants(normalizedTenants);
-      setTotalTenants(data.totalTenants || 0);
-      setProperties(
-        (data.properties || []).map((p: Property) => ({
-          ...p,
-          _id: p._id.toString(),
-          unitTypes: p.unitTypes.map((u, index: number) => ({
-            ...u,
-            uniqueType: u.uniqueType || `${u.type}-${index}`,
-          })),
-          managementFee: typeof p.managementFee === "string" ? parseFloat(p.managementFee) : p.managementFee || getManagementFee(calculateTotalUnits(p._id.toString(), data.properties)),
-          createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : undefined,
-          updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : undefined,
-          rentPaymentDate: p.rentPaymentDate ? new Date(p.rentPaymentDate).toISOString() : undefined,
-          ownerId: p.ownerId ?? "",
-          address: p.address ?? "",
-          status: p.status ?? "",
-        }))
-      );
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("User account not found")) {
-        setError("User account not found. Please log in again.");
-        Cookies.remove("userId");
-        Cookies.remove("role");
-        router.push("/");
-      } else {
-        setError(err instanceof Error ? err.message : "Failed to fetch initial data.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId, role, csrfToken, page, limit, router, fetchWithRetry]);
-
-  const fetchInvoiceStatus = useCallback(
-    async (propertyId: string) => {
-      if (!userId || !propertyId || !csrfToken) {
-        setError("Missing required parameters to check invoice status.");
-        return null;
-      }
-      const cacheKey = `invoice-status-${userId}-${propertyId}`;
-      try {
-        const data = await fetchWithRetry(
-          `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(propertyId)}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": csrfToken,
-            },
-            credentials: "include",
-          },
-          cacheKey
-        );
+        });
+        const data = await res.json();
         if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
           return data.status;
         }
@@ -285,87 +312,24 @@ export default function TenantsPage() {
         return null;
       }
     },
-    [userId, csrfToken, fetchWithRetry]
+    [userId, csrfToken]
   );
 
+  // Fetch initial data
   useEffect(() => {
-    if (isInitialized) return;
-    const uid = Cookies.get("userId");
-    const userRole = Cookies.get("role");
-    if (!uid || userRole !== "propertyOwner") {
-      setError("Unauthorized. Please log in as a property owner.");
-      Cookies.remove("userId");
-      Cookies.remove("role");
-      router.push("/");
-      return;
+    if (userId && role === "propertyOwner" && csrfToken) {
+      Promise.all([
+        fetchUserData(),
+        fetchTenants(),
+        fetchProperties(),
+        fetchPendingInvoices(),
+      ]).catch(() => {
+        setError("Failed to load initial data. Please try again.");
+      });
     }
-    setUserId(uid);
-    setRole(userRole);
-    setIsInitialized(true);
-  }, [router, isInitialized]);
+  }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
-  useEffect(() => {
-    if (!isInitialized || !userId || !role || csrfToken) return;
-    fetchCsrfToken();
-  }, [isInitialized, userId, role, csrfToken, fetchCsrfToken]);
-
-  useEffect(() => {
-    if (!isInitialized || !userId || role !== "propertyOwner" || !csrfToken) return;
-    let isMounted = true;
-    fetchInitialData().then(() => {
-      if (isMounted) setIsLoading(false);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [isInitialized, userId, role, csrfToken, page, fetchInitialData]);
-
-  const applyFilters = useCallback((newFilters: FilterConfig, currentTenants: Tenant[]) => {
-    let filtered = [...currentTenants];
-    if (newFilters.tenantName) {
-      filtered = filtered.filter((tenant) =>
-        tenant.name.toLowerCase().includes(newFilters.tenantName.toLowerCase())
-      );
-    }
-    if (newFilters.tenantEmail) {
-      filtered = filtered.filter((tenant) =>
-        tenant.email.toLowerCase().includes(newFilters.tenantEmail.toLowerCase())
-      );
-    }
-    if (newFilters.propertyId) {
-      filtered = filtered.filter((tenant) => tenant.propertyId === newFilters.propertyId);
-    }
-    if (newFilters.unitType) {
-      filtered = filtered.filter((tenant) => tenant.unitType.split('-')[0] === newFilters.unitType);
-    }
-    filtered = filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    setFilteredTenants(filtered);
-    setTotalTenants(filtered.length);
-  }, []);
-
-  const debouncedApplyFilters = useMemo(
-    () => debounce((newFilters: FilterConfig) => applyFilters(newFilters, tenants), 500),
-    [applyFilters, tenants]
-  );
-
-  useEffect(() => {
-    debouncedApplyFilters(filters);
-    return () => {
-      debouncedApplyFilters.cancel();
-    };
-  }, [filters, debouncedApplyFilters]);
-
-  const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
-    setPage(1);
-  }, []);
-
-  const clearFilters = useCallback(() => {
-    setFilters({ tenantName: "", tenantEmail: "", propertyId: "", unitType: "" });
-    setPage(1);
-  }, []);
-
+  // Reset tenant form
   const resetForm = useCallback(() => {
     setTenantName("");
     setTenantEmail("");
@@ -386,14 +350,10 @@ export default function TenantsPage() {
     setError(null);
   }, []);
 
+  // Open add tenant modal
   const openAddModal = useCallback(async () => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
-      return;
-    }
-    if (pendingInvoices > 0) {
-      setError("You have pending invoices. Please settle them before adding new tenants.");
-      setIsPaymentPromptOpen(true);
       return;
     }
     resetForm();
@@ -416,16 +376,12 @@ export default function TenantsPage() {
       setTotalDepositPaid(pendingTenantData.totalDepositPaid?.toString() || "");
     }
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, pendingInvoices, pendingTenantData, resetForm]);
+  }, [paymentStatus, walletBalance, pendingTenantData, resetForm]);
 
+  // Open edit tenant modal
   const openEditModal = useCallback((tenant: Tenant) => {
     if (paymentStatus === null || walletBalance === null) {
       setError("Unable to verify payment status. Please try again or log in.");
-      return;
-    }
-    if (pendingInvoices > 0) {
-      setError("You have pending invoices. Please settle them before editing tenants.");
-      setIsPaymentPromptOpen(true);
       return;
     }
     setModalMode("edit");
@@ -448,13 +404,15 @@ export default function TenantsPage() {
     setFormErrors({});
     setError(null);
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, pendingInvoices]);
+  }, [paymentStatus, walletBalance]);
 
+  // Handle tenant deletion
   const handleDelete = useCallback((id: string) => {
     setTenantToDelete(id);
     setIsDeleteModalOpen(true);
   }, []);
 
+  // Confirm tenant deletion
   const confirmDelete = useCallback(async () => {
     if (!tenantToDelete) return;
     setIsLoading(true);
@@ -470,8 +428,7 @@ export default function TenantsPage() {
       const data = await res.json();
       if (data.success) {
         setSuccessMessage("Tenant deleted successfully!");
-        cache.current.delete(`property-owner-data-${userId}-${page}-${limit}`);
-        await fetchInitialData();
+        fetchTenants();
       } else {
         setError(data.message || "Failed to delete tenant.");
       }
@@ -482,8 +439,9 @@ export default function TenantsPage() {
       setIsDeleteModalOpen(false);
       setTenantToDelete(null);
     }
-  }, [tenantToDelete, fetchInitialData, csrfToken, userId, page, limit]);
+  }, [tenantToDelete, fetchTenants, csrfToken]);
 
+  // Validate tenant form
   const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
     if (!tenantName.trim()) errors.tenantName = "Full name is required";
@@ -507,6 +465,7 @@ export default function TenantsPage() {
     return Object.keys(errors).length === 0;
   }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, modalMode]);
 
+  // Handle tenant form submission
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -556,8 +515,9 @@ export default function TenantsPage() {
           setIsModalOpen(false);
           setPendingTenantData(null);
           resetForm();
-          cache.current.delete(`property-owner-data-${userId}-${page}-${limit}`);
-          await fetchInitialData();
+          fetchTenants();
+          fetchUserData();
+          fetchPendingInvoices();
         } else {
           if (data.message.includes("Cannot add more tenants until the invoice")) {
             setPendingTenantData(tenantData);
@@ -573,158 +533,8 @@ export default function TenantsPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, fetchInitialData, resetForm, validateForm, csrfToken]
+    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm, csrfToken]
   );
-
-  const debouncedHandleSort = useMemo(
-    () =>
-      debounce((key: keyof Tenant | "propertyName") => {
-        setSortConfig((prev) => {
-          const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-          const sortedTenants = [...filteredTenants].sort((a, b) => {
-            if (key === "price" || key === "totalRentPaid" || key === "totalUtilityPaid" || key === "totalDepositPaid") {
-              const aVal = (a[key] ?? 0) as number;
-              const bVal = (b[key] ?? 0) as number;
-              return direction === "asc" ? aVal - bVal : bVal - aVal;
-            }
-            if (key === "createdAt" || key === "leaseStartDate" || key === "leaseEndDate") {
-              return direction === "asc"
-                ? new Date(a[key] as string).getTime() - new Date(b[key] as string).getTime()
-                : new Date(b[key] as string).getTime() - new Date(a[key] as string).getTime();
-            }
-            if (key === "propertyName") {
-              const aName = properties.find((p) => p._id.toString() === a.propertyId)?.name || "";
-              const bName = properties.find((p) => p._id.toString() === b.propertyId)?.name || "";
-              return direction === "asc" ? aName.localeCompare(bName) : bName.localeCompare(aName);
-            }
-            const aVal = (a[key] ?? "").toString();
-            const bVal = (b[key] ?? "").toString();
-            return direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-          });
-          setFilteredTenants(sortedTenants);
-          return { key, direction };
-        });
-      }, 300),
-    [filteredTenants, properties]
-  );
-
-  const getSortIcon = useCallback(
-    (key: keyof Tenant | "propertyName") => {
-      if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-      return sortConfig.direction === "asc" ? (
-        <span className="inline ml-1">↑</span>
-      ) : (
-        <span className="inline ml-1">↓</span>
-      );
-    },
-    [sortConfig]
-  );
-
-  const handleTenantClick = useCallback(
-    (tenantId: string) => {
-      if (!csrfToken) {
-        setError("CSRF token is missing. Please refresh the page.");
-        return;
-      }
-      router.push(`/property-owner-dashboard/tenants/${tenantId}`);
-    },
-    [csrfToken, router]
-  );
-
-  const handleUnitTypeChange = useCallback(
-    async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const uniqueType = e.target.value;
-      setSelectedUnitType(uniqueType);
-      const selectedProperty = properties.find((p) => p._id.toString() === selectedPropertyId);
-      const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === uniqueType);
-      if (unit) {
-        setPrice(unit.price.toString());
-        setDeposit(unit.deposit.toString());
-        setFormErrors((prev) => ({
-          ...prev,
-          selectedUnitType: uniqueType ? undefined : "Unit type is required",
-          price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
-          deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
-        }));
-        if (tenants.length >= 3 && modalMode === "add") {
-          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId);
-          if (invoiceStatus === "pending") {
-            const tenantData: Partial<TenantRequest> = {
-              name: tenantName,
-              email: tenantEmail,
-              phone: tenantPhone,
-              password: tenantPassword,
-              propertyId: selectedPropertyId,
-              unitType: uniqueType,
-              price: parseFloat(price) || unit.price,
-              deposit: parseFloat(deposit) || unit.deposit,
-              houseNumber,
-              leaseStartDate,
-              leaseEndDate,
-              totalRentPaid: parseFloat(totalRentPaid) || 0,
-              totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
-              totalDepositPaid: parseFloat(totalDepositPaid) || 0,
-              role: "tenant",
-              ownerId: userId || "",
-            };
-            setPendingTenantData(tenantData);
-            setError(
-              `Cannot add more tenants until the pending invoice for property ${selectedProperty?.name || "unknown"} is paid.`
-            );
-            setIsModalOpen(false);
-            setIsPaymentPromptOpen(true);
-          } else {
-            setPendingTenantData(null);
-            setIsPaymentPromptOpen(false);
-            setError(null);
-          }
-        } else {
-          setPendingTenantData(null);
-          setIsPaymentPromptOpen(false);
-          setError(null);
-        }
-      } else {
-        setPrice("");
-        setDeposit("");
-        setFormErrors((prev) => ({
-          ...prev,
-          selectedUnitType: uniqueType ? undefined : "Unit type is required",
-          price: undefined,
-          deposit: undefined,
-        }));
-        setPendingTenantData(null);
-        setIsPaymentPromptOpen(false);
-        setError("Selected unit type not found.");
-      }
-    },
-    [
-      properties,
-      selectedPropertyId,
-      tenants.length,
-      modalMode,
-      tenantName,
-      tenantEmail,
-      tenantPhone,
-      tenantPassword,
-      price,
-      deposit,
-      houseNumber,
-      leaseStartDate,
-      leaseEndDate,
-      totalRentPaid,
-      totalUtilityPaid,
-      totalDepositPaid,
-      userId,
-      fetchInvoiceStatus,
-    ]
-  );
-
-  const debouncedSetPage = useMemo(
-    () => debounce((newPage: number) => setPage(newPage), 300),
-    []
-  );
-
-  const totalPages = Math.ceil(totalTenants / limit);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
@@ -749,210 +559,34 @@ export default function TenantsPage() {
           </div>
           {tenants.length >= 3 && (
             <div className="bg-yellow-100 text-yellow-700 p-4 mb-4 rounded-lg shadow">
-              Note: Adding more tenants may require payment of a property-wide management fee if no invoice has been paid.
+              Note: Adding more tenants may require payment of a management fee for the selected unit type if no invoice has been paid.
             </div>
           )}
           {pendingInvoices > 0 && (
             <div className="bg-blue-100 text-blue-700 p-4 mb-4 rounded-lg shadow">
-              You have {pendingInvoices} pending invoice{pendingInvoices === 1 ? "" : "s"}. Please settle them to add more tenants.
+              You have {pendingInvoices} pending invoice{pendingInvoices === 1 ? '' : 's'}. Please settle them to add more tenants.
             </div>
           )}
-          <div className="mb-6 bg-white p-4 rounded-lg shadow">
-            <h2 className="text-lg font-semibold mb-4">Filter Tenants</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Name</label>
-                <input
-                  name="tenantName"
-                  value={filters.tenantName}
-                  onChange={handleFilterChange}
-                  placeholder="Enter tenant name"
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Email</label>
-                <input
-                  name="tenantEmail"
-                  value={filters.tenantEmail}
-                  onChange={handleFilterChange}
-                  placeholder="Enter tenant email"
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Property</label>
-                <select
-                  name="propertyId"
-                  value={filters.propertyId}
-                  onChange={handleFilterChange}
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
-                >
-                  <option value="">All Properties</option>
-                  {properties.map((property) => (
-                    <option key={property._id.toString()} value={property._id.toString()}>
-                      {property.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Unit Type</label>
-                <select
-                  name="unitType"
-                  value={filters.unitType}
-                  onChange={handleFilterChange}
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
-                >
-                  <option value="">All Unit Types</option>
-                  {[...new Set(properties.flatMap((p) => p.unitTypes.map((u) => u.type)))].map((unitType) => (
-                    <option key={unitType} value={unitType}>
-                      {unitType}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <button
-              onClick={clearFilters}
-              className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-md hover:bg-[#024a7a] transition"
-            >
-              Clear Filters
-            </button>
-          </div>
           {successMessage && (
             <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg shadow animate-pulse">
               {successMessage}
             </div>
           )}
-          {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
-              {error}
-            </div>
-          )}
-          {isLoading ? (
-            <div className="text-center text-gray-600">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <span className="ml-2">Loading tenants...</span>
-            </div>
-          ) : filteredTenants.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
-              No tenants found. Adjust filters or add a tenant to get started.
-            </div>
-          ) : (
-            <div className="overflow-x-auto bg-white shadow rounded-lg">
-              <table className="min-w-full table-auto text-sm md:text-base">
-                <thead className="bg-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("name")}>
-                      Name {getSortIcon("name")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("email")}>
-                      Email {getSortIcon("email")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("phone")}>
-                      Phone {getSortIcon("phone")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("propertyName")}>
-                      Property {getSortIcon("propertyName")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("unitType")}>
-                      Unit {getSortIcon("unitType")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("price")}>
-                      Price {getSortIcon("price")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("deposit")}>
-                      Deposit {getSortIcon("deposit")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("houseNumber")}>
-                      House # {getSortIcon("houseNumber")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("leaseStartDate")}>
-                      Lease Start {getSortIcon("leaseStartDate")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("leaseEndDate")}>
-                      Lease End {getSortIcon("leaseEndDate")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("totalRentPaid")}>
-                      Total Rent Paid {getSortIcon("totalRentPaid")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("totalUtilityPaid")}>
-                      Total Utility Paid {getSortIcon("totalUtilityPaid")}
-                    </th>
-                    <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => debouncedHandleSort("totalDepositPaid")}>
-                      Total Deposit Paid {getSortIcon("totalDepositPaid")}
-                    </th>
-                    <th className="px-4 py-3 text-left">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTenants.slice((page - 1) * limit, page * limit).map((t) => {
-                    const [baseUnitType, index] = t.unitType.split("-");
-                    return (
-                      <tr
-                        key={t._id}
-                        className="border-t hover:bg-gray-50 transition cursor-pointer"
-                        onClick={() => handleTenantClick(t._id)}
-                      >
-                        <td className="px-4 py-3">{t.name}</td>
-                        <td className="px-4 py-3">{t.email}</td>
-                        <td className="px-4 py-3">{t.phone}</td>
-                        <td className="px-4 py-3">{properties.find((p) => p._id.toString() === t.propertyId)?.name || "N/A"}</td>
-                        <td className="px-4 py-3">{`${baseUnitType} #${parseInt(index, 10) + 1}`}</td>
-                        <td className="px-4 py-3">Ksh {t.price.toFixed(2)}</td>
-                        <td className="px-4 py-3">Ksh {t.deposit.toFixed(2)}</td>
-                        <td className="px-4 py-3">{t.houseNumber}</td>
-                        <td className="px-4 py-3">{new Date(t.leaseStartDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">{new Date(t.leaseEndDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">Ksh {(t.totalRentPaid ?? 0).toFixed(2)}</td>
-                        <td className="px-4 py-3">Ksh {(t.totalUtilityPaid ?? 0).toFixed(2)}</td>
-                        <td className="px-4 py-3">Ksh {(t.totalDepositPaid ?? 0).toFixed(2)}</td>
-                        <td className="px-4 py-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => openEditModal(t)}
-                            className="text-[#012a4a] hover:text-[#014a7a] transition"
-                            title="Edit Tenant"
-                            aria-label={`Edit tenant ${t.name}`}
-                          >
-                            <Pencil className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(t._id)}
-                            className="text-red-600 hover:text-red-800 transition"
-                            title="Delete Tenant"
-                            aria-label={`Delete tenant ${t.name}`}
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="mt-4 flex justify-between items-center">
-            <div>Showing {Math.min(filteredTenants.length, limit)} of {totalTenants} tenants</div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => debouncedSetPage(Math.max(page - 1, 1))}
-                disabled={page === 1}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span>Page {page} of {totalPages}</span>
-              <button
-                onClick={() => debouncedSetPage(Math.min(page + 1, totalPages))}
-                disabled={page === totalPages}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <TenantsTable
+            tenants={tenants}
+            properties={properties}
+            filters={filters}
+            setFilters={setFilters}
+            page={page}
+            setPage={setPage}
+            limit={limit}
+            totalTenants={totalTenants}
+            isLoading={isLoading}
+            userId={userId}
+            csrfToken={csrfToken}
+            onEdit={openEditModal}
+            onDelete={handleDelete}
+          />
           <Modal
             title={modalMode === "add" ? "Add Tenant" : "Edit Tenant"}
             isOpen={isModalOpen}
@@ -984,7 +618,9 @@ export default function TenantsPage() {
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantName ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.tenantName && <p className="text-red-500 text-xs mt-1">{formErrors.tenantName}</p>}
+                {formErrors.tenantName && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantName}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Email</label>
@@ -1006,7 +642,9 @@ export default function TenantsPage() {
                   type="email"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantEmail ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.tenantEmail && <p className="text-red-500 text-xs mt-1">{formErrors.tenantEmail}</p>}
+                {formErrors.tenantEmail && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantEmail}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Phone</label>
@@ -1027,7 +665,9 @@ export default function TenantsPage() {
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPhone ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.tenantPhone && <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>}
+                {formErrors.tenantPhone && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>
+                )}
               </div>
               {modalMode === "add" && (
                 <div>
@@ -1053,10 +693,16 @@ export default function TenantsPage() {
                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <EyeOffIcon className="h-5 w-5" aria-hidden="true" /> : <EyeIcon className="h-5 w-5" aria-hidden="true" />}
+                      {showPassword ? (
+                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                      )}
                     </button>
                   </div>
-                  {formErrors.tenantPassword && <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>}
+                  {formErrors.tenantPassword && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>
+                  )}
                 </div>
               )}
               {modalMode === "edit" && (
@@ -1076,7 +722,11 @@ export default function TenantsPage() {
                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <EyeOffIcon className="h-5 w-5" aria-hidden="true" /> : <EyeIcon className="h-5 w-5" aria-hidden="true" />}
+                      {showPassword ? (
+                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1103,36 +753,103 @@ export default function TenantsPage() {
                 >
                   <option value="">Select Property</option>
                   {properties.map((p) => (
-                    <option key={p._id.toString()} value={p._id.toString()}>
-                      {p.name} (Total Units: {calculateTotalUnits(p._id.toString(), properties)}, Fee: Ksh {p.managementFee}/mo)
+                    <option key={p._id} value={p._id}>
+                      {p.name}
                     </option>
                   ))}
                 </select>
-                {formErrors.selectedPropertyId && <p className="text-red-500 text-xs mt-1">{formErrors.selectedPropertyId}</p>}
+                {formErrors.selectedPropertyId && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.selectedPropertyId}</p>
+                )}
               </div>
               {selectedPropertyId && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Unit Type</label>
                   <select
                     value={selectedUnitType}
-                    onChange={handleUnitTypeChange}
+                    onChange={async (e) => {
+                      const uniqueType = e.target.value;
+                      setSelectedUnitType(uniqueType);
+                      const selectedProperty = properties.find((p) => p._id === selectedPropertyId);
+                      const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === uniqueType);
+                      if (unit) {
+                        setPrice(unit.price.toString());
+                        setDeposit(unit.deposit.toString());
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
+                          price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
+                          deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
+                        }));
+                        if (tenants.length >= 3 && uniqueType && modalMode === "add") {
+                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, uniqueType);
+                          if (invoiceStatus !== "completed") {
+                            const tenantData: Partial<TenantRequest> = {
+                              name: tenantName,
+                              email: tenantEmail,
+                              phone: tenantPhone,
+                              password: tenantPassword,
+                              propertyId: selectedPropertyId,
+                              unitType: uniqueType,
+                              price: parseFloat(price) || unit.price,
+                              deposit: parseFloat(deposit) || unit.deposit,
+                              houseNumber,
+                              leaseStartDate,
+                              leaseEndDate,
+                              totalRentPaid: parseFloat(totalRentPaid) || 0,
+                              totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
+                              totalDepositPaid: parseFloat(totalDepositPaid) || 0,
+                              role: "tenant",
+                              ownerId: userId || "",
+                            };
+                            setPendingTenantData(tenantData);
+                            setError(
+                              invoiceStatus === "pending"
+                                ? `Cannot add more tenants until the pending invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} is paid.`
+                                : invoiceStatus === "failed"
+                                  ? `Cannot add tenants because the invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} has failed. Please contact support.`
+                                  : `No invoice found for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"}. Please create an invoice.`
+                            );
+                            setIsModalOpen(false);
+                            setIsPaymentPromptOpen(true);
+                          } else {
+                            setPendingTenantData(null);
+                            setIsPaymentPromptOpen(false);
+                            setError(null);
+                          }
+                        } else {
+                          setPendingTenantData(null);
+                          setIsPaymentPromptOpen(false);
+                          setError(null);
+                        }
+                      } else {
+                        setPrice("");
+                        setDeposit("");
+                        setFormErrors((prev) => ({
+                          ...prev,
+                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
+                          price: undefined,
+                          deposit: undefined,
+                        }));
+                        setPendingTenantData(null);
+                        setIsPaymentPromptOpen(false);
+                        setError("Selected unit type not found.");
+                      }
+                    }}
                     required
                     className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"}`}
                   >
                     <option value="">Select Unit Type</option>
                     {properties
-                      .find((p) => p._id.toString() === selectedPropertyId)
+                      .find((p) => p._id === selectedPropertyId)
                       ?.unitTypes.map((u) => (
                         <option key={u.uniqueType} value={u.uniqueType}>
-                          {u.type} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit})
+                          {u.type} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
                         </option>
                       ))}
                   </select>
-                  {formErrors.selectedUnitType && <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>}
-                  {selectedPropertyId && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      Property Management Fee: Ksh {properties.find((p) => p._id.toString() === selectedPropertyId)?.managementFee || 0}/mo
-                    </p>
+                  {formErrors.selectedUnitType && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>
                   )}
                 </div>
               )}
@@ -1144,7 +861,9 @@ export default function TenantsPage() {
                   readOnly
                   className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.price ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.price && <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>}
+                {formErrors.price && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Deposit (Ksh)</label>
@@ -1154,7 +873,9 @@ export default function TenantsPage() {
                   readOnly
                   className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.deposit ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.deposit && <p className="text-red-500 text-xs mt-1">{formErrors.deposit}</p>}
+                {formErrors.deposit && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.deposit}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">House Number</label>
@@ -1171,7 +892,9 @@ export default function TenantsPage() {
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.houseNumber ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.houseNumber && <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>}
+                {formErrors.houseNumber && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Lease Start Date</label>
@@ -1192,7 +915,9 @@ export default function TenantsPage() {
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.leaseStartDate && <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>}
+                {formErrors.leaseStartDate && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Lease End Date</label>
@@ -1213,7 +938,9 @@ export default function TenantsPage() {
                   required
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.leaseEndDate && <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>}
+                {formErrors.leaseEndDate && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Total Rent Paid (Ksh)</label>
@@ -1233,7 +960,9 @@ export default function TenantsPage() {
                   step="0.01"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalRentPaid ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.totalRentPaid && <p className="text-red-500 text-xs mt-1">{formErrors.totalRentPaid}</p>}
+                {formErrors.totalRentPaid && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.totalRentPaid}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Total Utility Paid (Ksh)</label>
@@ -1253,7 +982,9 @@ export default function TenantsPage() {
                   step="0.01"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalUtilityPaid ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.totalUtilityPaid && <p className="text-red-500 text-xs mt-1">{formErrors.totalUtilityPaid}</p>}
+                {formErrors.totalUtilityPaid && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.totalUtilityPaid}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Total Deposit Paid (Ksh)</label>
@@ -1273,7 +1004,9 @@ export default function TenantsPage() {
                   step="0.01"
                   className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalDepositPaid ? "border-red-500" : "border-gray-300"}`}
                 />
-                {formErrors.totalDepositPaid && <p className="text-red-500 text-xs mt-1">{formErrors.totalDepositPaid}</p>}
+                {formErrors.totalDepositPaid && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.totalDepositPaid}</p>
+                )}
               </div>
               <div className="flex flex-col sm:flex-row justify-end gap-3">
                 <button
@@ -1291,22 +1024,37 @@ export default function TenantsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined) || !selectedPropertyId || !selectedUnitType}
-                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${
-                    isLoading || Object.values(formErrors).some((v) => v !== undefined) || !selectedPropertyId || !selectedUnitType
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-[#012a4a] hover:bg-[#014a7a]"
-                  }`}
+                  disabled={
+                    isLoading ||
+                    Object.values(formErrors).some((v) => v !== undefined) ||
+                    !selectedPropertyId ||
+                    !selectedUnitType
+                  }
+                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${isLoading ||
+                    Object.values(formErrors).some((v) => v !== undefined) ||
+                    !selectedPropertyId ||
+                    !selectedUnitType
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#012a4a] hover:bg-[#014a7a]"
+                    }`}
                   aria-label={modalMode === "add" ? "Add tenant" : "Update tenant"}
                 >
-                  {isLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>}
+                  {isLoading && (
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                  )}
                   {modalMode === "add" ? "Add Tenant" : "Update Tenant"}
                 </button>
               </div>
             </form>
           </Modal>
-          <Modal title="Confirm Delete" isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}>
-            <p className="mb-6 text-gray-700 text-sm sm:text-base">Are you sure you want to delete this tenant? This action cannot be undone.</p>
+          <Modal
+            title="Confirm Delete"
+            isOpen={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+          >
+            <p className="mb-6 text-gray-700 text-sm sm:text-base">
+              Are you sure you want to delete this tenant? This action cannot be undone.
+            </p>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <button
                 onClick={() => setIsDeleteModalOpen(false)}
@@ -1321,7 +1069,9 @@ export default function TenantsPage() {
                 disabled={isLoading}
                 aria-label="Confirm delete tenant"
               >
-                {isLoading && <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>}
+                {isLoading && (
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                )}
                 Delete
               </button>
             </div>
@@ -1336,8 +1086,9 @@ export default function TenantsPage() {
             onSuccess={() => {
               setSuccessMessage("Payment processed successfully!");
               setPendingTenantData(null);
-              cache.current.delete(`property-owner-data-${userId}-${page}-${limit}`);
-              fetchInitialData();
+              fetchUserData();
+              fetchPendingInvoices();
+              fetchTenants();
               setIsPaymentPromptOpen(false);
               setIsModalOpen(true);
               setError(null);
@@ -1355,9 +1106,9 @@ export default function TenantsPage() {
         </main>
       </div>
       <style jsx global>{`
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
-          font-family: "Inter", sans-serif;
+          font-family: 'Inter', sans-serif;
         }
       `}
       </style>

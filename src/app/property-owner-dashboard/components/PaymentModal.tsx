@@ -2,12 +2,36 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Modal from "./Modal";
-import { Property } from "../../../types/property";
 
-// Define UnitType interface if not imported from elsewhere
+// Define ClientProperty interface to match TenantsPage
+interface ClientProperty {
+  _id: string;
+  name: string;
+  address: string;
+  unitTypes: {
+    uniqueType: string;
+    type: string;
+    price: number;
+    deposit: number;
+    managementType: "RentCollection" | "FullManagement";
+    quantity: number;
+  }[];
+  managementFee: number;
+  createdAt: string;
+  updatedAt: string;
+  rentPaymentDate: string;
+  ownerId: string;
+  status: string;
+}
+
+// Define UnitType interface for consistency
 interface UnitType {
-  quantity?: number;
-  // Add other properties if needed
+  uniqueType: string;
+  type: string;
+  price: number;
+  deposit: number;
+  managementType: "RentCollection" | "FullManagement";
+  quantity: number;
 }
 
 interface Invoice {
@@ -29,7 +53,7 @@ interface PaymentModalProps {
   onClose: () => void;
   onSuccess: () => void;
   onError: (message: string) => void;
-  properties: Property[];
+  properties: ClientProperty[]; // Changed from Property[] to ClientProperty[]
   initialPropertyId?: string;
   initialPhone?: string;
   userId: string | null;
@@ -390,7 +414,7 @@ export default function PaymentModal({
   );
 
   const calculateTotalUnits = (propertyId: string): number => {
-    const property = properties.find((p) => p._id.toString() === propertyId);
+    const property = properties.find((p) => p._id === propertyId); // No toString() needed since _id is string
     if (!property) return 0;
     return property.unitTypes.reduce((sum: number, unit: UnitType) => sum + (unit.quantity || 0), 0);
   };
@@ -452,8 +476,8 @@ export default function PaymentModal({
               >
                 <option value="">Select Property</option>
                 {properties.map((p) => (
-                  <option key={p._id.toString()} value={p._id.toString()}>
-                    {p.name} (Total Units: {calculateTotalUnits(p._id.toString())})
+                  <option key={p._id} value={p._id}> {/* No toString() needed since _id is string */}
+                    {p.name} (Total Units: {calculateTotalUnits(p._id)})
                   </option>
                 ))}
               </select>

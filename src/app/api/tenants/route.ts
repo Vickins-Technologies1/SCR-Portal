@@ -57,6 +57,15 @@ interface LogMeta {
   [key: string]: unknown;
 }
 
+// Define MongoDB query type
+interface MongoQuery {
+  ownerId: string;
+  name?: { $regex: string; $options: string };
+  email?: { $regex: string; $options: string };
+  propertyId?: string;
+  unitType?: { $regex: string; $options: string };
+}
+
 const logger = {
   debug: (message: string, meta?: LogMeta) => {
     if (process.env.NODE_ENV !== "production") {
@@ -126,18 +135,28 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
+    const tenantName = searchParams.get("tenantName");
+    const tenantEmail = searchParams.get("tenantEmail");
+    const propertyId = searchParams.get("propertyId");
+    const unitType = searchParams.get("unitType");
+
+    const query: MongoQuery = { ownerId: userId };
+    if (tenantName) query.name = { $regex: tenantName, $options: "i" };
+    if (tenantEmail) query.email = { $regex: tenantEmail, $options: "i" };
+    if (propertyId) query.propertyId = propertyId;
+    if (unitType) query.unitType = { $regex: unitType, $options: "i" };
 
     const { db }: { db: Db } = await connectToDatabase();
     logger.debug("Connected to database", { database: "rentaldb", collection: "tenants" });
 
-    const totalTenants = await db.collection<Tenant>("tenants").countDocuments({ ownerId: userId });
+    const totalTenants = await db.collection<Tenant>("tenants").countDocuments(query);
     const tenants = await db
       .collection<Tenant>("tenants")
-      .find({ ownerId: userId })
+      .find(query)
       .skip(skip)
       .limit(limit)
       .toArray();
-    logger.debug("Fetched tenants", { userId, count: tenants.length, page, limit });
+    logger.debug("Fetched tenants", { userId, count: tenants.length, page, limit, query });
 
     return NextResponse.json(
       {
