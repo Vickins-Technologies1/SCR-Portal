@@ -101,6 +101,7 @@ interface ApiResponse<T> {
   page?: number;
   limit?: number;
   message?: string;
+  csrfToken?: string;
 }
 
 export default function NotificationsPage() {
@@ -134,37 +135,73 @@ export default function NotificationsPage() {
         method: "GET",
         credentials: "include",
       });
-      const data = await response.json();
+      const data: ApiResponse<never> = await response.json();
       if (data.success && data.csrfToken) {
         setCsrfToken(data.csrfToken);
-        Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", secure: true });
+        Cookies.set("csrfToken", data.csrfToken, { sameSite: "strict", secure: true });
+        console.log("[INFO] CSRF token fetched and stored:", data.csrfToken);
+        return data.csrfToken;
       } else {
-        setError("Failed to fetch CSRF token.");
+        console.error("[ERROR] Failed to fetch CSRF token:", data.message);
+        setError("Failed to fetch CSRF token. Please try again.");
+        return null;
       }
     } catch (err) {
-      console.error("Error fetching CSRF token:", err instanceof Error ? err.message : "Unknown error");
-      setError("Failed to fetch CSRF token.");
+      console.error("[ERROR] Error fetching CSRF token:", err instanceof Error ? err.message : "Unknown error");
+      setError("Failed to fetch CSRF token. Please refresh the page.");
+      return null;
     }
   }, []);
 
+  const makeAuthenticatedRequest = useCallback(
+    async (url: string, options: RequestInit, retries = 1): Promise<Response> => {
+      if (!csrfToken) {
+        const newToken = await fetchCsrfToken();
+        if (!newToken) {
+          throw new Error("Unable to fetch CSRF token");
+        }
+      }
+
+      const headers = new Headers(options.headers || {});
+      headers.set("X-CSRF-Token", csrfToken!);
+      headers.set("Content-Type", "application/json");
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: "include",
+      });
+
+      if (response.status === 403 && retries > 0) {
+        console.log("[INFO] CSRF token invalid, retrying with new token...");
+        const newToken = await fetchCsrfToken();
+        if (newToken) {
+          headers.set("X-CSRF-Token", newToken);
+          setCsrfToken(newToken);
+          Cookies.set("csrfToken", newToken, { sameSite: "strict", secure: true });
+          return makeAuthenticatedRequest(url, { ...options, headers }, retries - 1);
+        }
+      }
+
+      return response;
+    },
+    [csrfToken, fetchCsrfToken]
+  );
+
   const fetchTenantsAndPayments = useCallback(async () => {
     if (!userId || !csrfToken) {
-      console.log("Skipping fetchTenantsAndPayments: missing userId or csrfToken", { userId, csrfToken });
+      console.log("[DEBUG] Skipping fetchTenantsAndPayments: missing userId or csrfToken", { userId, csrfToken });
       setError("Please log in to fetch tenant and payment data.");
       return;
     }
     setIsLoading(true);
     try {
-      const propertiesRes = await fetch(`/api/properties?ownerId=${encodeURIComponent(userId)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
-      });
+      const propertiesRes = await makeAuthenticatedRequest(
+        `/api/properties?ownerId=${encodeURIComponent(userId)}`,
+        { method: "GET" }
+      );
       const propertiesData: ApiResponse<Property[]> = await propertiesRes.json();
-      console.log("Properties fetch response:", {
+      console.log("[INFO] Properties fetch response:", {
         success: propertiesData.success,
         properties: propertiesData.properties?.length,
         message: propertiesData.message,
@@ -179,16 +216,12 @@ export default function NotificationsPage() {
 
       const fetchedProperties = propertiesData.properties;
 
-      const tenantsRes = await fetch(`/api/tenants?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
-      });
+      const tenantsRes = await makeAuthenticatedRequest(
+        `/api/tenants?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
+        { method: "GET" }
+      );
       const tenantsData: ApiResponse<Tenant[]> = await tenantsRes.json();
-      console.log("Tenants fetch response:", {
+      console.log("[INFO] Tenants fetch response:", {
         success: tenantsData.success,
         tenants: tenantsData.tenants?.length,
         message: tenantsData.message,
@@ -215,16 +248,12 @@ export default function NotificationsPage() {
         return;
       }
 
-      const paymentsRes = await fetch(`/api/payments?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
-      });
+      const paymentsRes = await makeAuthenticatedRequest(
+        `/api/payments?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
+        { method: "GET" }
+      );
       const paymentsData: ApiResponse<Payment[]> = await paymentsRes.json();
-      console.log("Payments fetch response:", {
+      console.log("[INFO] Payments fetch response:", {
         success: paymentsData.success,
         payments: paymentsData.payments?.length,
         message: paymentsData.message,
@@ -243,20 +272,20 @@ export default function NotificationsPage() {
       for (const tenant of fetchedTenants) {
         const property = fetchedProperties.find((p) => p._id === tenant.propertyId);
         if (!property) {
-          console.warn(`Property not found for tenant ${tenant._id}`);
+          console.warn(`[WARN] Property not found for tenant ${tenant._id}`);
           continue;
         }
 
         const leaseStartDate = new Date(tenant.leaseStartDate);
         const currentDate = new Date();
         if (isNaN(leaseStartDate.getTime()) || leaseStartDate > currentDate) {
-          console.warn(`Invalid or future lease start date for tenant ${tenant._id}`);
+          console.warn(`[WARN] Invalid or future lease start date for tenant ${tenant._id}`);
           continue;
         }
 
         const unit = property.unitTypes.find((u) => u.uniqueType === tenant.unitType);
         if (!unit && !tenant.price) {
-          console.warn(`No valid unit type or price for tenant ${tenant._id}`);
+          console.warn(`[WARN] No valid unit type or price for tenant ${tenant._id}`);
           continue;
         }
         const rentAmount = unit ? unit.price : tenant.price;
@@ -299,7 +328,7 @@ export default function NotificationsPage() {
 
         const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), property.rentPaymentDate);
         if (isNaN(dueDate.getTime())) {
-          console.warn(`Invalid rent payment date for property ${property._id}`);
+          console.warn(`[WARN] Invalid rent payment date for property ${property._id}`);
           continue;
         }
         const formattedDueDate = dueDate.toLocaleDateString("en-US", {
@@ -333,32 +362,28 @@ export default function NotificationsPage() {
           });
         }
       }
-      console.log("Generated reminders:", reminders);
+      console.log("[INFO] Generated reminders:", reminders);
       setUpcomingReminders(reminders);
     } catch (err) {
-      console.error("Error fetching tenants, properties, or payments:", err instanceof Error ? err.message : "Unknown error");
+      console.error("[ERROR] Error fetching tenants, properties, or payments:", err instanceof Error ? err.message : "Unknown error");
       setError("Unable to fetch tenant, property, or payment data.");
     } finally {
       setIsLoading(false);
     }
-  }, [userId, csrfToken]);
+  }, [userId, csrfToken, makeAuthenticatedRequest]);
 
   const fetchNotifications = useCallback(async () => {
     if (!userId || !csrfToken) {
-      console.log("Skipping fetchNotifications: missing userId or csrfToken", { userId, csrfToken });
+      console.log("[DEBUG] Skipping fetchNotifications: missing userId or csrfToken", { userId, csrfToken });
       return;
     }
     try {
-      const response = await fetch(`/api/notifications?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
-      });
+      const response = await makeAuthenticatedRequest(
+        `/api/notifications?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
+        { method: "GET" }
+      );
       const data: ApiResponse<Notification[]> = await response.json();
-      console.log("Notifications fetch response:", {
+      console.log("[INFO] Notifications fetch response:", {
         success: data.success,
         notifications: data.data?.length,
         message: data.message,
@@ -371,49 +396,10 @@ export default function NotificationsPage() {
         setError(data.message || "Failed to fetch notifications.");
       }
     } catch (err) {
-      console.error("Error fetching notifications:", err instanceof Error ? err.message : "Unknown error");
+      console.error("[ERROR] Error fetching notifications:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to fetch notifications.");
     }
-  }, [userId, csrfToken]);
-
-  useEffect(() => {
-    const uid = Cookies.get("userId") ?? null;
-    const originalRole = Cookies.get("originalRole") ?? null;
-    const originalUserId = Cookies.get("originalUserId") ?? null;
-    const storedCsrfToken = Cookies.get("csrf-token") ?? null;
-
-    console.log("Cookies retrieved:", {
-      userId: uid ?? "null",
-      role: Cookies.get("role") ?? "null",
-      originalRole: originalRole ?? "null",
-      originalUserId: originalUserId ?? "null",
-      csrfToken: storedCsrfToken ?? "null",
-      documentCookie: document.cookie,
-    });
-
-    if (!uid || !Cookies.get("role")) {
-      console.log("Missing userId or role, setting error but not redirecting");
-      setError("No user session found. Please log in to access all features.");
-      return;
-    }
-
-    if (Cookies.get("role") !== "propertyOwner" && !(originalRole === "propertyOwner" && originalUserId)) {
-      console.log("Unauthorized role, setting error but not redirecting", { uid, userRole: Cookies.get("role"), originalRole, originalUserId });
-      setError("Please log in as a property owner to access all features.");
-      return;
-    }
-
-    setUserId(uid);
-    setCsrfToken(storedCsrfToken);
-    fetchCsrfToken();
-  }, [fetchCsrfToken]);
-
-  useEffect(() => {
-    if (userId && csrfToken) {
-      fetchTenantsAndPayments();
-      fetchNotifications();
-    }
-  }, [userId, csrfToken, fetchTenantsAndPayments, fetchNotifications]);
+  }, [userId, csrfToken, makeAuthenticatedRequest]);
 
   const triggerReminders = async () => {
     if (!userId || !csrfToken) {
@@ -422,17 +408,12 @@ export default function NotificationsPage() {
     }
     setIsLoading(true);
     try {
-      const response = await fetch("/api/notifications/reminders", {
+      const response = await makeAuthenticatedRequest("/api/notifications/reminders", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
         body: JSON.stringify({}),
       });
       const data: ApiResponse<Notification[]> = await response.json();
-      console.log("Trigger reminders response:", {
+      console.log("[INFO] Trigger reminders response:", {
         success: data.success,
         notifications: data.data?.length,
         message: data.message,
@@ -449,7 +430,7 @@ export default function NotificationsPage() {
       setUpcomingReminders([]);
       setError(null);
     } catch (err) {
-      console.error("Error triggering reminders:", err instanceof Error ? err.message : "Unknown error");
+      console.error("[ERROR] Error triggering reminders:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to send reminders.");
     } finally {
       setIsLoading(false);
@@ -463,16 +444,12 @@ export default function NotificationsPage() {
     }
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/notifications?notificationId=${encodeURIComponent(notificationId)}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
-      });
+      const response = await makeAuthenticatedRequest(
+        `/api/notifications?notificationId=${encodeURIComponent(notificationId)}`,
+        { method: "DELETE" }
+      );
       const data: ApiResponse<never> = await response.json();
-      console.log("Delete notification response:", {
+      console.log("[INFO] Delete notification response:", {
         success: data.success,
         message: data.message,
         status: response.status,
@@ -487,14 +464,14 @@ export default function NotificationsPage() {
       setNotifications((prev) => prev.filter((n) => n._id !== notificationId));
       setError(null);
     } catch (err) {
-      console.error("Error deleting notification:", err instanceof Error ? err.message : "Unknown error");
+      console.error("[ERROR] Error deleting notification:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to delete notification.");
     } finally {
       setIsLoading(false);
       setIsDeleteModalOpen(false);
       setNotificationToDelete(null);
     }
-  }, [userId, csrfToken]);
+  }, [userId, csrfToken, makeAuthenticatedRequest]);
 
   const createNotification = async () => {
     if (!userId || !csrfToken) {
@@ -519,13 +496,8 @@ export default function NotificationsPage() {
     }
     setIsLoading(true);
     try {
-      const response = await fetch("/api/notifications", {
+      const response = await makeAuthenticatedRequest("/api/notifications", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
         body: JSON.stringify({
           message: newNotification.message,
           tenantId: newNotification.tenantId,
@@ -534,7 +506,7 @@ export default function NotificationsPage() {
         }),
       });
       const data: ApiResponse<Notification> = await response.json();
-      console.log("Create notification response:", {
+      console.log("[INFO] Create notification response:", {
         success: data.success,
         message: data.message,
         status: response.status,
@@ -552,12 +524,53 @@ export default function NotificationsPage() {
       setCurrentPage(1);
       setError(null);
     } catch (err) {
-      console.error("Error creating notification:", err instanceof Error ? err.message : "Unknown error");
+      console.error("[ERROR] Error creating notification:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to create notification.");
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const uid = Cookies.get("userId") ?? null;
+    const originalRole = Cookies.get("originalRole") ?? null;
+    const originalUserId = Cookies.get("originalUserId") ?? null;
+    const storedCsrfToken = Cookies.get("csrfToken") ?? null;
+
+    console.log("[DEBUG] Cookies retrieved:", {
+      userId: uid ?? "null",
+      role: Cookies.get("role") ?? "null",
+      originalRole: originalRole ?? "null",
+      originalUserId: originalUserId ?? "null",
+      csrfToken: storedCsrfToken ?? "null",
+      documentCookie: document.cookie,
+    });
+
+    if (!uid || !Cookies.get("role")) {
+      console.log("[ERROR] Missing userId or role, setting error");
+      setError("No user session found. Please log in to access all features.");
+      return;
+    }
+
+    if (Cookies.get("role") !== "propertyOwner" && !(originalRole === "propertyOwner" && originalUserId)) {
+      console.log("[ERROR] Unauthorized role, setting error", { uid, userRole: Cookies.get("role"), originalRole, originalUserId });
+      setError("Please log in as a property owner to access all features.");
+      return;
+    }
+
+    setUserId(uid);
+    setCsrfToken(storedCsrfToken);
+    if (!storedCsrfToken) {
+      fetchCsrfToken();
+    }
+  }, [fetchCsrfToken]);
+
+  useEffect(() => {
+    if (userId && csrfToken) {
+      fetchTenantsAndPayments();
+      fetchNotifications();
+    }
+  }, [userId, csrfToken, fetchTenantsAndPayments, fetchNotifications]);
 
   const openNotificationDetails = useCallback((notification: Notification) => {
     setSelectedNotification(notification);
@@ -931,45 +944,45 @@ export default function NotificationsPage() {
                 ))}
               </div>
               <div className="flex flex-col sm:flex-row justify-between items-center mt-6">
-                <div className="flex items-center gap-2">
-                  <label htmlFor="pageSize" className="text-sm text-[#012a4a]">
-                    Show:
-                  </label>
-                  <select
-                    id="pageSize"
-                    value={pageSize}
-                    onChange={handlePageSizeChange}
-                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm text-[#012a4a]"
-                  >
-                    <option value="5">5</option>
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
-                  <span className="text-sm text-[#012a4a]">
-                    entries per page
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-4 sm:mt-0">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <span className="text-sm text-[#012a4a]">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
+  <div className="flex items-center gap-2">
+    <label htmlFor="pageSize" className="text-sm text-[#012a4a]">
+      Show:
+    </label>
+    <select
+      id="pageSize"
+      value={pageSize}
+      onChange={handlePageSizeChange}
+      className="border border-gray-200 rounded-lg px-2 py-1 text-sm text-[#012a4a]"
+    >
+      <option value="5">5</option>
+      <option value="10">10</option>
+      <option value="20">20</option>
+      <option value="50">50</option>
+    </select>
+    <span className="text-sm text-[#012a4a]">
+      entries per page
+    </span>
+  </div>
+  <div className="flex items-center gap-2 mt-4 sm:mt-0">
+    <button
+      onClick={() => handlePageChange(currentPage - 1)}
+      disabled={currentPage === 1}
+      className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
+    >
+      <ChevronLeft size={16} />
+    </button>
+    <span className="text-sm text-[#012a4a]">
+      Page {currentPage} of {totalPages}
+    </span>
+    <button
+      onClick={() => handlePageChange(currentPage + 1)}
+      disabled={currentPage === totalPages}
+      className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
+    >
+      <ChevronRight size={16} /> {/* Fixed from size=16} to size={16} */}
+    </button>
+  </div>
+</div>
             </div>
           )}
           <Modal
