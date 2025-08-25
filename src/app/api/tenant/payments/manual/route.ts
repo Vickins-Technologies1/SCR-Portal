@@ -46,8 +46,6 @@ interface User {
   _id: ObjectId;
   name: string;
   email: string;
-
-System: string;
   phone: string;
   role: "tenant" | "propertyOwner" | "admin";
 }
@@ -61,6 +59,21 @@ interface ManualPaymentRequestBody {
   reference: string;
   paymentDate: string;
   csrfToken: string;
+}
+
+// Interface for the check-dues response
+interface CheckDuesResponse {
+  success: boolean;
+  message: string;
+  tenant?: {
+    walletBalance: number;
+    totalRentPaid: number;
+    totalUtilityPaid: number;
+    totalDepositPaid: number;
+  };
+  dues?: {
+    totalRemainingDues: number;
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -171,40 +184,76 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Trigger dues recalculation via check-dues endpoint
-    const checkDuesResponse = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/tenants/check-dues`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": fetchedCsrfToken,
-          Cookie: `csrf-token=${fetchedCsrfToken}; userId=${userId}; role=${role}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
+    // Trigger dues recalculation via check-dues endpoint with timeout and retry
+    let checkDuesData: CheckDuesResponse = { success: false, message: "Dues recalculation not attempted" };
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+    const maxRetries = 3;
+    let retryCount = 0;
+
+    while (retryCount < maxRetries) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+
+        const checkDuesResponse = await fetch(`${apiUrl}/api/tenants/check-dues`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": fetchedCsrfToken,
+          },
+          credentials: "include", // Let the browser handle cookies
+          signal: controller.signal,
+          body: JSON.stringify({
+            tenantId,
+            userId,
+          }),
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!checkDuesResponse.ok) {
+          throw new Error(`HTTP error ${checkDuesResponse.status}: ${checkDuesResponse.statusText}`);
+        }
+
+        checkDuesData = await checkDuesResponse.json() as CheckDuesResponse;
+        if (!checkDuesData.success) {
+          logger.error("Failed to update dues after manual payment", {
+            tenantId,
+            message: checkDuesData.message,
+            status: checkDuesResponse.status,
+          });
+        } else {
+          logger.info("Dues recalculated after manual payment", {
+            tenantId,
+            walletBalance: checkDuesData.tenant?.walletBalance,
+            totalRentPaid: checkDuesData.tenant?.totalRentPaid,
+            totalUtilityPaid: checkDuesData.tenant?.totalUtilityPaid,
+            totalDepositPaid: checkDuesData.tenant?.totalDepositPaid,
+            totalRemainingDues: checkDuesData.dues?.totalRemainingDues,
+          });
+        }
+        break; // Exit retry loop on success
+      } catch (fetchError) {
+        retryCount++;
+        logger.error("Error during check-dues fetch", {
           tenantId,
           userId,
-        }),
-      }
-    );
+          attempt: retryCount,
+          error: fetchError instanceof Error ? fetchError.message : "Unknown error",
+        });
 
-    const checkDuesData = await checkDuesResponse.json();
-    if (!checkDuesData.success) {
-      logger.error("Failed to update dues after manual payment", {
-        tenantId,
-        message: checkDuesData.message,
-      });
-      // Continue with notifications but log the error
-    } else {
-      logger.info("Dues recalculated after manual payment", {
-        tenantId,
-        walletBalance: checkDuesData.tenant.walletBalance,
-        totalRentPaid: checkDuesData.tenant.totalRentPaid,
-        totalUtilityPaid: checkDuesData.tenant.totalUtilityPaid,
-        totalDepositPaid: checkDuesData.tenant.totalDepositPaid,
-        totalRemainingDues: checkDuesData.dues.totalRemainingDues,
-      });
+        if (retryCount === maxRetries) {
+          logger.error("Max retries reached for check-dues fetch", {
+            tenantId,
+            userId,
+            maxRetries,
+          });
+          // Continue with notifications despite failure
+          checkDuesData = { success: false, message: "Failed to recalculate dues after maximum retries" };
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
+        }
+      }
     }
 
     // Fetch updated tenant data
@@ -353,6 +402,7 @@ export async function POST(request: NextRequest) {
       message: error instanceof Error ? error.message : "Unknown error",
       userId,
       role,
+      stack: error instanceof Error ? error.stack : undefined,
     });
     return NextResponse.json(
       { success: false, message: "Server error while recording payment" },
