@@ -25,7 +25,6 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
-  // Load cookies and fetch CSRF token
   useEffect(() => {
     const checkCookies = () => {
       const uid = Cookies.get("userId");
@@ -107,12 +106,12 @@ export default function AdminDashboard() {
           headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
           credentials: "include",
         }),
-        fetch("/api/payments", {
+        fetch("/api/admin/payments", {
           method: "GET",
           headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
           credentials: "include",
         }),
-        fetch("/api/invoices", {
+        fetch("/api/admin/invoices", {
           method: "GET",
           headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
           credentials: "include",
@@ -125,7 +124,7 @@ export default function AdminDashboard() {
       ]);
 
       const responses = [propertyOwnersRes, tenantsRes, propertiesRes, paymentsRes, invoicesRes, adminsRes];
-      const endpoints = ["/api/admin/property-owners", "/api/admin/tenants", "/api/admin/properties", "/api/payments", "/api/invoices", "/api/admin"];
+      const endpoints = ["/api/admin/property-owners", "/api/admin/tenants", "/api/admin/properties", "/api/admin/payments", "/api/admin/invoices", "/api/admin"];
       responses.forEach((res, index) => {
         if (!res.ok) {
           console.error(`Failed to fetch ${endpoints[index]}: ${res.status} ${res.statusText}`);
@@ -167,7 +166,7 @@ export default function AdminDashboard() {
           paymentsData.message,
           invoicesData.message,
           adminsData.message,
-        ].filter(msg => msg).join("; ");
+        ].filter((msg) => msg).join("; ");
         setError(`Failed to fetch dashboard data: ${errors || "Unknown error"}`);
       }
     } catch (error: unknown) {
@@ -186,89 +185,84 @@ export default function AdminDashboard() {
   }, [userId, role, csrfToken, fetchCounts]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen bg-white font-sans text-gray-900">
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800 mb-6 animate-fade-in-down">
-            <Home className="text-[#012a4a] h-6 w-6" />
+      <div className="sm:ml-64 mt-16 p-6 lg:p-8">
+        <main className="max-w-7xl mx-auto">
+          <h1 className="text-3xl lg:text-4xl font-extrabold flex items-center gap-3 text-gray-900 mb-8 animate-slide-in-left">
+            <Home className="h-8 w-8 text-indigo-600" />
             Admin Dashboard
           </h1>
           {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+            <div className="bg-red-100 border border-red-200 text-red-600 p-4 rounded-xl mb-6 animate-pulse">
               {error}
             </div>
           )}
           {isLoading ? (
-            <div className="text-center text-gray-600">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <span className="ml-2">Loading...</span>
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+              <span className="ml-3 text-lg text-gray-600">Loading Dashboard...</span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in">
-                <Users className="h-8 w-8 mb-2" />
-                <h3 className="text-lg font-semibold">Property Owners</h3>
-                <p className="text-2xl font-bold">{counts.propertyOwners}</p>
-              </div>
-              <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in" style={{ animationDelay: "100ms" }}>
-                <Users className="h-8 w-8 mb-2" />
-                <h3 className="text-lg font-semibold">Tenants</h3>
-                <p className="text-2xl font-bold">{counts.tenants}</p>
-              </div>
-              <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in" style={{ animationDelay: "200ms" }}>
-                <Building2 className="h-8 w-8 mb-2" />
-                <h3 className="text-lg font-semibold">Properties</h3>
-                <p className="text-2xl font-bold">{counts.properties}</p>
-              </div>
-              <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in" style={{ animationDelay: "300ms" }}>
-                <CreditCard className="h-8 w-8 mb-2" />
-                <h3 className="text-lg font-semibold">Payments</h3>
-                <p className="text-2xl font-bold">{counts.payments}</p>
-              </div>
-              <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in" style={{ animationDelay: "400ms" }}>
-                <FileText className="h-8 w-8 mb-2" />
-                <h3 className="text-lg font-semibold">Invoices</h3>
-                <p className="text-2xl font-bold">{counts.invoices}</p>
-              </div>
-              <div className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white p-6 rounded-xl shadow-lg transform transition-all duration-300 hover:scale-105 animate-fade-in" style={{ animationDelay: "500ms" }}>
-                <Shield className="h-8 w-8 mb-2" />
-                <h3 className="text-lg font-semibold">Admins</h3>
-                <p className="text-2xl font-bold">{counts.admins}</p>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                { icon: Users, title: "Property Owners", count: counts.propertyOwners, color: "indigo", delay: "0ms" },
+                { icon: Users, title: "Tenants", count: counts.tenants, color: "blue", delay: "100ms" },
+                { icon: Building2, title: "Properties", count: counts.properties, color: "purple", delay: "200ms" },
+                { icon: CreditCard, title: "Payments", count: counts.payments, color: "green", delay: "300ms" },
+                { icon: FileText, title: "Invoices", count: counts.invoices, color: "yellow", delay: "400ms" },
+                { icon: Shield, title: "Admins", count: counts.admins, color: "red", delay: "500ms" },
+              ].map((item, index) => (
+                <div
+                  key={index}
+                  className={`relative bg-white p-6 rounded-2xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-fade-in-up`}
+                  style={{ animationDelay: item.delay }}
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-r from-transparent to-${item.color}-100/20 rounded-2xl`}></div>
+                  <div className="relative flex items-center gap-4">
+                    <item.icon className={`h-10 w-10 text-${item.color}-600`} />
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-700">{item.title}</h3>
+                      <p className="text-3xl font-bold text-gray-900">{item.count}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </main>
       </div>
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
         body {
           font-family: 'Inter', sans-serif;
         }
-        @keyframes fadeInDown {
+        @keyframes slideInLeft {
           from {
             opacity: 0;
-            transform: translateY(-10px);
+            transform: translateX(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        .animate-slide-in-left {
+          animation: slideInLeft 0.6s ease-out;
+        }
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
           }
           to {
             opacity: 1;
             transform: translateY(0);
           }
         }
-        .animate-fade-in-down {
-          animation: fadeInDown 0.5s ease-out;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out;
+        .animate-fade-in-up {
+          animation: fadeInUp 0.6s ease-out;
         }
       `}</style>
     </div>

@@ -1,13 +1,13 @@
-// src/app/api/admin/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { connectToDatabase } from "../../../lib/mongodb";
+import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 
-interface User {
+interface Payment {
   _id: ObjectId;
-  name: string;
-  email: string;
-  role: string;
+  amount: number;
+  date: Date;
+  status: string;
+  propertyOwnerId?: ObjectId; // Optional reference to property owner
 }
 
 export async function GET(request: NextRequest) {
@@ -25,35 +25,36 @@ export async function GET(request: NextRequest) {
   try {
     const { db }: { db: Db } = await connectToDatabase();
     
-    // Fetch admin count
-    const count = await db.collection<User>("propertyOwners").countDocuments({ role: "admin" });
+    // Fetch payment count
+    const count = await db.collection<Payment>("payments").countDocuments();
 
-    // Fetch admin details (optional, for consistency)
-    const admins = await db
-      .collection<User>("propertyOwners")
-      .find({ role: "admin" })
-      .project<User>({ _id: 1, name: 1, email: 1 })
+    // Fetch payment details (optional, for consistency)
+    const payments = await db
+      .collection<Payment>("payments")
+      .find({})
+      .project<Payment>({ _id: 1, amount: 1, date: 1, status: 1 })
       .toArray();
 
     return NextResponse.json(
       {
         success: true,
         count: count || 0, // Ensure count is always a number
-        admins: admins.map((a) => ({
-          _id: a._id.toString(),
-          name: a.name || "N/A",
-          email: a.email || "N/A",
+        payments: payments.map((p) => ({
+          _id: p._id.toString(),
+          amount: p.amount || 0,
+          date: p.date ? p.date.toISOString() : "N/A",
+          status: p.status || "N/A",
         })),
       },
       { status: 200 }
     );
   } catch (error: unknown) {
-    console.error("Admins fetch error:", {
+    console.error("Payments fetch error:", {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
     return NextResponse.json(
-      { success: false, message: "Failed to fetch admins: Server error" },
+      { success: false, message: "Failed to fetch payments: Server error" },
       { status: 500 }
     );
   }
