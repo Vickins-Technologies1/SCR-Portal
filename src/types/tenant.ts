@@ -23,7 +23,7 @@ export interface Tenant {
   totalUtilityPaid: number;
   totalDepositPaid: number;
   walletBalance: number;
-  deliveryMethod: 'sms' | 'email' | 'both' | 'app'; // Added to match route.ts usage
+  deliveryMethod: "sms" | "email" | "whatsapp" | "both" | "app"; // Added "whatsapp"
 }
 
 export interface ResponseTenant {
@@ -48,6 +48,7 @@ export interface ResponseTenant {
   totalUtilityPaid: number;
   totalDepositPaid: number;
   walletBalance: number;
+  deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app"; // Added for API responses
   dues?: {
     rentDues: number;
     utilityDues: number;

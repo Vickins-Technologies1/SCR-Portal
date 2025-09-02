@@ -30,6 +30,7 @@ interface Tenant {
   totalUtilityPaid: number;
   totalDepositPaid: number;
   walletBalance: number;
+  deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
 }
 
 interface Property {
@@ -61,8 +62,9 @@ interface Notification {
   tenantId: string;
   tenantName: string;
   ownerId: string;
-  deliveryMethod: "app" | "sms" | "email" | "both";
+  deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
   deliveryStatus?: "pending" | "success" | "failed";
+  errorDetails?: string;
 }
 
 interface Payment {
@@ -283,6 +285,11 @@ export default function NotificationsPage() {
           continue;
         }
 
+        if (isNaN(property.rentPaymentDate) || property.rentPaymentDate < 1 || property.rentPaymentDate > 31) {
+          console.warn(`[WARN] Invalid rent payment date for property ${property._id}`);
+          continue;
+        }
+
         const unit = property.unitTypes.find((u) => u.uniqueType === tenant.unitType);
         if (!unit && !tenant.price) {
           console.warn(`[WARN] No valid unit type or price for tenant ${tenant._id}`);
@@ -292,7 +299,9 @@ export default function NotificationsPage() {
         const depositAmount = unit ? unit.deposit : tenant.deposit;
         const utilityAmount = 1000;
 
-        const tenantPayments = fetchedPayments.filter((p) => p.tenantId === tenant._id);
+        const tenantPayments = fetchedPayments.filter((p) =>
+          p.tenantId ? p.tenantId.toString() === tenant._id : false
+        );
 
         const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
         const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
@@ -328,7 +337,7 @@ export default function NotificationsPage() {
 
         const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), property.rentPaymentDate);
         if (isNaN(dueDate.getTime())) {
-          console.warn(`[WARN] Invalid rent payment date for property ${property._id}`);
+          console.warn(`[WARN] Invalid due date for property ${property._id}`);
           continue;
         }
         const formattedDueDate = dueDate.toLocaleDateString("en-US", {
@@ -473,6 +482,101 @@ export default function NotificationsPage() {
     }
   }, [userId, csrfToken, makeAuthenticatedRequest]);
 
+  const markAsRead = async (notificationId: string) => {
+    if (!userId || !csrfToken) {
+      setError("Please log in to mark notifications as read.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const response = await makeAuthenticatedRequest("/api/notifications/reminders/mark-read", {
+        method: "POST",
+        body: JSON.stringify({ notificationId }),
+      });
+      const data: ApiResponse<never> = await response.json();
+      console.log("[INFO] Mark as read response:", {
+        success: data.success,
+        message: data.message,
+        status: response.status,
+      });
+
+      if (!data.success) {
+        setError(data.message || "Failed to mark notification as read.");
+        setIsLoading(false);
+        return;
+      }
+
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === notificationId ? { ...n, status: "read" } : n))
+      );
+      setError(null);
+    } catch (err) {
+      console.error("[ERROR] Error marking notification as read:", err instanceof Error ? err.message : "Unknown error");
+      setError("Failed to mark notification as read.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const retryNotification = async (notificationId: string) => {
+    if (!userId || !csrfToken) {
+      setError("Please log in to retry notifications.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const notification = notifications.find((n) => n._id === notificationId);
+      if (!notification) {
+        setError("Notification not found.");
+        setIsLoading(false);
+        return;
+      }
+      if (
+        notification.deliveryStatus === "failed" &&
+        notification.errorDetails?.includes("Error code: 1007")
+      ) {
+        setError(
+          "Cannot retry: Device not found. Please verify the WhatsApp device ID in your configuration and try again."
+        );
+        setIsLoading(false);
+        return;
+      }
+      const response = await makeAuthenticatedRequest("/api/notifications", {
+        method: "POST",
+        body: JSON.stringify({
+          message: notification.message,
+          tenantId: notification.tenantId,
+          type: notification.type,
+          deliveryMethod: notification.deliveryMethod,
+        }),
+      });
+      const data: ApiResponse<Notification> = await response.json();
+      console.log("[INFO] Retry notification response:", {
+        success: data.success,
+        message: data.message,
+        status: response.status,
+      });
+
+      if (!data.success || !data.data) {
+        setError(data.message || "Failed to retry notification.");
+        setIsLoading(false);
+        return;
+      }
+
+      setNotifications((prev) => [data.data!, ...prev.filter((n) => n._id !== notificationId)]);
+      setError(null);
+    } catch (err) {
+      console.error("[ERROR] Error retrying notification:", err instanceof Error ? err.message : "Unknown error");
+      setError(
+        err instanceof Error && err.message.includes("Error code: 1007")
+          ? "Cannot retry: Device not found. Please verify the WhatsApp device ID in your configuration."
+          : "Failed to retry notification."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const createNotification = async () => {
     if (!userId || !csrfToken) {
       setError("Please log in to create notifications.");
@@ -486,7 +590,7 @@ export default function NotificationsPage() {
       setError("Please select a valid notification type.");
       return;
     }
-    if (!newNotification.deliveryMethod || !["app", "sms", "email", "both"].includes(newNotification.deliveryMethod)) {
+    if (!newNotification.deliveryMethod || !["app", "sms", "email", "whatsapp", "both"].includes(newNotification.deliveryMethod)) {
       setError("Please select a valid delivery method.");
       return;
     }
@@ -525,7 +629,11 @@ export default function NotificationsPage() {
       setError(null);
     } catch (err) {
       console.error("[ERROR] Error creating notification:", err instanceof Error ? err.message : "Unknown error");
-      setError("Failed to create notification.");
+      setError(
+        err instanceof Error && err.message.includes("Error code: 1007")
+          ? "Cannot send: Device not found. Please verify the WhatsApp device ID in your configuration."
+          : "Failed to create notification."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -606,6 +714,31 @@ export default function NotificationsPage() {
   const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setPageSize(Number(e.target.value));
     setCurrentPage(1);
+  };
+
+  const getDeliveryStatusText = (notification: Notification) => {
+    const status = notification.deliveryStatus || "Pending";
+    const errorDetails = notification.errorDetails || "";
+    let baseText: string;
+    switch (notification.deliveryMethod) {
+      case "both":
+        baseText = `SMS, Email & WhatsApp (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
+        break;
+      case "sms":
+        baseText = `SMS (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
+        break;
+      case "email":
+        baseText = `Email (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
+        break;
+      case "whatsapp":
+        baseText = `WhatsApp (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
+        break;
+      default:
+        baseText = "App";
+    }
+    return errorDetails.includes("Error code: 1007")
+      ? `${baseText} - Verify WhatsApp device ID in configuration`
+      : baseText;
   };
 
   return (
@@ -788,28 +921,51 @@ export default function NotificationsPage() {
                               {new Date((item as Notification).createdAt).toLocaleDateString()}
                             </td>
                             <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as Notification).deliveryMethod === "both"
-                                ? "SMS & Email"
-                                : (item as Notification).deliveryMethod === "sms"
-                                ? `SMS (${(item as Notification).deliveryStatus || "Pending"})`
-                                : (item as Notification).deliveryMethod === "email"
-                                ? "Email"
-                                : "App"}
+                              {getDeliveryStatusText(item as Notification)}
                             </td>
                             <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
                               {(item as Notification).status.charAt(0).toUpperCase() + (item as Notification).status.slice(1)}
                             </td>
                             <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openDeleteConfirmation((item as Notification)._id);
-                                }}
-                                className="text-red-600 hover:text-red-800 flex items-center gap-1"
-                              >
-                                <Trash2 size={14} />
-                                Delete
-                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markAsRead((item as Notification)._id);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                                  disabled={(item as Notification).status === "read"}
+                                >
+                                  Mark as Read
+                                </button>
+                                {viewMode === "sent" && (item as Notification).deliveryStatus === "failed" && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      retryNotification((item as Notification)._id);
+                                    }}
+                                    className="text-yellow-600 hover:text-yellow-800 flex items-center gap-1"
+                                    disabled={(item as Notification).errorDetails?.includes("Error code: 1007")}
+                                    title={
+                                      (item as Notification).errorDetails?.includes("Error code: 1007")
+                                        ? "Cannot retry: Verify WhatsApp device ID in configuration"
+                                        : ""
+                                    }
+                                  >
+                                    Retry
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDeleteConfirmation((item as Notification)._id);
+                                  }}
+                                  className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                                >
+                                  <Trash2 size={14} />
+                                  Delete
+                                </button>
+                              </div>
                             </td>
                           </>
                         ) : (
@@ -882,13 +1038,7 @@ export default function NotificationsPage() {
                         <div>
                           <span className="font-medium text-[#012a4a] text-sm">Delivery: </span>
                           <span className="text-[#012a4a] text-sm">
-                            {(item as Notification).deliveryMethod === "both"
-                              ? "SMS & Email"
-                              : (item as Notification).deliveryMethod === "sms"
-                              ? `SMS (${(item as Notification).deliveryStatus || "Pending"})`
-                              : (item as Notification).deliveryMethod === "email"
-                              ? "Email"
-                              : "App"}
+                            {getDeliveryStatusText(item as Notification)}
                           </span>
                         </div>
                         <div>
@@ -897,16 +1047,45 @@ export default function NotificationsPage() {
                             {(item as Notification).status.charAt(0).toUpperCase() + (item as Notification).status.slice(1)}
                           </span>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteConfirmation((item as Notification)._id);
-                          }}
-                          className="text-red-600 hover:text-red-800 flex items-center gap-1 text-sm mt-3"
-                        >
-                          <Trash2 size={14} />
-                          Delete
-                        </button>
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markAsRead((item as Notification)._id);
+                            }}
+                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+                            disabled={(item as Notification).status === "read"}
+                          >
+                            Mark as Read
+                          </button>
+                          {viewMode === "sent" && (item as Notification).deliveryStatus === "failed" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                retryNotification((item as Notification)._id);
+                              }}
+                              className="text-yellow-600 hover:text-yellow-800 flex items-center gap-1 text-sm"
+                              disabled={(item as Notification).errorDetails?.includes("Error code: 1007")}
+                              title={
+                                (item as Notification).errorDetails?.includes("Error code: 1007")
+                                  ? "Cannot retry: Verify WhatsApp device ID in configuration"
+                                  : ""
+                              }
+                            >
+                              Retry
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDeleteConfirmation((item as Notification)._id);
+                            }}
+                            className="text-red-600 hover:text-red-800 flex items-center gap-1 text-sm"
+                          >
+                            <Trash2 size={14} />
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -944,54 +1123,59 @@ export default function NotificationsPage() {
                 ))}
               </div>
               <div className="flex flex-col sm:flex-row justify-between items-center mt-6">
-  <div className="flex items-center gap-2">
-    <label htmlFor="pageSize" className="text-sm text-[#012a4a]">
-      Show:
-    </label>
-    <select
-      id="pageSize"
-      value={pageSize}
-      onChange={handlePageSizeChange}
-      className="border border-gray-200 rounded-lg px-2 py-1 text-sm text-[#012a4a]"
-    >
-      <option value="5">5</option>
-      <option value="10">10</option>
-      <option value="20">20</option>
-      <option value="50">50</option>
-    </select>
-    <span className="text-sm text-[#012a4a]">
-      entries per page
-    </span>
-  </div>
-  <div className="flex items-center gap-2 mt-4 sm:mt-0">
-    <button
-      onClick={() => handlePageChange(currentPage - 1)}
-      disabled={currentPage === 1}
-      className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
-    >
-      <ChevronLeft size={16} />
-    </button>
-    <span className="text-sm text-[#012a4a]">
-      Page {currentPage} of {totalPages}
-    </span>
-    <button
-      onClick={() => handlePageChange(currentPage + 1)}
-      disabled={currentPage === totalPages}
-      className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
-    >
-      <ChevronRight size={16} /> {/* Fixed from size=16} to size={16} */}
-    </button>
-  </div>
-</div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="pageSize" className="text-sm text-[#012a4a]">
+                    Show:
+                  </label>
+                  <select
+                    id="pageSize"
+                    value={pageSize}
+                    onChange={handlePageSizeChange}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm text-[#012a4a]"
+                  >
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                  </select>
+                  <span className="text-sm text-[#012a4a]">
+                    entries per page
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-4 sm:mt-0">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="text-sm text-[#012a4a]">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           <Modal
             isOpen={isModalOpen}
-            onClose={() => setIsModalOpen(false)}
-            title={selectedNotification ? "Notification Details" : "Reminder Details"}
+            onClose={() => {
+              setIsModalOpen(false);
+              setSelectedNotification(null);
+              setSelectedReminder(null);
+              setError(null);
+            }}
+            title={viewMode === "sent" ? "Notification Details" : "Reminder Details"}
           >
-            {selectedNotification ? (
-              <div className="space-y-4 text-[#012a4a] text-sm">
+            {selectedNotification && (
+              <div className="space-y-4 text-[#012a4a]">
                 <p>
                   <strong>Message:</strong> {selectedNotification.message}
                 </p>
@@ -1004,29 +1188,43 @@ export default function NotificationsPage() {
                 </p>
                 <p>
                   <strong>Date:</strong>{" "}
-                  {new Date(selectedNotification.createdAt).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {new Date(selectedNotification.createdAt).toLocaleDateString()}
                 </p>
                 <p>
                   <strong>Delivery Method:</strong>{" "}
-                  {selectedNotification.deliveryMethod === "both"
-                    ? "SMS & Email"
-                    : selectedNotification.deliveryMethod === "sms"
-                    ? `SMS (${selectedNotification.deliveryStatus || "Pending"})`
-                    : selectedNotification.deliveryMethod === "email"
-                    ? "Email"
-                    : "App"}
+                  {getDeliveryStatusText(selectedNotification)}
                 </p>
                 <p>
                   <strong>Status:</strong>{" "}
                   {selectedNotification.status.charAt(0).toUpperCase() + selectedNotification.status.slice(1)}
                 </p>
+                {selectedNotification.status !== "read" && (
+                  <button
+                    onClick={() => markAsRead(selectedNotification._id)}
+                    className="bg-[#03a678] text-white px-4 py-2 rounded-xl hover:bg-[#02956a] transition-colors"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "Processing..." : "Mark as Read"}
+                  </button>
+                )}
+                {selectedNotification.deliveryStatus === "failed" && (
+                  <button
+                    onClick={() => retryNotification(selectedNotification._id)}
+                    className="bg-yellow-600 text-white px-4 py-2 rounded-xl hover:bg-yellow-700 transition-colors"
+                    disabled={isLoading || selectedNotification.errorDetails?.includes("Error code: 1007")}
+                    title={
+                      selectedNotification.errorDetails?.includes("Error code: 1007")
+                        ? "Cannot retry: Verify WhatsApp device ID in configuration"
+                        : ""
+                    }
+                  >
+                    {isLoading ? "Retrying..." : "Retry Notification"}
+                  </button>
+                )}
               </div>
-            ) : selectedReminder ? (
-              <div className="space-y-4 text-[#012a4a] text-sm">
+            )}
+            {selectedReminder && (
+              <div className="space-y-4 text-[#012a4a]">
                 <p>
                   <strong>Tenant:</strong> {selectedReminder.tenantName}
                 </p>
@@ -1053,10 +1251,12 @@ export default function NotificationsPage() {
                 </p>
                 <p>
                   <strong>Reminder Type:</strong>{" "}
-                  {selectedReminder.reminderType === "fiveDaysBefore" ? "Five Days Before" : "Payment Date"}
+                  {selectedReminder.reminderType === "paymentDate"
+                    ? "Payment Date"
+                    : "Five Days Before"}
                 </p>
               </div>
-            ) : null}
+            )}
           </Modal>
           <Modal
             isOpen={isCreateModalOpen}
@@ -1119,7 +1319,8 @@ export default function NotificationsPage() {
                   <option value="app">In-App</option>
                   <option value="sms">SMS</option>
                   <option value="email">Email</option>
-                  <option value="both">SMS & Email</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="both">SMS, Email & WhatsApp</option>
                 </select>
               </div>
               {newNotification.type !== "payment" && (

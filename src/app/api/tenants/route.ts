@@ -6,6 +6,7 @@ import { TenantRequest, ResponseTenant } from "../../../types/tenant";
 import bcrypt from "bcryptjs";
 import { sendWelcomeEmail } from "../../../lib/email";
 import { sendWelcomeSms } from "../../../lib/sms";
+import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 
 interface UnitType {
   type: string;
@@ -584,6 +585,43 @@ export async function POST(request: NextRequest) {
         error: smsError instanceof Error ? smsError.message : "Unknown error",
       });
       // Continue even if SMS fails to ensure tenant is added
+    }
+
+    // Send welcome WhatsApp message
+    try {
+      const maxPropertyNameLength = 50; // More lenient for WhatsApp due to 4096-char limit
+      const truncatedPropertyName = property.name.length > maxPropertyNameLength
+        ? `${property.name.substring(0, maxPropertyNameLength)}...`
+        : property.name;
+
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+      const shortUrl = baseUrl.length > 30 ? "https://app.smartchoicerentalmanagement.com/" : baseUrl;
+
+      const whatsAppMessage = `Welcome, ${requestData.name}! You have been added as a tenant. Log in at ${shortUrl} using your email: ${requestData.email} and password: ${requestData.password}. Your unit: ${truncatedPropertyName} ${requestData.houseNumber}.`;
+
+      if (whatsAppMessage.length > 4096) {
+        logger.warn("WhatsApp message exceeds 4096 characters", {
+          phone: requestData.phone,
+          messageLength: whatsAppMessage.length,
+        });
+        const fallbackMessage = `Welcome, ${requestData.name}! Log in: ${shortUrl}, email: ${requestData.email}, pass: ${requestData.password}.`;
+        await sendWhatsAppMessage({
+          phone: requestData.phone!,
+          message: fallbackMessage,
+        });
+      } else {
+        await sendWhatsAppMessage({
+          phone: requestData.phone!,
+          message: whatsAppMessage,
+        });
+      }
+      logger.info("Welcome WhatsApp message sent successfully", { phone: requestData.phone });
+    } catch (whatsAppError) {
+      logger.error("Failed to send welcome WhatsApp message", {
+        phone: requestData.phone,
+        error: whatsAppError instanceof Error ? whatsAppError.message : "Unknown error",
+      });
+      // Continue even if WhatsApp message fails to ensure tenant is added
     }
 
     logger.info("POST /api/tenants completed");

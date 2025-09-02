@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb';
 import { UNIT_TYPES, getManagementFee } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
+import { sendWhatsAppMessage } from '../../../lib/whatsapp';
 
 // Define Invoice interface for type safety
 interface Invoice {
@@ -19,6 +20,12 @@ interface Invoice {
   updatedAt: Date;
   expiresAt: Date;
   description: string;
+}
+
+// Define PropertyOwner interface for retrieving phone number
+interface PropertyOwner {
+  _id: ObjectId;
+  phone: string;
 }
 
 // Shared CSRF token validation function
@@ -267,6 +274,50 @@ export async function POST(request: NextRequest) {
         managementFee,
         invoice,
       });
+
+      // Retrieve owner's phone number
+      const owner = await db.collection<PropertyOwner>('propertyOwners').findOne({
+        _id: new ObjectId(ownerId),
+      });
+
+      if (!owner || !owner.phone) {
+        console.log('Owner phone number not found:', { ownerId });
+      } else {
+        // Send WhatsApp message to owner
+        try {
+          const maxPropertyNameLength = 50; // Lenient for WhatsApp's 4096-char limit
+          const truncatedPropertyName = name.length > maxPropertyNameLength
+            ? `${name.substring(0, maxPropertyNameLength)}...`
+            : name;
+
+          const paymentUrl = process.env.NEXT_PUBLIC_PAYMENT_URL || 'https://app.smartchoicerentalmanagement.com/';
+          const whatsAppMessage = `Hello, a new invoice has been generated for your property "${truncatedPropertyName}". Management Fee: ${managementFee}. Please pay by ${expiresAt.toLocaleDateString()} at ${paymentUrl}. Reference: ${invoice.reference} to add tenants.`;
+
+          if (whatsAppMessage.length > 4096) {
+            console.log('WhatsApp message exceeds 4096 characters:', {
+              messageLength: whatsAppMessage.length,
+              ownerId,
+            });
+            const fallbackMessage = `New invoice for "${truncatedPropertyName}". Fee: ${managementFee}. Pay by ${expiresAt.toLocaleDateString()} at ${paymentUrl}. Ref: ${invoice.reference}.`;
+            await sendWhatsAppMessage({
+              phone: owner.phone,
+              message: fallbackMessage,
+            });
+          } else {
+            await sendWhatsAppMessage({
+              phone: owner.phone,
+              message: whatsAppMessage,
+            });
+          }
+          console.log('WhatsApp message sent successfully:', { phone: owner.phone });
+        } catch (whatsAppError) {
+          console.error('Failed to send WhatsApp message:', {
+            phone: owner.phone,
+            error: whatsAppError instanceof Error ? whatsAppError.message : 'Unknown error',
+          });
+          // Continue even if WhatsApp message fails
+        }
+      }
     } else {
       console.log('No management fee for property, skipping invoice generation:', {
         propertyId: result.insertedId.toString(),

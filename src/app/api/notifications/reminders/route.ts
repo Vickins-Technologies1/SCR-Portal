@@ -1,40 +1,16 @@
+// src/app/api/notifications/reminders/route.ts
 import { NextResponse, NextRequest } from "next/server";
-import { Db, MongoClient, ObjectId } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 import { v4 as uuidv4 } from "uuid";
 import { sendWelcomeSms } from "../../../../lib/sms";
+import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
 import { generateStyledTemplate } from "../../../../lib/email-template";
 import nodemailer from "nodemailer";
-
-const connectToDatabase = async (): Promise<Db> => {
-  const client = new MongoClient(process.env.MONGODB_URI || "mongodb://localhost:27017");
-  await client.connect();
-  console.log("Connected to MongoDB database: rentaldb");
-  return client.db("rentaldb");
-};
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
-interface Tenant {
-  _id: ObjectId;
-  name: string;
-  propertyId: string;
-  ownerId: string;
-  price?: number;
-  status: string;
-  paymentStatus: string;
-  phone: string;
-  email: string;
-  deliveryMethod?: "app" | "sms" | "email" | "both";
-}
+import { connectToDatabase } from "../../../../lib/mongodb";
+import { validateCsrfToken } from "../../../../lib/csrf";
+import logger from "../../../../lib/logger";
+import { Tenant } from "../../../../types/tenant";
 
 interface Notification {
   _id: string;
@@ -45,30 +21,19 @@ interface Notification {
   tenantId: string;
   tenantName: string;
   ownerId: string;
-  deliveryMethod: "app" | "sms" | "email" | "both";
+  deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
   deliveryStatus?: "pending" | "success" | "failed";
 }
 
-interface LogMeta {
-  [key: string]: unknown;
-}
-
-const logger = {
-  debug: (message: string, meta?: LogMeta) => {
-    if (process.env.NODE_ENV !== "production") {
-      console.debug(`[DEBUG] ${message}`, meta || "");
-    }
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: process.env.SMTP_SECURE === "true",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
   },
-  warn: (message: string, meta?: LogMeta) => {
-    console.warn(`[WARN] ${message}`, meta || "");
-  },
-  error: (message: string, meta?: LogMeta) => {
-    console.error(`[ERROR] ${message}`, meta || "");
-  },
-  info: (message: string, meta?: LogMeta) => {
-    console.info(`[INFO] ${message}`, meta || "");
-  },
-};
+});
 
 const authenticatePropertyOwner = async (req: NextRequest) => {
   const cookieStore = await cookies();
@@ -93,7 +58,7 @@ const authenticatePropertyOwner = async (req: NextRequest) => {
     logger.warn("Missing CSRF token", { userId, path: req.nextUrl.pathname });
     return { isValid: false, error: "Missing CSRF token", userId };
   }
-  if (csrfToken !== storedCsrfToken) {
+  if (!(await validateCsrfToken(req, csrfToken))) {
     logger.warn("Invalid CSRF token", {
       userId,
       receivedToken: csrfToken,
@@ -138,7 +103,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type");
 
-    const db = await connectToDatabase();
+    const { db } = await connectToDatabase();
     const query: Partial<Notification> = { ownerId: userId };
     if (type && ["payment", "maintenance", "tenant", "other"].includes(type)) {
       query.type = type as Notification["type"];
@@ -181,7 +146,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ success: false, message: error }, { status: 401 });
     }
 
-    const db = await connectToDatabase();
+    const { db } = await connectToDatabase();
     const body = await req.json();
     const { pathname } = new URL(req.url);
 
@@ -232,7 +197,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
 
-      if (!deliveryMethod || !["app", "sms", "email", "both"].includes(deliveryMethod)) {
+      if (!deliveryMethod || !["app", "sms", "email", "whatsapp", "both"].includes(deliveryMethod)) {
         logger.warn("Invalid delivery method", { userId, deliveryMethod });
         return NextResponse.json(
           { success: false, message: "Valid delivery method is required" },
@@ -272,91 +237,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
 
-      if (["sms", "both"].includes(deliveryMethod) && !tenants.some((t) => t.phone)) {
-        logger.warn("No valid phone numbers for SMS delivery", { userId, tenantId });
-        return NextResponse.json(
-          { success: false, message: "No valid phone numbers available for SMS delivery" },
-          { status: 400 }
-        );
-      }
+      const notifications: Notification[] = [];
 
-      if (["email", "both"].includes(deliveryMethod) && !tenants.some((t) => t.email)) {
-        logger.warn("No valid email addresses for email delivery", { userId, tenantId });
-        return NextResponse.json(
-          { success: false, message: "No valid email addresses available for email delivery" },
-          { status: 400 }
-        );
-      }
+      for (const tenant of tenants) {
+        let finalMessage = message ? sanitizeInput(message) : "";
+        const tenantName = tenant.name; // Changed from let to const
+        let effectiveDeliveryMethod = deliveryMethod;
 
-      let finalMessage = message ? sanitizeInput(message) : "";
-      let tenantName = tenantId === "all" ? "All Tenants" : tenants[0]?.name || "Unknown";
-      let deliveryStatus: Notification["deliveryStatus"] = "pending";
+        // Respect tenant's deliveryMethod preference unless overridden by "both"
+        if (deliveryMethod !== "both" && tenant.deliveryMethod && tenant.deliveryMethod !== "both") {
+          effectiveDeliveryMethod = tenant.deliveryMethod;
+        }
 
-      if (type === "payment" && tenantId !== "all" && tenants[0]) {
-        finalMessage = tenants[0].price
-          ? `Payment of Ksh. ${tenants[0].price.toFixed(2)} is due for ${tenants[0].name}`
-          : `Payment reminder for ${tenants[0].name}`;
-        tenantName = tenants[0].name;
-      } else if (type === "payment" && tenantId === "all") {
-        finalMessage = finalMessage || "Payment reminder for all tenants";
-      } else if (type === "maintenance") {
-        finalMessage = finalMessage || "Scheduled maintenance for your property";
-      } else if (type === "tenant") {
-        finalMessage = finalMessage || "Important tenant update";
-      }
+        if (type === "payment") {
+          finalMessage = tenant.price
+            ? `Payment of Ksh. ${tenant.price.toFixed(2)} is due for ${tenant.name}`
+            : `Payment reminder for ${tenant.name}`;
+        } else if (type === "maintenance") {
+          finalMessage = finalMessage || "Scheduled maintenance for your property";
+        } else if (type === "tenant") {
+          finalMessage = finalMessage || "Important tenant update";
+        } else {
+          finalMessage = finalMessage || "Important information from your property manager";
+        }
 
-      let emailTitle: string;
-      let emailIntro: string;
-      let emailDetails: string;
+        let deliveryStatus: Notification["deliveryStatus"] = "pending";
 
-      switch (type) {
-        case "payment":
-          emailTitle = "Payment Reminder";
-          emailIntro = "This is a reminder regarding your rental payment.";
-          emailDetails = `
-            <ul>
-              <li><strong>Message:</strong> ${finalMessage}</li>
-              ${tenants[0]?.price ? `<li><strong>Amount:</strong> Ksh. ${tenants[0].price.toFixed(2)}</li>` : ""}
-              <li><strong>Action:</strong> Please make your payment at your earliest convenience.</li>
-            </ul>
-          `;
-          break;
-        case "maintenance":
-          emailTitle = "Maintenance Notification";
-          emailIntro = "We have scheduled maintenance for your property.";
-          emailDetails = `
-            <ul>
-              <li><strong>Message:</strong> ${finalMessage}</li>
-              <li><strong>Action:</strong> Please ensure access to your property or contact us for details.</li>
-            </ul>
-          `;
-          break;
-        case "tenant":
-          emailTitle = "Tenant Update";
-          emailIntro = "Important update regarding your tenancy.";
-          emailDetails = `
-            <ul>
-              <li><strong>Message:</strong> ${finalMessage}</li>
-              <li><strong>Action:</strong> Please review the update and contact us if you have questions.</li>
-            </ul>
-          `;
-          break;
-        default:
-          emailTitle = "Property Notification";
-          emailIntro = "Important information from your property manager.";
-          emailDetails = `
-            <ul>
-              <li><strong>Message:</strong> ${finalMessage}</li>
-              <li><strong>Action:</strong> Please review and contact us if needed.</li>
-            </ul>
-          `;
-      }
-
-      let smsSuccess = true;
-      let emailSuccess = true;
-
-      if (deliveryMethod === "sms" || deliveryMethod === "both") {
-        for (const tenant of tenants) {
+        if (effectiveDeliveryMethod === "sms" || effectiveDeliveryMethod === "both") {
           if (tenant.phone) {
             try {
               await sendWelcomeSms({
@@ -364,18 +271,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 message: finalMessage.slice(0, 160),
               });
               logger.info("SMS sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
+              deliveryStatus = "success";
             } catch (error) {
               logger.error("Failed to send SMS", { tenantId: tenant._id.toString(), phone: tenant.phone, error });
-              smsSuccess = false;
+              deliveryStatus = "failed";
             }
+          } else {
+            logger.warn("No phone number for SMS delivery", { tenantId: tenant._id.toString() });
+            deliveryStatus = "failed";
           }
         }
-      }
 
-      if (deliveryMethod === "email" || deliveryMethod === "both") {
-        for (const tenant of tenants) {
+        if (effectiveDeliveryMethod === "email" || effectiveDeliveryMethod === "both") {
           if (tenant.email) {
             try {
+              const emailTitle = type === "payment" ? "Payment Reminder" :
+                                type === "maintenance" ? "Maintenance Notification" :
+                                type === "tenant" ? "Tenant Update" : "Property Notification";
+              const emailIntro = type === "payment" ? "This is a reminder regarding your rental payment." :
+                                type === "maintenance" ? "We have scheduled maintenance for your property." :
+                                type === "tenant" ? "Important update regarding your tenancy." :
+                                "Important information from your property manager.";
+              const emailDetails = `
+                <ul>
+                  <li><strong>Message:</strong> ${finalMessage}</li>
+                  <li><strong>Action:</strong> ${type === "payment" ? "Please make your payment at your earliest convenience." :
+                                              type === "maintenance" ? "Please ensure access to your property or contact us for details." :
+                                              type === "tenant" ? "Please review the update and contact us if you have questions." :
+                                              "Please review and contact us if needed."}</li>
+                </ul>
+              `;
               const html = generateStyledTemplate({
                 name: tenant.name,
                 title: emailTitle,
@@ -390,33 +315,55 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 html,
               });
               logger.info("Email sent successfully", { tenantId: tenant._id.toString(), email: tenant.email });
+              deliveryStatus = deliveryStatus !== "failed" ? "success" : "failed";
             } catch (error) {
               logger.error("Failed to send email", { tenantId: tenant._id.toString(), email: tenant.email, error });
-              emailSuccess = false;
+              deliveryStatus = "failed";
             }
+          } else {
+            logger.warn("No email address for email delivery", { tenantId: tenant._id.toString() });
+            deliveryStatus = "failed";
           }
         }
+
+        if (effectiveDeliveryMethod === "whatsapp" || effectiveDeliveryMethod === "both") {
+          if (tenant.phone) {
+            try {
+              await sendWhatsAppMessage({
+                phone: tenant.phone,
+                message: finalMessage,
+              });
+              logger.info("WhatsApp message sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
+              deliveryStatus = deliveryStatus !== "failed" ? "success" : "failed";
+            } catch (error) {
+              logger.error("Failed to send WhatsApp message", { tenantId: tenant._id.toString(), phone: tenant.phone, error });
+              deliveryStatus = "failed";
+            }
+          } else {
+            logger.warn("No phone number for WhatsApp delivery", { tenantId: tenant._id.toString() });
+            deliveryStatus = "failed";
+          }
+        }
+
+        const newNotification: Notification = {
+          _id: uuidv4(),
+          message: finalMessage,
+          type,
+          createdAt: new Date().toISOString(),
+          status: "unread",
+          tenantId: tenantId === "all" ? tenant._id.toString() : tenantId,
+          tenantName,
+          ownerId: userId,
+          deliveryMethod: effectiveDeliveryMethod,
+          deliveryStatus: effectiveDeliveryMethod === "app" ? "success" : deliveryStatus,
+        };
+
+        await db.collection<Notification>("notifications").insertOne(newNotification);
+        logger.info("Notification created", { notificationId: newNotification._id, userId, tenantId: tenant._id.toString(), type });
+        notifications.push(newNotification);
       }
 
-      deliveryStatus = smsSuccess && emailSuccess ? "success" : "failed";
-
-      const newNotification: Notification = {
-        _id: uuidv4(),
-        message: finalMessage,
-        type,
-        createdAt: new Date().toISOString(),
-        status: "unread",
-        tenantId,
-        tenantName,
-        ownerId: userId,
-        deliveryMethod: deliveryMethod || "app",
-        deliveryStatus,
-      };
-
-      await db.collection<Notification>("notifications").insertOne(newNotification);
-      logger.info("Notification created", { notificationId: newNotification._id, userId, tenantId, type });
-
-      return NextResponse.json({ success: true, data: newNotification }, { status: 201 });
+      return NextResponse.json({ success: true, data: notifications[0] }, { status: 201 });
     }
   } catch (error) {
     logger.error("Error processing POST request", { error });
@@ -445,7 +392,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const db = await connectToDatabase();
+    const { db } = await connectToDatabase();
     const result = await db.collection<Notification>("notifications").deleteOne({
       _id: notificationId,
       ownerId: userId,
