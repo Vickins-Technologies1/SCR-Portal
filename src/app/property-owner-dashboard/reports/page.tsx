@@ -72,6 +72,13 @@ export default function ReportsAndInvoicesPage() {
   const [reportSortConfig, setReportSortConfig] = useState<SortConfig<Report>>({ key: "date", direction: "desc" });
   const [invoiceSortConfig, setInvoiceSortConfig] = useState<SortConfig<Invoice>>({ key: "createdAt", direction: "desc" });
 
+  // Helper function to validate and format date
+  const formatDate = (dateString: string): string => {
+    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return "N/A";
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? "N/A" : date.toLocaleDateString();
+  };
+
   // Check cookies and redirect if unauthorized
   useEffect(() => {
     const uid = Cookies.get("userId");
@@ -227,9 +234,12 @@ export default function ReportsAndInvoicesPage() {
           return direction === "asc" ? a[key] - b[key] : b[key] - a[key];
         }
         if (key === "date") {
-          return direction === "asc"
-            ? new Date(a[key]).getTime() - new Date(b[key]).getTime()
-            : new Date(b[key]).getTime() - new Date(a[key]).getTime();
+          const dateA = new Date(a[key]).getTime();
+          const dateB = new Date(b[key]).getTime();
+          if (isNaN(dateA) && isNaN(dateB)) return 0;
+          if (isNaN(dateA)) return direction === "asc" ? 1 : -1;
+          if (isNaN(dateB)) return direction === "asc" ? -1 : 1;
+          return direction === "asc" ? dateA - dateB : dateB - dateA;
         }
         return direction === "asc"
           ? String(a[key]).localeCompare(String(b[key]))
@@ -282,7 +292,7 @@ export default function ReportsAndInvoicesPage() {
       report.propertyName,
       report.tenantName,
       report.revenue.toFixed(2),
-      new Date(report.date).toLocaleDateString(),
+      formatDate(report.date),
       report.status,
       report.tenantPaymentStatus,
     ].map((value) => `"${value}"`).join(","));
@@ -302,7 +312,9 @@ export default function ReportsAndInvoicesPage() {
   // Prepare chart data for revenue trends
   const chartData = reports.reduce((acc, report) => {
     if (selectedPropertyId !== "all" && report.propertyId !== selectedPropertyId) return acc;
-    const month = new Date(report.date).toLocaleString("default", { year: "numeric", month: "short" });
+    const date = new Date(report.date);
+    if (isNaN(date.getTime())) return acc; // Skip invalid dates
+    const month = date.toLocaleString("default", { year: "numeric", month: "short" });
     acc[month] = (acc[month] || 0) + report.revenue;
     return acc;
   }, {} as Record<string, number>);
@@ -537,7 +549,7 @@ export default function ReportsAndInvoicesPage() {
                         <td className="px-4 py-3">{report.propertyName}</td>
                         <td className="px-4 py-3">{report.tenantName}</td>
                         <td className="px-4 py-3">Ksh {report.revenue.toFixed(2)}</td>
-                        <td className="px-4 py-3">{new Date(report.date).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">{formatDate(report.date)}</td>
                         <td className="px-4 py-3">{report.status}</td>
                         <td className="px-4 py-3">{report.tenantPaymentStatus}</td>
                       </tr>

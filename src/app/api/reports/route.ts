@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Db, MongoClient, ObjectId } from "mongodb";
+import logger from "../../../lib/logger";
 
 // Database connection
 const connectToDatabase = async (): Promise<Db> => {
@@ -11,40 +12,41 @@ const connectToDatabase = async (): Promise<Db> => {
 // Interfaces
 interface Payment {
   _id: ObjectId;
-  tenantId: string;
-  propertyId: string;
+  tenantId: string | null;
   amount: number;
+  propertyId: string;
+  paymentDate: string;
+  transactionId: string;
+  status: "completed" | "pending" | "failed";
+  createdAt: string;
+  type?: "Rent" | "Utility";
+  phoneNumber?: string;
+  reference?: string;
   date: string;
-  status: string;
+  tenantName?: string;
+  unitType?: string;
   ownerId: string;
 }
 
-interface Tenant {
-  _id: ObjectId;
-  name: string;
-  propertyId: string;
-  status: string;
-  paymentStatus: string;
-  ownerId: string;
-}
 
 interface Property {
   _id: ObjectId;
+  ownerId: string | ObjectId;
   name: string;
-  ownerId: string;
 }
 
 interface Report {
   _id: string;
   propertyId: string;
   propertyName: string;
-  tenantId: string;
+  tenantId: string | null;
   tenantName: string;
   revenue: number;
   date: string;
   status: string;
   ownerId: string;
-  tenantPaymentStatus: string; // New field for tenant payment status
+  tenantPaymentStatus: string;
+  unitType?: string;
 }
 
 interface ApiResponse<T> {
@@ -53,6 +55,14 @@ interface ApiResponse<T> {
   message?: string;
 }
 
+// Validate date string
+const isValidDate = (dateString: string): boolean => {
+  if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
+  const date = new Date(dateString);
+  return !isNaN(date.getTime()) && dateString === date.toISOString().split("T")[0];
+};
+
+
 // GET /api/reports
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Report[]>>> {
   const startTime = Date.now();
@@ -60,9 +70,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     // Read cookies from client request
     const userId = request.cookies.get("userId")?.value;
     const role = request.cookies.get("role")?.value;
-    console.log("GET /api/reports - Cookies - userId:", userId, "role:", role);
+    logger.debug("GET /api/reports - Cookies", { userId, role });
 
     if (!userId || !ObjectId.isValid(userId)) {
+      logger.error("Invalid user ID", { userId });
       return NextResponse.json(
         { success: false, message: "Valid user ID is required" },
         { status: 400 }
@@ -70,8 +81,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     if (role !== "propertyOwner") {
+      logger.error("Unauthorized access attempt", { userId, role });
       return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in as a property owner." },
+        { success: false, message: "Unauthorized: Please log in as a property owner." },
         { status: 401 }
       );
     }
@@ -82,7 +94,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
-    if (propertyId && !ObjectId.isValid(propertyId)) {
+    if (propertyId && propertyId !== "all" && !ObjectId.isValid(propertyId)) {
+      logger.error("Invalid property ID", { propertyId });
       return NextResponse.json(
         { success: false, message: "Invalid property ID" },
         { status: 400 }
@@ -90,66 +103,141 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     // Validate date range
-    if ((startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) || (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate))) {
+    if (startDate && !isValidDate(startDate)) {
+      logger.error("Invalid start date", { startDate });
       return NextResponse.json(
-        { success: false, message: "Invalid date format. Use YYYY-MM-DD." },
+        { success: false, message: "Invalid start date. Use a valid date in YYYY-MM-DD format." },
+        { status: 400 }
+      );
+    }
+    if (endDate && !isValidDate(endDate)) {
+      logger.error("Invalid end date", { endDate });
+      return NextResponse.json(
+        { success: false, message: "Invalid end date. Use a valid date in YYYY-MM-DD format." },
         { status: 400 }
       );
     }
 
     // DB Connection
     const db = await connectToDatabase();
-    const paymentsCollection = db.collection<Payment>("payments");
-    const tenantsCollection = db.collection<Tenant>("tenants");
-    const propertiesCollection = db.collection<Property>("properties");
 
-    const paymentQuery: { ownerId: string; propertyId?: string; date?: { $gte?: string; $lte?: string } } = { ownerId: userId };
-    if (propertyId) paymentQuery.propertyId = propertyId;
+    // Fetch properties owned by the user
+    const properties = await db
+      .collection<Property>("properties")
+      .find(
+        {
+          $or: [{ ownerId: userId }, { ownerId: new ObjectId(userId) }],
+        },
+        { projection: { _id: 1, name: 1 } }
+      )
+      .toArray();
+    const propertyIds = properties.map((p) => p._id.toString());
+
+    if (!propertyIds.length) {
+      logger.debug("No properties found for propertyOwner", { userId });
+      return NextResponse.json({ success: true, data: [] }, { status: 200 });
+    }
+
+    // Build payment query
+    const paymentQuery: { propertyId: { $in: string[] } | string; date?: { $gte?: string; $lte?: string }; status?: string } = {
+      propertyId: propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds },
+    };
     if (startDate || endDate) {
       paymentQuery.date = {};
       if (startDate) paymentQuery.date.$gte = startDate;
       if (endDate) paymentQuery.date.$lte = endDate;
     }
+    // Only include completed payments for revenue reporting
+    paymentQuery.status = "completed";
 
-    const payments = await paymentsCollection
-      .find(paymentQuery)
-      .sort({ date: -1 })
-      .toArray();
+    // Fetch payments with tenant and property information
+    const payments = await db
+      .collection<Payment>("payments")
+      .aggregate([
+        { $match: paymentQuery },
+        { $sort: { date: -1 } },
+        {
+          $lookup: {
+            from: "tenants",
+            let: { tenantId: { $toObjectId: "$tenantId" } },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$_id", "$$tenantId"] } } },
+              { $project: { name: 1, paymentStatus: 1, unitType: 1 } },
+            ],
+            as: "tenant",
+          },
+        },
+        { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: "properties",
+            let: { propertyId: { $toObjectId: "$propertyId" } },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$_id", "$$propertyId"] } } },
+              { $project: { name: 1 } },
+            ],
+            as: "property",
+          },
+        },
+        { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            _id: { $toString: "$_id" },
+            propertyId: { $toString: "$propertyId" },
+            propertyName: { $ifNull: ["$property.name", "Unassigned"] },
+            tenantId: { $ifNull: ["$tenantId", null] },
+            tenantName: { $ifNull: ["$tenant.name", "$tenantName", "Unknown"] },
+            revenue: "$amount",
+            date: {
+              $cond: [
+                { $and: ["$date", { $ne: ["$date", ""] }, { $regexMatch: { input: "$date", regex: /^\d{4}-\d{2}-\d{2}$/ } }] },
+                "$date",
+                {
+                  $cond: [
+                    { $and: ["$paymentDate", { $ne: ["$paymentDate", ""] }, { $regexMatch: { input: "$paymentDate", regex: /^\d{4}-\d{2}-\d{2}$/ } }] },
+                    "$paymentDate",
+                    { $toString: { $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$createdAt" } } } }
+                  ]
+                }
+              ]
+            },
+            status: "$status",
+            ownerId: userId,
+            tenantPaymentStatus: { $ifNull: ["$tenant.paymentStatus", "Unknown"] },
+            unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },
+          },
+        },
+        {
+          $match: {
+            date: { $regex: /^\d{4}-\d{2}-\d{2}$/, $ne: "" }, // Ensure date is valid
+          },
+        },
+      ])
+      .toArray() as Report[];
 
-    const tenantIds = [...new Set(payments.map((p) => p.tenantId))];
-    const propertyIds = [...new Set(payments.map((p) => p.propertyId))];
+    // Log any payments with invalid dates for debugging
+    const invalidPayments = payments.filter((p) => !isValidDate(p.date));
+    if (invalidPayments.length > 0) {
+      logger.warn("Payments with invalid dates found", {
+        invalidPayments: invalidPayments.map((p) => ({ _id: p._id, date: p.date })),
+      });
+    }
 
-    const tenants = await tenantsCollection
-      .find({ _id: { $in: tenantIds.map((id) => new ObjectId(id)) }, ownerId: userId })
-      .toArray();
+    logger.info("Reports fetched successfully", {
+      userId,
+      propertyId: propertyId || "all",
+      startDate,
+      endDate,
+      reportCount: payments.length,
+      duration: `${Date.now() - startTime}ms`,
+    });
 
-    const properties = await propertiesCollection
-      .find({ _id: { $in: propertyIds.map((id) => new ObjectId(id)) }, ownerId: userId })
-      .toArray();
-
-    const tenantMap = new Map(tenants.map((t) => [t._id.toString(), t]));
-    const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
-
-    const reports: Report[] = payments.map((payment) => ({
-      _id: payment._id.toString(),
-      propertyId: payment.propertyId,
-      propertyName: propertyMap.get(payment.propertyId)?.name || "Unassigned",
-      tenantId: payment.tenantId,
-      tenantName: tenantMap.get(payment.tenantId)?.name || "Unknown",
-      revenue: payment.amount,
-      date: payment.date,
-      status: payment.status,
-      ownerId: payment.ownerId,
-      tenantPaymentStatus: tenantMap.get(payment.tenantId)?.paymentStatus || "Unknown",
-    }));
-
-    console.log("GET /api/reports - Completed in", Date.now() - startTime, "ms");
-
-    return NextResponse.json({ success: true, data: reports }, { status: 200 });
+    return NextResponse.json({ success: true, data: payments }, { status: 200 });
   } catch (error: unknown) {
-    console.error("Error fetching reports:", {
+    logger.error("Error fetching reports", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
+      duration: `${Date.now() - startTime}ms`,
     });
 
     return NextResponse.json(
