@@ -76,8 +76,8 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
-    // Define current month range (August 2025, EAT)
-    const today = new Date("2025-08-14T13:29:00+03:00");
+    // Define current month range (September 2025, based on current date)
+    const today = new Date(); // Current date: September 3, 2025
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Tenants fetched for ownerstats", { userId, tenantIds, totalTenants, occupiedUnits });
 
-    // Current month rent (sum of completed rent payments for the month)
+    // Current month rent (sum of completed rent payments for the current month)
     const currentMonthRentResult = await db
       .collection("payments")
       .aggregate<{
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
             propertyId: { $in: propertyIds },
             status: "completed",
             type: "Rent",
-            paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
+            date: { $gte: startOfMonthISO, $lte: endOfMonthISO },
           },
         },
         {
@@ -162,7 +162,7 @@ export async function GET(request: NextRequest) {
         propertyId: { $in: propertyIds },
         status: "completed",
         type: "Rent",
-        paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
+        date: { $gte: startOfMonthISO, $lte: endOfMonthISO },
       })
       .toArray();
     logger.debug("Current month payments for totalMonthlyRent", {
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
       paymentCount: currentMonthPayments.length,
       totalMonthlyRent,
       paymentIds: currentMonthPayments.map((p) => p._id),
-      paymentDates: currentMonthPayments.map((p) => p.paymentDate),
+      paymentDates: currentMonthPayments.map((p) => p.date),
       propertyIds,
     });
 

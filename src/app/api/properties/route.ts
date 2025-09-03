@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
             : name;
 
           const paymentUrl = process.env.NEXT_PUBLIC_PAYMENT_URL || 'https://app.smartchoicerentalmanagement.com/';
-          const whatsAppMessage = `Hello, a new invoice has been generated for your property "${truncatedPropertyName}". Management Fee: ${managementFee}. Please pay by ${expiresAt.toLocaleDateString()} at ${paymentUrl}. Reference: ${invoice.reference} to add tenants.`;
+          const whatsAppMessage = `Greetings, a new invoice has been generated for your property "${truncatedPropertyName}". Management Fee: ${managementFee}. Please pay by ${expiresAt.toLocaleDateString()} at ${paymentUrl}. Reference: ${invoice.reference} to add tenants.`;
 
           if (whatsAppMessage.length > 4096) {
             console.log('WhatsApp message exceeds 4096 characters:', {

@@ -31,6 +31,8 @@ interface Report {
   status: string;
   ownerId: string;
   tenantPaymentStatus: string;
+  type: string;
+  unitType?: string;
 }
 
 interface Invoice {
@@ -63,6 +65,7 @@ export default function ReportsAndInvoicesPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [paymentType, setPaymentType] = useState<string>("all");
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -73,10 +76,31 @@ export default function ReportsAndInvoicesPage() {
   const [invoiceSortConfig, setInvoiceSortConfig] = useState<SortConfig<Invoice>>({ key: "createdAt", direction: "desc" });
 
   // Helper function to validate and format date
-  const formatDate = (dateString: string): string => {
-    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return "N/A";
+  const isValidDate = (dateString: string): boolean => {
+    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
     const date = new Date(dateString);
-    return isNaN(date.getTime()) ? "N/A" : date.toLocaleDateString();
+    return !isNaN(date.getTime()) && dateString === date.toISOString().split("T")[0];
+  };
+
+  const formatDate = (dateString: string): string => {
+    if (!isValidDate(dateString)) return "N/A";
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
+
+  // Escape special characters for LaTeX
+  const escapeLatex = (str: string): string => {
+    return str
+      .replace(/&/g, "\\&")
+      .replace(/%/g, "\\%")
+      .replace(/\$/g, "\\$")
+      .replace(/#/g, "\\#")
+      .replace(/_/g, "\\_")
+      .replace(/{/g, "\\{")
+      .replace(/}/g, "\\}")
+      .replace(/~/g, "\\textasciitilde")
+      .replace(/\^/g, "\\textasciicircum")
+      .replace(/\\/g, "\\textbackslash");
   };
 
   // Check cookies and redirect if unauthorized
@@ -147,6 +171,7 @@ export default function ReportsAndInvoicesPage() {
       if (selectedPropertyId !== "all") queryParams.append("propertyId", selectedPropertyId);
       if (startDate) queryParams.append("startDate", startDate);
       if (endDate) queryParams.append("endDate", endDate);
+      if (paymentType !== "all") queryParams.append("type", paymentType);
       const query = queryParams.toString() ? `?${queryParams}` : "";
       const res = await fetch(`/api/reports${query}`, {
         method: "GET",
@@ -164,7 +189,7 @@ export default function ReportsAndInvoicesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedPropertyId, startDate, endDate]);
+  }, [userId, selectedPropertyId, startDate, endDate, paymentType]);
 
   // Fetch invoices
   const fetchInvoices = useCallback(async () => {
@@ -200,7 +225,7 @@ export default function ReportsAndInvoicesPage() {
         fetchUserData();
       }
     }
-  }, [userId, role, activeTab, selectedPropertyId, startDate, endDate, fetchProperties, fetchReports, fetchInvoices, fetchUserData]);
+  }, [userId, role, activeTab, selectedPropertyId, startDate, endDate, paymentType, fetchProperties, fetchReports, fetchInvoices, fetchUserData]);
 
   // Handle tab switch
   const handleTabSwitch = (tab: "reports" | "invoices") => {
@@ -225,6 +250,13 @@ export default function ReportsAndInvoicesPage() {
     setSuccessMessage(null);
   };
 
+  // Handle payment type change
+  const handlePaymentTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setPaymentType(e.target.value);
+    setError(null);
+    setSuccessMessage(null);
+  };
+
   // Handle report sorting
   const handleReportSort = useCallback((key: keyof Report) => {
     setReportSortConfig((prev) => {
@@ -242,8 +274,8 @@ export default function ReportsAndInvoicesPage() {
           return direction === "asc" ? dateA - dateB : dateB - dateA;
         }
         return direction === "asc"
-          ? String(a[key]).localeCompare(String(b[key]))
-          : String(b[key]).localeCompare(String(a[key]));
+          ? String(a[key] || "N/A").localeCompare(String(b[key] || "N/A"))
+          : String(b[key] || "N/A").localeCompare(String(a[key] || "N/A"));
       });
       setReports(sortedReports);
       return { key, direction };
@@ -285,35 +317,103 @@ export default function ReportsAndInvoicesPage() {
   // Calculate total revenue for selected property
   const totalRevenue = reports.reduce((sum, report) => sum + (selectedPropertyId === "all" || report.propertyId === selectedPropertyId ? report.revenue : 0), 0);
 
-  // Export reports as CSV
-  const exportToCSV = useCallback(() => {
-    const headers = ["Property,Tenant,Revenue (Ksh),Date,Status,Tenant Payment Status"];
-    const rows = reports.map((report) => [
-      report.propertyName,
-      report.tenantName,
+  // Export reports as PDF
+  const exportToPDF = useCallback(() => {
+    // Defining the LaTeX document structure
+    const latexContent = `
+\\documentclass[a4paper,11pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{lmodern}
+\\usepackage{geometry}
+\\geometry{margin=1in}
+\\usepackage{booktabs}
+\\usepackage{array}
+\\usepackage{fancyhdr}
+\\usepackage{lastpage}
+
+% Setting up the header
+\\pagestyle{fancy}
+\\fancyhf{}
+\\chead{
+  \\textbf{Smart Choice Rental Management}\\\\
+  PO Box 617-10300 Kerugoya\\\\
+  management@gmail.com\\\\
+  0702036837 \\textbullet\\ 0117649850
+}
+\\rfoot{Page \\thepage\\ of \\pageref{LastPage}}
+
+% Defining table column types
+\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}
+\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}p{#1}}
+\\newcolumntype{R}[1]{>{\\raggedleft\\arraybackslash}p{#1}}
+
+\\begin{document}
+
+% Title
+\\begin{center}
+  \\Large\\textbf{Financial Report}\\\\
+  \\normalsize Generated on ${new Date().toLocaleDateString()}
+\\end{center}
+
+% Filter information
+\\vspace{10pt}
+\\noindent
+\\textbf{Filters Applied:}\\\\
+Property: ${selectedPropertyId === "all" ? "All Properties" : escapeLatex(properties.find(p => p._id === selectedPropertyId)?.name || "Selected Property")}\\\\
+Payment Type: ${paymentType === "all" ? "All Types" : escapeLatex(paymentType)}\\\\
+Date Range: ${startDate && endDate ? `${startDate} to ${endDate}` : "All Dates"}\\\\
+Total Revenue: Ksh ${totalRevenue.toFixed(2)}
+
+% Report table
+\\vspace{10pt}
+\\begin{center}
+\\begin{tabular}{${selectedPropertyId === "all" ? "L{3cm} L{3cm} R{2.5cm} C{2.5cm} L{2cm} L{2cm} L{3cm}" : "L{3cm} L{3cm} R{2.5cm} C{2.5cm} L{2cm} L{2cm} L{2cm} L{3cm}"}} 
+  \\toprule
+  \\textbf{Property} & \\textbf{Tenant} & \\textbf{Revenue (Ksh)} & \\textbf{Date} & \\textbf{Status} & \\textbf{Type} ${selectedPropertyId !== "all" ? "& \\textbf{Unit Type}" : ""} & \\textbf{Tenant Payment Status} \\\\
+  \\midrule
+${reports
+  .map((report) => {
+    const baseRow = [
+      escapeLatex(report.propertyName),
+      escapeLatex(report.tenantName),
       report.revenue.toFixed(2),
       formatDate(report.date),
-      report.status,
-      report.tenantPaymentStatus,
-    ].map((value) => `"${value}"`).join(","));
-    const csvContent = [headers, ...rows].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      escapeLatex(report.status),
+      escapeLatex(report.type),
+    ];
+    if (selectedPropertyId !== "all") {
+      baseRow.push(escapeLatex(report.unitType || "N/A"));
+    }
+    baseRow.push(escapeLatex(report.tenantPaymentStatus));
+    return baseRow.join(" & ") + " \\\\";
+  })
+  .join("\n")}
+  \\bottomrule
+\\end{tabular}
+\\end{center}
+
+\\end{document}
+`;
+
+    // Creating and downloading the PDF
+    const blob = new Blob([latexContent], { type: "application/x-tex" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `reports_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `reports_${new Date().toISOString().split("T")[0]}.tex`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    setSuccessMessage("Reports exported successfully!");
-  }, [reports]);
+    setSuccessMessage("Report PDF exported successfully!");
+  }, [reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties]);
 
   // Prepare chart data for revenue trends
   const chartData = reports.reduce((acc, report) => {
     if (selectedPropertyId !== "all" && report.propertyId !== selectedPropertyId) return acc;
+    if (!isValidDate(report.date)) return acc; // Skip invalid dates
     const date = new Date(report.date);
-    if (isNaN(date.getTime())) return acc; // Skip invalid dates
     const month = date.toLocaleString("default", { year: "numeric", month: "short" });
     acc[month] = (acc[month] || 0) + report.revenue;
     return acc;
@@ -326,7 +426,7 @@ export default function ReportsAndInvoicesPage() {
     labels: chartLabels,
     datasets: [
       {
-        label: "Revenue (Ksh)",
+        label: `Revenue (Ksh) - ${paymentType === "all" ? "All Types" : paymentType}`,
         data: chartValues,
         borderColor: "#012a4a",
         backgroundColor: "rgba(1, 42, 74, 0.2)",
@@ -403,7 +503,7 @@ export default function ReportsAndInvoicesPage() {
             </div>
           </div>
           {activeTab === "reports" && (
-            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Select Property</label>
                 <select
@@ -417,6 +517,20 @@ export default function ReportsAndInvoicesPage() {
                       {property.name}
                     </option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Payment Type</label>
+                <select
+                  value={paymentType}
+                  onChange={handlePaymentTypeChange}
+                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base border-gray-300"
+                >
+                  <option value="all">All Types</option>
+                  <option value="Rent">Rent</option>
+                  <option value="Utility">Utility</option>
+                  <option value="Deposit">Deposit</option>
+                  <option value="Other">Other</option>
                 </select>
               </div>
               <div>
@@ -459,16 +573,18 @@ export default function ReportsAndInvoicesPage() {
                   Ksh {totalRevenue.toFixed(2)}
                 </p>
                 <p className="text-sm text-gray-600">
-                  For {selectedPropertyId === "all" ? "all properties" : "selected property"} {startDate && endDate ? `from ${startDate} to ${endDate}` : ""}
+                  For {selectedPropertyId === "all" ? "all properties" : `selected property${reports.length > 0 && reports[0].unitType ? " (" + reports[0].unitType + ")" : ""}`}{" "}
+                  {paymentType === "all" ? "all payment types" : paymentType}{" "}
+                  {startDate && endDate ? `from ${startDate} to ${endDate}` : ""}
                 </p>
               </div>
               <div className="mb-6">
                 <button
-                  onClick={exportToCSV}
+                  onClick={exportToPDF}
                   className="flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#013a6a] transition"
                 >
                   <Download className="h-5 w-5" />
-                  Export Reports
+                  Export Reports as PDF
                 </button>
               </div>
               {chartLabels.length > 0 && (
@@ -537,6 +653,20 @@ export default function ReportsAndInvoicesPage() {
                       </th>
                       <th
                         className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                        onClick={() => handleReportSort("type")}
+                      >
+                        Type {getSortIcon("type", reportSortConfig)}
+                      </th>
+                      {selectedPropertyId !== "all" && (
+                        <th
+                          className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                          onClick={() => handleReportSort("unitType")}
+                        >
+                          Unit Type {getSortIcon("unitType", reportSortConfig)}
+                        </th>
+                      )}
+                      <th
+                        className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
                         onClick={() => handleReportSort("tenantPaymentStatus")}
                       >
                         Tenant Payment Status {getSortIcon("tenantPaymentStatus", reportSortConfig)}
@@ -551,6 +681,10 @@ export default function ReportsAndInvoicesPage() {
                         <td className="px-4 py-3">Ksh {report.revenue.toFixed(2)}</td>
                         <td className="px-4 py-3">{formatDate(report.date)}</td>
                         <td className="px-4 py-3">{report.status}</td>
+                        <td className="px-4 py-3">{report.type}</td>
+                        {selectedPropertyId !== "all" && (
+                          <td className="px-4 py-3">{report.unitType || "N/A"}</td>
+                        )}
                         <td className="px-4 py-3">{report.tenantPaymentStatus}</td>
                       </tr>
                     ))}

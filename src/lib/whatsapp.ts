@@ -14,6 +14,11 @@ interface WhatsAppResponse {
         device_id: string;
         recipients: string;
         status: string;
+      }
+    | {
+        status: string;
+        error_code: number;
+        message: string;
       };
   error?: string;
   error_code?: number;
@@ -29,17 +34,17 @@ export async function sendWhatsAppMessage({
   phone,
   message,
   deviceId = process.env.UMS_DEFAULT_DEVICE_ID,
-}: SendWhatsAppOptions): Promise<boolean> {
+}: SendWhatsAppOptions): Promise<{ success: boolean; error?: { code: number; message: string } }> {
   if (!phone || !message) {
     logger.error("Phone number or message missing", { phone, message });
-    return false;
+    return { success: false, error: { code: 1001, message: "Phone number or message missing" } };
   }
 
   if (message.length > 4096) {
     logger.error("WhatsApp message exceeds 4096 character limit", {
       messageLength: message.length,
     });
-    return false;
+    return { success: false, error: { code: 1002, message: "Message exceeds 4096 character limit" } };
   }
 
   const apiKey = process.env.UMS_API_KEY;
@@ -51,7 +56,7 @@ export async function sendWhatsAppMessage({
       appId: !!appId,
       deviceId: !!deviceId,
     });
-    return false;
+    return { success: false, error: { code: 1003, message: "Missing WhatsApp API credentials" } };
   }
 
   const normalizePhone = (phoneNum: string): string => {
@@ -109,7 +114,12 @@ export async function sendWhatsAppMessage({
         status: response.status,
         data,
       });
-      return false;
+      return {
+        success: false,
+        error: data.data && "error_code" in data.data && data.data.error_code && "message" in data.data
+          ? { code: data.data.error_code, message: data.data.message }
+          : { code: response.status, message: "API request failed" },
+      };
     }
 
     // Safely handle both array and object response formats
@@ -129,20 +139,33 @@ export async function sendWhatsAppMessage({
           ? data.data[0]?.message_id
           : (data.data as { msg_id: string; device_id: string; recipients: string; status: string })?.msg_id || "N/A",
       });
-      return true;
+      return { success: true };
     }
 
-    if (data.error_code === 1007) {
-      logger.error("Invalid WhatsApp Device ID", { deviceId });
+    // Handle specific error codes
+    if (data.data && "error_code" in data.data && data.data.error_code) {
+      const error = { code: data.data.error_code, message: data.data.message || "Unknown error" };
+      if (data.data.error_code === 1007) {
+        logger.error("Invalid WhatsApp Device ID", { deviceId });
+      } else if (data.data.error_code === 1010) {
+        logger.error("Failed to send WhatsApp message", {
+          phone: phoneNumbers,
+          error: data.data.message || "Failed to send message",
+        });
+      } else {
+        logger.warn("WhatsApp API returned unknown error state", { data });
+      }
+      return { success: false, error };
     }
 
     logger.warn("WhatsApp API returned unknown state", { data });
-    return false;
+    return { success: false, error: { code: 0, message: "Unknown response state" } };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     logger.error("Failed to send WhatsApp message", {
       phone: phoneNumbers,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
     });
-    return false;
+    return { success: false, error: { code: 1000, message: errorMessage } };
   }
 }

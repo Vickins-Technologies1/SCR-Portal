@@ -270,30 +270,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               type === "payment"
                 ? "Payment Reminder"
                 : type === "maintenance"
-                ? "Maintenance Notification"
-                : type === "tenant"
-                ? "Tenant Update"
-                : "Property Notification";
+                  ? "Maintenance Notification"
+                  : type === "tenant"
+                    ? "Tenant Update"
+                    : "Property Notification";
             const emailIntro =
               type === "payment"
                 ? "This is a reminder regarding your rental payment."
                 : type === "maintenance"
-                ? "We have scheduled maintenance for your property."
-                : type === "tenant"
-                ? "Important update regarding your tenancy."
-                : "Important information from your property manager.";
+                  ? "We have scheduled maintenance for your property."
+                  : type === "tenant"
+                    ? "Important update regarding your tenancy."
+                    : "Important information from your property manager.";
             const emailDetails = `
               <ul>
                 <li><strong>Message:</strong> ${finalMessage}</li>
-                <li><strong>Action:</strong> ${
-                  type === "payment"
-                    ? "Please make your payment at your earliest convenience."
-                    : type === "maintenance"
-                    ? "Please ensure access to your property or contact us for details."
-                    : type === "tenant"
+                <li><strong>Action:</strong> ${type === "payment"
+                ? "Please make your payment at your earliest convenience."
+                : type === "maintenance"
+                  ? "Please ensure access to your property or contact us for details."
+                  : type === "tenant"
                     ? "Please review the update and contact us if you have questions."
                     : "Please review and contact us if needed."
-                }</li>
+              }</li>
               </ul>
             `;
             const html = generateStyledTemplate({
@@ -329,25 +328,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       if (effectiveDeliveryMethod === "whatsapp" || effectiveDeliveryMethod === "both") {
         if (tenant.phone) {
-          const whatsappSuccess = await sendWhatsAppMessage({
+          const whatsappResult = await sendWhatsAppMessage({
             phone: tenant.phone,
             message: finalMessage,
           });
-          if (whatsappSuccess) {
+          if (whatsappResult.success) {
             logger.info("WhatsApp message sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
             deliveryStatus = deliveryStatus !== "failed" ? "success" : "failed";
           } else {
             logger.error("Failed to send WhatsApp message", {
               tenantId: tenant._id.toString(),
               phone: tenant.phone,
-              error: process.env.UMS_DEFAULT_DEVICE_ID
-                ? "Device not found. Please verify the WhatsApp device ID in your configuration (Error code: 1007)"
-                : "WhatsApp device ID is missing. Please configure UMS_DEFAULT_DEVICE_ID in environment variables (Error code: 1007)",
+              error: whatsappResult.error?.message || "Unknown error",
+              errorCode: whatsappResult.error?.code || 0,
             });
             deliveryStatus = "failed";
-            errorDetails = process.env.UMS_DEFAULT_DEVICE_ID
-              ? "Device not found. Please verify the WhatsApp device ID in your configuration (Error code: 1007)"
-              : "WhatsApp device ID is missing. Please configure UMS_DEFAULT_DEVICE_ID in environment variables (Error code: 1007)";
+            errorDetails = whatsappResult.error?.message || "Failed to send WhatsApp message";
           }
         } else {
           logger.warn("No phone number for WhatsApp delivery", { tenantId: tenant._id.toString() });

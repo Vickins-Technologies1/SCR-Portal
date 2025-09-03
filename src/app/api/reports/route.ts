@@ -19,7 +19,7 @@ interface Payment {
   transactionId: string;
   status: "completed" | "pending" | "failed";
   createdAt: string;
-  type?: "Rent" | "Utility";
+  type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference?: string;
   date: string;
@@ -47,6 +47,7 @@ interface Report {
   ownerId: string;
   tenantPaymentStatus: string;
   unitType?: string;
+  type: string;
 }
 
 interface ApiResponse<T> {
@@ -61,7 +62,6 @@ const isValidDate = (dateString: string): boolean => {
   const date = new Date(dateString);
   return !isNaN(date.getTime()) && dateString === date.toISOString().split("T")[0];
 };
-
 
 // GET /api/reports
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Report[]>>> {
@@ -88,12 +88,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       );
     }
 
-    // Get query params (propertyId, startDate, endDate)
+    // Get query params (propertyId, startDate, endDate, type)
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get("propertyId");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    const type = searchParams.get("type");
 
+    // Validate query parameters
     if (propertyId && propertyId !== "all" && !ObjectId.isValid(propertyId)) {
       logger.error("Invalid property ID", { propertyId });
       return NextResponse.json(
@@ -102,7 +104,6 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       );
     }
 
-    // Validate date range
     if (startDate && !isValidDate(startDate)) {
       logger.error("Invalid start date", { startDate });
       return NextResponse.json(
@@ -110,10 +111,19 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         { status: 400 }
       );
     }
+
     if (endDate && !isValidDate(endDate)) {
       logger.error("Invalid end date", { endDate });
       return NextResponse.json(
         { success: false, message: "Invalid end date. Use a valid date in YYYY-MM-DD format." },
+        { status: 400 }
+      );
+    }
+
+    if (type && !["Rent", "Utility", "Deposit", "Other"].includes(type)) {
+      logger.error("Invalid payment type", { type });
+      return NextResponse.json(
+        { success: false, message: "Invalid payment type. Must be one of: Rent, Utility, Deposit, Other" },
         { status: 400 }
       );
     }
@@ -139,16 +149,25 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     // Build payment query
-    const paymentQuery: { propertyId: { $in: string[] } | string; date?: { $gte?: string; $lte?: string }; status?: string } = {
+    const paymentQuery: {
+      propertyId: { $in: string[] } | string;
+      date?: { $gte?: string; $lte?: string };
+      status?: string;
+      type?: string;
+    } = {
       propertyId: propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds },
+      status: "completed",
     };
+
     if (startDate || endDate) {
       paymentQuery.date = {};
       if (startDate) paymentQuery.date.$gte = startDate;
       if (endDate) paymentQuery.date.$lte = endDate;
     }
-    // Only include completed payments for revenue reporting
-    paymentQuery.status = "completed";
+
+    if (type) {
+      paymentQuery.type = type;
+    }
 
     // Fetch payments with tenant and property information
     const payments = await db
@@ -205,6 +224,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             ownerId: userId,
             tenantPaymentStatus: { $ifNull: ["$tenant.paymentStatus", "Unknown"] },
             unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },
+            type: { $ifNull: ["$type", "Unknown"] },
           },
         },
         {
@@ -215,11 +235,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       ])
       .toArray() as Report[];
 
-    // Log any payments with invalid dates for debugging
-    const invalidPayments = payments.filter((p) => !isValidDate(p.date));
-    if (invalidPayments.length > 0) {
-      logger.warn("Payments with invalid dates found", {
-        invalidPayments: invalidPayments.map((p) => ({ _id: p._id, date: p.date })),
+    // Log payments with missing unitType for debugging
+    const missingUnitTypePayments = payments.filter((p) => p.unitType === "N/A" && propertyId && propertyId !== "all");
+    if (missingUnitTypePayments.length > 0) {
+      logger.warn("Payments with missing unitType found", {
+        propertyId: propertyId || "all",
+        missingUnitTypePayments: missingUnitTypePayments.map((p) => ({ _id: p._id, tenantId: p.tenantId })),
       });
     }
 
@@ -228,6 +249,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       propertyId: propertyId || "all",
       startDate,
       endDate,
+      type: type || "all",
       reportCount: payments.length,
       duration: `${Date.now() - startTime}ms`,
     });

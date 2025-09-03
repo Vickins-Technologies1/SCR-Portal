@@ -597,7 +597,7 @@ export async function POST(request: NextRequest) {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
       const shortUrl = baseUrl.length > 30 ? "https://app.smartchoicerentalmanagement.com/" : baseUrl;
 
-      const whatsAppMessage = `Welcome, ${requestData.name}! You have been added as a tenant. Log in at ${shortUrl} using your email: ${requestData.email} and password: ${requestData.password}. Your unit: ${truncatedPropertyName} ${requestData.houseNumber}.`;
+      const whatsAppMessage = `Greetings, ${requestData.name}! You have been added as a tenant. Log in at ${shortUrl} using your email: ${requestData.email} and password: ${requestData.password}. Your unit: ${truncatedPropertyName} ${requestData.houseNumber}.`;
 
       if (whatsAppMessage.length > 4096) {
         logger.warn("WhatsApp message exceeds 4096 characters", {
