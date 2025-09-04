@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       .collection("properties")
       .find<WithId<Property>>({ ownerId: userId })
       .toArray();
-    const propertyIds = properties.map((p) => p._id.toString());
+    const propertyIds = properties.map((p) => p._id.toString()); // Convert to strings for consistency
 
     if (properties.length === 0) {
       logger.debug("No properties found for user", { userId });
@@ -76,12 +76,19 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
-    // Define current month range (September 2025, based on current date)
-    const today = new Date(); // Current date: September 3, 2025
+    // Define current month range (September 2025)
+    const today = new Date(); // Current date: September 4, 2025
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
     const endOfMonthISO = endOfMonth.toISOString();
+
+    // Log date range for debugging
+    logger.debug("Current month date range", {
+      userId,
+      startOfMonth: startOfMonthISO,
+      endOfMonth: endOfMonthISO,
+    });
 
     // Total units aggregation
     const totalUnitsResult = await db
@@ -137,44 +144,73 @@ export async function GET(request: NextRequest) {
       .collection("payments")
       .aggregate<{
         totalMonthlyRent: number;
+        paymentCount: number;
       }>([
         {
           $match: {
             propertyId: { $in: propertyIds },
             status: "completed",
             type: "Rent",
-            date: { $gte: startOfMonthISO, $lte: endOfMonthISO },
+            $or: [
+              // Match both Date objects and ISO strings for paymentDate
+              { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
+              { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+            ],
           },
         },
         {
           $group: {
             _id: null,
             totalMonthlyRent: { $sum: "$amount" },
+            paymentCount: { $sum: 1 },
           },
         },
       ])
       .toArray();
     const totalMonthlyRent = currentMonthRentResult[0]?.totalMonthlyRent || 0;
+    const paymentCount = currentMonthRentResult[0]?.paymentCount || 0;
 
+    // Fetch payment details for logging
     const currentMonthPayments = await db
       .collection("payments")
       .find({
         propertyId: { $in: propertyIds },
         status: "completed",
         type: "Rent",
-        date: { $gte: startOfMonthISO, $lte: endOfMonthISO },
+        $or: [
+          { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
+          { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+        ],
       })
       .toArray();
+
     logger.debug("Current month payments for totalMonthlyRent", {
       userId,
       paymentCount: currentMonthPayments.length,
       totalMonthlyRent,
-      paymentIds: currentMonthPayments.map((p) => p._id),
-      paymentDates: currentMonthPayments.map((p) => p.date),
-      propertyIds,
+      paymentIds: currentMonthPayments.map((p) => p._id.toString()),
+      paymentDates: currentMonthPayments.map((p) => p.paymentDate),
+      propertyIds: currentMonthPayments.map((p) => p.propertyId),
     });
 
-    // Total rent payments aggregation (only completed rent payments)
+    // Debug: Check all rent payments for the user (not limited to current month)
+    const allPayments = await db
+      .collection("payments")
+      .find({
+        propertyId: { $in: propertyIds },
+        status: "completed",
+        type: "Rent",
+      })
+      .limit(10)
+      .toArray();
+    logger.debug("All rent payments for user (sample)", {
+      userId,
+      paymentCount: allPayments.length,
+      paymentDates: allPayments.map((p) => p.paymentDate),
+      paymentAmounts: allPayments.map((p) => p.amount),
+    });
+
+    // Total payments aggregation
     const paymentsResult = await db
       .collection("payments")
       .aggregate<{

@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    logger.debug("Properties fetched for ownercharts", { propertyOwnerId, propertyIds });
+
     // Fetch all tenants for the owner's properties
     const tenants = await db
       .collection("tenants")
@@ -73,69 +75,104 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Define the last six months range (August 2025 backwards, EAT)
-    const today = new Date("2025-08-14T14:46:00+03:00");
-    // Generate month labels (e.g., "Mar 25", "Apr 25", ..., "Aug 25")
+    logger.debug("Tenants fetched for ownercharts", { propertyOwnerId, tenantIds });
+
+    // Define the last six months range (September 2025 backwards, UTC for consistency)
+    const today = new Date(); // Current date: September 4, 2025, 2:54 PM EAT
     const months: string[] = [];
     const rentPayments: number[] = [];
     const utilityPayments: number[] = [];
     const maintenanceRequests: number[] = [];
 
     for (let i = 0; i < 6; i++) {
-      const monthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      // Use UTC to align with paymentDate format
+      const monthDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1));
       const monthLabel = monthDate.toLocaleString("en-US", { month: "short", year: "2-digit" });
       months.unshift(monthLabel);
 
-      const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
+      const startOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1));
+      const endOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 0, 23, 59, 59, 999));
       const startOfMonthISO = startOfMonth.toISOString();
       const endOfMonthISO = endOfMonth.toISOString();
+
+      logger.debug("Processing month for chart data", {
+        propertyOwnerId,
+        month: monthLabel,
+        startOfMonth: startOfMonthISO,
+        endOfMonth: endOfMonthISO,
+      });
 
       // Aggregate rent payments
       const rentPaymentsResult = await db
         .collection("payments")
-        .aggregate<{ total: number }>([
+        .aggregate<{ total: number; count: number }>([
           {
             $match: {
               tenantId: { $in: tenantIds },
               propertyId: { $in: propertyIds },
               status: "completed",
               type: "Rent",
-              paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
+              $or: [
+                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } }, // For Date objects
+                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } }, // For ISO strings
+              ],
             },
           },
           {
             $group: {
               _id: null,
               total: { $sum: "$amount" },
+              count: { $sum: 1 },
             },
           },
         ])
         .toArray();
-      rentPayments.unshift(rentPaymentsResult[0]?.total || 0);
+      const rentTotal = rentPaymentsResult[0]?.total || 0;
+      const rentCount = rentPaymentsResult[0]?.count || 0;
+      rentPayments.unshift(rentTotal);
+
+      logger.debug("Rent payments for month", {
+        propertyOwnerId,
+        month: monthLabel,
+        total: rentTotal,
+        count: rentCount,
+      });
 
       // Aggregate utility payments
       const utilityPaymentsResult = await db
         .collection("payments")
-        .aggregate<{ total: number }>([
+        .aggregate<{ total: number; count: number }>([
           {
             $match: {
               tenantId: { $in: tenantIds },
               propertyId: { $in: propertyIds },
               status: "completed",
               type: "Utility",
-              paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
+              $or: [
+                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
+                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+              ],
             },
           },
           {
             $group: {
               _id: null,
               total: { $sum: "$amount" },
+              count: { $sum: 1 },
             },
           },
         ])
         .toArray();
-      utilityPayments.unshift(utilityPaymentsResult[0]?.total || 0);
+      const utilityTotal = utilityPaymentsResult[0]?.total || 0;
+      const utilityCount = utilityPaymentsResult[0]?.count || 0;
+      utilityPayments.unshift(utilityTotal);
+
+      logger.debug("Utility payments for month", {
+        propertyOwnerId,
+        month: monthLabel,
+        total: utilityTotal,
+        count: utilityCount,
+      });
 
       // Aggregate maintenance requests
       const maintenanceResult = await db
@@ -145,7 +182,10 @@ export async function GET(request: NextRequest) {
             $match: {
               tenantId: { $in: tenantIds },
               propertyId: { $in: propertyIds },
-              createdAt: { $gte: startOfMonthISO, $lte: endOfMonthISO },
+              $or: [
+                { createdAt: { $gte: startOfMonth, $lte: endOfMonth } },
+                { createdAt: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+              ],
             },
           },
           {
@@ -156,8 +196,33 @@ export async function GET(request: NextRequest) {
           },
         ])
         .toArray();
-      maintenanceRequests.unshift(maintenanceResult[0]?.count || 0);
+      const maintenanceCount = maintenanceResult[0]?.count || 0;
+      maintenanceRequests.unshift(maintenanceCount);
+
+      logger.debug("Maintenance requests for month", {
+        propertyOwnerId,
+        month: monthLabel,
+        count: maintenanceCount,
+      });
     }
+
+    // Debug: Fetch sample payments to verify data
+    const samplePayments = await db
+      .collection("payments")
+      .find({
+        tenantId: { $in: tenantIds },
+        propertyId: { $in: propertyIds },
+        status: "completed",
+        type: "Rent",
+      })
+      .limit(10)
+      .toArray();
+    logger.debug("Sample rent payments for owner", {
+      propertyOwnerId,
+      paymentCount: samplePayments.length,
+      paymentDates: samplePayments.map((p) => p.paymentDate),
+      paymentAmounts: samplePayments.map((p) => p.amount),
+    });
 
     const chartData: ChartData = {
       months,
