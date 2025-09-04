@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (role !== "不動産所有者") {
+    if (role !== "propertyOwner") {
       logger.warn("Invalid role:", { role });
       return NextResponse.json(
         { success: false, message: "Role must be 'propertyOwner'" },

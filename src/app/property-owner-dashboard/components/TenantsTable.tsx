@@ -31,7 +31,7 @@ interface Tenant {
   email: string;
   phone: string;
   propertyId: string;
-  unitType: string; // This corresponds to unitTypes.uniqueType
+  unitType: string;
   price: number;
   deposit: number;
   houseNumber: string;
@@ -71,6 +71,7 @@ interface TenantsTableProps {
   page: number;
   setPage: React.Dispatch<React.SetStateAction<number>>;
   limit: number;
+  setLimit: React.Dispatch<React.SetStateAction<number>>; // Added setLimit to props
   totalTenants: number;
   isLoading: boolean;
   userId: string | null;
@@ -108,6 +109,7 @@ export default function TenantsTable({
   page,
   setPage,
   limit,
+  setLimit, // Added to props destructuring
   totalTenants,
   isLoading,
   userId,
@@ -132,7 +134,7 @@ export default function TenantsTable({
     });
   }, []);
 
-  // Remove client-side filtering since API handles it
+  // Sorting logic remains unchanged
   const displayedTenants = useMemo(() => {
     logger.debug("Sorting tenants", { tenantCount: tenants.length, sortConfig });
     const sortedTenants = [...tenants].sort((a, b) => {
@@ -180,6 +182,17 @@ export default function TenantsTable({
     [setPage]
   );
 
+  // Handle limit change
+  const handleLimitChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const newLimit = parseInt(e.target.value, 10);
+      logger.debug("Changing entries per page", { newLimit });
+      setLimit(newLimit);
+      setPage(1); // Reset to page 1 when limit changes
+    },
+    [setLimit, setPage]
+  );
+
   useEffect(() => {
     logger.debug("TenantsTable received tenants", { tenantCount: tenants.length });
     return () => {
@@ -191,7 +204,7 @@ export default function TenantsTable({
   useEffect(() => {
     const totalPages = Math.ceil(totalTenants / limit);
     if (page > totalPages && totalPages > 0) {
-      logger.debug("Adjusting page due to totalTenants change", { page, totalPages });
+      logger.debug("Adjusting page due to totalTenants or limit change", { page, totalPages });
       setPage(totalPages);
     }
   }, [page, totalTenants, limit, setPage]);
@@ -306,6 +319,24 @@ export default function TenantsTable({
         >
           Clear Filters
         </button>
+      </div>
+
+      {/* Entries Per Page Selector */}
+      <div className="flex justify-end">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700">Entries per page:</label>
+          <select
+            value={limit}
+            onChange={handleLimitChange}
+            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-dark-blue-600 focus:border-dark-blue-600 transition text-sm"
+          >
+            {[10, 25, 50, 100].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Loading State */}

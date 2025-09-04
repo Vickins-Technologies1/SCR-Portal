@@ -41,7 +41,7 @@ interface Tenant {
   createdAt: Date;
   updatedAt?: Date;
   walletBalance: number;
-  status?: string; // Added to include computed status
+  status?: string;
 }
 
 interface PropertyRequest {
@@ -51,7 +51,6 @@ interface PropertyRequest {
   requiresAdminApproval?: boolean;
 }
 
-// Utility function to compute tenant status
 const getTenantStatus = (leaseStartDate: string, leaseEndDate: string): string => {
   const currentDate = new Date();
   const startDate = leaseStartDate ? new Date(leaseStartDate) : null;
@@ -369,10 +368,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { db } = await connectToDatabase();
     const propertyObjectId = new ObjectId(propertyId);
 
-    const property = await db.collection<Property>('properties').findOne({
-      _id: propertyObjectId,
-      ownerId: userId,
-    });
+    const propertyQuery = role === 'admin' ? { _id: propertyObjectId } : { _id: propertyObjectId, ownerId: userId };
+    const property = await db.collection<Property>('properties').findOne(propertyQuery);
 
     if (!property) {
       console.log('Property lookup failed', { propertyId, userId });
@@ -382,18 +379,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       );
     }
 
-    const tenantCount = await db.collection<Tenant>('tenants').countDocuments({ propertyId: propertyId });
-    if (tenantCount > 0) {
-      console.log('Cannot delete property with active tenants', { propertyId, tenantCount });
-      return NextResponse.json(
-        { success: false, message: 'Cannot delete property with active tenants' },
-        { status: 400 }
-      );
-    }
+    // Delete associated invoices
+    const invoiceDeleteResult = await db.collection('invoices').deleteMany({
+      propertyId: propertyId,
+    });
+    console.log('Deleted invoices', { propertyId, deletedCount: invoiceDeleteResult.deletedCount });
 
+    // Delete associated tenants
+    const tenantDeleteResult = await db.collection<Tenant>('tenants').deleteMany({
+      propertyId: propertyId,
+    });
+    console.log('Deleted tenants', { propertyId, deletedCount: tenantDeleteResult.deletedCount });
+
+    // Delete the property
     const deleteResult = await db.collection<Property>('properties').deleteOne({
       _id: propertyObjectId,
-      ownerId: userId,
     });
 
     if (deleteResult.deletedCount === 0) {
@@ -404,10 +404,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       );
     }
 
-    console.log('Property deleted successfully', { propertyId });
+    console.log('Property and associated data deleted successfully', {
+      propertyId,
+      deletedTenants: tenantDeleteResult.deletedCount,
+      deletedInvoices: invoiceDeleteResult.deletedCount,
+    });
     return NextResponse.json({
       success: true,
-      message: 'Property deleted successfully',
+      message: 'Property, associated tenants, and invoices deleted successfully',
     });
   } catch (error: unknown) {
     console.error('Error in DELETE /api/properties/[propertyId]', {

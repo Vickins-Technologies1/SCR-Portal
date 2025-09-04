@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -99,7 +98,7 @@ export default function TenantsPage() {
   const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
   const [csrfToken, setCsrfToken] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10); // Changed to dynamic state with setLimit
   const [totalTenants, setTotalTenants] = useState(0);
   const [filters, setFilters] = useState<FilterConfig>({
     tenantName: "",
@@ -183,7 +182,7 @@ export default function TenantsPage() {
       const query = new URLSearchParams({
         userId: encodeURIComponent(userId),
         page: page.toString(),
-        limit: limit.toString(),
+        limit: limit.toString(), // Updated to use dynamic limit
         ...(filters.tenantName && { name: filters.tenantName }),
         ...(filters.tenantEmail && { email: filters.tenantEmail }),
         ...(filters.propertyId && { propertyId: filters.propertyId }),
@@ -218,7 +217,7 @@ export default function TenantsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, page, limit, csrfToken, filters]);
+  }, [userId, page, limit, csrfToken, filters]); // Added limit to dependencies
 
   // Fetch properties
   const fetchProperties = useCallback(async () => {
@@ -580,6 +579,7 @@ export default function TenantsPage() {
             page={page}
             setPage={setPage}
             limit={limit}
+            setLimit={setLimit} // Added setLimit prop
             totalTenants={totalTenants}
             isLoading={isLoading}
             userId={userId}
