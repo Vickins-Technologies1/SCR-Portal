@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Users, DollarSign, AlertCircle, BarChart2 } from "lucide-react";
 import Cookies from "js-cookie";
-import { Line, Pie, Bar } from "react-chartjs-2";
+import { Line, Pie } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   LineElement,
