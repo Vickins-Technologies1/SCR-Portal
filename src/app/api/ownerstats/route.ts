@@ -168,7 +168,6 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
     const totalMonthlyRent = currentMonthRentResult[0]?.totalMonthlyRent || 0;
-    const paymentCount = currentMonthRentResult[0]?.paymentCount || 0;
 
     // Fetch payment details for logging
     const currentMonthPayments = await db
