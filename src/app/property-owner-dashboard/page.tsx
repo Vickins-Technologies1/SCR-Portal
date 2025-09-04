@@ -384,41 +384,6 @@ export default function PropertyOwnerDashboard() {
     },
   };
 
-  // Bar chart data for maintenance requests
-  const maintenanceChartData = {
-    labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
-    datasets: [
-      {
-        label: "Maintenance Requests",
-        data: chartData?.maintenanceRequests || [0, 0, 0, 0, 0, 0],
-        backgroundColor: "#4BC0C0",
-        hoverBackgroundColor: "#36A2EB",
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  // Bar chart options for maintenance requests
-  const maintenanceChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: { title: { display: true, text: "Month", color: "#012a4a", font: { size: 14 } } },
-      y: { title: { display: true, text: "Requests", color: "#012a4a", font: { size: 14 } }, beginAtZero: true },
-    },
-    plugins: {
-      legend: { display: true, labels: { color: "#012a4a", font: { size: 14 } } },
-      title: { display: true, text: "Maintenance Requests", color: "#012a4a", font: { size: 16 } },
-      tooltip: {
-        callbacks: {
-          label: (context: TooltipItem<"bar">) => {
-            const value = context.raw as number;
-            return `${context.dataset.label}: ${value}`;
-          },
-        },
-      },
-    },
-  };
 
   if (!userId || role !== "propertyOwner") {
     return (
@@ -534,12 +499,6 @@ export default function PropertyOwnerDashboard() {
               <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Tenant Payment Status</h2>
               <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-200 h-80 sm:h-96">
                 <Pie data={pieChartData} options={pieChartOptions} />
-              </div>
-            </section>
-            <section>
-              <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Maintenance Requests</h2>
-              <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-200 h-80 sm:h-96">
-                <Bar data={maintenanceChartData} options={maintenanceChartOptions} />
               </div>
             </section>
           </div>
