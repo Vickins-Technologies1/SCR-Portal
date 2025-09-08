@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
+import * as fs from "fs";
+import * as path from "path";
 
 interface Invoice {
   _id: ObjectId;
@@ -65,27 +67,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch user and property details for PDF
-    const user = await db.collection("users").findOne({ _id: new ObjectId(invoice.userId) });
+    const user = await db.collection("propertyOwners").findOne({ _id: new ObjectId(invoice.userId) });
     const property = await db.collection("properties").findOne({ _id: new ObjectId(invoice.propertyId) });
 
-    // Generate PDF
+    // Generate PDF with background image from public directory
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
-    const { height } = page.getSize();
+    const { width, height } = page.getSize();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const fontSize = 12;
     const titleFontSize = 24;
-    const footerFontSize = 10;
     const margin = 50;
+    const topMargin = 180; // Margin top to accommodate the logo in the image
+
+    // Read the image from the public directory and convert to base64
+    const imagePath = path.join(process.cwd(), "public", "bg.png"); // Adjust filename as needed
+    const imageBuffer = fs.readFileSync(imagePath);
+    const backgroundImageBase64 = `data:image/png;base64,${imageBuffer.toString("base64")}`;
+    const backgroundImageBytes = Uint8Array.from(atob(backgroundImageBase64.split(',')[1]), c => c.charCodeAt(0));
+    const backgroundImage = await pdfDoc.embedPng(backgroundImageBytes);
+    page.drawImage(backgroundImage, {
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+    });
 
     const titleColor = rgb(0.0039, 0.1647, 0.2902);
-    const textColor = rgb(0, 0, 0);
-    const footerColor = rgb(0.5, 0.5, 0.5);
+    const textColor = rgb(0, 0, 0); // Black text for contrast
 
     page.drawText("Property Management Invoice", {
       x: margin,
-      y: height - margin - titleFontSize,
+      y: height - topMargin - titleFontSize,
       size: titleFontSize,
       font: boldFont,
       color: titleColor,
@@ -103,27 +117,12 @@ export async function POST(request: NextRequest) {
       { label: "Description", value: invoice.description },
     ];
 
-    let y = height - margin - titleFontSize - 50;
+    let y = height - topMargin - titleFontSize - 50;
     for (const { label, value } of details) {
       page.drawText(`${label}:`, { x: margin, y, size: fontSize, font: boldFont, color: textColor });
       page.drawText(value, { x: margin + 100, y, size: fontSize, font, color: textColor });
       y -= fontSize + 10;
     }
-
-    page.drawText("Smart Choice Rental Management System | Contact: support@smartchoicerentalmanagement.com", {
-      x: margin,
-      y: margin,
-      size: footerFontSize,
-      font,
-      color: footerColor,
-    });
-    page.drawText(`Generated on: ${new Date().toLocaleDateString()}`, {
-      x: margin,
-      y: margin - footerFontSize - 5,
-      size: footerFontSize,
-      font,
-      color: footerColor,
-    });
 
     const pdfBytes = await pdfDoc.save();
     const pdfBase64 = Buffer.from(pdfBytes).toString("base64");

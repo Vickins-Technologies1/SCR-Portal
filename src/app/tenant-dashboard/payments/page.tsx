@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download } from "lucide-react";
 
 interface Payment {
   _id: string;
@@ -334,6 +334,60 @@ export default function PaymentsPage() {
     }
   };
 
+  const generateReceipt = async (paymentId: string) => {
+    if (!csrfToken || !tenantId) {
+      setMessages((prev) => [
+        ...prev,
+        { type: "error", text: "Missing CSRF token or tenant ID", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+      ]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/tenant/payments/receipt?paymentId=${paymentId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (data.success && data.pdf) {
+        const byteCharacters = atob(data.pdf);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `receipt_${paymentId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        setMessages((prev) => [
+          ...prev,
+          { type: "success", text: "Receipt generated and downloaded successfully", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { type: "error", text: data.message || "Failed to generate receipt", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        ]);
+      }
+    } catch (err) {
+      console.error("Error generating receipt:", err);
+      setMessages((prev) => [
+        ...prev,
+        { type: "error", text: "Failed to generate receipt", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+      ]);
+    }
+  };
+
   if (!isClient) return null;
 
   return (
@@ -342,7 +396,7 @@ export default function PaymentsPage() {
         {/* Header Section */}
         <section className="bg-[#1E3A8A] text-white rounded-xl sm:rounded-2xl p-6 sm:p-8 shadow-xl">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Payment Dashboard</h1>
-          <p className="text-gray-200 text-xs sm:text-sm">Manage your rent and utility payments seamlessly.</p>
+          <p className="text-gray-200 text-xs sm:text-sm">Manage your rent, deposit and utility payments seamlessly.</p>
           {tenant && (
             <div className="mt-4 bg-[#1E3A8A]/20 p-4 rounded-lg">
               <p className="text-xs sm:text-sm font-medium">
@@ -372,12 +426,13 @@ export default function PaymentsPage() {
                 <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Status</th>
                 <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Payment Date</th>
                 <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Transaction ID</th>
+                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500">
                     <div className="flex justify-center items-center">
                       <div className="animate-spin w-5 sm:w-6 h-5 sm:h-6 border-4 border-[#1E3A8A] border-t-transparent rounded-full"></div>
                       <span className="ml-2 text-sm">Loading payments...</span>
@@ -412,11 +467,20 @@ export default function PaymentsPage() {
                       {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString() : "—"}
                     </td>
                     <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-600 break-all">{p.transactionId}</td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4">
+                      <button
+                        onClick={() => generateReceipt(p._id)}
+                        disabled={p.status !== "completed"}
+                        className="flex items-center px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] disabled:bg-gray-300 disabled:text-gray-400 transition-all duration-300"
+                      >
+                        <Download size={14} className="mr-1" /> Generate Receipt
+                      </button>
+                    </td>
                   </motion.tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-sm">
+                  <td colSpan={6} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-sm">
                     No payment records found.
                   </td>
                 </tr>
