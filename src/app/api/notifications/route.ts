@@ -9,7 +9,8 @@ import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 import { generateStyledTemplate } from "../../../lib/email-template";
 import nodemailer from "nodemailer";
 import logger from "../../../lib/logger";
-import { Tenant } from "../../../types/tenant";
+import { Tenant, ResponseTenant } from "../../../types/tenant";
+import { calculateTenantDues, TenantDues, convertTenantToResponse } from "../../../lib/utils";
 
 interface Notification {
   _id: string;
@@ -23,6 +24,7 @@ interface Notification {
   deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
   deliveryStatus?: "pending" | "success" | "failed";
   errorDetails?: string | null;
+  dues?: TenantDues;
 }
 
 const transporter = nodemailer.createTransport({
@@ -213,28 +215,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const notifications: Notification[] = [];
+    const responseTenants: ResponseTenant[] = [];
+    const today = new Date();
 
     for (const tenant of tenants) {
       let finalMessage = message ? sanitizeInput(message) : "";
       let effectiveDeliveryMethod = deliveryMethod;
       let deliveryStatus: Notification["deliveryStatus"] = "pending";
       let errorDetails: string | null = null;
+      let dues: TenantDues | undefined;
 
-      // Respect tenant's deliveryMethod preference unless overridden by "both"
-      if (deliveryMethod !== "both" && tenant.deliveryMethod && tenant.deliveryMethod !== "both") {
-        effectiveDeliveryMethod = tenant.deliveryMethod;
-      }
-
+      // Calculate dues for payment notifications
       if (type === "payment") {
-        finalMessage = tenant.price
-          ? `Dear ${tenant.name}, this is a courteous reminder that your rental payment of Ksh. ${tenant.price.toFixed(2)} is due. Please ensure timely payment to avoid any inconveniences.`
-          : `Dear ${tenant.name}, this is a reminder to submit your rental payment promptly. Kindly contact us for any clarification.`;
+        dues = await calculateTenantDues(db, tenant, today);
+        if (dues.paymentStatus === "up-to-date") {
+          logger.info("Skipping notification for up-to-date tenant", {
+            tenantId: tenant._id.toString(),
+            tenantName: tenant.name,
+          });
+          continue; // Skip tenants with no dues
+        }
+        finalMessage = `Dear ${tenant.name}, you have overdue payments: Rent: Ksh ${dues.rentDues.toFixed(2)}, Deposit: Ksh ${dues.depositDues.toFixed(2)}, Utility: Ksh ${dues.utilityDues.toFixed(2)}. Total Due: Ksh ${dues.totalRemainingDues.toFixed(2)}. Please settle promptly to avoid penalties.`;
       } else if (type === "maintenance") {
         finalMessage = finalMessage || `Dear ${tenant.name}, we have scheduled essential maintenance for your property to ensure your comfort and safety. Please cooperate with our team during this period.`;
       } else if (type === "tenant") {
         finalMessage = finalMessage || `Dear ${tenant.name}, we have important updates regarding your tenancy agreement. Please review the details and reach out for any assistance.`;
       } else {
         finalMessage = finalMessage || `Dear ${tenant.name}, we have important information from Smart Choice Rental Management. Please review this message and contact us if you have any questions.`;
+      }
+
+      // Respect tenant's deliveryMethod preference unless overridden by "both"
+      if (deliveryMethod !== "both" && tenant.deliveryMethod && tenant.deliveryMethod !== "both") {
+        effectiveDeliveryMethod = tenant.deliveryMethod;
       }
 
       if (effectiveDeliveryMethod === "sms" || effectiveDeliveryMethod === "both") {
@@ -267,7 +279,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           try {
             const emailTitle =
               type === "payment"
-                ? "Rental Payment Reminder"
+                ? "Overdue Payment Reminder"
                 : type === "maintenance"
                   ? "Scheduled Property Maintenance"
                   : type === "tenant"
@@ -275,23 +287,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     : "Important Property Management Notice";
             const emailIntro =
               type === "payment"
-                ? `Dear ${tenant.name}, this is a formal reminder regarding your upcoming rental payment.`
+                ? `Dear ${tenant.name}, you have outstanding payments that require your immediate attention.`
                 : type === "maintenance"
                   ? `Dear ${tenant.name}, we are committed to maintaining the quality of your residence.`
                   : type === "tenant"
                     ? `Dear ${tenant.name}, we have important updates concerning your tenancy.`
                     : `Dear ${tenant.name}, we have important information to share from Smart Choice Rental Management.`;
-            const emailDetails = `
+            const emailDetails =
+              type === "payment"
+                ? `
+              <ul>
+                <li><strong>Rent Due:</strong> Ksh ${dues?.rentDues.toFixed(2)}</li>
+                <li><strong>Deposit Due:</strong> Ksh ${dues?.depositDues.toFixed(2)}</li>
+                <li><strong>Utility Due:</strong> Ksh ${dues?.utilityDues.toFixed(2)}</li>
+                <li><strong>Total Due:</strong> Ksh ${dues?.totalRemainingDues.toFixed(2)}</li>
+                <li><strong>Message:</strong> ${finalMessage}</li>
+                <li><strong>Action:</strong> Please submit your payment by the due date to avoid penalties. Contact us for payment options.</li>
+              </ul>
+            `
+                : `
               <ul>
                 <li><strong>Message:</strong> ${finalMessage}</li>
                 <li><strong>Action:</strong> ${
-                  type === "payment"
-                    ? "Please submit your payment by the due date to avoid any penalties. Contact us for payment options."
-                    : type === "maintenance"
-                      ? "Kindly ensure access to your property on the scheduled date or contact us to reschedule."
-                      : type === "tenant"
-                        ? "Please review the attached updates and contact us for any clarification or assistance."
-                        : "Please review this notice and reach out with any questions or concerns."
+                  type === "maintenance"
+                    ? "Kindly ensure access to your property on the scheduled date or contact us to reschedule."
+                    : type === "tenant"
+                      ? "Please review the attached updates and contact us for any clarification or assistance."
+                      : "Please review this notice and reach out with any questions or concerns."
                 }</li>
               </ul>
             `;
@@ -364,6 +386,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         deliveryMethod: effectiveDeliveryMethod,
         deliveryStatus: effectiveDeliveryMethod === "app" ? "success" : deliveryStatus,
         errorDetails,
+        dues: type === "payment" ? dues : undefined,
       };
 
       await db.collection<Notification>("notifications").insertOne(newNotification);
@@ -372,13 +395,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         userId,
         tenantId: tenant._id.toString(),
         type,
+        dues: type === "payment" ? dues : undefined,
       });
       notifications.push(newNotification);
+      responseTenants.push({
+        ...convertTenantToResponse(tenant),
+        dues: type === "payment" ? dues : undefined,
+      });
+    }
+
+    if (notifications.length === 0) {
+      logger.info("No notifications created; all tenants up-to-date or no eligible tenants", {
+        userId,
+        tenantId,
+      });
+      return NextResponse.json({
+        success: true,
+        data: null,
+        message: "No notifications created; all tenants are up-to-date or no eligible tenants",
+      });
     }
 
     return NextResponse.json({
       success: true,
-      data: notifications[0], // Return first notification for simplicity
+      data: {
+        notification: notifications[0], // Return first notification
+        tenant: responseTenants[0], // Return first tenant with dues
+      },
       message: "Notification created successfully",
     });
   } catch (error) {
