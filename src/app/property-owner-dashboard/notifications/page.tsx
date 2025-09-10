@@ -123,11 +123,11 @@ export default function NotificationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [newNotification, setNewNotification] = useState({
     message: "",
-    tenantIds: [] as string[], // Changed from tenantId to tenantIds to support multiple tenants
+    tenantIds: [] as string[],
     type: "other" as Notification["type"],
     deliveryMethod: "app" as Notification["deliveryMethod"],
   });
@@ -401,7 +401,17 @@ export default function NotificationsPage() {
       });
 
       if (data.success && data.data) {
-        setNotifications(data.data);
+        const validNotifications = data.data.filter((notification) => {
+          const isValid = notification.type && ["payment", "maintenance", "tenant", "other"].includes(notification.type);
+          if (!isValid) {
+            console.warn("[WARN] Invalid notification type found:", {
+              notificationId: notification._id,
+              type: notification.type,
+            });
+          }
+          return isValid;
+        });
+        setNotifications(validNotifications);
       } else {
         setError(data.message || "Failed to fetch notifications.");
       }
@@ -587,11 +597,13 @@ export default function NotificationsPage() {
       setError("Please select at least one tenant or 'All Tenants' to send the notification.");
       return;
     }
-    if (!newNotification.type || !["payment", "maintenance", "tenant", "other"].includes(newNotification.type)) {
+    const validTypes = ["payment", "maintenance", "tenant", "other"];
+    if (!newNotification.type || !validTypes.includes(newNotification.type)) {
       setError("Please select a valid notification type.");
       return;
     }
-    if (!newNotification.deliveryMethod || !["app", "sms", "email", "whatsapp", "both"].includes(newNotification.deliveryMethod)) {
+    const validDeliveryMethods = ["app", "sms", "email", "whatsapp", "both"];
+    if (!newNotification.deliveryMethod || !validDeliveryMethods.includes(newNotification.deliveryMethod)) {
       setError("Please select a valid delivery method.");
       return;
     }
@@ -602,33 +614,46 @@ export default function NotificationsPage() {
     setIsLoading(true);
     try {
       const tenantIds = newNotification.tenantIds.includes("all")
-        ? ["all"]
+        ? tenants.map((t) => t._id) // Expand "all" to individual tenant IDs
         : newNotification.tenantIds;
 
       const responses = await Promise.all(
         tenantIds.map(async (tenantId) => {
-          const response = await makeAuthenticatedRequest("/api/notifications", {
-            method: "POST",
-            body: JSON.stringify({
-              message: newNotification.message,
+          try {
+            const response = await makeAuthenticatedRequest("/api/notifications", {
+              method: "POST",
+              body: JSON.stringify({
+                message: newNotification.message,
+                tenantId,
+                type: newNotification.type,
+                deliveryMethod: newNotification.deliveryMethod,
+              }),
+            });
+            const data = await response.json() as ApiResponse<Notification>;
+            return { tenantId, data, status: response.status };
+          } catch (err) {
+            return {
               tenantId,
-              type: newNotification.type,
-              deliveryMethod: newNotification.deliveryMethod,
-            }),
-          });
-          return await response.json() as ApiResponse<Notification>;
+              data: { success: false, message: err instanceof Error ? err.message : "Request failed" },
+              status: 500,
+            };
+          }
         })
       );
 
       const successfulNotifications: Notification[] = [];
       let errorMessage: string | null = null;
 
-      responses.forEach((data, index) => {
-        if (data.success && data.data) {
+      responses.forEach(({ tenantId, data, status }) => {
+        if (data.success && data.data && validTypes.includes(data.data.type)) {
           successfulNotifications.push(data.data);
         } else {
-          console.error("[ERROR] Failed to create notification for tenant:", tenantIds[index], data.message);
-          errorMessage = data.message || `Failed to create notification for some tenants.`;
+          console.error("[ERROR] Failed to create notification for tenant:", tenantId, {
+            message: data.message,
+            status,
+            responseData: data,
+          });
+          errorMessage = data.message || `Failed to create notification for tenant ${tenantId}.`;
         }
       });
 
@@ -638,8 +663,10 @@ export default function NotificationsPage() {
         setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
         setCurrentPage(1);
         setError(errorMessage);
+        // Refresh notifications to ensure consistency
+        await fetchNotifications();
       } else {
-        setError(errorMessage || "Failed to create notifications.");
+        setError(errorMessage || "Failed to create notifications for any tenants.");
       }
     } catch (err) {
       console.error("[ERROR] Error creating notification:", err instanceof Error ? err.message : "Unknown error");
@@ -924,7 +951,9 @@ export default function NotificationsPage() {
                               {(item as Notification).message}
                             </td>
                             <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as Notification).type.charAt(0).toUpperCase() + (item as Notification).type.slice(1)}
+                              {(item as Notification).type
+                                ? (item as Notification).type.charAt(0).toUpperCase() + (item as Notification).type.slice(1)
+                                : "Unknown"}
                             </td>
                             <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
                               {(item as Notification).tenantName}
@@ -1034,7 +1063,9 @@ export default function NotificationsPage() {
                         <div>
                           <span className="font-medium text-[#012a4a] text-sm">Type: </span>
                           <span className="text-[#012a4a] text-sm">
-                            {(item as Notification).type.charAt(0).toUpperCase() + (item as Notification).type.slice(1)}
+                            {(item as Notification).type
+                              ? (item as Notification).type.charAt(0).toUpperCase() + (item as Notification).type.slice(1)
+                              : "Unknown"}
                           </span>
                         </div>
                         <div>
@@ -1193,12 +1224,13 @@ export default function NotificationsPage() {
                 </p>
                 <p>
                   <strong>Type:</strong>{" "}
-                  {selectedNotification.type.charAt(0).toUpperCase() + selectedNotification.type.slice(1)}
+                  {selectedNotification.type
+                    ? selectedNotification.type.charAt(0).toUpperCase() + selectedNotification.type.slice(1)
+                    : "Unknown"}
                 </p>
                 <p>
                   <strong>Tenant:</strong> {selectedNotification.tenantName}
                 </p>
-
                 <p>
                   <strong>Date:</strong>{" "}
                   {new Date(selectedNotification.createdAt).toLocaleDateString()}
@@ -1271,164 +1303,164 @@ export default function NotificationsPage() {
               </div>
             )}
           </Modal>
-<Modal
-  isOpen={isCreateModalOpen}
-  onClose={() => {
-    setIsCreateModalOpen(false);
-    setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
-    setError(null);
-  }}
-  title="Create New Notification"
->
-  <div className="space-y-6 text-[#012a4a]">
-    <div>
-      <label className="block text-sm font-medium mb-2">Recipients</label>
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors flex justify-between items-center"
-          disabled={tenants.length === 0}
-        >
-          <span>
-            {newNotification.tenantIds.length === 0
-              ? 'Select tenants'
-              : newNotification.tenantIds.includes('all')
-                ? 'All Tenants'
-                : newNotification.tenantIds.length === 1
-                  ? tenants.find((t) => t._id === newNotification.tenantIds[0])?.name || '1 tenant selected'
-                  : `${newNotification.tenantIds.length} tenants selected`}
-          </span>
-          <svg
-            className={`w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
+          <Modal
+            isOpen={isCreateModalOpen}
+            onClose={() => {
+              setIsCreateModalOpen(false);
+              setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
+              setError(null);
+            }}
+            title="Create New Notification"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {isDropdownOpen && (
-          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-            <label className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={newNotification.tenantIds.includes("all")}
-                onChange={(e) => {
-                  setNewNotification({
-                    ...newNotification,
-                    tenantIds: e.target.checked ? ["all"] : [],
-                  });
-                }}
-                className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
-                disabled={tenants.length === 0}
-              />
-              <span className="text-sm font-medium text-[#012a4a]">All Tenants</span>
-            </label>
-            {tenants.map((tenant) => (
-              <label
-                key={tenant._id}
-                className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  value={tenant._id}
-                  checked={newNotification.tenantIds.includes(tenant._id)}
-                  onChange={(e) => {
-                    if (newNotification.tenantIds.includes("all")) return;
-                    setNewNotification({
-                      ...newNotification,
-                      tenantIds: e.target.checked
-                        ? [...newNotification.tenantIds, tenant._id]
-                        : newNotification.tenantIds.filter((id) => id !== tenant._id),
-                    });
+            <div className="space-y-6 text-[#012a4a]">
+              <div>
+                <label className="block text-sm font-medium mb-2">Recipients</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors flex justify-between items-center"
+                    disabled={tenants.length === 0}
+                  >
+                    <span>
+                      {newNotification.tenantIds.length === 0
+                        ? 'Select tenants'
+                        : newNotification.tenantIds.includes('all')
+                          ? 'All Tenants'
+                          : newNotification.tenantIds.length === 1
+                            ? tenants.find((t) => t._id === newNotification.tenantIds[0])?.name || '1 tenant selected'
+                            : `${newNotification.tenantIds.length} tenants selected`}
+                    </span>
+                    <svg
+                      className={`w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {isDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      <label className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newNotification.tenantIds.includes("all")}
+                          onChange={(e) => {
+                            setNewNotification({
+                              ...newNotification,
+                              tenantIds: e.target.checked ? ["all"] : [],
+                            });
+                          }}
+                          className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
+                          disabled={tenants.length === 0}
+                        />
+                        <span className="text-sm font-medium text-[#012a4a]">All Tenants</span>
+                      </label>
+                      {tenants.map((tenant) => (
+                        <label
+                          key={tenant._id}
+                          className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            value={tenant._id}
+                            checked={newNotification.tenantIds.includes(tenant._id)}
+                            onChange={(e) => {
+                              if (newNotification.tenantIds.includes("all")) return;
+                              setNewNotification({
+                                ...newNotification,
+                                tenantIds: e.target.checked
+                                  ? [...newNotification.tenantIds, tenant._id]
+                                  : newNotification.tenantIds.filter((id) => id !== tenant._id),
+                              });
+                            }}
+                            className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
+                            disabled={tenants.length === 0 || newNotification.tenantIds.includes("all")}
+                          />
+                          <span className="text-sm font-medium text-[#012a4a]">
+                            {tenant.name} ({tenant.houseNumber})
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Selecting &quot;All Tenants&quot; will override individual tenant selections.
+                </p>
+              </div>
+              <div>
+                <label htmlFor="type" className="block text-sm font-medium mb-2">
+                  Notification Type
+                </label>
+                <select
+                  id="type"
+                  value={newNotification.type}
+                  onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+                >
+                  <option value="payment">Payment</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="tenant">Tenant Update</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="deliveryMethod" className="block text-sm font-medium mb-2">
+                  Delivery Method
+                </label>
+                <select
+                  id="deliveryMethod"
+                  value={newNotification.deliveryMethod}
+                  onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+                >
+                  <option value="app">In-App</option>
+                  <option value="sms">SMS</option>
+                  <option value="email">Email</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="both">SMS, Email & WhatsApp</option>
+                </select>
+              </div>
+              {newNotification.type !== "payment" && (
+                <div>
+                  <label htmlFor="message" className="block text-sm font-medium mb-2">
+                    Message
+                  </label>
+                  <textarea
+                    id="message"
+                    value={newNotification.message}
+                    onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+                    rows={4}
+                    placeholder="Enter your message here"
+                  ></textarea>
+                </div>
+              )}
+              {error && <p className="text-red-600 text-sm">{error}</p>}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
+                    setError(null);
                   }}
-                  className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
-                  disabled={tenants.length === 0 || newNotification.tenantIds.includes("all")}
-                />
-                <span className="text-sm font-medium text-[#012a4a]">
-                  {tenant.name} ({tenant.houseNumber})
-                </span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-      <p className="text-xs text-gray-500 mt-2">
-        Selecting &quot;All Tenants&quot; will override individual tenant selections.
-      </p>
-    </div>
-    <div>
-      <label htmlFor="type" className="block text-sm font-medium mb-2">
-        Notification Type
-      </label>
-      <select
-        id="type"
-        value={newNotification.type}
-        onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-      >
-        <option value="payment">Payment</option>
-        <option value="maintenance">Maintenance</option>
-        <option value="tenant">Tenant Update</option>
-        <option value="other">Other</option>
-      </select>
-    </div>
-    <div>
-      <label htmlFor="deliveryMethod" className="block text-sm font-medium mb-2">
-        Delivery Method
-      </label>
-      <select
-        id="deliveryMethod"
-        value={newNotification.deliveryMethod}
-        onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-      >
-        <option value="app">In-App</option>
-        <option value="sms">SMS</option>
-        <option value="email">Email</option>
-        <option value="whatsapp">WhatsApp</option>
-        <option value="both">SMS, Email & WhatsApp</option>
-      </select>
-    </div>
-    {newNotification.type !== "payment" && (
-      <div>
-        <label htmlFor="message" className="block text-sm font-medium mb-2">
-          Message
-        </label>
-        <textarea
-          id="message"
-          value={newNotification.message}
-          onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-          rows={4}
-          placeholder="Enter your message here"
-        ></textarea>
-      </div>
-    )}
-    {error && <p className="text-red-600 text-sm">{error}</p>}
-    <div className="flex justify-end gap-3">
-      <button
-        onClick={() => {
-          setIsCreateModalOpen(false);
-          setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
-          setError(null);
-        }}
-        className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300 transition-colors"
-      >
-        Cancel
-      </button>
-      <button
-        onClick={createNotification}
-        className="px-4 py-2 text-sm rounded-lg bg-[#03a678] text-white hover:bg-[#02956a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        disabled={isLoading}
-      >
-        {isLoading ? "Sending..." : "Send Notification"}
-      </button>
-    </div>
-  </div>
-</Modal>
+                  className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={createNotification}
+                  className="px-4 py-2 text-sm rounded-lg bg-[#03a678] text-white hover:bg-[#02956a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Sending..." : "Send Notification"}
+                </button>
+              </div>
+            </div>
+          </Modal>
           <Modal
             isOpen={isDeleteModalOpen}
             onClose={() => {
