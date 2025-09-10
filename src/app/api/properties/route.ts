@@ -28,16 +28,88 @@ interface PropertyOwner {
   phone: string;
 }
 
+// Logger (aligned with tenant route handler)
+interface LogMeta {
+  [key: string]: unknown;
+}
+
+const logger = {
+  debug: (message: string, meta?: LogMeta) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug(`[DEBUG] ${message}`, meta || '');
+    }
+  },
+  warn: (message: string, meta?: LogMeta) => {
+    console.warn(`[WARN] ${message}`, meta || '');
+    return { message, meta, level: 'warn' };
+  },
+  error: (message: string, meta?: LogMeta) => {
+    console.error(`[ERROR] ${message}`, meta || '');
+    return { message, meta, level: 'error' };
+  },
+  info: (message: string, meta?: LogMeta) => {
+    console.info(`[INFO] ${message}`, meta || '');
+    return { message, meta, level: 'info' };
+  },
+};
+
+// Helper to convert potential Date or undefined to ISO string
+const toISOStringSafe = (value: Date | undefined, field: string): string => {
+  if (!value) {
+    logger.warn(`Empty value for ${field}, returning empty string`, { value, field });
+    return '';
+  }
+  try {
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return value.toISOString();
+    }
+    logger.warn(`Invalid Date object for ${field}, returning empty string`, { value, field });
+    return '';
+  } catch (error) {
+    logger.error(`Error converting ${field} to ISO string`, {
+      value,
+      field,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return '';
+  }
+};
+
 // Shared CSRF token validation function
 async function validateCsrfToken(req: NextRequest, token: string | null): Promise<boolean> {
   const storedToken = req.cookies.get('csrf-token')?.value;
   const submittedToken = token || req.headers.get('x-csrf-token');
-  return !!submittedToken && storedToken === submittedToken;
+  logger.debug('CSRF Token Validation', {
+    headerCsrfToken: submittedToken,
+    cookieCsrfToken: storedToken,
+    path: req.nextUrl.pathname,
+  });
+  if (!submittedToken || !storedToken) {
+    logger.warn('CSRF token missing', {
+      headerCsrfToken: submittedToken,
+      cookieCsrfToken: storedToken,
+      path: req.nextUrl.pathname,
+    });
+    return false;
+  }
+  if (submittedToken !== storedToken) {
+    logger.warn('CSRF token mismatch', {
+      headerCsrfToken: submittedToken,
+      cookieCsrfToken: storedToken,
+      path: req.nextUrl.pathname,
+    });
+    return false;
+  }
+  logger.debug('CSRF token validated successfully', {
+    headerCsrfToken: submittedToken,
+    path: req.nextUrl.pathname,
+  });
+  return true;
 }
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('Handling GET request to /api/properties');
+    logger.debug('Handling GET request to /api/properties', { path: request.nextUrl.pathname });
     const { searchParams } = new URL(request.url);
     // Check for userId, tenantId, or ownerId in query parameters
     const userId = searchParams.get('userId') || searchParams.get('tenantId') || searchParams.get('ownerId');
@@ -45,7 +117,7 @@ export async function GET(request: NextRequest) {
     const role = cookieStore.get('role')?.value;
 
     const { db } = await connectToDatabase();
-    console.log('Connected to MongoDB database: rentaldb');
+    logger.debug('Connected to MongoDB database: rentaldb');
 
     if (role === 'admin') {
       const properties = await db.collection<Property>('propertyListings').find().toArray();
@@ -55,8 +127,8 @@ export async function GET(request: NextRequest) {
           properties: properties.map((p) => ({
             ...p,
             _id: p._id.toString(),
-            createdAt: p.createdAt.toISOString(),
-            updatedAt: p.updatedAt.toISOString(),
+            createdAt: toISOStringSafe(p.createdAt, 'property.createdAt'),
+            updatedAt: toISOStringSafe(p.updatedAt, 'property.updatedAt'),
           })),
         },
         { status: 200 }
@@ -64,7 +136,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userId || !ObjectId.isValid(userId)) {
-      console.log('Invalid or missing user ID:', userId);
+      logger.warn('Invalid or missing user ID', { userId });
       return NextResponse.json(
         { success: false, message: 'Valid user ID is required' },
         { status: 400 }
@@ -72,7 +144,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!role || (role !== 'propertyOwner' && role !== 'tenant')) {
-      console.log('Unauthorized: Invalid role:', role);
+      logger.warn('Unauthorized: Invalid role', { role });
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Invalid role' },
         { status: 401 }
@@ -90,8 +162,8 @@ export async function GET(request: NextRequest) {
           properties: properties.map((p) => ({
             ...p,
             _id: p._id.toString(),
-            createdAt: p.createdAt.toISOString(),
-            updatedAt: p.updatedAt.toISOString(),
+            createdAt: toISOStringSafe(p.createdAt, 'property.createdAt'),
+            updatedAt: toISOStringSafe(p.updatedAt, 'property.updatedAt'),
           })),
         },
         { status: 200 }
@@ -104,7 +176,7 @@ export async function GET(request: NextRequest) {
       });
 
       if (!tenant) {
-        console.log('Tenant not found for userId:', userId);
+        logger.warn('Tenant not found for userId', { userId });
         return NextResponse.json(
           { success: false, message: 'Tenant not found' },
           { status: 404 }
@@ -116,7 +188,7 @@ export async function GET(request: NextRequest) {
       });
 
       if (!property) {
-        console.log('Property not found for tenant propertyId:', tenant.propertyId);
+        logger.warn('Property not found for tenant propertyId', { propertyId: tenant.propertyId });
         return NextResponse.json(
           { success: false, message: 'Property not found' },
           { status: 404 }
@@ -129,15 +201,15 @@ export async function GET(request: NextRequest) {
           property: {
             ...property,
             _id: property._id.toString(),
-            createdAt: property.createdAt.toISOString(),
-            updatedAt: property.updatedAt.toISOString(),
+            createdAt: toISOStringSafe(property.createdAt, 'property.createdAt'),
+            updatedAt: toISOStringSafe(property.updatedAt, 'property.updatedAt'),
           },
         },
         { status: 200 }
       );
     }
   } catch (error: unknown) {
-    console.error('Error fetching properties:', {
+    logger.error('Error fetching properties', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });
@@ -150,7 +222,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Handling POST request to /api/properties');
+    logger.debug('Handling POST request to /api/properties', { path: request.nextUrl.pathname });
     const cookieStore = await cookies();
     const role = cookieStore.get('role')?.value;
     const ownerId = cookieStore.get('userId')?.value;
@@ -159,7 +231,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const csrfToken = body.csrfToken || request.headers.get('x-csrf-token');
     if (!await validateCsrfToken(request, csrfToken)) {
-      console.log('Invalid CSRF token', { ownerId, csrfToken });
+      logger.warn('Invalid CSRF token', { ownerId, csrfToken });
       return NextResponse.json(
         { success: false, message: 'Invalid CSRF token' },
         { status: 403 }
@@ -167,7 +239,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (role !== 'propertyOwner' || !ownerId || !ObjectId.isValid(ownerId)) {
-      console.log('Unauthorized or invalid ownerId:', { role, ownerId });
+      logger.warn('Unauthorized or invalid ownerId', { role, ownerId });
       return NextResponse.json(
         { success: false, message: 'Unauthorized or invalid owner ID' },
         { status: 401 }
@@ -175,7 +247,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
-    console.log('Connected to MongoDB database: rentaldb');
+    logger.debug('Connected to MongoDB database: rentaldb');
     const { name, address, unitTypes, status, rentPaymentDate } = body;
 
     if (
@@ -189,7 +261,7 @@ export async function POST(request: NextRequest) {
       rentPaymentDate < 1 ||
       rentPaymentDate > 28
     ) {
-      console.log('Missing or invalid required fields:', { name, address, unitTypes, status, rentPaymentDate });
+      logger.warn('Missing or invalid required fields', { name, address, unitTypes, status, rentPaymentDate });
       return NextResponse.json(
         { success: false, message: 'Missing or invalid required fields. Rent payment date must be between 1 and 28.' },
         { status: 400 }
@@ -267,7 +339,7 @@ export async function POST(request: NextRequest) {
       };
 
       const invoiceResult = await db.collection<Omit<Invoice, '_id'>>('invoices').insertOne(invoice);
-      console.log('Generated invoice for property:', {
+      logger.info('Generated invoice for property', {
         invoiceId: invoiceResult.insertedId.toString(),
         propertyId: result.insertedId.toString(),
         totalUnits,
@@ -281,7 +353,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!owner || !owner.phone) {
-        console.log('Owner phone number not found:', { ownerId });
+        logger.warn('Owner phone number not found', { ownerId });
       } else {
         // Send WhatsApp message to owner
         try {
@@ -294,7 +366,7 @@ export async function POST(request: NextRequest) {
           const whatsAppMessage = `Greetings, a new invoice has been generated for your property "${truncatedPropertyName}". Management Fee: ${managementFee}. Please pay by ${expiresAt.toLocaleDateString()} at ${paymentUrl}. Reference: ${invoice.reference} to add tenants.`;
 
           if (whatsAppMessage.length > 4096) {
-            console.log('WhatsApp message exceeds 4096 characters:', {
+            logger.warn('WhatsApp message exceeds 4096 characters', {
               messageLength: whatsAppMessage.length,
               ownerId,
             });
@@ -309,9 +381,9 @@ export async function POST(request: NextRequest) {
               message: whatsAppMessage,
             });
           }
-          console.log('WhatsApp message sent successfully:', { phone: owner.phone });
+          logger.info('WhatsApp message sent successfully', { phone: owner.phone });
         } catch (whatsAppError) {
-          console.error('Failed to send WhatsApp message:', {
+          logger.error('Failed to send WhatsApp message', {
             phone: owner.phone,
             error: whatsAppError instanceof Error ? whatsAppError.message : 'Unknown error',
           });
@@ -319,7 +391,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      console.log('No management fee for property, skipping invoice generation:', {
+      logger.info('No management fee for property, skipping invoice generation', {
         propertyId: result.insertedId.toString(),
         totalUnits,
       });
@@ -331,14 +403,14 @@ export async function POST(request: NextRequest) {
         property: {
           ...newProperty,
           _id: result.insertedId.toString(),
-          createdAt: newProperty.createdAt.toISOString(),
-          updatedAt: newProperty.updatedAt.toISOString(),
+          createdAt: toISOStringSafe(newProperty.createdAt, 'newProperty.createdAt'),
+          updatedAt: toISOStringSafe(newProperty.updatedAt, 'newProperty.updatedAt'),
         },
       },
       { status: 201 }
     );
   } catch (error: unknown) {
-    console.error('Error creating property:', {
+    logger.error('Error creating property', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     });

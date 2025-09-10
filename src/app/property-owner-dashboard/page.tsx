@@ -22,6 +22,7 @@ import {
   BarElement,
   TooltipItem,
 } from "chart.js";
+import { Property } from "../../types/property"; // Import Property from src/types/property.ts
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,16 +30,6 @@ const inter = Inter({
 });
 
 ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement, BarElement);
-
-interface Property {
-  _id: string;
-  name: string;
-  address: string;
-  unitTypes: { type: string; price: number; deposit: number; quantity: number }[];
-  status: string;
-  ownerId: string;
-  createdAt: string;
-}
 
 interface Tenant {
   _id: string;
@@ -394,7 +385,6 @@ export default function PropertyOwnerDashboard() {
     },
   };
 
-
   if (!userId || role !== "propertyOwner") {
     return (
       <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-white ${inter.className}`}>
@@ -524,9 +514,9 @@ export default function PropertyOwnerDashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                 {properties.map((property: Property) => (
                   <div
-                    key={property._id}
+                    key={property._id.toString()} // Convert _id to string
                     className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-2 cursor-pointer bg-gradient-to-br from-white to-gray-50"
-                    onClick={() => router.push(`/properties/${property._id}`)}
+                    onClick={() => router.push(`/properties/${property._id.toString()}`)} // Convert _id to string
                   >
                     <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 flex items-center gap-2">
                       <Home className="h-5 w-5 text-blue-600" /> {property.name}
