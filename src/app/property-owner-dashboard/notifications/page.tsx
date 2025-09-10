@@ -123,11 +123,11 @@ export default function NotificationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const [newNotification, setNewNotification] = useState({
     message: "",
-    tenantIds: [] as string[],
+    tenantIds: [] as string[], // Changed from tenantId to tenantIds to support multiple tenants
     type: "other" as Notification["type"],
     deliveryMethod: "app" as Notification["deliveryMethod"],
   });
@@ -157,14 +157,16 @@ export default function NotificationsPage() {
   }, []);
 
   const makeAuthenticatedRequest = useCallback(
-    async (url: string, options: RequestInit): Promise<Response> => {
+    async (url: string, options: RequestInit, retries = 1): Promise<Response> => {
       if (!csrfToken) {
-        console.error("[ERROR] CSRF token missing for request to:", url);
-        throw new Error("CSRF token not available. Please refresh the page.");
+        const newToken = await fetchCsrfToken();
+        if (!newToken) {
+          throw new Error("Unable to fetch CSRF token");
+        }
       }
 
       const headers = new Headers(options.headers || {});
-      headers.set("X-CSRF-Token", csrfToken);
+      headers.set("X-CSRF-Token", csrfToken!);
       headers.set("Content-Type", "application/json");
 
       const response = await fetch(url, {
@@ -173,15 +175,20 @@ export default function NotificationsPage() {
         credentials: "include",
       });
 
-      if (response.status === 403) {
-        console.error("[ERROR] CSRF token invalid for request to:", url);
-        setError("Session expired. Please refresh the page.");
-        throw new Error("Invalid CSRF token");
+      if (response.status === 403 && retries > 0) {
+        console.log("[INFO] CSRF token invalid, retrying with new token...");
+        const newToken = await fetchCsrfToken();
+        if (newToken) {
+          headers.set("X-CSRF-Token", newToken);
+          setCsrfToken(newToken);
+          Cookies.set("csrfToken", newToken, { sameSite: "strict", secure: true });
+          return makeAuthenticatedRequest(url, { ...options, headers }, retries - 1);
+        }
       }
 
       return response;
     },
-    [csrfToken]
+    [csrfToken, fetchCsrfToken]
   );
 
   const fetchTenantsAndPayments = useCallback(async () => {
@@ -674,9 +681,8 @@ export default function NotificationsPage() {
     }
 
     setUserId(uid);
-    if (storedCsrfToken) {
-      setCsrfToken(storedCsrfToken);
-    } else {
+    setCsrfToken(storedCsrfToken);
+    if (!storedCsrfToken) {
       fetchCsrfToken();
     }
   }, [fetchCsrfToken]);
@@ -770,8 +776,8 @@ export default function NotificationsPage() {
                 <button
                   onClick={() => setViewMode("sent")}
                   className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === "sent"
-                      ? "bg-[#03a678] text-white"
-                      : "bg-white text-[#012a4a] hover:bg-gray-100"
+                    ? "bg-[#03a678] text-white"
+                    : "bg-white text-[#012a4a] hover:bg-gray-100"
                     }`}
                 >
                   Sent Reminders
@@ -779,8 +785,8 @@ export default function NotificationsPage() {
                 <button
                   onClick={() => setViewMode("upcoming")}
                   className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === "upcoming"
-                      ? "bg-[#03a678] text-white"
-                      : "bg-white text-[#012a4a] hover:bg-gray-100"
+                    ? "bg-[#03a678] text-white"
+                    : "bg-white text-[#012a4a] hover:bg-gray-100"
                     }`}
                 >
                   Upcoming Reminders
@@ -1192,6 +1198,7 @@ export default function NotificationsPage() {
                 <p>
                   <strong>Tenant:</strong> {selectedNotification.tenantName}
                 </p>
+
                 <p>
                   <strong>Date:</strong>{" "}
                   {new Date(selectedNotification.createdAt).toLocaleDateString()}
@@ -1264,164 +1271,164 @@ export default function NotificationsPage() {
               </div>
             )}
           </Modal>
-          <Modal
-            isOpen={isCreateModalOpen}
-            onClose={() => {
-              setIsCreateModalOpen(false);
-              setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
-              setError(null);
-            }}
-            title="Create New Notification"
+<Modal
+  isOpen={isCreateModalOpen}
+  onClose={() => {
+    setIsCreateModalOpen(false);
+    setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
+    setError(null);
+  }}
+  title="Create New Notification"
+>
+  <div className="space-y-6 text-[#012a4a]">
+    <div>
+      <label className="block text-sm font-medium mb-2">Recipients</label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors flex justify-between items-center"
+          disabled={tenants.length === 0}
+        >
+          <span>
+            {newNotification.tenantIds.length === 0
+              ? 'Select tenants'
+              : newNotification.tenantIds.includes('all')
+                ? 'All Tenants'
+                : newNotification.tenantIds.length === 1
+                  ? tenants.find((t) => t._id === newNotification.tenantIds[0])?.name || '1 tenant selected'
+                  : `${newNotification.tenantIds.length} tenants selected`}
+          </span>
+          <svg
+            className={`w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            <div className="space-y-6 text-[#012a4a]">
-              <div>
-                <label className="block text-sm font-medium mb-2">Recipients</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors flex justify-between items-center"
-                    disabled={tenants.length === 0}
-                  >
-                    <span>
-                      {newNotification.tenantIds.length === 0
-                        ? "Select tenants"
-                        : newNotification.tenantIds.includes("all")
-                        ? "All Tenants"
-                        : newNotification.tenantIds.length === 1
-                        ? tenants.find((t) => t._id === newNotification.tenantIds[0])?.name || "1 tenant selected"
-                        : `${newNotification.tenantIds.length} tenants selected`}
-                    </span>
-                    <svg
-                      className={`w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {isDropdownOpen && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                      <label className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newNotification.tenantIds.includes("all")}
-                          onChange={(e) => {
-                            setNewNotification({
-                              ...newNotification,
-                              tenantIds: e.target.checked ? ["all"] : [],
-                            });
-                          }}
-                          className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
-                          disabled={tenants.length === 0}
-                        />
-                        <span className="text-sm font-medium text-[#012a4a]">All Tenants</span>
-                      </label>
-                      {tenants.map((tenant) => (
-                        <label
-                          key={tenant._id}
-                          className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            value={tenant._id}
-                            checked={newNotification.tenantIds.includes(tenant._id)}
-                            onChange={(e) => {
-                              if (newNotification.tenantIds.includes("all")) return;
-                              setNewNotification({
-                                ...newNotification,
-                                tenantIds: e.target.checked
-                                  ? [...newNotification.tenantIds, tenant._id]
-                                  : newNotification.tenantIds.filter((id) => id !== tenant._id),
-                              });
-                            }}
-                            className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
-                            disabled={tenants.length === 0 || newNotification.tenantIds.includes("all")}
-                          />
-                          <span className="text-sm font-medium text-[#012a4a]">
-                            {tenant.name} ({tenant.houseNumber})
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Selecting &quot;All Tenants&quot; will override individual tenant selections.
-                </p>
-              </div>
-              <div>
-                <label htmlFor="type" className="block text-sm font-medium mb-2">
-                  Notification Type
-                </label>
-                <select
-                  id="type"
-                  value={newNotification.type}
-                  onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-                >
-                  <option value="payment">Payment</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="tenant">Tenant Update</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="deliveryMethod" className="block text-sm font-medium mb-2">
-                  Delivery Method
-                </label>
-                <select
-                  id="deliveryMethod"
-                  value={newNotification.deliveryMethod}
-                  onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-                >
-                  <option value="app">In-App</option>
-                  <option value="sms">SMS</option>
-                  <option value="email">Email</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="both">SMS, Email & WhatsApp</option>
-                </select>
-              </div>
-              {newNotification.type !== "payment" && (
-                <div>
-                  <label htmlFor="message" className="block text-sm font-medium mb-2">
-                    Message
-                  </label>
-                  <textarea
-                    id="message"
-                    value={newNotification.message}
-                    onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-                    rows={4}
-                    placeholder="Enter your message here"
-                  ></textarea>
-                </div>
-              )}
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setIsCreateModalOpen(false);
-                    setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
-                    setError(null);
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {isDropdownOpen && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            <label className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={newNotification.tenantIds.includes("all")}
+                onChange={(e) => {
+                  setNewNotification({
+                    ...newNotification,
+                    tenantIds: e.target.checked ? ["all"] : [],
+                  });
+                }}
+                className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
+                disabled={tenants.length === 0}
+              />
+              <span className="text-sm font-medium text-[#012a4a]">All Tenants</span>
+            </label>
+            {tenants.map((tenant) => (
+              <label
+                key={tenant._id}
+                className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  value={tenant._id}
+                  checked={newNotification.tenantIds.includes(tenant._id)}
+                  onChange={(e) => {
+                    if (newNotification.tenantIds.includes("all")) return;
+                    setNewNotification({
+                      ...newNotification,
+                      tenantIds: e.target.checked
+                        ? [...newNotification.tenantIds, tenant._id]
+                        : newNotification.tenantIds.filter((id) => id !== tenant._id),
+                    });
                   }}
-                  className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={createNotification}
-                  className="px-4 py-2 text-sm rounded-lg bg-[#03a678] text-white hover:bg-[#02956a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Sending..." : "Send Notification"}
-                </button>
-              </div>
-            </div>
-          </Modal>
+                  className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
+                  disabled={tenants.length === 0 || newNotification.tenantIds.includes("all")}
+                />
+                <span className="text-sm font-medium text-[#012a4a]">
+                  {tenant.name} ({tenant.houseNumber})
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 mt-2">
+        Selecting &quot;All Tenants&quot; will override individual tenant selections.
+      </p>
+    </div>
+    <div>
+      <label htmlFor="type" className="block text-sm font-medium mb-2">
+        Notification Type
+      </label>
+      <select
+        id="type"
+        value={newNotification.type}
+        onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+      >
+        <option value="payment">Payment</option>
+        <option value="maintenance">Maintenance</option>
+        <option value="tenant">Tenant Update</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div>
+      <label htmlFor="deliveryMethod" className="block text-sm font-medium mb-2">
+        Delivery Method
+      </label>
+      <select
+        id="deliveryMethod"
+        value={newNotification.deliveryMethod}
+        onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+      >
+        <option value="app">In-App</option>
+        <option value="sms">SMS</option>
+        <option value="email">Email</option>
+        <option value="whatsapp">WhatsApp</option>
+        <option value="both">SMS, Email & WhatsApp</option>
+      </select>
+    </div>
+    {newNotification.type !== "payment" && (
+      <div>
+        <label htmlFor="message" className="block text-sm font-medium mb-2">
+          Message
+        </label>
+        <textarea
+          id="message"
+          value={newNotification.message}
+          onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+          rows={4}
+          placeholder="Enter your message here"
+        ></textarea>
+      </div>
+    )}
+    {error && <p className="text-red-600 text-sm">{error}</p>}
+    <div className="flex justify-end gap-3">
+      <button
+        onClick={() => {
+          setIsCreateModalOpen(false);
+          setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
+          setError(null);
+        }}
+        className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300 transition-colors"
+      >
+        Cancel
+      </button>
+      <button
+        onClick={createNotification}
+        className="px-4 py-2 text-sm rounded-lg bg-[#03a678] text-white hover:bg-[#02956a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        disabled={isLoading}
+      >
+        {isLoading ? "Sending..." : "Send Notification"}
+      </button>
+    </div>
+  </div>
+</Modal>
           <Modal
             isOpen={isDeleteModalOpen}
             onClose={() => {
