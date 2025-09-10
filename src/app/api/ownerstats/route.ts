@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
     // Define current month range (September 2025)
-    const today = new Date(); // Current date: September 4, 2025
+    const today = new Date(); // Current date: September 10, 2025
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
@@ -306,11 +306,24 @@ export async function GET(request: NextRequest) {
                   $multiply: [
                     "$price",
                     {
-                      $dateDiff: {
-                        startDate: { $toDate: "$leaseStartDate" },
-                        endDate: today,
-                        unit: "month",
-                      },
+                      $add: [
+                        {
+                          $dateDiff: {
+                            startDate: { $toDate: "$leaseStartDate" },
+                            endDate: today,
+                            unit: "month",
+                          },
+                        },
+                        {
+                          $cond: {
+                            if: {
+                              $lte: [{ $toDate: "$leaseStartDate" }, today],
+                            },
+                            then: 1, // Include the current month
+                            else: 0,
+                          },
+                        },
+                      ],
                     },
                   ],
                 },
@@ -333,11 +346,24 @@ export async function GET(request: NextRequest) {
                               $multiply: [
                                 "$price",
                                 {
-                                  $dateDiff: {
-                                    startDate: { $toDate: "$leaseStartDate" },
-                                    endDate: today,
-                                    unit: "month",
-                                  },
+                                  $add: [
+                                    {
+                                      $dateDiff: {
+                                        startDate: { $toDate: "$leaseStartDate" },
+                                        endDate: today,
+                                        unit: "month",
+                                      },
+                                    },
+                                    {
+                                      $cond: {
+                                        if: {
+                                          $lte: [{ $toDate: "$leaseStartDate" }, today],
+                                        },
+                                        then: 1, // Include the current month
+                                        else: 0,
+                                      },
+                                    },
+                                  ],
                                 },
                               ],
                             },
@@ -370,6 +396,17 @@ export async function GET(request: NextRequest) {
 
     const overduePayments = overdueResult.length;
     const totalOverdueAmount = overdueResult.reduce((sum, tenant) => sum + tenant.totalOverdueAmount, 0);
+
+    // Log overdue tenants for debugging
+    logger.debug("Overdue tenants", {
+      userId,
+      overdueTenants: overdueResult.map((tenant) => ({
+        tenantId: tenant.tenantId,
+        totalRentDue: tenant.totalRentDue,
+        totalDepositDue: tenant.totalDepositDue,
+        totalOverdueAmount: tenant.totalOverdueAmount,
+      })),
+    });
 
     // Update tenant paymentStatus
     const bulkOps = overdueResult.map((tenant) => ({

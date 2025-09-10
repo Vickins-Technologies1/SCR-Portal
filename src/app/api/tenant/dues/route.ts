@@ -1,4 +1,3 @@
-// File: /pages/api/tenant/dues.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
@@ -46,7 +45,6 @@ interface Tenant {
 }
 
 export async function GET(request: NextRequest) {
-  // ... (Existing GET handler remains unchanged)
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
 
@@ -92,8 +90,8 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
-    // Define current month range (August 2025, EAT)
-    const today = new Date("2025-08-25T10:47:00+03:00");
+    // Define current month range
+    const today = new Date(); // Use current date
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
@@ -241,11 +239,24 @@ export async function GET(request: NextRequest) {
                   $multiply: [
                     "$price",
                     {
-                      $dateDiff: {
-                        startDate: { $toDate: "$leaseStartDate" },
-                        endDate: today,
-                        unit: "month",
-                      },
+                      $add: [
+                        {
+                          $dateDiff: {
+                            startDate: { $toDate: "$leaseStartDate" },
+                            endDate: today,
+                            unit: "month",
+                          },
+                        },
+                        {
+                          $cond: {
+                            if: {
+                              $lte: [{ $toDate: "$leaseStartDate" }, today],
+                            },
+                            then: 1, // Add 1 to include the current month
+                            else: 0,
+                          },
+                        },
+                      ],
                     },
                   ],
                 },
@@ -268,11 +279,24 @@ export async function GET(request: NextRequest) {
                               $multiply: [
                                 "$price",
                                 {
-                                  $dateDiff: {
-                                    startDate: { $toDate: "$leaseStartDate" },
-                                    endDate: today,
-                                    unit: "month",
-                                  },
+                                  $add: [
+                                    {
+                                      $dateDiff: {
+                                        startDate: { $toDate: "$leaseStartDate" },
+                                        endDate: today,
+                                        unit: "month",
+                                      },
+                                    },
+                                    {
+                                      $cond: {
+                                        if: {
+                                          $lte: [{ $toDate: "$leaseStartDate" }, today],
+                                        },
+                                        then: 1, // Add 1 to include the current month
+                                        else: 0,
+                                      },
+                                    },
+                                  ],
                                 },
                               ],
                             },
@@ -389,22 +413,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    const today = new Date("2025-08-25T10:47:00+03:00");
+    const today = new Date(); // Use current date
 
-    // Calculate months stayed
+    // Calculate months stayed, including the current month, using MongoDB aggregation
     let monthsStayed = 0;
     if (tenant.leaseStartDate) {
-      const leaseStart = new Date(tenant.leaseStartDate);
-      monthsStayed = Math.max(
-        0,
-        Math.floor((today.getTime() - leaseStart.getTime()) / (1000 * 60 * 60 * 24 * 30))
-      );
+      const result = await db
+        .collection("tenants")
+        .aggregate([
+          {
+            $match: { _id: new ObjectId(tenantId) },
+          },
+          {
+            $project: {
+              monthsStayed: {
+                $add: [
+                  {
+                    $dateDiff: {
+                      startDate: { $toDate: "$leaseStartDate" },
+                      endDate: today,
+                      unit: "month",
+                    },
+                  },
+                  {
+                    $cond: {
+                      if: {
+                        $lte: [{ $toDate: "$leaseStartDate" }, today],
+                      },
+                      then: 1, // Include the current month
+                      else: 0,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ])
+        .toArray();
+      monthsStayed = result[0]?.monthsStayed || 0;
     }
 
     // Calculate dues
-    const totalRentDue = tenant.leaseStartDate
-      ? tenant.price * monthsStayed
-      : 0;
+    const totalRentDue = tenant.leaseStartDate ? tenant.price * monthsStayed : 0;
     const totalDepositDue = tenant.deposit || 0;
     const totalUtilityDue = 0; // Not tracked, as per GET handler
     const totalPaid = (tenant.totalRentPaid || 0) + (tenant.totalUtilityPaid || 0) + (tenant.totalDepositPaid || 0);

@@ -117,7 +117,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/list-properties": { roles: ["propertyOwner"], isApi: true },
   "/api/tenants": { roles: ["propertyOwner", "tenant"], isApi: true },
   "/api/tenant/profile": { roles: ["tenant"], isApi: true },
-  "/api/maintenance": { roles: ["tenant"], isApi: true },
+  "/api/tenants/maintenance": { roles: ["tenant"], isApi: true }, // Updated to explicitly allow tenants
   "/api/update-wallet": { roles: ["propertyOwner"], isApi: true },
   "/api/impersonate": { roles: ["propertyOwner"], isApi: true },
   "/api/impersonate/revert": { roles: ["tenant"], isApi: true },
@@ -219,7 +219,13 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/", request.url));
     }
 
-    // Check tenant-specific access for /api/tenants
+    // Skip tenantId check for /api/tenants/maintenance since it uses query params
+    if (path === "/api/tenants/maintenance" && role === "tenant") {
+      logger.debug("Allowing tenant access to /api/tenants/maintenance", { path, method, userId, role });
+      return rateLimitMiddleware(async () => NextResponse.next())(request);
+    }
+
+    // Check tenant-specific access for /api/tenants/:tenantId
     if (path.startsWith("/api/tenants/") && !path.startsWith("/api/tenant/") && role === "tenant") {
       const tenantId = path.split("/")[3];
       if (tenantId !== userId) {
@@ -288,7 +294,7 @@ export const config = {
     "/api/tenant/payments",
     "/api/tenant/payments/:path*",
     "/api/tenant/profile",
-    "/api/maintenance",
+    "/api/tenants/maintenance",
     "/api/invoices/:path*",
     "/api/invoices/generate/:path*",
     "/api/admins/:path*",

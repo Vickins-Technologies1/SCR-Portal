@@ -1,16 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import {
-  Home,
-  DollarSign,
-  User,
-  AlertCircle,
-  Wallet,
-  LogOut,
-} from "lucide-react";
+import { Home, DollarSign, User, AlertCircle, LogOut } from "lucide-react";
+import MaintenanceRequests from "./components/MaintenanceRequests";
+import { Property } from "../../types/property";
 
 interface Tenant {
   _id: string;
@@ -41,13 +36,6 @@ interface Tenant {
   monthsStayed?: number;
 }
 
-interface Property {
-  _id: string;
-  name: string;
-  address: string;
-  unitTypes: { type: string; price: number; deposit: number; quantity: number }[];
-}
-
 export default function TenantDashboardPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
@@ -59,17 +47,18 @@ export default function TenantDashboardPage() {
   const [isDuesLoading, setIsDuesLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [maintenanceRequest, setMaintenanceRequest] = useState({
+    title: "",
     description: "",
-    urgency: "low",
+    urgency: "low" as "low" | "medium" | "high",
   });
   const [maintenanceErrors, setMaintenanceErrors] = useState<{
     [key: string]: string | undefined;
-  }>({}); // Added for form validation
+  }>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(Cookies.get("csrf-token") || null);
   const requestInProgress = useRef(false);
   const lastRequestTime = useRef(0);
-  const rateLimitDelay = 1000; // 1 second delay for rate limiting
+  const rateLimitDelay = 1000;
 
   // Fetch CSRF token with retry logic
   const fetchCsrfToken = useCallback(async () => {
@@ -113,13 +102,13 @@ export default function TenantDashboardPage() {
       }
       const data = await res.json();
       if (data.success && data.csrfToken) {
-        const token = data.csrfToken;
+        const token = data.csrfToken as string;
         setCsrfToken(token);
         Cookies.set("csrf-token", token, {
           path: "/",
           secure: window.location.protocol === "https:",
           sameSite: "strict",
-          expires: 1, // 1 day
+          expires: 1,
         });
         console.log("[INFO] Fetched and stored CSRF token", { csrfToken: token });
         return token;
@@ -345,6 +334,10 @@ export default function TenantDashboardPage() {
           },
           credentials: "include",
         });
+        if (!tenantRes.ok) {
+          const text = await tenantRes.text();
+          throw new Error(`Failed to fetch tenant data: ${tenantRes.status} ${text.slice(0, 50)}`);
+        }
         const tenantData = await tenantRes.json();
 
         if (!tenantData.success) {
@@ -355,9 +348,9 @@ export default function TenantDashboardPage() {
 
         setTenant({
           ...tenantData.tenant,
-          totalRentPaid: tenantData.tenant.totalRentPaid || 0,
-          totalUtilityPaid: tenantData.tenant.totalUtilityPaid || 0,
-          totalDepositPaid: tenantData.tenant.totalDepositPaid || 0,
+          totalRentPaid: tenantData.tenant.totalRentPaid ?? 0,
+          totalUtilityPaid: tenantData.tenant.totalUtilityPaid ?? 0,
+          totalDepositPaid: tenantData.tenant.totalDepositPaid ?? 0,
         });
 
         if (tenantData.tenant?.propertyId) {
@@ -369,10 +362,20 @@ export default function TenantDashboardPage() {
             },
             credentials: "include",
           });
+          if (!propertyRes.ok) {
+            const text = await propertyRes.text();
+            throw new Error(`Failed to fetch property data: ${propertyRes.status} ${text.slice(0, 50)}`);
+          }
           const propertyData = await propertyRes.json();
 
           if (propertyData.success) {
-            setProperty(propertyData.property);
+            setProperty({
+              ...propertyData.property,
+              _id: propertyData.property._id as string,
+              createdAt: propertyData.property.createdAt as string,
+              updatedAt: propertyData.property.updatedAt as string | undefined,
+              rentPaymentDate: propertyData.property.rentPaymentDate as string | undefined,
+            });
           } else {
             setError(propertyData.message || "Failed to fetch property data");
             console.log(`Failed to fetch property data - Error: ${propertyData.message}`);
@@ -393,8 +396,10 @@ export default function TenantDashboardPage() {
 
   const handleMaintenanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate form inputs
     const errors: { [key: string]: string | undefined } = {};
+    if (!maintenanceRequest.title.trim()) {
+      errors.title = "Title is required";
+    }
     if (!maintenanceRequest.description.trim()) {
       errors.description = "Description is required";
     }
@@ -415,7 +420,7 @@ export default function TenantDashboardPage() {
         }
       }
 
-      const res = await fetch("/api/maintenance", {
+      const res = await fetch("/api/tenants/maintenance", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -424,16 +429,21 @@ export default function TenantDashboardPage() {
         credentials: "include",
         body: JSON.stringify({
           tenantId: userId,
-          propertyId: tenant?.propertyId,
+          title: maintenanceRequest.title,
           description: maintenanceRequest.description,
+          propertyId: tenant?.propertyId,
           urgency: maintenanceRequest.urgency,
         }),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to submit maintenance request: ${res.status} ${text.slice(0, 50)}`);
+      }
       const data = await res.json();
 
       if (data.success) {
         setSuccessMessage("Maintenance request submitted successfully!");
-        setMaintenanceRequest({ description: "", urgency: "low" });
+        setMaintenanceRequest({ title: "", description: "", urgency: "low" });
         setIsModalOpen(false);
         setMaintenanceErrors({});
       } else {
@@ -471,6 +481,10 @@ export default function TenantDashboardPage() {
         credentials: "include",
         body: JSON.stringify({}),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to revert impersonation: ${res.status} ${text.slice(0, 50)}`);
+      }
       const data = await res.json();
 
       if (data.success) {
@@ -516,7 +530,7 @@ export default function TenantDashboardPage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
+                  d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3 .921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784 .57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81 .588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
                 />
               </svg>
               Submit Maintenance Request
@@ -547,20 +561,20 @@ export default function TenantDashboardPage() {
         )}
         {isLoading && (
           <div className="mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg flex items-center gap-2">
-            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-teal-600"></div>
             Loading...
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <Card icon={<Home />} title="Leased Property">
             {property && tenant ? (
               <>
                 <p className="font-medium">{property.name}</p>
                 <p className="text-gray-500">{property.address}</p>
                 <p className="mt-2">Unit: {tenant.houseNumber} ({tenant.unitType})</p>
-                <p>Rent: Ksh {tenant.price?.toFixed(2)}</p>
-                <p>Deposit: Ksh {tenant.deposit?.toFixed(2)}</p>
+                <p>Rent: Ksh {tenant.price.toFixed(2)}</p>
+                <p>Deposit: Ksh {tenant.deposit.toFixed(2)}</p>
                 <p>Lease Start: {tenant.leaseStartDate ? new Date(tenant.leaseStartDate).toLocaleDateString("en-GB") : "N/A"}</p>
                 <p>Lease End: {tenant.leaseEndDate ? new Date(tenant.leaseEndDate).toLocaleDateString("en-GB") : "N/A"}</p>
                 <p>Months Stayed: {tenant.monthsStayed ?? "N/A"}</p>
@@ -573,7 +587,7 @@ export default function TenantDashboardPage() {
           <Card icon={<DollarSign />} title="Payment Status">
             {tenant ? (
               <>
-                <p>Rent: Ksh {tenant.price?.toFixed(2)}</p>
+                <p>Rent: Ksh {tenant.price.toFixed(2)}</p>
                 <p className="mt-2">
                   Status:
                   <span
@@ -612,17 +626,6 @@ export default function TenantDashboardPage() {
             )}
           </Card>
 
-          <Card icon={<Wallet />} title="Wallet Balance">
-            {tenant ? (
-              <>
-                <p className="text-2xl font-bold text-teal-700">Ksh {tenant.wallet?.toFixed(2)}</p>
-                <p className="text-sm text-gray-500 mt-1">Use wallet for quick rent payments.</p>
-              </>
-            ) : (
-              <p className="text-sm text-gray-500">Wallet not available.</p>
-            )}
-          </Card>
-
           <Card icon={<User />} title="Your Profile">
             {tenant ? (
               <>
@@ -648,6 +651,15 @@ export default function TenantDashboardPage() {
             )}
           </Card>
         </div>
+
+        {/* Maintenance Requests Section */}
+        {userId && csrfToken && property && (
+          <MaintenanceRequests
+            userId={userId}
+            csrfToken={csrfToken}
+            properties={[property]}
+          />
+        )}
       </main>
 
       {/* Maintenance Request Modal */}
@@ -656,6 +668,23 @@ export default function TenantDashboardPage() {
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
             <h2 className="text-lg font-semibold mb-4">Submit Maintenance Request</h2>
             <form onSubmit={handleMaintenanceSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={maintenanceRequest.title}
+                  onChange={(e) =>
+                    setMaintenanceRequest({ ...maintenanceRequest, title: e.target.value })
+                  }
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-600 focus:ring-teal-600"
+                  required
+                />
+                {maintenanceErrors.title && (
+                  <p className="mt-1 text-sm text-red-600">{maintenanceErrors.title}</p>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   Description
@@ -680,7 +709,7 @@ export default function TenantDashboardPage() {
                 <select
                   value={maintenanceRequest.urgency}
                   onChange={(e) =>
-                    setMaintenanceRequest({ ...maintenanceRequest, urgency: e.target.value })
+                    setMaintenanceRequest({ ...maintenanceRequest, urgency: e.target.value as "low" | "medium" | "high" })
                   }
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-600 focus:ring-teal-600"
                 >

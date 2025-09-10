@@ -22,12 +22,11 @@ interface Payment {
   type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference?: string;
-  date: string;
+  date?: string; // Optional, for backward compatibility
   tenantName?: string;
   unitType?: string;
   ownerId: string;
 }
-
 
 interface Property {
   _id: ObjectId;
@@ -58,9 +57,9 @@ interface ApiResponse<T> {
 
 // Validate date string
 const isValidDate = (dateString: string): boolean => {
-  if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
+  if (!dateString || !/^\d{4}-\d{2}-\d{2}/.test(dateString)) return false;
   const date = new Date(dateString);
-  return !isNaN(date.getTime()) && dateString === date.toISOString().split("T")[0];
+  return !isNaN(date.getTime());
 };
 
 // GET /api/reports
@@ -88,7 +87,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       );
     }
 
-    // Get query params (propertyId, startDate, endDate, type)
+    // Get query params
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get("propertyId");
     const startDate = searchParams.get("startDate");
@@ -107,7 +106,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     if (startDate && !isValidDate(startDate)) {
       logger.error("Invalid start date", { startDate });
       return NextResponse.json(
-        { success: false, message: "Invalid start date. Use a valid date in YYYY-MM-DD format." },
+        { success: false, message: "Invalid start date. Use YYYY-MM-DD format." },
         { status: 400 }
       );
     }
@@ -115,15 +114,16 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     if (endDate && !isValidDate(endDate)) {
       logger.error("Invalid end date", { endDate });
       return NextResponse.json(
-        { success: false, message: "Invalid end date. Use a valid date in YYYY-MM-DD format." },
+        { success: false, message: "Invalid end date. Use YYYY-MM-DD format." },
         { status: 400 }
       );
     }
 
-    if (type && !["Rent", "Utility", "Deposit", "Other"].includes(type)) {
-      logger.error("Invalid payment type", { type });
+    // Validate date range
+    if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
+      logger.error("End date is before start date", { startDate, endDate });
       return NextResponse.json(
-        { success: false, message: "Invalid payment type. Must be one of: Rent, Utility, Deposit, Other" },
+        { success: false, message: "End date cannot be before start date." },
         { status: 400 }
       );
     }
@@ -151,7 +151,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     // Build payment query
     const paymentQuery: {
       propertyId: { $in: string[] } | string;
-      date?: { $gte?: string; $lte?: string };
+      paymentDate?: { $gte?: string; $lte?: string };
       status?: string;
       type?: string;
     } = {
@@ -160,12 +160,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     };
 
     if (startDate || endDate) {
-      paymentQuery.date = {};
-      if (startDate) paymentQuery.date.$gte = startDate;
-      if (endDate) paymentQuery.date.$lte = endDate;
+      paymentQuery.paymentDate = {};
+      if (startDate) {
+        paymentQuery.paymentDate.$gte = new Date(startDate).toISOString();
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        paymentQuery.paymentDate.$lte = end.toISOString();
+      }
     }
 
-    if (type) {
+    if (type && type !== "all") {
       paymentQuery.type = type;
     }
 
@@ -174,7 +180,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       .collection<Payment>("payments")
       .aggregate([
         { $match: paymentQuery },
-        { $sort: { date: -1 } },
+        { $sort: { paymentDate: -1 } },
         {
           $lookup: {
             from: "tenants",
@@ -209,16 +215,16 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             revenue: "$amount",
             date: {
               $cond: [
-                { $and: ["$date", { $ne: ["$date", ""] }, { $regexMatch: { input: "$date", regex: /^\d{4}-\d{2}-\d{2}$/ } }] },
-                "$date",
                 {
-                  $cond: [
-                    { $and: ["$paymentDate", { $ne: ["$paymentDate", ""] }, { $regexMatch: { input: "$paymentDate", regex: /^\d{4}-\d{2}-\d{2}$/ } }] },
+                  $and: [
                     "$paymentDate",
-                    { $toString: { $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$createdAt" } } } }
-                  ]
-                }
-              ]
+                    { $ne: ["$paymentDate", ""] },
+                    { $regexMatch: { input: { $toString: "$paymentDate" }, regex: /^\d{4}-\d{2}-\d{2}/ } },
+                  ],
+                },
+                { $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$paymentDate" } } },
+                { $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$createdAt" } } },
+              ],
             },
             status: "$status",
             ownerId: userId,
@@ -229,7 +235,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         },
         {
           $match: {
-            date: { $regex: /^\d{4}-\d{2}-\d{2}$/, $ne: "" }, // Ensure date is valid
+            date: { $regex: /^\d{4}-\d{2}-\d{2}$/, $ne: "" },
           },
         },
       ])

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Cookies from "js-cookie";
 import { useRouter, useParams } from "next/navigation";
-import { User, LogIn, ArrowLeft, Edit, Trash2, DollarSign } from "lucide-react";
+import { User, LogIn, ArrowLeft, Edit, Trash2, DollarSign, Info } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import Modal from "../../components/Modal";
@@ -329,6 +329,12 @@ export default function TenantDetailsPage() {
                     }
                   : null
               );
+              console.log("[INFO] Dues fetched successfully", {
+                tenantId,
+                monthsStayed: retryData.monthsStayed,
+                rentDues: retryData.dues.rentDues,
+                totalRemainingDues: retryData.dues.totalRemainingDues,
+              });
               return;
             }
             throw new Error(retryData.message || "Retry failed to fetch dues.");
@@ -365,6 +371,12 @@ export default function TenantDetailsPage() {
                 }
               : null
           );
+          console.log("[INFO] Dues fetched successfully", {
+            tenantId,
+            monthsStayed: data.monthsStayed,
+            rentDues: data.dues.rentDues,
+            totalRemainingDues: data.dues.totalRemainingDues,
+          });
         } else {
           throw new Error(data.message || "Failed to fetch dues.");
         }
@@ -674,144 +686,144 @@ export default function TenantDetailsPage() {
     setError(null);
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editTenant || !tenant || !csrfToken) {
-      setError("Missing tenant data or CSRF token.");
-      return;
-    }
-    // Validate form inputs
-    const errors: { [key: string]: string | undefined } = {};
-    if (!editTenant.name?.trim()) errors.name = "Name is required";
-    if (!editTenant.email?.trim()) errors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(editTenant.email)) errors.email = "Invalid email format";
-    if (!editTenant.phone?.trim()) errors.phone = "Phone number is required";
-    if (!editTenant.houseNumber?.trim()) errors.houseNumber = "House number is required";
-    if (!editTenant.leaseStartDate) errors.leaseStartDate = "Lease start date is required";
-    if (!editTenant.leaseEndDate) errors.leaseEndDate = "Lease end date is required";
-    setEditErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      return;
-    }
-    if (requestInProgress.current) {
-      console.log("[DEBUG] Skipping update, request in progress");
-      return;
-    }
-    requestInProgress.current = true;
-    const now = Date.now();
-    if (now - lastRequestTime.current < rateLimitDelay) {
-      await new Promise((resolve) => setTimeout(resolve, rateLimitDelay - (now - lastRequestTime.current)));
-    }
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-    try {
-      const res = await fetch(`/api/tenants/${tenant._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          name: editTenant.name,
-          email: editTenant.email,
-          phone: editTenant.phone,
-          houseNumber: editTenant.houseNumber,
-          leaseStartDate: editTenant.leaseStartDate,
-          leaseEndDate: editTenant.leaseEndDate,
-          userId,
-        }),
+const handleUpdate = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editTenant || !tenant || !csrfToken) {
+    setError("Missing tenant data or CSRF token.");
+    return;
+  }
+  // Validate form inputs
+  const errors: { [key: string]: string | undefined } = {};
+  if (!editTenant.name?.trim()) errors.name = "Name is required";
+  if (!editTenant.email?.trim()) errors.email = "Email is required";
+  else if (!/\S+@\S+\.\S+/.test(editTenant.email)) errors.email = "Invalid email format";
+  if (!editTenant.phone?.trim()) errors.phone = "Phone number is required";
+  if (!editTenant.houseNumber?.trim()) errors.houseNumber = "House number is required";
+  if (!editTenant.leaseStartDate) errors.leaseStartDate = "Lease start date is required";
+  if (!editTenant.leaseEndDate) errors.leaseEndDate = "Lease end date is required";
+  setEditErrors(errors);
+  if (Object.keys(errors).length > 0) {
+    return;
+  }
+  if (requestInProgress.current) {
+    console.log("[DEBUG] Skipping update, request in progress");
+    return;
+  }
+  requestInProgress.current = true;
+  const now = Date.now();
+  if (now - lastRequestTime.current < rateLimitDelay) {
+    await new Promise((resolve) => setTimeout(resolve, rateLimitDelay - (now - lastRequestTime.current)));
+  }
+  setIsLoading(true);
+  setError(null);
+  setSuccessMessage(null);
+  try {
+    const res = await fetch(`/api/tenants/${tenant._id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        name: editTenant.name,
+        email: editTenant.email,
+        phone: editTenant.phone,
+        houseNumber: editTenant.houseNumber,
+        leaseStartDate: editTenant.leaseStartDate,
+        leaseEndDate: editTenant.leaseEndDate,
+        userId,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("[ERROR] Failed to update tenant", {
+        status: res.status, // Fixed typo: changed rs.status to res.status
+        response: text,
+        headers: Object.fromEntries(res.headers),
       });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("[ERROR] Failed to update tenant", {
-          status: res.status,
-          response: text,
-          headers: Object.fromEntries(res.headers),
-        });
-        if (res.status === 403) {
-          const newToken = await fetchCsrfToken();
-          if (!newToken) {
-            setError("Session expired. Please refresh the page.");
-            return;
-          }
-          console.log("[INFO] Retrying update with new CSRF token", { newToken });
-          const retryRes = await fetch(`/api/tenants/${tenant._id}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": newToken,
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              name: editTenant.name,
-              email: editTenant.email,
-              phone: editTenant.phone,
-              houseNumber: editTenant.houseNumber,
-              leaseStartDate: editTenant.leaseStartDate,
-              leaseEndDate: editTenant.leaseEndDate,
-              userId,
-            }),
-          });
-          if (!retryRes.ok) {
-            const retryText = await retryRes.text();
-            console.error("[ERROR] Retry failed for update", {
-              status: retryRes.status,
-              response: retryText,
-              headers: Object.fromEntries(retryRes.headers),
-            });
-            throw new Error(`Retry failed! Status: ${retryRes.status}`);
-          }
-          const retryData = await retryRes.json();
-          if (retryData.success) {
-            setTenant(retryData.tenant);
-            setSuccessMessage("Tenant updated successfully!");
-            setShowEditModal(false);
-            setEditTenant(null);
-            setEditErrors({});
-            await fetchTenantData(newToken);
-            await fetchDues(newToken);
-            return;
-          }
-          throw new Error(retryData.message || "Retry failed to update tenant.");
-        } else if (res.status === 429) {
-          setError("Too many requests. Please try again later.");
+      if (res.status === 403) {
+        const newToken = await fetchCsrfToken();
+        if (!newToken) {
+          setError("Session expired. Please refresh the page.");
           return;
         }
-        throw new Error(`HTTP error! Status: ${res.status}`);
-      }
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await res.text();
-        console.error("[ERROR] Non-JSON response from /api/tenants PUT", {
-          status: res.status,
-          response: text,
-          headers: Object.fromEntries(res.headers),
+        console.log("[INFO] Retrying update with new CSRF token", { newToken });
+        const retryRes = await fetch(`/api/tenants/${tenant._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": newToken,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            name: editTenant.name,
+            email: editTenant.email,
+            phone: editTenant.phone,
+            houseNumber: editTenant.houseNumber,
+            leaseStartDate: editTenant.leaseStartDate,
+            leaseEndDate: editTenant.leaseEndDate,
+            userId,
+          }),
         });
-        throw new Error("Received non-JSON response from server");
+        if (!retryRes.ok) {
+          const retryText = await retryRes.text();
+          console.error("[ERROR] Retry failed for update", {
+            status: retryRes.status,
+            response: retryText,
+            headers: Object.fromEntries(retryRes.headers),
+          });
+          throw new Error(`Retry failed! Status: ${retryRes.status}`);
+        }
+        const retryData = await retryRes.json();
+        if (retryData.success) {
+          setTenant(retryData.tenant);
+          setSuccessMessage("Tenant updated successfully!");
+          setShowEditModal(false);
+          setEditTenant(null);
+          setEditErrors({});
+          await fetchTenantData(newToken);
+          await fetchDues(newToken);
+          return;
+        }
+        throw new Error(retryData.message || "Retry failed to update tenant.");
+      } else if (res.status === 429) {
+        setError("Too many requests. Please try again later.");
+        return;
       }
-      const data = await res.json();
-      if (data.success) {
-        setTenant(data.tenant);
-        setSuccessMessage("Tenant updated successfully!");
-        setShowEditModal(false);
-        setEditTenant(null);
-        setEditErrors({});
-        await fetchTenantData(csrfToken);
-        await fetchDues(csrfToken);
-      } else {
-        throw new Error(data.message || "Failed to update tenant.");
-      }
-    } catch {
-      console.error("[ERROR] Failed to update tenant");
-      setError("Failed to connect to the server.");
-    } finally {
-      setIsLoading(false);
-      requestInProgress.current = false;
-      lastRequestTime.current = Date.now();
+      throw new Error(`HTTP error! Status: ${res.status}`);
     }
-  };
+    const contentType = res.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await res.text();
+      console.error("[ERROR] Non-JSON response from /api/tenants PUT", {
+        status: res.status,
+        response: text,
+        headers: Object.fromEntries(res.headers),
+      });
+      throw new Error("Received non-JSON response from server");
+    }
+    const data = await res.json();
+    if (data.success) {
+      setTenant(data.tenant);
+      setSuccessMessage("Tenant updated successfully!");
+      setShowEditModal(false);
+      setEditTenant(null);
+      setEditErrors({});
+      await fetchTenantData(csrfToken);
+      await fetchDues(csrfToken);
+    } else {
+      throw new Error(data.message || "Failed to update tenant.");
+    }
+  } catch {
+    console.error("[ERROR] Failed to update tenant");
+    setError("Failed to connect to the server.");
+  } finally {
+    setIsLoading(false);
+    requestInProgress.current = false;
+    lastRequestTime.current = Date.now();
+  }
+};
 
   const openPaymentModal = () => {
     setShowPaymentModal(true);
@@ -1262,6 +1274,10 @@ export default function TenantDetailsPage() {
                   label: "Total Deposit Paid (Ksh)",
                   value: tenant.totalDepositPaid.toFixed(2),
                 },
+                {
+                  label: "Months Stayed",
+                  value: tenant.monthsStayed !== undefined ? tenant.monthsStayed : "N/A",
+                },
               ].map((item, index) => (
                 <div
                   key={index}
@@ -1282,8 +1298,17 @@ export default function TenantDetailsPage() {
             </div>
             {tenant.dues ? (
               <div className="mt-4">
-                <h3 className="text-lg font-semibold text-gray-800">
+                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                   Outstanding Dues
+                  <span
+                    className="relative group"
+                    aria-label="Rent dues include the current month"
+                  >
+                    <Info className="h-5 w-5 text-gray-500 cursor-pointer" />
+                    <span className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 -mt-8 left-1/2 transform -translate-x-1/2">
+                      Rent dues include the current month to maintain up-to-date status.
+                    </span>
+                  </span>
                 </h3>
                 {isDuesLoading ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
@@ -1526,6 +1551,11 @@ export default function TenantDetailsPage() {
                 min="0"
                 step="0.01"
               />
+              {paymentData.type === "Rent" && tenant?.dues?.rentDues ? (
+                <p className="mt-1 text-sm text-gray-600">
+                  Suggested: {tenant.dues.rentDues.toFixed(2)} Ksh (includes current month)
+                </p>
+              ) : null}
               {paymentErrors.amount && (
                 <p className="mt-1 text-sm text-red-600">
                   {paymentErrors.amount}

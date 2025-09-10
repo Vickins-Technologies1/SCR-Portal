@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { FileText, BarChart2, ArrowUpDown, Download } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
-import { Line } from "react-chartjs-2";
+import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
-  LineElement,
+  BarElement,
   PointElement,
   LinearScale,
   Title,
@@ -18,7 +18,7 @@ import {
   Legend,
 } from "chart.js";
 
-ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend);
+ChartJS.register(BarElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend);
 
 interface Report {
   _id: string;
@@ -70,6 +70,7 @@ export default function ReportsAndInvoicesPage() {
   const [role, setRole] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [reportSortConfig, setReportSortConfig] = useState<SortConfig<Report>>({ key: "date", direction: "desc" });
@@ -88,19 +89,20 @@ export default function ReportsAndInvoicesPage() {
     return date.toLocaleDateString();
   };
 
-  // Escape special characters for LaTeX
-  const escapeLatex = (str: string): string => {
-    return str
-      .replace(/&/g, "\\&")
-      .replace(/%/g, "\\%")
-      .replace(/\$/g, "\\$")
-      .replace(/#/g, "\\#")
-      .replace(/_/g, "\\_")
-      .replace(/{/g, "\\{")
-      .replace(/}/g, "\\}")
-      .replace(/~/g, "\\textasciitilde")
-      .replace(/\^/g, "\\textasciicircum")
-      .replace(/\\/g, "\\textbackslash");
+  // Generate all months between two dates
+  const getAllMonths = (start: string, end: string): string[] => {
+    const startDate = isValidDate(start) ? new Date(start) : new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1);
+    const endDate = isValidDate(end) ? new Date(end) : new Date();
+    const months: string[] = [];
+    // eslint-disable-next-line prefer-const
+    let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+
+    while (current <= endDate) {
+      months.push(current.toLocaleString("default", { year: "numeric", month: "short" }));
+      current.setMonth(current.getMonth() + 1);
+    }
+
+    return months;
   };
 
   // Check cookies and redirect if unauthorized
@@ -169,8 +171,8 @@ export default function ReportsAndInvoicesPage() {
     try {
       const queryParams = new URLSearchParams();
       if (selectedPropertyId !== "all") queryParams.append("propertyId", selectedPropertyId);
-      if (startDate) queryParams.append("startDate", startDate);
-      if (endDate) queryParams.append("endDate", endDate);
+      if (startDate && isValidDate(startDate)) queryParams.append("startDate", startDate);
+      if (endDate && isValidDate(endDate)) queryParams.append("endDate", endDate);
       if (paymentType !== "all") queryParams.append("type", paymentType);
       const query = queryParams.toString() ? `?${queryParams}` : "";
       const res = await fetch(`/api/reports${query}`, {
@@ -241,11 +243,23 @@ export default function ReportsAndInvoicesPage() {
     setSuccessMessage(null);
   };
 
-  // Handle date range change
+  // Handle date range change with validation
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    if (name === "startDate") setStartDate(value);
-    if (name === "endDate") setEndDate(value);
+    if (name === "startDate") {
+      if (endDate && value && isValidDate(value) && isValidDate(endDate) && new Date(value) > new Date(endDate)) {
+        setError("Start date cannot be after end date.");
+        return;
+      }
+      setStartDate(value);
+    }
+    if (name === "endDate") {
+      if (startDate && value && isValidDate(startDate) && isValidDate(value) && new Date(value) < new Date(startDate)) {
+        setError("End date cannot be before start date.");
+        return;
+      }
+      setEndDate(value);
+    }
     setError(null);
     setSuccessMessage(null);
   };
@@ -318,125 +332,81 @@ export default function ReportsAndInvoicesPage() {
   const totalRevenue = reports.reduce((sum, report) => sum + (selectedPropertyId === "all" || report.propertyId === selectedPropertyId ? report.revenue : 0), 0);
 
   // Export reports as PDF
-  const exportToPDF = useCallback(() => {
-    // Defining the LaTeX document structure
-    const latexContent = `
-\\documentclass[a4paper,11pt]{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage[T1]{fontenc}
-\\usepackage{lmodern}
-\\usepackage{geometry}
-\\geometry{margin=1in}
-\\usepackage{booktabs}
-\\usepackage{array}
-\\usepackage{fancyhdr}
-\\usepackage{lastpage}
-
-% Setting up the header
-\\pagestyle{fancy}
-\\fancyhf{}
-\\chead{
-  \\textbf{Smart Choice Rental Management}\\\\
-  PO Box 617-10300 Kerugoya\\\\
-  management@gmail.com\\\\
-  0702036837 \\textbullet\\ 0117649850
-}
-\\rfoot{Page \\thepage\\ of \\pageref{LastPage}}
-
-% Defining table column types
-\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}
-\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}p{#1}}
-\\newcolumntype{R}[1]{>{\\raggedleft\\arraybackslash}p{#1}}
-
-\\begin{document}
-
-% Title
-\\begin{center}
-  \\Large\\textbf{Financial Report}\\\\
-  \\normalsize Generated on ${new Date().toLocaleDateString()}
-\\end{center}
-
-% Filter information
-\\vspace{10pt}
-\\noindent
-\\textbf{Filters Applied:}\\\\
-Property: ${selectedPropertyId === "all" ? "All Properties" : escapeLatex(properties.find(p => p._id === selectedPropertyId)?.name || "Selected Property")}\\\\
-Payment Type: ${paymentType === "all" ? "All Types" : escapeLatex(paymentType)}\\\\
-Date Range: ${startDate && endDate ? `${startDate} to ${endDate}` : "All Dates"}\\\\
-Total Revenue: Ksh ${totalRevenue.toFixed(2)}
-
-% Report table
-\\vspace{10pt}
-\\begin{center}
-\\begin{tabular}{${selectedPropertyId === "all" ? "L{3cm} L{3cm} R{2.5cm} C{2.5cm} L{2cm} L{2cm} L{3cm}" : "L{3cm} L{3cm} R{2.5cm} C{2.5cm} L{2cm} L{2cm} L{2cm} L{3cm}"}} 
-  \\toprule
-  \\textbf{Property} & \\textbf{Tenant} & \\textbf{Revenue (Ksh)} & \\textbf{Date} & \\textbf{Status} & \\textbf{Type} ${selectedPropertyId !== "all" ? "& \\textbf{Unit Type}" : ""} & \\textbf{Tenant Payment Status} \\\\
-  \\midrule
-${reports
-  .map((report) => {
-    const baseRow = [
-      escapeLatex(report.propertyName),
-      escapeLatex(report.tenantName),
-      report.revenue.toFixed(2),
-      formatDate(report.date),
-      escapeLatex(report.status),
-      escapeLatex(report.type),
-    ];
-    if (selectedPropertyId !== "all") {
-      baseRow.push(escapeLatex(report.unitType || "N/A"));
+  const exportToPDF = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          reports,
+          selectedPropertyId,
+          paymentType,
+          startDate,
+          endDate,
+          totalRevenue,
+          properties,
+        }),
+      });
+      const data = await response.json();
+      if (data.success && data.pdf) {
+        const byteCharacters = atob(data.pdf);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `reports_${new Date().toISOString().split("T")[0]}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setSuccessMessage("Report PDF exported successfully!");
+      } else {
+        setError(data.message || "Failed to generate PDF.");
+      }
+    } catch {
+      setError("Failed to connect to the server.");
+    } finally {
+      setIsExporting(false);
     }
-    baseRow.push(escapeLatex(report.tenantPaymentStatus));
-    return baseRow.join(" & ") + " \\\\";
-  })
-  .join("\n")}
-  \\bottomrule
-\\end{tabular}
-\\end{center}
-
-\\end{document}
-`;
-
-    // Creating and downloading the PDF
-    const blob = new Blob([latexContent], { type: "application/x-tex" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `reports_${new Date().toISOString().split("T")[0]}.tex`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setSuccessMessage("Report PDF exported successfully!");
   }, [reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties]);
 
   // Prepare chart data for revenue trends
-  const chartData = reports.reduce((acc, report) => {
-    if (selectedPropertyId !== "all" && report.propertyId !== selectedPropertyId) return acc;
-    if (!isValidDate(report.date)) return acc; // Skip invalid dates
-    const date = new Date(report.date);
-    const month = date.toLocaleString("default", { year: "numeric", month: "short" });
-    acc[month] = (acc[month] || 0) + report.revenue;
+  const chartLabels = getAllMonths(startDate, endDate);
+  const chartData = chartLabels.reduce((acc, month) => {
+    acc[month] = reports
+      .filter((report) => {
+        if (selectedPropertyId !== "all" && report.propertyId !== selectedPropertyId) return false;
+        if (!isValidDate(report.date)) return false;
+        if (paymentType !== "all" && report.type !== paymentType) return false;
+        const reportMonth = new Date(report.date).toLocaleString("default", { year: "numeric", month: "short" });
+        return reportMonth === month;
+      })
+      .reduce((sum, report) => sum + report.revenue, 0);
     return acc;
   }, {} as Record<string, number>);
-  const chartLabels = Object.keys(chartData).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-  const chartValues = chartLabels.map((label) => chartData[label]);
+  const chartValues = chartLabels.map((label) => chartData[label] || 0);
 
-  // Chart.js configuration for Line component
-  const lineChartData = {
+  const barChartData = {
     labels: chartLabels,
     datasets: [
       {
         label: `Revenue (Ksh) - ${paymentType === "all" ? "All Types" : paymentType}`,
         data: chartValues,
+        backgroundColor: "rgba(1, 42, 74, 0.8)",
         borderColor: "#012a4a",
-        backgroundColor: "rgba(1, 42, 74, 0.2)",
-        fill: true,
-        tension: 0.4,
+        borderWidth: 1,
       },
     ],
   };
 
-  const lineChartOptions = {
+  const barChartOptions = {
     responsive: true,
     scales: {
       x: {
@@ -450,6 +420,7 @@ ${reports
           display: true,
           text: "Revenue (Ksh)",
         },
+        beginAtZero: true,
       },
     },
     plugins: {
@@ -581,16 +552,17 @@ ${reports
               <div className="mb-6">
                 <button
                   onClick={exportToPDF}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#013a6a] transition"
+                  disabled={isExporting}
+                  className={`flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#013a6a] transition ${isExporting ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <Download className="h-5 w-5" />
-                  Export Reports as PDF
+                  {isExporting ? "Exporting..." : "Export Reports as PDF"}
                 </button>
               </div>
               {chartLabels.length > 0 && (
                 <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-md">
                   <h2 className="text-lg font-semibold text-gray-800 mb-4">Revenue Trends</h2>
-                  <Line data={lineChartData} options={lineChartOptions} />
+                  <Bar data={barChartData} options={barChartOptions} />
                 </div>
               )}
             </>

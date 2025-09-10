@@ -25,7 +25,6 @@ interface Notification {
   errorDetails?: string | null;
 }
 
-
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT || "587"),
@@ -228,14 +227,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       if (type === "payment") {
         finalMessage = tenant.price
-          ? `Payment of Ksh. ${tenant.price.toFixed(2)} is due for ${tenant.name}`
-          : `Payment reminder for ${tenant.name}`;
+          ? `Dear ${tenant.name}, this is a courteous reminder that your rental payment of Ksh. ${tenant.price.toFixed(2)} is due. Please ensure timely payment to avoid any inconveniences.`
+          : `Dear ${tenant.name}, this is a reminder to submit your rental payment promptly. Kindly contact us for any clarification.`;
       } else if (type === "maintenance") {
-        finalMessage = finalMessage || "Scheduled maintenance for your property";
+        finalMessage = finalMessage || `Dear ${tenant.name}, we have scheduled essential maintenance for your property to ensure your comfort and safety. Please cooperate with our team during this period.`;
       } else if (type === "tenant") {
-        finalMessage = finalMessage || "Important tenant update";
+        finalMessage = finalMessage || `Dear ${tenant.name}, we have important updates regarding your tenancy agreement. Please review the details and reach out for any assistance.`;
       } else {
-        finalMessage = finalMessage || "Important information from your property manager";
+        finalMessage = finalMessage || `Dear ${tenant.name}, we have important information from Smart Choice Rental Management. Please review this message and contact us if you have any questions.`;
       }
 
       if (effectiveDeliveryMethod === "sms" || effectiveDeliveryMethod === "both") {
@@ -268,31 +267,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           try {
             const emailTitle =
               type === "payment"
-                ? "Payment Reminder"
+                ? "Rental Payment Reminder"
                 : type === "maintenance"
-                  ? "Maintenance Notification"
+                  ? "Scheduled Property Maintenance"
                   : type === "tenant"
-                    ? "Tenant Update"
-                    : "Property Notification";
+                    ? "Tenancy Agreement Update"
+                    : "Important Property Management Notice";
             const emailIntro =
               type === "payment"
-                ? "This is a reminder regarding your rental payment."
+                ? `Dear ${tenant.name}, this is a formal reminder regarding your upcoming rental payment.`
                 : type === "maintenance"
-                  ? "We have scheduled maintenance for your property."
+                  ? `Dear ${tenant.name}, we are committed to maintaining the quality of your residence.`
                   : type === "tenant"
-                    ? "Important update regarding your tenancy."
-                    : "Important information from your property manager.";
+                    ? `Dear ${tenant.name}, we have important updates concerning your tenancy.`
+                    : `Dear ${tenant.name}, we have important information to share from Smart Choice Rental Management.`;
             const emailDetails = `
               <ul>
                 <li><strong>Message:</strong> ${finalMessage}</li>
-                <li><strong>Action:</strong> ${type === "payment"
-                ? "Please make your payment at your earliest convenience."
-                : type === "maintenance"
-                  ? "Please ensure access to your property or contact us for details."
-                  : type === "tenant"
-                    ? "Please review the update and contact us if you have questions."
-                    : "Please review and contact us if needed."
-              }</li>
+                <li><strong>Action:</strong> ${
+                  type === "payment"
+                    ? "Please submit your payment by the due date to avoid any penalties. Contact us for payment options."
+                    : type === "maintenance"
+                      ? "Kindly ensure access to your property on the scheduled date or contact us to reschedule."
+                      : type === "tenant"
+                        ? "Please review the attached updates and contact us for any clarification or assistance."
+                        : "Please review this notice and reach out with any questions or concerns."
+                }</li>
               </ul>
             `;
             const html = generateStyledTemplate({

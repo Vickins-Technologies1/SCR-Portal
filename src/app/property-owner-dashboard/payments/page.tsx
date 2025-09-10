@@ -16,7 +16,7 @@ interface Payment {
   transactionId: string;
   status: "completed" | "pending" | "failed";
   tenantName: string;
-  type: "Rent" | "Utility" | "ManagementFee";
+  type: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber: string;
   reference: string;
   unitType: string;
@@ -78,7 +78,7 @@ export default function PaymentsPage() {
       }
 
       setCsrfToken(data.csrfToken);
-      Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 }); // Reduced expiration to 1 day
+      Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
       console.log("Fetched new CSRF token:", data.csrfToken);
       return data.csrfToken;
     } catch (error) {
@@ -410,7 +410,8 @@ export default function PaymentsPage() {
                   <option value="">All Types</option>
                   <option value="Rent">Rent</option>
                   <option value="Utility">Utility</option>
-                  <option value="ManagementFee">Management Fee</option>
+                  <option value="Deposit">Deposit</option>
+                  <option value="Other">Other</option>
                 </select>
               </div>
               <div>
@@ -476,6 +477,7 @@ export default function PaymentsPage() {
                     <th className="px-4 py-3 text-left">Tenant</th>
                     <th className="px-4 py-3 text-left">Property</th>
                     <th className="px-4 py-3 text-left">Unit Type</th>
+                    <th className="px-4 py-3 text-left">Type</th>
                     <th className="px-4 py-3 text-left">Amount (Ksh)</th>
                     <th className="px-4 py-3 text-left">Payment Date</th>
                     <th className="px-4 py-3 text-left">Status</th>
@@ -493,6 +495,7 @@ export default function PaymentsPage() {
                           {properties.find((p) => p._id === payment.propertyId)?.name || "N/A"}
                         </td>
                         <td className="px-4 py-3">{`${baseUnitType} (${payment.unitType})`}</td>
+                        <td className="px-4 py-3">{payment.type}</td>
                         <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
                         <td className="px-4 py-3">{new Date(payment.paymentDate).toLocaleDateString()}</td>
                         <td className="px-4 py-3">

@@ -1,4 +1,3 @@
-// src/app/api/tenants/check-dues/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId, WithId } from "mongodb";
@@ -100,8 +99,8 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
-    // Define current month range (August 2025, EAT)
-    const today = new Date("2025-08-14T15:33:00+03:00");
+    // Define current month range
+    const today = new Date(); // Use current date
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
@@ -249,11 +248,24 @@ export async function GET(request: NextRequest) {
                   $multiply: [
                     "$price",
                     {
-                      $dateDiff: {
-                        startDate: { $toDate: "$leaseStartDate" },
-                        endDate: today,
-                        unit: "month",
-                      },
+                      $add: [
+                        {
+                          $dateDiff: {
+                            startDate: { $toDate: "$leaseStartDate" },
+                            endDate: today,
+                            unit: "month",
+                          },
+                        },
+                        {
+                          $cond: {
+                            if: {
+                              $lte: [{ $toDate: "$leaseStartDate" }, today],
+                            },
+                            then: 1, // Include the current month
+                            else: 0,
+                          },
+                        },
+                      ],
                     },
                   ],
                 },
@@ -276,11 +288,24 @@ export async function GET(request: NextRequest) {
                               $multiply: [
                                 "$price",
                                 {
-                                  $dateDiff: {
-                                    startDate: { $toDate: "$leaseStartDate" },
-                                    endDate: today,
-                                    unit: "month",
-                                  },
+                                  $add: [
+                                    {
+                                      $dateDiff: {
+                                        startDate: { $toDate: "$leaseStartDate" },
+                                        endDate: today,
+                                        unit: "month",
+                                      },
+                                    },
+                                    {
+                                      $cond: {
+                                        if: {
+                                          $lte: [{ $toDate: "$leaseStartDate" }, today],
+                                        },
+                                        then: 1, // Include the current month
+                                        else: 0,
+                                      },
+                                    },
+                                  ],
                                 },
                               ],
                             },
@@ -394,7 +419,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
-    const today = new Date("2025-08-14T15:33:00+03:00");
+    const today = new Date(); // Use current date
 
     // Fetch tenant
     const tenant = await db
@@ -408,26 +433,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate months stayed
-    const leaseStart = tenant.leaseStartDate ? new Date(tenant.leaseStartDate) : null;
-    const monthsStayed = leaseStart
-      ? Math.max(
-          0,
-          Math.floor(
-            (today.getTime() - leaseStart.getTime()) / (1000 * 60 * 60 * 24 * 30)
-          )
-        )
-      : 0;
+    // Calculate months stayed, including the current month
+    let monthsStayed = 0;
+    if (tenant.leaseStartDate) {
+      const result = await db
+        .collection("tenants")
+        .aggregate([
+          {
+            $match: { _id: new ObjectId(tenantId) },
+          },
+          {
+            $project: {
+              monthsStayed: {
+                $add: [
+                  {
+                    $dateDiff: {
+                      startDate: { $toDate: "$leaseStartDate" },
+                      endDate: today,
+                      unit: "month",
+                    },
+                  },
+                  {
+                    $cond: {
+                      if: {
+                        $lte: [{ $toDate: "$leaseStartDate" }, today],
+                      },
+                      then: 1, // Include the current month
+                      else: 0,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ])
+        .toArray();
+      monthsStayed = result[0]?.monthsStayed || 0;
+    }
 
     // Calculate dues
-    const totalRentDue = leaseStart && tenant.price
-      ? tenant.price * monthsStayed
-      : 0;
+    const totalRentDue = tenant.leaseStartDate && tenant.price ? tenant.price * monthsStayed : 0;
     const totalDepositDue = tenant.deposit || 0;
     const totalUtilityDue = 0; // Utility dues not tracked
-    const totalPaid = (tenant.totalRentPaid || 0) +
-                      (tenant.totalUtilityPaid || 0) +
-                      (tenant.totalDepositPaid || 0);
+    const totalPaid = (tenant.totalRentPaid || 0) + (tenant.totalUtilityPaid || 0) + (tenant.totalDepositPaid || 0);
     const totalRemainingDues = Math.max(0, totalRentDue + totalDepositDue + totalUtilityDue - totalPaid);
 
     // Update tenant payment status
@@ -448,6 +496,7 @@ export async function POST(request: NextRequest) {
       tenantId,
       dues,
       monthsStayed,
+      paymentStatus,
     });
 
     return NextResponse.json({

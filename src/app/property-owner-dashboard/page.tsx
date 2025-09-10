@@ -3,9 +3,10 @@
 import { Inter } from "next/font/google";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
+import MaintenanceRequests from "./components/MaintenanceRequests";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Users, DollarSign, AlertCircle, BarChart2 } from "lucide-react";
+import { Building2, Users, DollarSign, AlertCircle, BarChart2, Home, MapPin, Hash } from "lucide-react";
 import Cookies from "js-cookie";
 import { Line, Pie } from "react-chartjs-2";
 import {
@@ -82,6 +83,7 @@ interface ChartData {
   months: string[];
   rentPayments: number[];
   utilityPayments: number[];
+  depositPayments: number[];
   maintenanceRequests: number[];
 }
 
@@ -340,9 +342,9 @@ export default function PropertyOwnerDashboard() {
     },
   };
 
-  // Line chart data for payment trends
+  // Payment trends line chart
   const paymentChartData = {
-    labels: chartData?.months || ["Mar 25", "Apr 25", "May 25", "Jun 25", "Jul 25", "Aug 25"],
+    labels: chartData?.months || ["Apr-25", "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25"],
     datasets: [
       {
         label: "Rent Payments (Ksh)",
@@ -357,6 +359,14 @@ export default function PropertyOwnerDashboard() {
         data: chartData?.utilityPayments || [0, 0, 0, 0, 0, 0],
         borderColor: "#FF6384",
         backgroundColor: "rgba(255, 99, 132, 0.2)",
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: "Deposit Payments (Ksh)",
+        data: chartData?.depositPayments || [0, 0, 0, 0, 0, 0],
+        borderColor: "#10b981",
+        backgroundColor: "rgba(16, 185, 129, 0.2)",
         fill: true,
         tension: 0.4,
       },
@@ -470,7 +480,7 @@ export default function PropertyOwnerDashboard() {
               },
               {
                 title: "Vacant Units",
-                value: stats.totalUnits,
+                value: stats.totalUnits - stats.occupiedUnits,
                 icon: <Building2 className="h-5 w-5 sm:h-6 sm:w-6" />,
                 color: "purple",
               },
@@ -515,16 +525,20 @@ export default function PropertyOwnerDashboard() {
                 {properties.map((property: Property) => (
                   <div
                     key={property._id}
-                    className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm hover:shadow-lg transition-all duration-200 hover:-translate-y-1 cursor-pointer"
+                    className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-2 cursor-pointer bg-gradient-to-br from-white to-gray-50"
                     onClick={() => router.push(`/properties/${property._id}`)}
                   >
-                    <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800">{property.name}</h3>
-                    <p className="text-sm sm:text-base text-gray-500 mt-1 sm:mt-2">{property.address}</p>
-                    <p className="text-sm sm:text-base text-gray-500 mt-1 sm:mt-2">
-                      Vacant Units: {property.unitTypes.reduce((sum: number, unit: { quantity: number }) => sum + unit.quantity, 0)}
+                    <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 flex items-center gap-2">
+                      <Home className="h-5 w-5 text-blue-600" /> {property.name}
+                    </h3>
+                    <p className="text-sm sm:text-base text-gray-500 mt-2 flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-gray-400" /> {property.address}
                     </p>
-                    <p className="text-sm sm:text-base text-gray-500 mt-1 sm:mt-2">
-                      Status:{" "}
+                    <p className="text-sm sm:text-base text-gray-500 mt-2 flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-gray-400" /> Vacant Units: {stats.totalUnits - stats.occupiedUnits}
+                    </p>
+                    <p className="text-sm sm:text-base text-gray-500 mt-2 flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-gray-400" /> Status:{" "}
                       <span
                         className={`inline-block px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium rounded-full ${
                           property.status === "occupied" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
@@ -538,9 +552,13 @@ export default function PropertyOwnerDashboard() {
               </div>
             )}
           </section>
+
+          {/* Maintenance Requests Section */}
+          {userId && csrfToken && (
+            <MaintenanceRequests userId={userId} csrfToken={csrfToken} properties={properties} />
+          )}
         </main>
       </div>
     </div>
-    
   );
 }

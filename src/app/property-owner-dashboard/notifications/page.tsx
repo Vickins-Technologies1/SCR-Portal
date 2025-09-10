@@ -123,10 +123,11 @@ export default function NotificationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [newNotification, setNewNotification] = useState({
     message: "",
-    tenantId: "",
+    tenantIds: [] as string[],
     type: "other" as Notification["type"],
     deliveryMethod: "app" as Notification["deliveryMethod"],
   });
@@ -156,16 +157,14 @@ export default function NotificationsPage() {
   }, []);
 
   const makeAuthenticatedRequest = useCallback(
-    async (url: string, options: RequestInit, retries = 1): Promise<Response> => {
+    async (url: string, options: RequestInit): Promise<Response> => {
       if (!csrfToken) {
-        const newToken = await fetchCsrfToken();
-        if (!newToken) {
-          throw new Error("Unable to fetch CSRF token");
-        }
+        console.error("[ERROR] CSRF token missing for request to:", url);
+        throw new Error("CSRF token not available. Please refresh the page.");
       }
 
       const headers = new Headers(options.headers || {});
-      headers.set("X-CSRF-Token", csrfToken!);
+      headers.set("X-CSRF-Token", csrfToken);
       headers.set("Content-Type", "application/json");
 
       const response = await fetch(url, {
@@ -174,20 +173,15 @@ export default function NotificationsPage() {
         credentials: "include",
       });
 
-      if (response.status === 403 && retries > 0) {
-        console.log("[INFO] CSRF token invalid, retrying with new token...");
-        const newToken = await fetchCsrfToken();
-        if (newToken) {
-          headers.set("X-CSRF-Token", newToken);
-          setCsrfToken(newToken);
-          Cookies.set("csrfToken", newToken, { sameSite: "strict", secure: true });
-          return makeAuthenticatedRequest(url, { ...options, headers }, retries - 1);
-        }
+      if (response.status === 403) {
+        console.error("[ERROR] CSRF token invalid for request to:", url);
+        setError("Session expired. Please refresh the page.");
+        throw new Error("Invalid CSRF token");
       }
 
       return response;
     },
-    [csrfToken, fetchCsrfToken]
+    [csrfToken]
   );
 
   const fetchTenantsAndPayments = useCallback(async () => {
@@ -240,7 +234,7 @@ export default function NotificationsPage() {
       setTenants(fetchedTenants);
       setNewNotification((prev) => ({
         ...prev,
-        tenantId: fetchedTenants.length > 0 ? "all" : "",
+        tenantIds: fetchedTenants.length > 0 ? ["all"] : [],
       }));
 
       const tenantIds = fetchedTenants.map((tenant) => tenant._id);
@@ -353,8 +347,8 @@ export default function NotificationsPage() {
           currentDate.getDate() === property.rentPaymentDate
             ? "paymentDate"
             : currentDate.getDate() === adjustedFiveDaysBefore
-            ? "fiveDaysBefore"
-            : null;
+              ? "fiveDaysBefore"
+              : null;
 
         if (reminderType) {
           reminders.push({
@@ -582,8 +576,8 @@ export default function NotificationsPage() {
       setError("Please log in to create notifications.");
       return;
     }
-    if (!newNotification.tenantId) {
-      setError("Please select a tenant or 'All Tenants' to send the notification.");
+    if (newNotification.tenantIds.length === 0) {
+      setError("Please select at least one tenant or 'All Tenants' to send the notification.");
       return;
     }
     if (!newNotification.type || !["payment", "maintenance", "tenant", "other"].includes(newNotification.type)) {
@@ -600,33 +594,46 @@ export default function NotificationsPage() {
     }
     setIsLoading(true);
     try {
-      const response = await makeAuthenticatedRequest("/api/notifications", {
-        method: "POST",
-        body: JSON.stringify({
-          message: newNotification.message,
-          tenantId: newNotification.tenantId,
-          type: newNotification.type,
-          deliveryMethod: newNotification.deliveryMethod,
-        }),
-      });
-      const data: ApiResponse<Notification> = await response.json();
-      console.log("[INFO] Create notification response:", {
-        success: data.success,
-        message: data.message,
-        status: response.status,
+      const tenantIds = newNotification.tenantIds.includes("all")
+        ? ["all"]
+        : newNotification.tenantIds;
+
+      const responses = await Promise.all(
+        tenantIds.map(async (tenantId) => {
+          const response = await makeAuthenticatedRequest("/api/notifications", {
+            method: "POST",
+            body: JSON.stringify({
+              message: newNotification.message,
+              tenantId,
+              type: newNotification.type,
+              deliveryMethod: newNotification.deliveryMethod,
+            }),
+          });
+          return await response.json() as ApiResponse<Notification>;
+        })
+      );
+
+      const successfulNotifications: Notification[] = [];
+      let errorMessage: string | null = null;
+
+      responses.forEach((data, index) => {
+        if (data.success && data.data) {
+          successfulNotifications.push(data.data);
+        } else {
+          console.error("[ERROR] Failed to create notification for tenant:", tenantIds[index], data.message);
+          errorMessage = data.message || `Failed to create notification for some tenants.`;
+        }
       });
 
-      if (!data.success || !data.data) {
-        setError(data.message || "Failed to create notification.");
-        setIsLoading(false);
-        return;
+      if (successfulNotifications.length > 0) {
+        setNotifications((prev) => [...successfulNotifications, ...prev]);
+        setIsCreateModalOpen(false);
+        setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
+        setCurrentPage(1);
+        setError(errorMessage);
+      } else {
+        setError(errorMessage || "Failed to create notifications.");
       }
-
-      setNotifications((prev) => [data.data!, ...prev]);
-      setIsCreateModalOpen(false);
-      setNewNotification({ message: "", tenantId: tenants.length > 0 ? "all" : "", type: "other", deliveryMethod: "app" });
-      setCurrentPage(1);
-      setError(null);
     } catch (err) {
       console.error("[ERROR] Error creating notification:", err instanceof Error ? err.message : "Unknown error");
       setError(
@@ -667,8 +674,9 @@ export default function NotificationsPage() {
     }
 
     setUserId(uid);
-    setCsrfToken(storedCsrfToken);
-    if (!storedCsrfToken) {
+    if (storedCsrfToken) {
+      setCsrfToken(storedCsrfToken);
+    } else {
       fetchCsrfToken();
     }
   }, [fetchCsrfToken]);
@@ -761,21 +769,19 @@ export default function NotificationsPage() {
               <div className="flex rounded-lg border border-gray-200 bg-white p-1 w-full sm:w-auto">
                 <button
                   onClick={() => setViewMode("sent")}
-                  className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                    viewMode === "sent"
+                  className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === "sent"
                       ? "bg-[#03a678] text-white"
                       : "bg-white text-[#012a4a] hover:bg-gray-100"
-                  }`}
+                    }`}
                 >
                   Sent Reminders
                 </button>
                 <button
                   onClick={() => setViewMode("upcoming")}
-                  className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                    viewMode === "upcoming"
+                  className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === "upcoming"
                       ? "bg-[#03a678] text-white"
                       : "bg-white text-[#012a4a] hover:bg-gray-100"
-                  }`}
+                    }`}
                 >
                   Upcoming Reminders
                 </button>
@@ -802,10 +808,10 @@ export default function NotificationsPage() {
                         isLoading
                           ? "Sending in progress..."
                           : upcomingReminders.length === 0
-                          ? "No upcoming reminders to send"
-                          : !csrfToken
-                          ? "Authenticating session..."
-                          : ""
+                            ? "No upcoming reminders to send"
+                            : !csrfToken
+                              ? "Authenticating session..."
+                              : ""
                       }
                     >
                       <Send size={16} />
@@ -860,35 +866,35 @@ export default function NotificationsPage() {
                     <tr className="bg-gray-50 text-[#012a4a] text-left text-xs sm:text-sm font-semibold">
                       {viewMode === "sent"
                         ? ["message", "type", "tenantName", "createdAt", "deliveryMethod", "status"].map((key) => (
-                            <th key={key} className="px-2 sm:px-4 py-2 sm:py-3">
-                              {key === "tenantName"
-                                ? "Tenant"
-                                : key === "createdAt"
+                          <th key={key} className="px-2 sm:px-4 py-2 sm:py-3">
+                            {key === "tenantName"
+                              ? "Tenant"
+                              : key === "createdAt"
                                 ? "Date"
                                 : key === "deliveryMethod"
-                                ? "Delivery"
-                                : key === "status"
-                                ? "Status"
-                                : key.charAt(0).toUpperCase() + key.slice(1)}
-                            </th>
-                          ))
+                                  ? "Delivery"
+                                  : key === "status"
+                                    ? "Status"
+                                    : key.charAt(0).toUpperCase() + key.slice(1)}
+                          </th>
+                        ))
                         : ["tenantName", "propertyName", "rentDue", "utilityDue", "depositDue", "totalDue", "dueDate"].map((key) => (
-                            <th key={key} className="px-2 sm:px-4 py-2 sm:py-3">
-                              {key === "tenantName"
-                                ? "Tenant"
-                                : key === "propertyName"
+                          <th key={key} className="px-2 sm:px-4 py-2 sm:py-3">
+                            {key === "tenantName"
+                              ? "Tenant"
+                              : key === "propertyName"
                                 ? "Property"
                                 : key === "rentDue"
-                                ? "Rent Due"
-                                : key === "utilityDue"
-                                ? "Utilities Due"
-                                : key === "depositDue"
-                                ? "Deposit Due"
-                                : key === "totalDue"
-                                ? "Total Due"
-                                : "Due Date"}
-                            </th>
-                          ))}
+                                  ? "Rent Due"
+                                  : key === "utilityDue"
+                                    ? "Utilities Due"
+                                    : key === "depositDue"
+                                      ? "Deposit Due"
+                                      : key === "totalDue"
+                                        ? "Total Due"
+                                        : "Due Date"}
+                          </th>
+                        ))}
                       <th className="px-2 sm:px-4 py-2 sm:py-3">Actions</th>
                     </tr>
                   </thead>
@@ -1262,43 +1268,99 @@ export default function NotificationsPage() {
             isOpen={isCreateModalOpen}
             onClose={() => {
               setIsCreateModalOpen(false);
-              setNewNotification({ message: "", tenantId: tenants.length > 0 ? "all" : "", type: "other", deliveryMethod: "app" });
+              setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
               setError(null);
             }}
             title="Create New Notification"
           >
-            <div className="space-y-4 text-[#012a4a]">
+            <div className="space-y-6 text-[#012a4a]">
               <div>
-                <label htmlFor="tenantId" className="block text-sm font-medium mb-1">
-                  Recipient
-                </label>
-                <select
-                  id="tenantId"
-                  value={newNotification.tenantId}
-                  onChange={(e) => setNewNotification({ ...newNotification, tenantId: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678]"
-                  disabled={tenants.length === 0}
-                >
-                  <option value="" disabled>
-                    Select a tenant
-                  </option>
-                  <option value="all">All Tenants</option>
-                  {tenants.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>
-                      {tenant.name} ({tenant.houseNumber})
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium mb-2">Recipients</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors flex justify-between items-center"
+                    disabled={tenants.length === 0}
+                  >
+                    <span>
+                      {newNotification.tenantIds.length === 0
+                        ? "Select tenants"
+                        : newNotification.tenantIds.includes("all")
+                        ? "All Tenants"
+                        : newNotification.tenantIds.length === 1
+                        ? tenants.find((t) => t._id === newNotification.tenantIds[0])?.name || "1 tenant selected"
+                        : `${newNotification.tenantIds.length} tenants selected`}
+                    </span>
+                    <svg
+                      className={`w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {isDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      <label className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newNotification.tenantIds.includes("all")}
+                          onChange={(e) => {
+                            setNewNotification({
+                              ...newNotification,
+                              tenantIds: e.target.checked ? ["all"] : [],
+                            });
+                          }}
+                          className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
+                          disabled={tenants.length === 0}
+                        />
+                        <span className="text-sm font-medium text-[#012a4a]">All Tenants</span>
+                      </label>
+                      {tenants.map((tenant) => (
+                        <label
+                          key={tenant._id}
+                          className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            value={tenant._id}
+                            checked={newNotification.tenantIds.includes(tenant._id)}
+                            onChange={(e) => {
+                              if (newNotification.tenantIds.includes("all")) return;
+                              setNewNotification({
+                                ...newNotification,
+                                tenantIds: e.target.checked
+                                  ? [...newNotification.tenantIds, tenant._id]
+                                  : newNotification.tenantIds.filter((id) => id !== tenant._id),
+                              });
+                            }}
+                            className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
+                            disabled={tenants.length === 0 || newNotification.tenantIds.includes("all")}
+                          />
+                          <span className="text-sm font-medium text-[#012a4a]">
+                            {tenant.name} ({tenant.houseNumber})
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Selecting &quot;All Tenants&quot; will override individual tenant selections.
+                </p>
               </div>
               <div>
-                <label htmlFor="type" className="block text-sm font-medium mb-1">
+                <label htmlFor="type" className="block text-sm font-medium mb-2">
                   Notification Type
                 </label>
                 <select
                   id="type"
                   value={newNotification.type}
                   onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678]"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
                 >
                   <option value="payment">Payment</option>
                   <option value="maintenance">Maintenance</option>
@@ -1307,14 +1369,14 @@ export default function NotificationsPage() {
                 </select>
               </div>
               <div>
-                <label htmlFor="deliveryMethod" className="block text-sm font-medium mb-1">
+                <label htmlFor="deliveryMethod" className="block text-sm font-medium mb-2">
                   Delivery Method
                 </label>
                 <select
                   id="deliveryMethod"
                   value={newNotification.deliveryMethod}
                   onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678]"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
                 >
                   <option value="app">In-App</option>
                   <option value="sms">SMS</option>
@@ -1325,14 +1387,14 @@ export default function NotificationsPage() {
               </div>
               {newNotification.type !== "payment" && (
                 <div>
-                  <label htmlFor="message" className="block text-sm font-medium mb-1">
+                  <label htmlFor="message" className="block text-sm font-medium mb-2">
                     Message
                   </label>
                   <textarea
                     id="message"
                     value={newNotification.message}
                     onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678]"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
                     rows={4}
                     placeholder="Enter your message here"
                   ></textarea>
@@ -1343,16 +1405,16 @@ export default function NotificationsPage() {
                 <button
                   onClick={() => {
                     setIsCreateModalOpen(false);
-                    setNewNotification({ message: "", tenantId: tenants.length > 0 ? "all" : "", type: "other", deliveryMethod: "app" });
+                    setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
                     setError(null);
                   }}
-                  className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300"
+                  className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={createNotification}
-                  className="px-4 py-2 text-sm rounded-lg bg-[#03a678] text-white hover:bg-[#02956a] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm rounded-lg bg-[#03a678] text-white hover:bg-[#02956a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   disabled={isLoading}
                 >
                   {isLoading ? "Sending..." : "Send Notification"}

@@ -942,72 +942,7 @@ export default function TenantsPage() {
                   <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Total Rent Paid (Ksh)</label>
-                <input
-                  placeholder="Enter total rent paid"
-                  value={totalRentPaid}
-                  onChange={(e) => {
-                    setTotalRentPaid(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      totalRentPaid: e.target.value && (isNaN(parseFloat(e.target.value)) || parseFloat(e.target.value) < 0)
-                        ? "Total rent paid must be a non-negative number"
-                        : undefined,
-                    }));
-                  }}
-                  type="number"
-                  step="0.01"
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalRentPaid ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.totalRentPaid && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.totalRentPaid}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Total Utility Paid (Ksh)</label>
-                <input
-                  placeholder="Enter total utility paid"
-                  value={totalUtilityPaid}
-                  onChange={(e) => {
-                    setTotalUtilityPaid(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      totalUtilityPaid: e.target.value && (isNaN(parseFloat(e.target.value)) || parseFloat(e.target.value) < 0)
-                        ? "Total utility paid must be a non-negative number"
-                        : undefined,
-                    }));
-                  }}
-                  type="number"
-                  step="0.01"
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalUtilityPaid ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.totalUtilityPaid && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.totalUtilityPaid}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Total Deposit Paid (Ksh)</label>
-                <input
-                  placeholder="Enter total deposit paid"
-                  value={totalDepositPaid}
-                  onChange={(e) => {
-                    setTotalDepositPaid(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      totalDepositPaid: e.target.value && (isNaN(parseFloat(e.target.value)) || parseFloat(e.target.value) < 0)
-                        ? "Total deposit paid must be a non-negative number"
-                        : undefined,
-                    }));
-                  }}
-                  type="number"
-                  step="0.01"
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.totalDepositPaid ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.totalDepositPaid && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.totalDepositPaid}</p>
-                )}
-              </div>
+              
               <div className="flex flex-col sm:flex-row justify-end gap-3">
                 <button
                   type="button"
