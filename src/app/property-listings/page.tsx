@@ -58,7 +58,7 @@ const Footer: React.FC = () => {
           &copy; {new Date().getFullYear()} Smart Choice Rental Management Ltd. All rights reserved.
         </div>
         <div className="mt-2 text-center text-xs text-gray-400">
-          Created by <a href="https://vickins-technologies.onrender.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
+        Developed by <a href="https://vickins-technologies-lv2h.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
         </div>
       </div>
     </footer>
