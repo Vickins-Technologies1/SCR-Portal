@@ -186,7 +186,7 @@ export default function TenantDashboardLayout({
         <br />
         Created by{" "}
         <a
-          href="https://vickinstech.com"
+          href="https://vickins-technologies-lv2h.vercel.app/"
           target="_blank"
           rel="noopener noreferrer"
           className="text-[#03a678] font-semibold hover:underline"
