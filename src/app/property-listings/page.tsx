@@ -1,3 +1,4 @@
+// src/app/property-listings/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -6,11 +7,19 @@ import { MapPin, DollarSign, Star, Filter, Menu, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
+interface UnitType {
+  type: string;
+  price: number;
+  deposit: number;
+  quantity: number;
+  vacant?: number;
+}
+
 interface PropertyListing {
   _id: string;
   name: string;
   address: string;
-  unitTypes: { type: string; price: number; quantity: number; deposit: number }[];
+  unitTypes: UnitType[];
   status: "Active" | "Inactive";
   createdAt: string;
   updatedAt: string;
@@ -19,7 +28,6 @@ interface PropertyListing {
   adExpiration?: string;
   description?: string;
   facilities?: string[];
-  ownerId: string;
 }
 
 interface FilterState {
@@ -55,20 +63,20 @@ const Footer: React.FC = () => {
           </div>
         </div>
         <div className="mt-8 text-center text-sm text-gray-200">
-          &copy; {new Date().getFullYear()} Smart Choice Rental Management Ltd. All rights reserved.
+          © {new Date().getFullYear()} Smart Choice Rental Management Ltd. All rights reserved.
         </div>
         <div className="mt-2 text-center text-xs text-gray-400">
-        Developed by <a href="https://vickins-technologies-lv2h.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
+          Developed by <a href="https://vickins-technologies-lv2h.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
         </div>
       </div>
     </footer>
   );
 };
 
-export default function LandingPage() {
+export default function PropertyListings() {
   const [properties, setProperties] = useState<PropertyListing[]>([]);
   const [filteredProperties, setFilteredProperties] = useState<PropertyListing[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     unitType: "",
@@ -83,67 +91,40 @@ export default function LandingPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/public-properties", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
+      const params = new URLSearchParams();
+      if (filters.unitType) params.set("unitType", filters.unitType);
+      if (filters.priceRange[0] > 0) params.set("minPrice", filters.priceRange[0].toString());
+      if (filters.priceRange[1] < Infinity) params.set("maxPrice", filters.priceRange[1].toString());
+      if (filters.location) params.set("location", filters.location);
+      if (filters.isAdvertised !== null) params.set("featured", filters.isAdvertised.toString());
+
+      const res = await fetch(`/api/public-properties?${params.toString()}`, {
+        next: { revalidate: 60 },
       });
       const data = await res.json();
+
       if (data.success) {
-        const sortedProperties = (data.properties || []).sort((a: PropertyListing, b: PropertyListing) => {
-          if (a.isAdvertised && !b.isAdvertised) return -1;
-          if (!a.isAdvertised && b.isAdvertised) return 1;
-          return a.name.localeCompare(b.name);
-        });
-        setProperties(sortedProperties);
-        setFilteredProperties(sortedProperties);
+        const sorted = (data.properties || []).sort((a: any, b: any) =>
+          a.isAdvertised === b.isAdvertised ? 0 : a.isAdvertised ? -1 : 1
+        );
+        setProperties(sorted);
+        setFilteredProperties(sorted);
       } else {
-        setError(data.message || "Failed to fetch properties.");
+        setError(data.message || "No properties found.");
       }
     } catch (err) {
-      console.error("Fetch properties error:", err instanceof Error ? err.message : "Unknown error");
-      setError("Failed to connect to the server.");
+      setError("Failed to connect to server.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [filters]);
 
   useEffect(() => {
     fetchProperties();
   }, [fetchProperties]);
 
-  useEffect(() => {
-    const applyFilters = () => {
-      let filtered = properties.filter((p) => p.status === "Active");
-
-      if (filters.unitType) {
-        filtered = filtered.filter((p) => p.unitTypes.some((u) => u.type === filters.unitType));
-      }
-
-      if (filters.priceRange[1] !== Infinity) {
-        filtered = filtered.filter((p) => {
-          const minPrice = Math.min(...p.unitTypes.map((u) => u.price));
-          return minPrice >= filters.priceRange[0] && minPrice <= filters.priceRange[1];
-        });
-      }
-
-      if (filters.isAdvertised !== null) {
-        filtered = filtered.filter((p) => p.isAdvertised === filters.isAdvertised);
-      }
-
-      if (filters.location) {
-        filtered = filtered.filter((p) =>
-          p.address.toLowerCase().includes(filters.location.toLowerCase())
-        );
-      }
-
-      setFilteredProperties(filtered);
-    };
-
-    applyFilters();
-  }, [filters, properties]);
-
   const handleFilterChange = useCallback(
-    (key: keyof FilterState, value: string | [number, number] | boolean | null) => {
+    (key: keyof FilterState, value: any) => {
       setFilters((prev) => ({ ...prev, [key]: value }));
     },
     []
@@ -163,14 +144,12 @@ export default function LandingPage() {
     [properties]
   );
 
-  // Animation variants for the filter panel
   const filterVariants: Variants = {
     hidden: { opacity: 0, height: 0, y: -20 },
     visible: { opacity: 1, height: "auto", y: 0 },
     exit: { opacity: 0, height: 0, y: -20 },
   };
 
-  // Animation variants for filter inputs
   const inputVariants: Variants = {
     hidden: { opacity: 0, y: 10 },
     visible: (i: number) => ({
@@ -185,16 +164,8 @@ export default function LandingPage() {
       <header className="bg-white text-gray-800 py-6 shadow-lg">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Image
-              src="/logo.png"
-              alt="Smart Choice Rental Management Logo"
-              width={52}
-              height={52}
-              className="object-contain"
-            />
-            <h1 className="text-3xl md:text-4xl font-bold">
-              Smart Choice Rentals
-            </h1>
+            <Image src="/logo.png" alt="Logo" width={52} height={52} className="object-contain" />
+            <h1 className="text-3xl md:text-4xl font-bold">Smart Choice Rentals</h1>
           </div>
           <div className="flex items-center">
             <nav className="hidden md:flex gap-6">
@@ -224,18 +195,10 @@ export default function LandingPage() {
               transition={{ duration: 0.3 }}
             >
               <div className="container mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4">
-                <Link
-                  href="https://smartchoicerentalmanagement.com/"
-                  className="text-sm font-medium hover:text-[#012a4a] transition"
-                  onClick={toggleMobileMenu}
-                >
+                <Link href="https://smartchoicerentalmanagement.com/" onClick={toggleMobileMenu} className="text-sm font-medium hover:text-[#012a4a]">
                   Home
                 </Link>
-                <Link
-                  href="https://www.smartchoicerentalmanagement.com/contact-us"
-                  className="text-sm font-medium hover:text-[#012a4a] transition"
-                  onClick={toggleMobileMenu}
-                >
+                <Link href="https://www.smartchoicerentalmanagement.com/contact-us" onClick={toggleMobileMenu} className="text-sm font-medium hover:text-[#012a4a]">
                   Contact
                 </Link>
               </div>
@@ -243,218 +206,91 @@ export default function LandingPage() {
           )}
         </AnimatePresence>
       </header>
+
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <motion.div
-          className="flex flex-col sm:flex-row justify-between items-center mb-8"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        >
-          <h2 className="text-2xl md:text-3xl font-semibold text-[#012a4a]">
-            Available Properties
-          </h2>
-          <button
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className="mt-4 sm:mt-0 flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition"
-          >
+        <motion.div className="flex flex-col sm:flex-row justify-between items-center mb-8" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          <h2 className="text-2xl md:text-3xl font-semibold text-[#012a4a]">Available Properties</h2>
+          <button onClick={() => setIsFilterOpen(!isFilterOpen)} className="mt-4 sm:mt-0 flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition">
             <Filter className="h-5 w-5" />
             {isFilterOpen ? "Close Filters" : "Open Filters"}
           </button>
         </motion.div>
+
         <AnimatePresence>
           {isFilterOpen && (
-            <motion.div
-              className="bg-gray-50 p-6 rounded-lg shadow-md mb-8"
-              variants={filterVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-            >
+            <motion.div className="bg-gray-50 p-6 rounded-lg shadow-md mb-8" variants={filterVariants} initial="hidden" animate="visible" exit="exit" transition={{ duration: 0.5 }}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  {
-                    label: "Location",
-                    component: (
-                      <input
-                        type="text"
-                        placeholder="Enter city or address"
-                        value={filters.location}
-                        onChange={(e) => handleFilterChange("location", e.target.value)}
-                        className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                      />
-                    ),
-                  },
-                  {
-                    label: "Unit Type",
-                    component: (
-                      <select
-                        value={filters.unitType}
-                        onChange={(e) => handleFilterChange("unitType", e.target.value)}
-                        className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                      >
-                        <option value="">All Unit Types</option>
-                        {unitTypes.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
-                    ),
-                  },
-                  {
-                    label: "Price Range (Ksh/mo)",
-                    component: (
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={filters.priceRange[0] === 0 ? "" : filters.priceRange[0]}
-                          onChange={(e) =>
-                            handleFilterChange("priceRange", [
-                              parseInt(e.target.value) || 0,
-                              filters.priceRange[1],
-                            ])
-                          }
-                          className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                        />
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={filters.priceRange[1] === Infinity ? "" : filters.priceRange[1]}
-                          onChange={(e) =>
-                            handleFilterChange("priceRange", [
-                              filters.priceRange[0],
-                              parseInt(e.target.value) || Infinity,
-                            ])
-                          }
-                          className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                        />
-                      </div>
-                    ),
-                  },
-                  {
-                    label: "Advertising Status",
-                    component: (
-                      <select
-                        value={filters.isAdvertised === null ? "all" : filters.isAdvertised ? "yes" : "no"}
-                        onChange={(e) =>
-                          handleFilterChange(
-                            "isAdvertised",
-                            e.target.value === "all" ? null : e.target.value === "yes"
-                          )
-                        }
-                        className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm"
-                      >
-                        <option value="all">All Properties</option>
-                        <option value="yes">Featured Only</option>
-                        <option value="no">Non-Featured Only</option>
-                      </select>
-                    ),
-                  },
-                ].map((filter, index) => (
-                  <motion.div
-                    key={filter.label}
-                    variants={inputVariants}
-                    initial="hidden"
-                    animate="visible"
-                    custom={index}
-                  >
-                    <label className="block text-sm font-medium text-[#012a4a] mb-2">
-                      {filter.label}
-                    </label>
-                    {filter.component}
+                  { label: "Location", component: <input type="text" placeholder="e.g. Westlands" value={filters.location} onChange={(e) => handleFilterChange("location", e.target.value)} className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] text-sm" /> },
+                  { label: "Unit Type", component: (
+                    <select value={filters.unitType} onChange={(e) => handleFilterChange("unitType", e.target.value)} className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] text-sm">
+                      <option value="">All Types</option>
+                      {unitTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  )},
+                  { label: "Price Range (Ksh/mo)", component: (
+                    <div className="flex gap-2">
+                      <input type="number" placeholder="Min" value={filters.priceRange[0] === 0 ? "" : filters.priceRange[0]} onChange={(e) => handleFilterChange("priceRange", [parseInt(e.target.value) || 0, filters.priceRange[1]])} className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm" />
+                      <input type="number" placeholder="Max" value={filters.priceRange[1] === Infinity ? "" : filters.priceRange[1]} onChange={(e) => handleFilterChange("priceRange", [filters.priceRange[0], parseInt(e.target.value) || Infinity])} className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm" />
+                    </div>
+                  )},
+                  { label: "Status", component: (
+                    <select value={filters.isAdvertised === null ? "all" : filters.isAdvertised ? "yes" : "no"} onChange={(e) => handleFilterChange("isAdvertised", e.target.value === "all" ? null : e.target.value === "yes")} className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm">
+                      <option value="all">All</option>
+                      <option value="yes">Featured Only</option>
+                      <option value="no">Non-Featured</option>
+                    </select>
+                  )},
+                ].map((f, i) => (
+                  <motion.div key={f.label} variants={inputVariants} initial="hidden" animate="visible" custom={i}>
+                    <label className="block text-sm font-medium text-[#012a4a] mb-2">{f.label}</label>
+                    {f.component}
                   </motion.div>
                 ))}
               </div>
-              <motion.div
-                className="mt-4 flex justify-end"
-                variants={inputVariants}
-                initial="hidden"
-                animate="visible"
-                custom={4}
-              >
-                <button
-                  onClick={resetFilters}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition text-sm"
-                >
+              <motion.div className="mt-4 flex justify-end" variants={inputVariants} initial="hidden" animate="visible" custom={4}>
+                <button onClick={resetFilters} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition text-sm">
                   Reset Filters
                 </button>
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
-        {error && (
-          <motion.div
-            className="bg-red-100 text-red-700 p-4 mb-8 rounded-lg shadow"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            {error}
-          </motion.div>
-        )}
+
+        {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-8">{error}</div>}
+
         {isLoading ? (
-          <motion.div
-            className="text-center text-[#012a4a]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-            <span className="ml-2 text-lg">Loading properties...</span>
-          </motion.div>
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#012a4a]"></div>
+            <p className="mt-4 text-lg">Loading properties...</p>
+          </div>
         ) : filteredProperties.length === 0 ? (
-          <motion.div
-            className="bg-white border border-gray-200 rounded-xl p-8 shadow-md text-center text-[#012a4a]"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <p className="text-lg">No properties match your filters.</p>
-            <button
-              onClick={resetFilters}
-              className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition text-sm"
-            >
-              Clear Filters
-            </button>
-          </motion.div>
+          <div className="text-center py-12 bg-white rounded-xl shadow-md">
+            <p className="text-lg text-gray-600">No properties match your filters.</p>
+            <button onClick={resetFilters} className="mt-4 px-6 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a]">Clear Filters</button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProperties.map((property, index) => (
+            {filteredProperties.map((property, i) => (
               <motion.div
                 key={property._id}
                 className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition relative group"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: index * 0.1 }}
+                transition={{ duration: 0.4, delay: i * 0.1 }}
               >
                 {property.isAdvertised && (
                   <div className="absolute top-3 right-3 bg-[#012a4a] text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center z-10">
-                    <Star className="h-4 w-4 mr-1" />
-                    Featured
+                    <Star className="h-4 w-4 mr-1" /> Featured
                   </div>
                 )}
                 <div className="relative h-56">
-                  {property.images && property.images.length > 0 ? (
-                    <Image
-                      src={property.images[0]}
-                      alt={`${property.name} image`}
-                      width={400}
-                      height={224}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                      <Image
-                        src="/logo.png"
-                        alt="Placeholder Logo"
-                        width={64}
-                        height={64}
-                        className="object-contain"
-                      />
-                    </div>
-                  )}
+                  <Image
+                    src={property.images[0] || "/logo.png"}
+                    alt={property.name}
+                    fill
+                    className="object-cover group-hover:scale-105 transition"
+                  />
                 </div>
                 <div className="p-5">
                   <h3 className="text-xl font-semibold text-[#012a4a] mb-2 truncate">{property.name}</h3>
@@ -465,15 +301,18 @@ export default function LandingPage() {
                   <div className="flex items-center text-gray-600 mb-2">
                     <DollarSign className="h-5 w-5 mr-1 text-[#012a4a]" />
                     <span className="text-sm">
-                      Starting from Ksh {Math.min(...property.unitTypes.map((u) => u.price)).toLocaleString()} /mo
+                      From Ksh {Math.min(...property.unitTypes.map(u => u.price)).toLocaleString()}/mo
                     </span>
                   </div>
                   <div className="text-sm text-gray-500 mb-4">
-                    {property.unitTypes.map((u) => `${u.type} (x${u.quantity})`).join(", ")}
+                    {property.unitTypes
+                      .filter(u => (u.vacant ?? u.quantity) > 0)
+                      .map(u => `${u.type} (${u.vacant ?? u.quantity} left)`)
+                      .join(" • ")}
                   </div>
                   <Link
                     href={`/property-listings/${property._id}`}
-                    className="w-full bg-[#012a4a] text-white py-2 rounded-lg hover:bg-[#014a7a] transition text-sm font-medium text-center block"
+                    className="w-full bg-[#012a4a] text-white py-2 rounded-lg hover:bg-[#014a7a] transition text-center block text-sm font-medium"
                   >
                     View Details
                   </Link>
@@ -483,12 +322,12 @@ export default function LandingPage() {
           </div>
         )}
       </main>
+
       <Footer />
+
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body {
-          font-family: 'Inter', sans-serif;
-        }
+        body { font-family: 'Inter', sans-serif; }
       `}</style>
     </div>
   );

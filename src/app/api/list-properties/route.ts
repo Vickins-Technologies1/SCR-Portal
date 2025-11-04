@@ -1,109 +1,115 @@
+// src/app/api/list-properties/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { UNIT_TYPES } from '@/lib/unitTypes';
 import logger from '@/lib/logger';
-import { validateCsrfToken } from '@/lib/csrf';
 
 interface UnitType {
   type: string;
-  quantity: number;
   price: number;
   deposit: number;
+  quantity: number;
+  vacant?: number;
 }
 
 interface PropertyListing {
   _id: ObjectId;
+  originalPropertyId?: ObjectId;
+  ownerId: string;
   name: string;
   address: string;
   description?: string;
   facilities: string[];
   unitTypes: UnitType[];
-  status: 'Active' | 'Inactive';
-  ownerId: string;
+  images: string[];
   isAdvertised: boolean;
   adExpiration?: Date;
-  images: string[];
+  status: 'Active' | 'Inactive';
   createdAt: Date;
   updatedAt: Date;
 }
 
 const FACILITIES = [
-  'Wi-Fi',
-  'Parking',
-  'Gym',
-  'Swimming Pool',
-  'Security',
-  'Elevator',
-  'Air Conditioning',
-  'Heating',
-  'Balcony',
-  'Garden',
+  'Wi-Fi', 'Parking', 'Gym', 'Swimming Pool', 'Security',
+  'Elevator', 'Air Conditioning', 'Heating', 'Balcony', 'Garden',
 ];
+
+async function validateCsrf(req: NextRequest): Promise<boolean> {
+  const token = req.headers.get('X-CSRF-Token');
+  const cookieToken = (await cookies()).get('csrf-token')?.value;
+  return token === cookieToken;
+}
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('Handling GET request to /api/list-properties');
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-    const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '10')));
-    const sort = searchParams.get('sort') || '-createdAt';
     const userId = searchParams.get('userId');
 
-    const { db } = await connectToDatabase();
-    console.log('Connected to MongoDB database: rentaldb');
-
-    const query: { ownerId?: string } = {};
-    if (userId && ObjectId.isValid(userId)) {
-      query.ownerId = userId;
+    if (!userId || !ObjectId.isValid(userId)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid user ID' },
+        { status: 400 }
+      );
     }
 
-    const total = await db.collection<PropertyListing>('propertyListings').countDocuments(query);
-    const totalPages = Math.ceil(total / limit) || 1;
-    const skip = (page - 1) * limit;
+    const { db } = await connectToDatabase();
 
-    const properties = await db
+    const listings = await db
       .collection<PropertyListing>('propertyListings')
-      .find(query)
-      .sort({ createdAt: sort === '-createdAt' ? -1 : 1 })
-      .skip(skip)
-      .limit(limit)
+      .find({ ownerId: userId })
+      .sort({ createdAt: -1 })
       .toArray();
 
-    logger.debug('Properties fetched', {
-      page,
-      limit,
-      total,
-      propertiesCount: properties.length,
-      userId,
-    });
+    const enriched = await Promise.all(
+      listings.map(async (listing) => {
+        const propertyId = listing.originalPropertyId
+          ? listing.originalPropertyId.toString()
+          : listing._id.toString();
+
+        const tenants = await db
+          .collection('tenants')
+          .find({ propertyId })
+          .toArray();
+
+        const occupiedByType = tenants.reduce((acc: Record<string, number>, t) => {
+          acc[t.unitType] = (acc[t.unitType] || 0) + 1;
+          return acc;
+        }, {});
+
+        const unitTypes = (listing.unitTypes || []).map((u) => ({
+          ...u,
+          vacant: Math.max(0, u.quantity - (occupiedByType[u.type] || 0)),
+        }));
+
+        return {
+          _id: listing._id.toString(),
+          originalPropertyId: listing.originalPropertyId?.toString() || null,
+          ownerId: listing.ownerId,
+          name: listing.name,
+          address: listing.address,
+          description: listing.description,
+          facilities: listing.facilities,
+          unitTypes,
+          images: listing.images,
+          isAdvertised: listing.isAdvertised,
+          adExpiration: listing.adExpiration?.toISOString(),
+          status: listing.status,
+          createdAt: listing.createdAt.toISOString(),
+          updatedAt: listing.updatedAt.toISOString(),
+        };
+      })
+    );
 
     return NextResponse.json(
-      {
-        success: true,
-        properties: properties.map((p) => ({
-          ...p,
-          _id: p._id.toString(),
-          createdAt: p.createdAt.toISOString(),
-          updatedAt: p.updatedAt.toISOString(),
-          adExpiration: p.adExpiration ? p.adExpiration.toISOString() : undefined,
-          facilities: p.facilities || [],
-        })),
-        total,
-        page,
-        limit,
-        totalPages,
-      },
+      { success: true, properties: enriched },
       { status: 200 }
     );
-  } catch (error: unknown) {
-    logger.error('Error fetching properties:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('GET /api/list-properties', { error: err.message });
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { success: false, message: 'Server error' },
       { status: 500 }
     );
   }
@@ -111,23 +117,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Handling POST request to /api/list-properties');
     const cookieStore = await cookies();
-    const role = cookieStore.get('role')?.value;
     const userId = cookieStore.get('userId')?.value;
+    const role = cookieStore.get('role')?.value;
 
-    if (!role || role !== 'propertyOwner' || !userId || !ObjectId.isValid(userId)) {
-      logger.error('Unauthorized or invalid userId', { role, userId });
+    if (role !== 'propertyOwner' || !ObjectId.isValid(userId!)) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized or invalid user ID' },
+        { success: false, message: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // Extract CSRF token from headers
-    const csrfToken = request.headers.get('X-CSRF-Token');
-    if (!validateCsrfToken(request, csrfToken)) {
-      logger.error('Invalid CSRF token', { userId, csrfToken });
+    if (!await validateCsrf(request)) {
       return NextResponse.json(
         { success: false, message: 'Invalid CSRF token' },
         { status: 403 }
@@ -135,173 +136,132 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, address, description, facilities, unitTypes, status, isAdvertised, ownerId, images } = body;
+    const {
+      originalPropertyId,
+      description,
+      facilities = [],
+      images = [],
+      isAdvertised = false,
+    } = body;
 
-    // Verify ownerId matches cookie
-    if (ownerId !== userId) {
-      logger.error('Mismatched ownerId', { ownerId, cookieUserId: userId });
+    if (!originalPropertyId || !ObjectId.isValid(originalPropertyId)) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized: Owner ID does not match session' },
-        { status: 401 }
-      );
-    }
-
-    // Validate required fields
-    if (
-      !name ||
-      typeof name !== 'string' ||
-      !address ||
-      typeof address !== 'string' ||
-      !unitTypes ||
-      !Array.isArray(unitTypes) ||
-      unitTypes.length === 0 ||
-      !status ||
-      !['Active', 'Inactive'].includes(status) ||
-      typeof isAdvertised !== 'boolean'
-    ) {
-      logger.error('Missing or invalid required fields', { name, address, unitTypes, status, isAdvertised });
-      return NextResponse.json(
-        { success: false, message: 'Missing or invalid required fields' },
+        { success: false, message: 'Valid property ID required' },
         { status: 400 }
       );
     }
 
-    // Validate description
-    if (description && (typeof description !== 'string' || description.length > 500)) {
-      logger.error('Invalid description', { description });
+    if (images.length === 0 || images.length > 10) {
       return NextResponse.json(
-        { success: false, message: 'Description must be a string with maximum 500 characters' },
+        { success: false, message: '1–10 images required' },
         { status: 400 }
       );
     }
 
-    // Validate facilities
-    if (facilities && !Array.isArray(facilities)) {
-      logger.error('Facilities must be an array', { facilities });
+    if (facilities.length > 10) {
       return NextResponse.json(
-        { success: false, message: 'Facilities must be an array' },
-        { status: 400 }
-      );
-    }
-    const validFacilities = facilities ? facilities.filter((f: string) => FACILITIES.includes(f)) : [];
-    if (validFacilities.length > 10) {
-      logger.error('Too many facilities', { facilitiesCount: validFacilities.length });
-      return NextResponse.json(
-        { success: false, message: 'Maximum 10 facilities allowed' },
+        { success: false, message: 'Max 10 facilities' },
         { status: 400 }
       );
     }
 
-    // Validate images
-    if (!images || !Array.isArray(images) || images.some((img: unknown) => typeof img !== 'string')) {
-      logger.error('Invalid images array', { images });
+    if (description && description.length > 500) {
       return NextResponse.json(
-        { success: false, message: 'Images must be an array of strings' },
-        { status: 400 }
-      );
-    }
-    if (images.length > 10) {
-      logger.error('Too many images', { imageCount: images.length });
-      return NextResponse.json(
-        { success: false, message: 'Maximum 10 images allowed' },
+        { success: false, message: 'Description too long' },
         { status: 400 }
       );
     }
 
     const { db } = await connectToDatabase();
-    console.log('Connected to MongoDB database: rentaldb');
 
-    // Validate unit types and check for duplicates
-    const unitTypeSet = new Set<string>();
-    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: UnitType, index: number) => {
-      if (
-        !unit.type ||
-        !UNIT_TYPES.some((ut) => ut.type === unit.type) ||
-        unitTypeSet.has(unit.type) ||
-        typeof unit.quantity !== 'number' ||
-        unit.quantity < 0 ||
-        typeof unit.price !== 'number' ||
-        unit.price < 0 ||
-        typeof unit.deposit !== 'number' ||
-        unit.deposit < 0
-      ) {
-        logger.error('Invalid unit type at index', { index, unit });
-        throw new Error(`Invalid or duplicate unit type: ${JSON.stringify(unit)}`);
-      }
-      unitTypeSet.add(unit.type);
-      return {
-        type: unit.type,
-        quantity: unit.quantity,
-        price: unit.price,
-        deposit: unit.deposit,
-      };
-    });
+    const original = await db
+      .collection('properties')
+      .findOne({ _id: new ObjectId(originalPropertyId), ownerId: userId });
 
-    // Create new property
-    const newProperty: PropertyListing = {
-      _id: new ObjectId(),
-      name,
-      address,
-      description: description?.trim() || undefined,
-      facilities: validFacilities,
-      unitTypes: validatedUnitTypes,
-      status,
-      ownerId: userId,
+    if (!original) {
+      return NextResponse.json(
+        { success: false, message: 'Property not found' },
+        { status: 404 }
+      );
+    }
+
+    const existing = await db
+      .collection('propertyListings')
+      .findOne({ originalPropertyId: new ObjectId(originalPropertyId) });
+
+    if (existing) {
+      return NextResponse.json(
+        { success: false, message: 'Already listed' },
+        { status: 409 }
+      );
+    }
+
+    const listing: Omit<PropertyListing, '_id'> = {
+      originalPropertyId: new ObjectId(originalPropertyId),
+      ownerId: userId as string,
+      name: original.name,
+      address: original.address,
+      description: description?.trim(),
+      facilities: facilities.filter((f: string) => FACILITIES.includes(f)),
+      unitTypes: original.unitTypes.map((u: { type: string; price: number; deposit: number; quantity: number }) => ({
+        type: u.type,
+        price: u.price,
+        deposit: u.deposit,
+        quantity: u.quantity,
+      })),
+      images,
       isAdvertised,
-      adExpiration: isAdvertised ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined,
-      images: images,
+      adExpiration: isAdvertised
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        : undefined,
+      status: 'Active',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    const result = await db.collection<PropertyListing>('propertyListings').insertOne(newProperty);
-
-    logger.debug('Property created', { propertyId: result.insertedId.toString(), userId });
+    const result = await db
+      .collection<PropertyListing>('propertyListings')
+      .insertOne(listing as PropertyListing);
 
     return NextResponse.json(
       {
         success: true,
         property: {
-          ...newProperty,
+          ...listing,
           _id: result.insertedId.toString(),
-          createdAt: newProperty.createdAt.toISOString(),
-          updatedAt: newProperty.updatedAt.toISOString(),
-          adExpiration: newProperty.adExpiration ? newProperty.adExpiration.toISOString() : undefined,
+          originalPropertyId: originalPropertyId,
+          createdAt: listing.createdAt.toISOString(),
+          updatedAt: listing.updatedAt.toISOString(),
+          adExpiration: listing.adExpiration?.toISOString(),
         },
       },
       { status: 201 }
     );
-  } catch (error: unknown) {
-    logger.error('Error creating property', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('POST /api/list-properties', { error: err.message });
     return NextResponse.json(
-      { success: false, message: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, message: err.message || 'Server error' },
       { status: 500 }
     );
   }
 }
 
+// PUT, DELETE — same pattern (types added)
 export async function PUT(request: NextRequest) {
   try {
-    console.log('Handling PUT request to /api/list-properties');
     const cookieStore = await cookies();
-    const role = cookieStore.get('role')?.value;
     const userId = cookieStore.get('userId')?.value;
+    const role = cookieStore.get('role')?.value;
 
-    if (!role || role !== 'propertyOwner' || !userId || !ObjectId.isValid(userId)) {
-      logger.error('Unauthorized or invalid userId', { role, userId });
+    if (role !== 'propertyOwner' || !ObjectId.isValid(userId!)) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized or invalid user ID' },
+        { success: false, message: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // Extract CSRF token from headers
-    const csrfToken = request.headers.get('X-CSRF-Token');
-    if (!validateCsrfToken(request, csrfToken)) {
-      logger.error('Invalid CSRF token', { userId, csrfToken });
+    if (!await validateCsrf(request)) {
       return NextResponse.json(
         { success: false, message: 'Invalid CSRF token' },
         { status: 403 }
@@ -309,177 +269,64 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { _id, name, address, description, facilities, unitTypes, status, isAdvertised, ownerId, images } = body;
+    const { _id, description, facilities = [], images = [], isAdvertised } = body;
 
-    // Verify ownerId matches cookie
-    if (ownerId !== userId) {
-      logger.error('Mismatched ownerId', { ownerId, cookieUserId: userId });
+    if (!_id || !ObjectId.isValid(_id)) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized: Owner ID does not match session' },
-        { status: 401 }
-      );
-    }
-
-    // Validate required fields
-    if (
-      !_id ||
-      !ObjectId.isValid(_id) ||
-      !name ||
-      typeof name !== 'string' ||
-      !address ||
-      typeof address !== 'string' ||
-      !unitTypes ||
-      !Array.isArray(unitTypes) ||
-      unitTypes.length === 0 ||
-      !status ||
-      !['Active', 'Inactive'].includes(status) ||
-      typeof isAdvertised !== 'boolean'
-    ) {
-      logger.error('Missing or invalid required fields', { _id, name, address, unitTypes, status, isAdvertised });
-      return NextResponse.json(
-        { success: false, message: 'Missing or invalid required fields' },
+        { success: false, message: 'Invalid listing ID' },
         { status: 400 }
       );
     }
 
-    // Validate description
-    if (description && (typeof description !== 'string' || description.length > 500)) {
-      logger.error('Invalid description', { description });
+    if (images.length === 0 || images.length > 10) {
       return NextResponse.json(
-        { success: false, message: 'Description must be a string with maximum 500 characters' },
-        { status: 400 }
-      );
-    }
-
-    // Validate facilities
-    if (facilities && !Array.isArray(facilities)) {
-      logger.error('Facilities must be an array', { facilities });
-      return NextResponse.json(
-        { success: false, message: 'Facilities must be an array' },
-        { status: 400 }
-      );
-    }
-    const validFacilities = facilities ? facilities.filter((f: string) => FACILITIES.includes(f)) : [];
-    if (validFacilities.length > 10) {
-      logger.error('Too many facilities', { facilitiesCount: validFacilities.length });
-      return NextResponse.json(
-        { success: false, message: 'Maximum 10 facilities allowed' },
-        { status: 400 }
-      );
-    }
-
-    // Validate images
-    if (!images || !Array.isArray(images) || images.some((img: unknown) => typeof img !== 'string')) {
-      logger.error('Invalid images array', { images });
-      return NextResponse.json(
-        { success: false, message: 'Images must be an array of strings' },
-        { status: 400 }
-      );
-    }
-    if (images.length > 10) {
-      logger.error('Too many images', { imageCount: images.length });
-      return NextResponse.json(
-        { success: false, message: 'Maximum 10 images allowed' },
+        { success: false, message: '1–10 images required' },
         { status: 400 }
       );
     }
 
     const { db } = await connectToDatabase();
-    console.log('Connected to MongoDB database: rentaldb');
 
-    // Verify property exists and belongs to user
-    const existingProperty = await db.collection<PropertyListing>('propertyListings').findOne({
-      _id: new ObjectId(_id),
-      ownerId: userId,
-    });
-    if (!existingProperty) {
-      logger.error('Property not found or unauthorized', { _id, userId });
+    const listing = await db
+      .collection<PropertyListing>('propertyListings')
+      .findOne({ _id: new ObjectId(_id), ownerId: userId });
+
+    if (!listing) {
       return NextResponse.json(
-        { success: false, message: 'Property not found or you are not authorized to edit it' },
+        { success: false, message: 'Listing not found' },
         { status: 404 }
       );
     }
 
-    // Validate unit types and check for duplicates
-    const unitTypeSet = new Set<string>();
-    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: UnitType, index: number) => {
-      if (
-        !unit.type ||
-        !UNIT_TYPES.some((ut) => ut.type === unit.type) ||
-        unitTypeSet.has(unit.type) ||
-        typeof unit.quantity !== 'number' ||
-        unit.quantity < 0 ||
-        typeof unit.price !== 'number' ||
-        unit.price < 0 ||
-        typeof unit.deposit !== 'number' ||
-        unit.deposit < 0
-      ) {
-        logger.error('Invalid unit type at index', { index, unit });
-        throw new Error(`Invalid or duplicate unit type: ${JSON.stringify(unit)}`);
-      }
-      unitTypeSet.add(unit.type);
-      return {
-        type: unit.type,
-        quantity: unit.quantity,
-        price: unit.price,
-        deposit: unit.deposit,
-      };
-    });
-
-    // Define updateData with required updatedAt
-    const updateData: Partial<PropertyListing> & { updatedAt: Date } = {
-      name,
-      address,
-      description: description?.trim() || undefined,
-      facilities: validFacilities,
-      unitTypes: validatedUnitTypes,
-      status,
+    const update: Partial<PropertyListing> = {
+      description: description?.trim(),
+      facilities: facilities.filter((f: string) => FACILITIES.includes(f)),
+      images,
       isAdvertised,
       adExpiration: isAdvertised
-        ? existingProperty.isAdvertised
-          ? existingProperty.adExpiration
+        ? listing.isAdvertised
+          ? listing.adExpiration
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         : undefined,
-      images,
       updatedAt: new Date(),
     };
 
-    const result = await db.collection<PropertyListing>('propertyListings').updateOne(
-      { _id: new ObjectId(_id), ownerId: userId },
-      { $set: updateData }
-    );
-
-    if (result.matchedCount === 0) {
-      logger.error('Property update failed: no matching document', { _id, userId });
-      return NextResponse.json(
-        { success: false, message: 'Property not found or you are not authorized to edit it' },
-        { status: 404 }
+    await db
+      .collection('propertyListings')
+      .updateOne(
+        { _id: new ObjectId(_id) },
+        { $set: update }
       );
-    }
-
-    logger.debug('Property updated', { propertyId: _id, userId });
 
     return NextResponse.json(
-      {
-        success: true,
-        property: {
-          ...existingProperty,
-          ...updateData,
-          _id: _id,
-          createdAt: existingProperty.createdAt.toISOString(),
-          updatedAt: updateData.updatedAt.toISOString(),
-          adExpiration: updateData.adExpiration ? updateData.adExpiration.toISOString() : undefined,
-        },
-      },
+      { success: true, message: 'Listing updated' },
       { status: 200 }
     );
-  } catch (error: unknown) {
-    logger.error('Error updating property', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('PUT /api/list-properties', { error: err.message });
     return NextResponse.json(
-      { success: false, message: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, message: 'Server error' },
       { status: 500 }
     );
   }
@@ -487,23 +334,18 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    console.log('Handling DELETE request to /api/list-properties');
     const cookieStore = await cookies();
-    const role = cookieStore.get('role')?.value;
     const userId = cookieStore.get('userId')?.value;
+    const role = cookieStore.get('role')?.value;
 
-    if (!role || role !== 'propertyOwner' || !userId || !ObjectId.isValid(userId)) {
-      logger.error('Unauthorized or invalid userId', { role, userId });
+    if (role !== 'propertyOwner' || !ObjectId.isValid(userId!)) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized or invalid user ID' },
+        { success: false, message: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // Extract CSRF token from headers
-    const csrfToken = request.headers.get('X-CSRF-Token');
-    if (!validateCsrfToken(request, csrfToken)) {
-      logger.error('Invalid CSRF token', { userId, csrfToken });
+    if (!await validateCsrf(request)) {
       return NextResponse.json(
         { success: false, message: 'Invalid CSRF token' },
         { status: 403 }
@@ -514,42 +356,37 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id');
 
     if (!id || !ObjectId.isValid(id)) {
-      logger.error('Invalid or missing property ID', { id });
       return NextResponse.json(
-        { success: false, message: 'Invalid or missing property ID' },
+        { success: false, message: 'Invalid ID' },
         { status: 400 }
       );
     }
 
     const { db } = await connectToDatabase();
-    console.log('Connected to MongoDB database: rentaldb');
 
-    const result = await db.collection<PropertyListing>('propertyListings').deleteOne({
-      _id: new ObjectId(id),
-      ownerId: userId,
-    });
+    const result = await db
+      .collection('propertyListings')
+      .deleteOne({
+        _id: new ObjectId(id),
+        ownerId: userId,
+      });
 
     if (result.deletedCount === 0) {
-      logger.error('Property not found or unauthorized', { id, userId });
       return NextResponse.json(
-        { success: false, message: 'Property not found or you are not authorized to delete it' },
+        { success: false, message: 'Not found or unauthorized' },
         { status: 404 }
       );
     }
 
-    logger.debug('Property deleted', { propertyId: id, userId });
-
     return NextResponse.json(
-      { success: true, message: 'Property deleted successfully' },
+      { success: true, message: 'Listing removed' },
       { status: 200 }
     );
-  } catch (error: unknown) {
-    logger.error('Error deleting property', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+  } catch (error) {
+    const err = error as Error;
+    logger.error('DELETE /api/list-properties', { error: err });
     return NextResponse.json(
-      { success: false, message: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, message: 'Server error' },
       { status: 500 }
     );
   }

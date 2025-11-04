@@ -3,87 +3,81 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
-interface Property {
-  _id: ObjectId;
-  name: string;
-  address: string;
-  unitTypes: { type: string; price: number; quantity: number; deposit: number }[];
-  status: "Active" | "Inactive";
-  createdAt: Date;
-  updatedAt: Date;
-  images: string[];
-  isAdvertised: boolean;
-  adExpiration?: Date;
-  description?: string;
-  facilities?: string[];
-  ownerId: string;
-}
-
-interface User {
-  _id: ObjectId;
-  email: string;
-  phone: string;
-}
-
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  console.log("Handling GET request to /api/public-properties/[id]");
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  console.log("Fetching property details");
 
   try {
     const { id } = await params;
 
     if (!ObjectId.isValid(id)) {
-      console.log("Invalid property ID", { id });
-      return NextResponse.json(
-        { success: false, message: "Invalid property ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 });
     }
 
     const { db } = await connectToDatabase();
-    const propertyObjectId = new ObjectId(id);
 
-    const property = await db
-      .collection<Property>("propertyListings")
-      .findOne({ _id: propertyObjectId, status: "Active" });
+    const listing = await db
+      .collection("propertyListings")
+      .findOne({ _id: new ObjectId(id), status: "Active" });
 
-    if (!property) {
-      console.log("Property not found or not active", { id });
-      return NextResponse.json(
-        { success: false, message: "Property not found or not active" },
-        { status: 404 }
-      );
+    if (!listing) {
+      return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
     }
 
-    const owner = await db
-      .collection<User>("propertyOwners")
-      .findOne({ _id: new ObjectId(property.ownerId) }, { projection: { email: 1, phone: 1 } });
+    const listingId = listing._id.toString();
 
-    const formattedProperty = {
-      _id: property._id.toString(),
-      name: property.name,
-      address: property.address,
-      unitTypes: property.unitTypes,
-      status: property.status,
-      createdAt: property.createdAt.toISOString(),
-      updatedAt: property.updatedAt.toISOString(),
-      images: property.images || [],
-      isAdvertised: property.isAdvertised || false,
-      adExpiration: property.adExpiration ? property.adExpiration.toISOString() : undefined,
-      description: property.description || undefined,
-      facilities: property.facilities || [],
-      ownerId: property.ownerId,
+    // Count tenants for THIS listing only
+    const tenants = await db
+      .collection("tenants")
+      .find({ propertyId: listingId })
+      .toArray();
+
+    const occupiedByType = tenants.reduce((acc: any, t) => {
+      acc[t.unitType] = (acc[t.unitType] || 0) + 1;
+      return acc;
+    }, {});
+
+    const unitTypes = (listing.unitTypes || []).map((u: any) => ({
+      ...u,
+      vacant: Math.max(0, u.quantity - (occupiedByType[u.type] || 0))
+    }));
+
+    const owner = await db
+      .collection("propertyOwners")
+      .findOne(
+        { _id: new ObjectId(listing.ownerId) },
+        { projection: { email: 1, phone: 1 } }
+      );
+
+    const formatted = {
+      _id: listingId,
+      name: listing.name,
+      address: listing.address,
+      description: listing.description,
+      facilities: listing.facilities || [],
+      unitTypes,
+      images: listing.images || [],
+      isAdvertised: listing.isAdvertised || false,
+      adExpiration: listing.adExpiration?.toISOString(),
+      status: listing.status,
+      createdAt: listing.createdAt.toISOString(),
+      updatedAt: listing.updatedAt.toISOString(),
     };
 
-    console.log("Property fetched successfully", { id });
-    return NextResponse.json({
-      success: true,
-      property: formattedProperty,
-      owner: owner ? { email: owner.email, phone: owner.phone } : null,
-    });
-  } catch (error) {
-    console.error("Error fetching public property:", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json(
-      { success: false, message: "Failed to fetch property details" },
+      {
+        success: true,
+        property: formatted,
+        owner: owner ? { email: owner.email, phone: owner.phone } : null,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Error:", error);
+    return NextResponse.json(
+      { success: false, message: "Server error" },
       { status: 500 }
     );
   }
