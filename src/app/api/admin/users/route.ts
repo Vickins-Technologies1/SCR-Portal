@@ -1,3 +1,4 @@
+// src/app/api/admin/users/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db } from "mongodb";
