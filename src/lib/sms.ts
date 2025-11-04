@@ -1,128 +1,129 @@
 // src/lib/sms.ts
 import logger from "./logger";
 
-interface SmsResponse {
-  status: string;
-  message: string;
-  data?: Array<{
-    phone: string;
-    status: string;
-    message_id: string;
-    sms_cost: number;
-  }>;
-  error_code?: number;
+/**
+ * TalkSasa SMS API Response
+ */
+interface TalkSasaResponse {
+  status: "success" | "error";
+  data?: any;
+  message?: string;
 }
 
+/**
+ * Options for sending SMS
+ */
 interface SendSmsOptions {
   phone: string;
   message: string;
-  senderId?: string;
+  senderId?: string; // Must be approved in TalkSasa dashboard
 }
 
+/**
+ * Send SMS via TalkSasa Bulk SMS API
+ */
 export async function sendWelcomeSms({
   phone,
   message,
-  senderId = "UMS_SMS",
+  senderId = "TALKSASA",
 }: SendSmsOptions): Promise<void> {
-  if (!phone || !message) {
-    throw new Error("Phone number and message are required");
+  // === VALIDATION ===
+  if (!phone?.trim()) throw new Error("Phone number is required");
+  if (!message?.trim()) throw new Error("Message is required");
+  if (message.trim().length > 160) {
+    throw new Error("SMS message exceeds 160 characters");
   }
 
-  if (message.length > 160) {
-    throw new Error("SMS message exceeds 160 character limit");
+  const apiToken = process.env.TALKSASA_API_TOKEN;
+  if (!apiToken) {
+    throw new Error("TALKSASA_API_TOKEN is missing in environment");
   }
 
-  const apiKey = process.env.UMS_API_KEY;
-  const appId = process.env.UMS_APP_ID;
-
-  if (!apiKey || !appId) {
-    throw new Error("UMS API key or App ID is missing");
-  }
-
-  // Normalize phone number to 254 format (e.g., 0794501005 -> 254794501005)
-  let normalizedPhone = phone.replace(/\s/g, "");
-  if (normalizedPhone.startsWith("0")) {
-    normalizedPhone = "254" + normalizedPhone.slice(1);
-  } else if (!normalizedPhone.startsWith("254")) {
-    normalizedPhone = "254" + normalizedPhone;
+  // === NORMALIZE PHONE: 0xxx → 254xxx ===
+  let recipient = phone.replace(/\D/g, ""); // Remove non-digits
+  if (recipient.startsWith("0") && recipient.length === 10) {
+    recipient = "254" + recipient.slice(1);
+  } else if (recipient.startsWith("254") && recipient.length === 12) {
+    // Already good
+  } else if (recipient.startsWith("7") || recipient.startsWith("1")) {
+    recipient = "254" + recipient;
+  } else {
+    throw new Error(`Invalid Kenyan phone format: ${phone}`);
   }
 
   const payload = {
-    api_key: apiKey,
-    app_id: appId,
+    recipient,
     sender_id: senderId,
-    message,
-    phone: normalizedPhone,
+    type: "plain",
+    message: message.trim(),
   };
 
   try {
-    const response = await fetch("https://comms.umeskiasoftwares.com/api/v1/sms/send", {
+    const res = await fetch("https://www.bulksms.talksasa.com/api/v3/sms/send", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${apiToken}`,
         "Content-Type": "application/json",
-        "x-api-key": apiKey, // Include apiKey in headers as a precaution
+        Accept: "application/json",
       },
       body: JSON.stringify(payload),
     });
 
-    // Check for non-200 status codes
-    if (!response.ok) {
-      const contentType = response.headers.get("content-type");
-      const text = await response.text();
-      logger.error("SMS API request failed", {
-        phone: normalizedPhone,
-        status: response.status,
-        statusText: response.statusText,
-        contentType: contentType || "unknown",
-        response: text.substring(0, 200),
-        payload,
+    let json: TalkSasaResponse;
+    try {
+      json = await res.json();
+    } catch (e) {
+      const text = await res.text();
+      logger.error("TalkSasa returned non-JSON", {
+        phone: recipient,
+        status: res.status,
+        body: text.slice(0, 200),
       });
-
-      // Map common error codes from documentation
-      let errorMessage = `SMS API request failed with status ${response.status}: ${response.statusText}`;
-      if (response.status === 401) {
-        errorMessage = "Invalid API key or App ID (Error code: 1002)";
-      } else if (response.status === 400) {
-        errorMessage = "Invalid request parameters (possible Error code: 1001 or 1005)";
-      }
-      throw new Error(errorMessage);
+      throw new Error("Invalid response from TalkSasa");
     }
 
-    // Check if response is JSON
-    const contentType = response.headers.get("content-type");
-    if (!contentType?.includes("application/json")) {
-      const text = await response.text();
-      logger.error("SMS API returned non-JSON response", {
-        phone: normalizedPhone,
-        status: response.status,
-        contentType: contentType || "unknown",
-        response: text.substring(0, 200),
-        payload,
-      });
-      throw new Error(`SMS API returned non-JSON response (status: ${response.status})`);
-    }
-
-    const data: SmsResponse = await response.json();
-
-    if (data.status !== "complete") {
-      logger.error("SMS sending failed", {
-        phone: normalizedPhone,
-        message: data.message,
-        errorCode: data.error_code || "N/A",
-      });
-      throw new Error(`SMS sending failed: ${data.message || "Unknown error"} (Error code: ${data.error_code || "N/A"})`);
-    }
-
-    logger.info("SMS sent successfully", {
-      phone: normalizedPhone,
-      messageId: data.data?.[0]?.message_id || "N/A",
+    // === LOG REQUEST ===
+    logger.info("TalkSasa SMS Request", {
+      to: recipient,
+      sender: senderId,
+      message: message.trim(),
+      status: res.status,
     });
+
+    // === HANDLE HTTP ERRORS ===
+    if (!res.ok) {
+      logger.error("TalkSasa HTTP Error", {
+        status: res.status,
+        statusText: res.statusText,
+        response: json,
+        payload,
+      });
+      throw new Error(`TalkSasa API error: ${res.status} ${res.statusText}`);
+    }
+
+    // === HANDLE API ERRORS ===
+    if (json.status === "error") {
+      logger.error("TalkSasa SMS Failed", {
+        phone: recipient,
+        error: json.message,
+        response: json,
+      });
+      throw new Error(`TalkSasa: ${json.message || "SMS failed"}`);
+    }
+
+    // === SUCCESS ===
+    logger.info("SMS Sent Successfully", {
+      phone: recipient,
+      sender: senderId,
+      response: json.data,
+    });
+
   } catch (error) {
-    logger.error("Failed to send SMS", {
-      phone: normalizedPhone,
-      error: error instanceof Error ? error.message : "Unknown error",
+    logger.error("sendWelcomeSms() Failed", {
+      phone: recipient,
+      error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
     });
-    throw new Error("Failed to send SMS");
+    throw error; // Re-throw for caller to handle
   }
 }
