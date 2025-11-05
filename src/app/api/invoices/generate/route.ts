@@ -163,9 +163,9 @@ export async function POST(request: NextRequest) {
     y -= line;
     page.drawText("Make all checks payable to Smart Choice Rental Management", { x: 50, y, size, font });
     y -= line;
-    page.drawText("M-PESA Paybill: # | Account: " + shortInvoiceNo, { x: 50, y, size, font });
+    page.drawText("M-PESA Paybill: 522533 | Account: " + shortInvoiceNo, { x: 50, y, size, font });
     y -= line;
-    page.drawText("Bank: KCB | A/C: #", { x: 50, y, size, font });
+    page.drawText("Bank: KCB | A/C: 7726486", { x: 50, y, size, font });
 
     // === SIGNATURE ===
     y -= 35;
