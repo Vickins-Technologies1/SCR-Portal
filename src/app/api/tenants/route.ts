@@ -551,42 +551,62 @@ export async function POST(request: NextRequest) {
       // Continue even if email fails to ensure tenant is added
     }
 
-    // Send welcome SMS
-    try {
-      const maxPropertyNameLength = 20;
-      const truncatedPropertyName = property.name.length > maxPropertyNameLength
-        ? `${property.name.substring(0, maxPropertyNameLength)}...`
-        : property.name;
+// Send welcome SMS — 100% safe under 160 chars
+try {
+  const name = requestData.name!.trim();
+  const email = (requestData.email ?? "").trim();
+  const password = (requestData.password ?? "").trim();
+  const phone = requestData.phone?.trim();
+  const house = requestData.houseNumber?.trim() || "";
+  const propertyName = property.name.trim();
 
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-      const shortUrl = baseUrl.length > 30 ? "https://app.smartchoicerentalmanagement.com/" : baseUrl;
+  if (!phone) {
+    logger.warn("No phone number provided for welcome SMS", { tenant: requestData.email });
+    throw new Error("Missing phone number");
+  }
 
-      const smsMessage = `Welcome, ${requestData.name}! Log in at ${shortUrl} with email: ${requestData.email}, pass: ${requestData.password}. Unit: ${truncatedPropertyName} ${requestData.houseNumber}.`;
+  // === SHORTEN PROPERTY NAME ===
+  const maxPropLen = 18;
+  const shortProp = propertyName.length > maxPropLen
+    ? propertyName.slice(0, maxPropLen - 1) + "…"
+    : propertyName;
 
-      if (smsMessage.length > 160) {
-        logger.warn("SMS message still exceeds 160 characters after truncation", {
-          phone: requestData.phone,
-          messageLength: smsMessage.length,
-        });
-        const fallbackMessage = `Welcome, ${requestData.name}! Log in: ${shortUrl}, email: ${requestData.email}, pass: ${requestData.password}.`;
-        await sendWelcomeSms({
-          phone: requestData.phone!,
-          message: fallbackMessage,
-        });
-      } else {
-        await sendWelcomeSms({
-          phone: requestData.phone!,
-          message: smsMessage,
-        });
-      }
-      logger.info("Welcome SMS sent successfully", { phone: requestData.phone });
-    } catch (smsError) {
-      logger.error("Failed to send welcome SMS", {
-        phone: requestData.phone,
-        error: smsError instanceof Error ? smsError.message : "Unknown error",
-      });
-      // Continue even if SMS fails to ensure tenant is added
-    }
+  // === SHORT BASE URL ===
+  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "https://app.smartchoicerentalmanagement.com").trim();
+  const shortUrl = baseUrl.length > 35 ? "https://app.scrm.co.ke" : baseUrl.replace(/^https?:\/\//, "");
+
+  // === BUILD MESSAGE (PRIORITIZE 160 CHAR LIMIT) ===
+  let message = `Hi ${name}! Login: ${shortUrl}\nEmail: ${email}\nPass: ${password}\nUnit: ${shortProp}${house ? " " + house : ""}`;
+
+  // Fallback if still too long (ultra-safe)
+  if (message.length > 160) {
+    message = `Hi ${name}! Login at ${shortUrl}\nUse: ${email}\nPass: ${password}`;
+  }
+
+  // Final safety check
+  if (message.length > 160) {
+    message = message.slice(0, 157) + "...";
+  }
+
+  await sendWelcomeSms({
+    phone,
+    message,
+  });
+
+  logger.info("Welcome SMS sent", {
+    phone,
+    length: message.length,
+    property: shortProp,
+    url: shortUrl,
+  });
+} catch (smsError) {
+  logger.error("Welcome SMS failed", {
+    phone: requestData.phone,
+    error: smsError instanceof Error ? smsError.message : smsError,
+    stack: smsError instanceof Error ? smsError.stack : undefined,
+  });
+  // Non-blocking: tenant still gets created
+}
 
 // Send welcome WhatsApp message
 try {

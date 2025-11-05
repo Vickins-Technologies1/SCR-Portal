@@ -2,12 +2,15 @@
 import logger from "./logger";
 
 /**
- * TalkSasa SMS API Response
+ * BlessedTexts SMS API Response
  */
-interface TalkSasaResponse {
-  status: "success" | "error";
-  data?: any;
-  message?: string;
+interface BlessedTextsResponse {
+  status_code: string;
+  status_desc: string;
+  message_id?: string;
+  phone?: string;
+  message_cost?: string;
+  balance?: string;
 }
 
 /**
@@ -16,16 +19,16 @@ interface TalkSasaResponse {
 interface SendSmsOptions {
   phone: string;
   message: string;
-  senderId?: string; // Must be approved in TalkSasa dashboard
+  senderId?: string; // Must be approved in BlessedTexts dashboard
 }
 
 /**
- * Send SMS via TalkSasa Bulk SMS API
+ * Send SMS via BlessedTexts Bulk SMS API
  */
 export async function sendWelcomeSms({
   phone,
   message,
-  senderId = "TALKSASA",
+  senderId = "BLESSEDTEXT",
 }: SendSmsOptions): Promise<void> {
   // === VALIDATION ===
   if (!phone?.trim()) throw new Error("Phone number is required");
@@ -34,56 +37,58 @@ export async function sendWelcomeSms({
     throw new Error("SMS message exceeds 160 characters");
   }
 
-  const apiToken = process.env.TALKSASA_API_TOKEN;
-  if (!apiToken) {
-    throw new Error("TALKSASA_API_TOKEN is missing in environment");
+  const apiKey = process.env.BLESSEDTEXTS_API_KEY;
+  if (!apiKey) {
+    throw new Error("BLESSEDTEXTS_API_KEY is missing in environment");
   }
 
-  // === NORMALIZE PHONE: 0xxx → 254xxx ===
+  // === NORMALIZE PHONE: 0xxx → 254xxx, 7xx → 2547xx ===
   let recipient = phone.replace(/\D/g, ""); // Remove non-digits
+
   if (recipient.startsWith("0") && recipient.length === 10) {
     recipient = "254" + recipient.slice(1);
   } else if (recipient.startsWith("254") && recipient.length === 12) {
-    // Already good
-  } else if (recipient.startsWith("7") || recipient.startsWith("1")) {
+    // Already in international format
+  } else if ((recipient.startsWith("7") || recipient.startsWith("1")) && recipient.length === 9) {
     recipient = "254" + recipient;
   } else {
     throw new Error(`Invalid Kenyan phone format: ${phone}`);
   }
 
   const payload = {
-    recipient,
+    api_key: apiKey,
     sender_id: senderId,
-    type: "plain",
     message: message.trim(),
+    phone: recipient,
   };
 
   try {
-    const res = await fetch("https://www.bulksms.talksasa.com/api/v3/sms/send", {
+    const res = await fetch("https://sms.blessedtexts.com/api/sms/v1/sendsms", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiToken}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify(payload),
     });
 
-    let json: TalkSasaResponse;
+    let json: BlessedTextsResponse | BlessedTextsResponse[];
+    let rawText = "";
+
     try {
-      json = await res.json();
+      rawText = await res.text();
+      json = JSON.parse(rawText);
     } catch (e) {
-      const text = await res.text();
-      logger.error("TalkSasa returned non-JSON", {
+      logger.error("BlessedTexts returned non-JSON", {
         phone: recipient,
         status: res.status,
-        body: text.slice(0, 200),
+        body: rawText.slice(0, 300),
       });
-      throw new Error("Invalid response from TalkSasa");
+      throw new Error("Invalid JSON response from BlessedTexts");
     }
 
     // === LOG REQUEST ===
-    logger.info("TalkSasa SMS Request", {
+    logger.info("BlessedTexts SMS Request", {
       to: recipient,
       sender: senderId,
       message: message.trim(),
@@ -92,30 +97,36 @@ export async function sendWelcomeSms({
 
     // === HANDLE HTTP ERRORS ===
     if (!res.ok) {
-      logger.error("TalkSasa HTTP Error", {
+      logger.error("BlessedTexts HTTP Error", {
         status: res.status,
         statusText: res.statusText,
         response: json,
         payload,
       });
-      throw new Error(`TalkSasa API error: ${res.status} ${res.statusText}`);
+      throw new Error(`BlessedTexts API error: ${res.status} ${res.statusText}`);
     }
 
-    // === HANDLE API ERRORS ===
-    if (json.status === "error") {
-      logger.error("TalkSasa SMS Failed", {
+    // === HANDLE API ERRORS (status_code !== "1000") ===
+    const responseArray = Array.isArray(json) ? json : [json];
+    const failed = responseArray.find((item) => item.status_code !== "1000");
+
+    if (failed) {
+      logger.error("BlessedTexts SMS Failed", {
         phone: recipient,
-        error: json.message,
+        error: failed.status_desc,
+        code: failed.status_code,
         response: json,
       });
-      throw new Error(`TalkSasa: ${json.message || "SMS failed"}`);
+      throw new Error(`BlessedTexts: ${failed.status_desc} (${failed.status_code})`);
     }
 
     // === SUCCESS ===
+    const successItem = responseArray[0];
     logger.info("SMS Sent Successfully", {
       phone: recipient,
       sender: senderId,
-      response: json.data,
+      message_id: successItem.message_id,
+      cost: successItem.message_cost,
     });
 
   } catch (error) {
