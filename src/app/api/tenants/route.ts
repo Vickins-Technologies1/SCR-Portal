@@ -526,10 +526,6 @@ export async function POST(request: NextRequest) {
       duration: Date.now() - insertStart,
     });
 
-    await db.collection<Property>("properties").updateOne(
-      { _id: new ObjectId(requestData.propertyId!), "unitTypes.uniqueType": requestData.unitType },
-      { $inc: { "unitTypes.$.quantity": -1 } }
-    );
 
     // Send welcome email
     try {
