@@ -218,13 +218,13 @@ export default function LoginPage() {
             <p className="text-center text-xs font-medium text-gray-500">Try Demo</p>
             <div className="grid grid-cols-2 gap-2">
               <a
-                href="/login?demo=owner"
+                href="/?demo=owner"
                 className="block text-center bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition text-xs font-medium"
               >
                 Owner Demo
               </a>
               <a
-                href="/login?demo=tenant"
+                href="/?demo=tenant"
                 className="block text-center bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition text-xs font-medium"
               >
                 Tenant Demo
