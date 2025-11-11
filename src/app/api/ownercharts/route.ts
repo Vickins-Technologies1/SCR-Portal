@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
-import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 
 interface ChartData {
@@ -16,17 +15,14 @@ export async function GET(request: NextRequest) {
   const propertyOwnerId = searchParams.get("propertyOwnerId");
 
   if (!propertyOwnerId) {
-    logger.error("Missing propertyOwnerId in ownercharts request");
     return NextResponse.json({ success: false, message: "propertyOwnerId is required" }, { status: 400 });
   }
 
   if (!ObjectId.isValid(propertyOwnerId)) {
-    logger.error("Invalid propertyOwnerId format", { propertyOwnerId });
     return NextResponse.json({ success: false, message: "Invalid propertyOwnerId format" }, { status: 400 });
   }
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
-    logger.error("Invalid CSRF token in ownercharts request", { propertyOwnerId });
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
@@ -41,7 +37,6 @@ export async function GET(request: NextRequest) {
     const propertyIds = properties.map((p) => p._id.toString());
 
     if (properties.length === 0) {
-      logger.debug("No properties found for owner", { propertyOwnerId });
       return NextResponse.json({
         success: true,
         chartData: {
@@ -52,8 +47,6 @@ export async function GET(request: NextRequest) {
         },
       });
     }
-
-    logger.debug("Properties fetched for ownercharts", { propertyOwnerId, propertyIds });
 
     // Fetch all tenants for the owner's properties
     const tenants = await db
@@ -63,7 +56,6 @@ export async function GET(request: NextRequest) {
     const tenantIds = tenants.map((t) => t._id.toString());
 
     if (tenantIds.length === 0) {
-      logger.debug("No tenants found for owner's properties", { propertyOwnerId });
       return NextResponse.json({
         success: true,
         chartData: {
@@ -75,10 +67,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    logger.debug("Tenants fetched for ownercharts", { propertyOwnerId, tenantIds });
-
-    // Define the last six months range (September 2025 backwards, EAT)
-    const today = new Date(); // Current date: September 10, 2025
+    // Define the last six months range
+    const today = new Date();
     const months: string[] = [];
     const rentPayments: number[] = [];
     const utilityPayments: number[] = [];
@@ -93,13 +83,6 @@ export async function GET(request: NextRequest) {
       const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
       const startOfMonthISO = startOfMonth.toISOString();
       const endOfMonthISO = endOfMonth.toISOString();
-
-      logger.debug("Processing month for chart data", {
-        propertyOwnerId,
-        month: monthLabel,
-        startOfMonth: startOfMonthISO,
-        endOfMonth: endOfMonthISO,
-      });
 
       // Aggregate rent payments
       const rentPaymentsResult = await db
@@ -127,15 +110,7 @@ export async function GET(request: NextRequest) {
         ])
         .toArray();
       const rentTotal = rentPaymentsResult[0]?.total || 0;
-      const rentCount = rentPaymentsResult[0]?.count || 0;
       rentPayments.unshift(rentTotal);
-
-      logger.debug("Rent payments for month", {
-        propertyOwnerId,
-        month: monthLabel,
-        total: rentTotal,
-        count: rentCount,
-      });
 
       // Aggregate utility payments
       const utilityPaymentsResult = await db
@@ -163,15 +138,7 @@ export async function GET(request: NextRequest) {
         ])
         .toArray();
       const utilityTotal = utilityPaymentsResult[0]?.total || 0;
-      const utilityCount = utilityPaymentsResult[0]?.count || 0;
       utilityPayments.unshift(utilityTotal);
-
-      logger.debug("Utility payments for month", {
-        propertyOwnerId,
-        month: monthLabel,
-        total: utilityTotal,
-        count: utilityCount,
-      });
 
       // Aggregate deposit payments
       const depositPaymentsResult = await db
@@ -199,36 +166,8 @@ export async function GET(request: NextRequest) {
         ])
         .toArray();
       const depositTotal = depositPaymentsResult[0]?.total || 0;
-      const depositCount = depositPaymentsResult[0]?.count || 0;
       depositPayments.unshift(depositTotal);
-
-      logger.debug("Deposit payments for month", {
-        propertyOwnerId,
-        month: monthLabel,
-        total: depositTotal,
-        count: depositCount,
-      });
     }
-
-    // Debug: Fetch sample payments
-    const samplePayments = await db
-      .collection("payments")
-      .find({
-        tenantId: { $in: tenantIds },
-        propertyId: { $in: propertyIds },
-        status: "completed",
-      })
-      .limit(10)
-      .toArray();
-    logger.debug("Sample payments for owner", {
-      propertyOwnerId,
-      paymentCount: samplePayments.length,
-      paymentDetails: samplePayments.map((p) => ({
-        type: p.type,
-        amount: p.amount,
-        paymentDate: p.paymentDate,
-      })),
-    });
 
     const chartData: ChartData = {
       months,
@@ -237,14 +176,8 @@ export async function GET(request: NextRequest) {
       depositPayments,
     };
 
-    logger.debug("Successfully fetched owner chart data", { propertyOwnerId, chartData });
     return NextResponse.json({ success: true, chartData });
   } catch (error) {
-    logger.error("Error fetching owner chart data", {
-      propertyOwnerId,
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-    });
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }

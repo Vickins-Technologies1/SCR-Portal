@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
-import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 
 interface Property {
@@ -33,17 +32,14 @@ export async function GET(request: NextRequest) {
   const userId = searchParams.get("userId");
 
   if (!userId) {
-    logger.error("Missing userId in ownerstats request");
     return NextResponse.json({ success: false, message: "userId is required" }, { status: 400 });
   }
 
   if (!ObjectId.isValid(userId)) {
-    logger.error("Invalid userId format", { userId });
     return NextResponse.json({ success: false, message: "Invalid userId format" }, { status: 400 });
   }
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
-    logger.error("Invalid CSRF token in ownerstats request", { userId });
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
@@ -55,10 +51,9 @@ export async function GET(request: NextRequest) {
       .collection("properties")
       .find<WithId<Property>>({ ownerId: userId })
       .toArray();
-    const propertyIds = properties.map((p) => p._id.toString()); // Convert to strings for consistency
+    const propertyIds = properties.map((p) => p._id.toString());
 
     if (properties.length === 0) {
-      logger.debug("No properties found for user", { userId });
       const stats: Stats = {
         activeProperties: 0,
         totalTenants: 0,
@@ -74,21 +69,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, stats });
     }
 
-    logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
-
-    // Define current month range (September 2025)
-    const today = new Date(); // Current date: September 10, 2025
+    // Define current month range
+    const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
     const endOfMonthISO = endOfMonth.toISOString();
-
-    // Log date range for debugging
-    logger.debug("Current month date range", {
-      userId,
-      startOfMonth: startOfMonthISO,
-      endOfMonth: endOfMonthISO,
-    });
 
     // Total units aggregation
     const totalUnitsResult = await db
@@ -137,9 +123,7 @@ export async function GET(request: NextRequest) {
       .toArray();
     const { totalTenants = 0, occupiedUnits = 0, tenantIds = [] } = tenantsResult[0] || {};
 
-    logger.debug("Tenants fetched for ownerstats", { userId, tenantIds, totalTenants, occupiedUnits });
-
-    // Current month rent (sum of completed rent payments for the current month)
+    // Current month rent
     const currentMonthRentResult = await db
       .collection("payments")
       .aggregate<{
@@ -152,7 +136,6 @@ export async function GET(request: NextRequest) {
             status: "completed",
             type: "Rent",
             $or: [
-              // Match both Date objects and ISO strings for paymentDate
               { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
               { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
             ],
@@ -168,46 +151,6 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
     const totalMonthlyRent = currentMonthRentResult[0]?.totalMonthlyRent || 0;
-
-    // Fetch payment details for logging
-    const currentMonthPayments = await db
-      .collection("payments")
-      .find({
-        propertyId: { $in: propertyIds },
-        status: "completed",
-        type: "Rent",
-        $or: [
-          { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-          { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-        ],
-      })
-      .toArray();
-
-    logger.debug("Current month payments for totalMonthlyRent", {
-      userId,
-      paymentCount: currentMonthPayments.length,
-      totalMonthlyRent,
-      paymentIds: currentMonthPayments.map((p) => p._id.toString()),
-      paymentDates: currentMonthPayments.map((p) => p.paymentDate),
-      propertyIds: currentMonthPayments.map((p) => p.propertyId),
-    });
-
-    // Debug: Check all rent payments for the user (not limited to current month)
-    const allPayments = await db
-      .collection("payments")
-      .find({
-        propertyId: { $in: propertyIds },
-        status: "completed",
-        type: "Rent",
-      })
-      .limit(10)
-      .toArray();
-    logger.debug("All rent payments for user (sample)", {
-      userId,
-      paymentCount: allPayments.length,
-      paymentDates: allPayments.map((p) => p.paymentDate),
-      paymentAmounts: allPayments.map((p) => p.amount),
-    });
 
     // Total payments aggregation
     const paymentsResult = await db
@@ -277,145 +220,96 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalUtilityPaid = utilityPaymentsResult[0]?.totalUtilityPaid || 0;
 
-    // Overdue payments aggregation
-    const overdueResult = await db
+    // === FINAL FIX: paymentStatus = "up-to-date" ONLY if overdue = 0 ===
+    const todayISO = today.toISOString();
+
+    const tenantDuesResult = await db
       .collection("tenants")
       .aggregate<{
-        tenantId: string;
-        totalRentDue: number;
-        totalDepositDue: number;
-        totalUtilityDue: number;
+        _id: ObjectId;
         totalOverdueAmount: number;
-        paymentStatus: string;
       }>([
-        { $match: { propertyId: { $in: propertyIds } } },
+        // Match only currently active tenants
         {
           $match: {
-            leaseStartDate: { $ne: null, $lte: today.toISOString() },
-            leaseEndDate: { $ne: null, $gte: today.toISOString() },
+            propertyId: { $in: propertyIds },
+            leaseStartDate: { $ne: null, $lte: todayISO },
+            leaseEndDate: { $ne: null, $gte: todayISO },
           },
         },
+        // Calculate months stayed (including current month)
         {
-          $project: {
-            _id: 0,
-            tenantId: "$_id",
-            totalRentDue: {
-              $cond: {
-                if: { $and: [{ $ne: ["$price", null] }, { $ne: ["$leaseStartDate", null] }] },
-                then: {
-                  $multiply: [
-                    "$price",
-                    {
-                      $add: [
-                        {
-                          $dateDiff: {
-                            startDate: { $toDate: "$leaseStartDate" },
-                            endDate: today,
-                            unit: "month",
-                          },
-                        },
-                        {
-                          $cond: {
-                            if: {
-                              $lte: [{ $toDate: "$leaseStartDate" }, today],
-                            },
-                            then: 1, // Include the current month
-                            else: 0,
-                          },
-                        },
-                      ],
-                    },
-                  ],
-                },
-                else: 0,
-              },
-            },
-            totalDepositDue: { $ifNull: ["$deposit", 0] },
-            totalUtilityDue: { $literal: 0 }, // Utility dues not tracked
-            totalOverdueAmount: {
-              $max: [
-                0,
+          $addFields: {
+            monthsStayed: {
+              $cond: [
+                { $ne: ["$leaseStartDate", null] },
                 {
-                  $subtract: [
+                  $add: [
                     {
-                      $add: [
-                        {
-                          $cond: {
-                            if: { $and: [{ $ne: ["$price", null] }, { $ne: ["$leaseStartDate", null] }] },
-                            then: {
-                              $multiply: [
-                                "$price",
-                                {
-                                  $add: [
-                                    {
-                                      $dateDiff: {
-                                        startDate: { $toDate: "$leaseStartDate" },
-                                        endDate: today,
-                                        unit: "month",
-                                      },
-                                    },
-                                    {
-                                      $cond: {
-                                        if: {
-                                          $lte: [{ $toDate: "$leaseStartDate" }, today],
-                                        },
-                                        then: 1, // Include the current month
-                                        else: 0,
-                                      },
-                                    },
-                                  ],
-                                },
-                              ],
-                            },
-                            else: 0,
-                          },
-                        },
-                        { $ifNull: ["$deposit", 0] },
-                        { $literal: 0 }, // Utility dues not tracked
-                      ],
+                      $dateDiff: {
+                        startDate: { $toDate: "$leaseStartDate" },
+                        endDate: today,
+                        unit: "month",
+                      },
                     },
                     {
-                      $add: [
-                        { $ifNull: ["$totalRentPaid", 0] },
-                        { $ifNull: ["$totalUtilityPaid", 0] },
-                        { $ifNull: ["$totalDepositPaid", 0] },
+                      $cond: [
+                        { $lte: [{ $toDate: "$leaseStartDate" }, today] },
+                        1,
+                        0,
                       ],
                     },
                   ],
                 },
+                0,
               ],
             },
-            paymentStatus: "$paymentStatus",
           },
         },
+        // Calculate total due and total paid
         {
-          $match: { totalOverdueAmount: { $gt: 0 } },
+          $project: {
+            _id: 1,
+            totalDue: {
+              $add: [
+                { $multiply: [{ $ifNull: ["$price", 0] }, "$monthsStayed"] },
+                { $ifNull: ["$deposit", 0] },
+                { $literal: 0 }, // utility
+              ],
+            },
+            totalPaid: {
+              $add: [
+                { $ifNull: ["$totalRentPaid", 0] },
+                { $ifNull: ["$totalDepositPaid", 0] },
+                { $ifNull: ["$totalUtilityPaid", 0] },
+              ],
+            },
+          },
+        },
+        // Final overdue amount
+        {
+          $project: {
+            _id: 1,
+            totalOverdueAmount: {
+              $max: [0, { $subtract: ["$totalDue", "$totalPaid"] }],
+            },
+          },
         },
       ])
       .toArray();
 
-    const overduePayments = overdueResult.length;
-    const totalOverdueAmount = overdueResult.reduce((sum, tenant) => sum + tenant.totalOverdueAmount, 0);
+    // Count overdue tenants and sum total overdue
+    const overduePayments = tenantDuesResult.filter(t => t.totalOverdueAmount > 0).length;
+    const totalOverdueAmount = tenantDuesResult.reduce((sum, t) => sum + t.totalOverdueAmount, 0);
 
-    // Log overdue tenants for debugging
-    logger.debug("Overdue tenants", {
-      userId,
-      overdueTenants: overdueResult.map((tenant) => ({
-        tenantId: tenant.tenantId,
-        totalRentDue: tenant.totalRentDue,
-        totalDepositDue: tenant.totalDepositDue,
-        totalOverdueAmount: tenant.totalOverdueAmount,
-      })),
-    });
-
-    // Update tenant paymentStatus
-    const bulkOps = overdueResult.map((tenant) => ({
+    // Update paymentStatus: "up-to-date" ONLY if overdue === 0
+    const bulkOps = tenantDuesResult.map((tenant) => ({
       updateOne: {
-        filter: { _id: new ObjectId(tenant.tenantId) },
+        filter: { _id: tenant._id },
         update: {
           $set: {
             paymentStatus: tenant.totalOverdueAmount > 0 ? "overdue" : "up-to-date",
-            updatedAt: today.toISOString(),
+            updatedAt: todayISO,
           },
         },
       },
@@ -423,9 +317,8 @@ export async function GET(request: NextRequest) {
 
     if (bulkOps.length > 0) {
       await db.collection("tenants").bulkWrite(bulkOps);
-      logger.debug("Bulk tenant updates executed", { userId, updateCount: bulkOps.length });
     }
-
+    
     const stats: Stats = {
       activeProperties: properties.length,
       totalTenants,
@@ -439,14 +332,8 @@ export async function GET(request: NextRequest) {
       totalUtilityPaid,
     };
 
-    logger.debug("Successfully fetched owner stats", { userId, stats });
     return NextResponse.json({ success: true, stats });
   } catch (error) {
-    logger.error("Error fetching owner stats", {
-      userId,
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-    });
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }

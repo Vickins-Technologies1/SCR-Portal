@@ -41,6 +41,7 @@ interface Tenant {
   leaseStartDate: string;
   leaseEndDate: string;
   walletBalance?: number;
+  paymentStatus?: "up-to-date" | "overdue" | "pending";
 }
 
 interface Payment {
@@ -283,30 +284,38 @@ export default function PropertyOwnerDashboard() {
     fetchDashboardData();
   }, [userId, role, csrfToken, fetchOwnerCharts]);
 
-  // Payment status pie chart
+  // Payment status pie chart - USE BACKEND paymentStatus
   const paymentStatusData = tenants.reduce(
     (acc, tenant) => {
-      if (!tenant.leaseStartDate || !tenant.leaseEndDate || !tenant.price) {
-        acc.pending = (acc.pending || 0) + 1;
+      if (!tenant.leaseStartDate || !tenant.leaseStartDate || !tenant.leaseEndDate) {
+        acc.pending += 1;
         return acc;
       }
+
       const leaseStart = new Date(tenant.leaseStartDate);
       const leaseEnd = new Date(tenant.leaseEndDate);
       const today = new Date();
-      if (isNaN(leaseStart.getTime()) || isNaN(leaseEnd.getTime()) || leaseStart > today || leaseEnd < today) {
-        acc.pending = (acc.pending || 0) + 1;
+
+      if (
+        isNaN(leaseStart.getTime()) ||
+        isNaN(leaseEnd.getTime()) ||
+        leaseStart > today ||
+        leaseEnd < today
+      ) {
+        acc.pending += 1;
         return acc;
       }
-      const monthsSinceLease = Math.max(
-        0,
-        Math.floor((today.getTime() - leaseStart.getTime()) / (1000 * 60 * 60 * 24 * 30))
-      );
-      const expectedRent = monthsSinceLease * tenant.price;
-      const totalPaid = payments
-        .filter((p) => p.tenantId === tenant._id && p.status === "completed" && p.type === "Rent")
-        .reduce((sum, p) => sum + p.amount, 0);
-      const overdueAmount = Math.max(0, expectedRent - totalPaid - (tenant.walletBalance || 0));
-      acc[overdueAmount > 0 ? "overdue" : "paid"] = (acc[overdueAmount > 0 ? "overdue" : "paid"] || 0) + 1;
+
+      // Use backend-calculated paymentStatus
+      const status = tenant.paymentStatus;
+      if (status === "overdue") {
+        acc.overdue += 1;
+      } else if (status === "up-to-date") {
+        acc.paid += 1;
+      } else {
+        acc.pending += 1;
+      }
+
       return acc;
     },
     { paid: 0, overdue: 0, pending: 0 } as Record<string, number>

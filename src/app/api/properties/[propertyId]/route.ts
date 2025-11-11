@@ -3,22 +3,28 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { validateCsrfToken } from '@/lib/csrf';
 import { ObjectId } from 'mongodb';
 
-interface UnitType {
+// ===============================================
+// INTERFACES
+// ===============================================
+export interface UnitType {
   type: string;
+  uniqueType?: string;
   price: number;
   deposit: number;
   managementType: 'RentCollection' | 'FullManagement';
-  managementFee: number;
   quantity: number;
+  managementFee?: number;
 }
 
-interface Property {
-  _id: ObjectId;
+export interface Property {
+  _id: ObjectId | string;
   ownerId: string;
   name: string;
-  address?: string;
+  address: string;
   unitTypes: UnitType[];
-  requiresAdminApproval?: boolean;
+  managementFee?: number;
+  status: string;
+  rentPaymentDate?: number;
   createdAt: Date;
   updatedAt?: Date;
 }
@@ -48,37 +54,36 @@ interface PropertyRequest {
   name?: string;
   address?: string;
   unitTypes?: UnitType[];
-  requiresAdminApproval?: boolean;
 }
 
+// ===============================================
+// HELPER: Tenant Status
+// ===============================================
 const getTenantStatus = (leaseStartDate: string, leaseEndDate: string): string => {
-  const currentDate = new Date();
-  const startDate = leaseStartDate ? new Date(leaseStartDate) : null;
-  const endDate = leaseEndDate ? new Date(leaseEndDate) : null;
+  const now = new Date();
+  const start = leaseStartDate ? new Date(leaseStartDate) : null;
+  const end = leaseEndDate ? new Date(leaseEndDate) : null;
 
-  if (!startDate || !endDate) {
-    return 'Unknown';
-  }
-
-  if (currentDate < startDate) {
-    return 'Pending';
-  } else if (currentDate >= startDate && currentDate <= endDate) {
-    return 'Active';
-  } else {
-    return 'Expired';
-  }
+  if (!start || !end) return 'Unknown';
+  if (now < start) return 'Pending';
+  if (now >= start && now <= end) return 'Active';
+  return 'Expired';
 };
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ propertyId: string }> }) {
+// ===============================================
+// GET: Fetch Property + Tenants
+// ===============================================
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ propertyId: string }> }
+) {
   try {
     const { propertyId } = await params;
-    const cookieStore = request.cookies;
-    const role = cookieStore.get('role')?.value as 'admin' | 'tenant' | 'propertyOwner' | undefined;
-    const userId = cookieStore.get('userId')?.value;
-    console.log('GET /api/properties/[propertyId] - Cookies', { userId, role, propertyId });
+    const cookies = request.cookies;
+    const role = cookies.get('role')?.value as 'admin' | 'tenant' | 'propertyOwner' | undefined;
+    const userId = cookies.get('userId')?.value;
 
     if (!role || !userId || !ObjectId.isValid(userId)) {
-      console.log('Unauthorized', { userId, role });
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Missing or invalid role or user ID' },
         { status: 401 }
@@ -86,7 +91,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (!ObjectId.isValid(propertyId)) {
-      console.log('Invalid property ID', { propertyId });
       return NextResponse.json(
         { success: false, message: 'Invalid property ID' },
         { status: 400 }
@@ -94,47 +98,37 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { db } = await connectToDatabase();
-    const propertyObjectId = new ObjectId(propertyId);
+    const propId = new ObjectId(propertyId);
 
     if (role === 'tenant') {
       const tenant = await db.collection<Tenant>('tenants').findOne({
         _id: new ObjectId(userId),
-        propertyId: propertyId,
+        propertyId,
       });
-
       if (!tenant) {
-        console.log('Tenant not associated with property', { userId, propertyId });
         return NextResponse.json(
           { success: false, message: 'Unauthorized: Tenant not associated with this property' },
           { status: 403 }
         );
       }
-      console.log('Tenant authorized', { userId, propertyId });
     } else if (role !== 'admin' && role !== 'propertyOwner') {
-      console.log('Unauthorized role', { userId, role, propertyId });
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Insufficient role permissions' },
         { status: 403 }
       );
     }
 
-    const propertyQuery = role === 'tenant' ? { _id: propertyObjectId } : { _id: propertyObjectId, ownerId: userId };
-    const property = await db.collection<Property>('properties').findOne(propertyQuery);
+    const query = role === 'tenant' ? { _id: propId } : { _id: propId, ownerId: userId };
+    const property = await db.collection<Property>('properties').findOne(query);
 
     if (!property) {
-      console.log('Property lookup failed', { propertyId, userId });
       return NextResponse.json(
         { success: false, message: 'Property not found or not authorized' },
         { status: 404 }
       );
     }
 
-    const tenants = await db
-      .collection<Tenant>('tenants')
-      .find({ propertyId: propertyId })
-      .toArray();
-
-    console.log('Property fetched successfully', { propertyId, userId, tenantCount: tenants.length });
+    const tenants = await db.collection<Tenant>('tenants').find({ propertyId }).toArray();
 
     return NextResponse.json({
       success: true,
@@ -142,25 +136,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ...property,
         _id: property._id.toString(),
         ownerId: property.ownerId,
-        createdAt: property.createdAt instanceof Date ? property.createdAt.toISOString() : property.createdAt,
-        updatedAt: property.updatedAt instanceof Date ? property.updatedAt.toISOString() : property.updatedAt || undefined,
+        createdAt: property.createdAt.toISOString(),
+        updatedAt: property.updatedAt?.toISOString(),
       },
-      tenants: tenants.map((tenant) => ({
-        ...tenant,
-        _id: tenant._id.toString(),
-        propertyId: tenant.propertyId.toString(),
-        ownerId: tenant.ownerId,
-        createdAt: tenant.createdAt instanceof Date ? tenant.createdAt.toISOString() : tenant.createdAt,
-        updatedAt: tenant.updatedAt instanceof Date ? tenant.updatedAt.toISOString() : tenant.updatedAt || undefined,
-        walletBalance: tenant.walletBalance ?? 0,
-        status: getTenantStatus(tenant.leaseStartDate, tenant.leaseEndDate),
+      tenants: tenants.map(t => ({
+        ...t,
+        _id: t._id.toString(),
+        propertyId: t.propertyId.toString(),
+        ownerId: t.ownerId,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt?.toISOString(),
+        walletBalance: t.walletBalance ?? 0,
+        status: getTenantStatus(t.leaseStartDate, t.leaseEndDate),
       })),
     });
-  } catch (error: unknown) {
-    console.error('Error in GET /api/properties/[propertyId]', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+  } catch (error) {
+    console.error('GET error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
@@ -168,14 +159,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ propertyId: string }> }) {
+// ===============================================
+// PUT: Update Property
+// ===============================================
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ propertyId: string }> }
+) {
   try {
-    const submittedToken = request.headers.get('X-CSRF-Token');
-    console.log(`CSRF token extracted from header - Path: /api/properties/[propertyId], Token: ${submittedToken}`);
-    const isValidCsrf = await validateCsrfToken(request, submittedToken);
+    const csrfHeader = request.headers.get('X-CSRF-Token');
+    const isValidCsrf = validateCsrfToken(request, csrfHeader); // Synchronous
 
     if (!isValidCsrf) {
-      console.error('Invalid CSRF token', { submittedToken });
       return NextResponse.json(
         { success: false, message: 'Invalid CSRF token' },
         { status: 403 }
@@ -183,13 +178,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { propertyId } = await params;
-    const cookieStore = request.cookies;
-    const userId = cookieStore.get('userId')?.value;
-    const role = cookieStore.get('role')?.value as 'admin' | 'propertyOwner' | undefined;
-    console.log('PUT /api/properties/[propertyId] - Cookies', { userId, role, propertyId });
+    const cookies = request.cookies;
+    const userId = cookies.get('userId')?.value;
+    const role = cookies.get('role')?.value as 'admin' | 'propertyOwner' | undefined;
 
-    if (!userId || !ObjectId.isValid(userId) || !['propertyOwner', 'admin'].includes(role || '')) {
-      console.log('Unauthorized', { userId, role });
+    if (!userId || !ObjectId.isValid(userId) || !['propertyOwner', 'admin'].includes(role ?? '')) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Please log in as a property owner or admin' },
         { status: 401 }
@@ -197,115 +190,135 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (!ObjectId.isValid(propertyId)) {
-      console.log('Invalid property ID', { propertyId });
       return NextResponse.json(
         { success: false, message: 'Invalid property ID' },
         { status: 400 }
       );
     }
 
-    const requestData: Partial<PropertyRequest> = await request.json();
-    console.log('PUT /api/properties/[propertyId] - Request body', { requestData });
-
+    const payload: Partial<PropertyRequest> = await request.json();
     const { db } = await connectToDatabase();
-    const propertyObjectId = new ObjectId(propertyId);
+    const propId = new ObjectId(propertyId);
 
-    const property = await db.collection<Property>('properties').findOne({
-      _id: propertyObjectId,
+    const existing = await db.collection<Property>('properties').findOne({
+      _id: propId,
       ownerId: userId,
     });
 
-    if (!property) {
-      console.log('Property lookup failed', { propertyId, userId });
+    if (!existing) {
       return NextResponse.json(
         { success: false, message: 'Property not found or not owned by user' },
         { status: 404 }
       );
     }
 
-    const updatableFields: Array<keyof PropertyRequest> = ['name', 'address', 'unitTypes', 'requiresAdminApproval'];
-    const updateData: Partial<Property> = {};
+    const allowed: Array<keyof PropertyRequest> = ['name', 'address', 'unitTypes'];
+    const update: Partial<Property> = {};
 
-    for (const field of updatableFields) {
-      if (requestData[field] !== undefined) {
+    for (const field of allowed) {
+      if (payload[field] !== undefined) {
         if (field === 'name' || field === 'address') {
-          updateData[field] = requestData[field] as string;
+          update[field] = payload[field] as string;
         } else if (field === 'unitTypes') {
-          updateData[field] = requestData[field] as UnitType[];
-        } else if (field === 'requiresAdminApproval') {
-          updateData[field] = requestData[field] as boolean;
+          update[field] = payload[field] as UnitType[];
         }
       }
     }
 
-    if (updateData.unitTypes) {
-      for (const unit of updateData.unitTypes) {
+    // === UNIT TYPE VALIDATION ===
+    if (update.unitTypes) {
+      const validated: UnitType[] = [];
+      const currentTypes = new Set(existing.unitTypes.map(u => u.type));
+      const newTypes = new Set(update.unitTypes.map(u => u.type));
+
+      // Validate each unit
+      for (const u of update.unitTypes) {
         if (
-          !unit.type ||
-          typeof unit.price !== 'number' ||
-          typeof unit.deposit !== 'number' ||
-          !['RentCollection', 'FullManagement'].includes(unit.managementType) ||
-          typeof unit.managementFee !== 'number' ||
-          typeof unit.quantity !== 'number'
+          !u.type ||
+          typeof u.price !== 'number' || u.price < 0 ||
+          typeof u.deposit !== 'number' || u.deposit < 0 ||
+          typeof u.quantity !== 'number' || u.quantity < 0 ||
+          !['RentCollection', 'FullManagement'].includes(u.managementType)
         ) {
-          console.log('Invalid unit type data', { unit });
           return NextResponse.json(
-            { success: false, message: 'Invalid unit type data' },
+            { success: false, message: `Invalid unit type '${u.type ?? 'unknown'}: missing or invalid fields` },
+            { status: 400 }
+          );
+        }
+
+        if (u.managementType === 'FullManagement') {
+          if (typeof u.managementFee !== 'number' || u.managementFee < 0) {
+            return NextResponse.json(
+              { success: false, message: `managementFee is required and must be >= 0 for FullManagement unit '${u.type}'` },
+              { status: 400 }
+            );
+          }
+        } else if (u.managementFee !== undefined && typeof u.managementFee !== 'number') {
+          return NextResponse.json(
+            { success: false, message: `managementFee must be a number for RentCollection unit '${u.type}'` },
+            { status: 400 }
+          );
+        }
+
+        validated.push({
+          ...u,
+          managementFee: u.managementType === 'RentCollection' && u.managementFee === undefined ? 0 : u.managementFee,
+        });
+      }
+
+      update.unitTypes = validated;
+
+      // === TENANT CONFLICT CHECK ===
+      const tenants = await db.collection<Tenant>('tenants').find({ propertyId }).toArray();
+
+      // Track which current types are being removed
+      const removedTypes = [...currentTypes].filter(t => !newTypes.has(t));
+
+      if (removedTypes.length > 0) {
+        const tenantsInRemoved = tenants.filter(t => removedTypes.includes(t.unitType));
+        if (tenantsInRemoved.length > 0) {
+          const typeList = removedTypes.join(', ');
+          return NextResponse.json(
+            { success: false, message: `Cannot remove unit type(s): ${typeList} – active tenants exist` },
             { status: 400 }
           );
         }
       }
 
-      const tenants = await db.collection<Tenant>('tenants').find({ propertyId: propertyId }).toArray();
-      const newUnitTypes = new Set(updateData.unitTypes.map((u) => u.type));
-
-      for (const tenant of tenants) {
-        if (!newUnitTypes.has(tenant.unitType)) {
-          console.log('Cannot remove unit type with active tenants', { unitType: tenant.unitType });
+      // Prevent price/deposit change for types with tenants
+      for (const t of tenants) {
+        const newUnit = validated.find(v => v.type === t.unitType);
+        if (newUnit && (newUnit.price !== t.price || newUnit.deposit !== t.deposit)) {
           return NextResponse.json(
-            { success: false, message: `Cannot remove unit type '${tenant.unitType}' with active tenants` },
-            { status: 400 }
-          );
-        }
-
-        const newUnit = updateData.unitTypes.find((u) => u.type === tenant.unitType);
-        if (newUnit && (newUnit.price !== tenant.price || newUnit.deposit !== tenant.deposit)) {
-          console.log('Unit type price/deposit mismatch with tenant', { unitType: tenant.unitType });
-          return NextResponse.json(
-            {
-              success: false,
-              message: `Unit type '${tenant.unitType}' price or deposit cannot be changed while tenants are assigned`,
-            },
+            { success: false, message: `Cannot change price or deposit for unit type '${t.unitType}' – tenants are assigned` },
             { status: 400 }
           );
         }
       }
     }
 
-    if (Object.keys(updateData).length === 0) {
-      console.log('No fields provided for update');
+    if (Object.keys(update).length === 0) {
       return NextResponse.json(
         { success: false, message: 'No fields provided for update' },
         { status: 400 }
       );
     }
 
-    updateData.updatedAt = new Date();
+    update.updatedAt = new Date();
+
     const result = await db.collection<Property>('properties').findOneAndUpdate(
-      { _id: propertyObjectId, ownerId: userId },
-      { $set: updateData },
+      { _id: propId, ownerId: userId },
+      { $set: update },
       { returnDocument: 'after' }
     );
 
     if (!result) {
-      console.log('Failed to update property', { propertyId });
       return NextResponse.json(
         { success: false, message: 'Failed to update property' },
         { status: 404 }
       );
     }
 
-    console.log('Property updated', { propertyId, updatedFields: Object.keys(updateData) });
     return NextResponse.json({
       success: true,
       message: 'Property updated successfully',
@@ -313,15 +326,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         ...result,
         _id: result._id.toString(),
         ownerId: result.ownerId,
-        createdAt: result.createdAt instanceof Date ? result.createdAt.toISOString() : result.createdAt,
-        updatedAt: result.updatedAt instanceof Date ? result.updatedAt.toISOString() : result.updatedAt || undefined,
+        createdAt: result.createdAt.toISOString(),
+        updatedAt: result.updatedAt?.toISOString(),
       },
     });
-  } catch (error: unknown) {
-    console.error('Error in PUT /api/properties/[propertyId]', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+  } catch (error) {
+    console.error('PUT error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
@@ -329,14 +339,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ propertyId: string }> }) {
+// ===============================================
+// DELETE: Remove Property + Data
+// ===============================================
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ propertyId: string }> }
+) {
   try {
-    const submittedToken = request.headers.get('X-CSRF-Token');
-    console.log(`CSRF token extracted from header - Path: /api/properties/[propertyId], Token: ${submittedToken}`);
-    const isValidCsrf = await validateCsrfToken(request, submittedToken);
+    const csrfHeader = request.headers.get('X-CSRF-Token');
+    const isValidCsrf = validateCsrfToken(request, csrfHeader);
 
     if (!isValidCsrf) {
-      console.error('Invalid CSRF token', { submittedToken });
       return NextResponse.json(
         { success: false, message: 'Invalid CSRF token' },
         { status: 403 }
@@ -344,13 +358,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     const { propertyId } = await params;
-    const cookieStore = request.cookies;
-    const userId = cookieStore.get('userId')?.value;
-    const role = cookieStore.get('role')?.value as 'admin' | 'propertyOwner' | undefined;
-    console.log('DELETE /api/properties/[propertyId] - Cookies', { userId, role, propertyId });
+    const cookies = request.cookies;
+    const userId = cookies.get('userId')?.value;
+    const role = cookies.get('role')?.value as 'admin' | 'propertyOwner' | undefined;
 
-    if (!userId || !ObjectId.isValid(userId) || !['propertyOwner', 'admin'].includes(role || '')) {
-      console.log('Unauthorized', { userId, role });
+    if (!userId || !ObjectId.isValid(userId) || !['propertyOwner', 'admin'].includes(role ?? '')) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Please log in as a property owner or admin' },
         { status: 401 }
@@ -358,7 +370,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     if (!ObjectId.isValid(propertyId)) {
-      console.log('Invalid property ID', { propertyId });
       return NextResponse.json(
         { success: false, message: 'Invalid property ID' },
         { status: 400 }
@@ -366,58 +377,44 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     const { db } = await connectToDatabase();
-    const propertyObjectId = new ObjectId(propertyId);
+    const propId = new ObjectId(propertyId);
 
-    const propertyQuery = role === 'admin' ? { _id: propertyObjectId } : { _id: propertyObjectId, ownerId: userId };
-    const property = await db.collection<Property>('properties').findOne(propertyQuery);
+    const query = role === 'admin' ? { _id: propId } : { _id: propId, ownerId: userId };
+    const property = await db.collection<Property>('properties').findOne(query);
 
     if (!property) {
-      console.log('Property lookup failed', { propertyId, userId });
       return NextResponse.json(
         { success: false, message: 'Property not found or not owned by user' },
         { status: 404 }
       );
     }
 
-    // Delete associated invoices
-    const invoiceDeleteResult = await db.collection('invoices').deleteMany({
-      propertyId: propertyId,
-    });
-    console.log('Deleted invoices', { propertyId, deletedCount: invoiceDeleteResult.deletedCount });
+    const [invDel, tenDel] = await Promise.all([
+      db.collection('invoices').deleteMany({ propertyId }),
+      db.collection<Tenant>('tenants').deleteMany({ propertyId }),
+    ]);
 
-    // Delete associated tenants
-    const tenantDeleteResult = await db.collection<Tenant>('tenants').deleteMany({
-      propertyId: propertyId,
-    });
-    console.log('Deleted tenants', { propertyId, deletedCount: tenantDeleteResult.deletedCount });
+    const delRes = await db.collection<Property>('properties').deleteOne({ _id: propId });
 
-    // Delete the property
-    const deleteResult = await db.collection<Property>('properties').deleteOne({
-      _id: propertyObjectId,
-    });
-
-    if (deleteResult.deletedCount === 0) {
-      console.log('Failed to delete property', { propertyId });
+    if (delRes.deletedCount === 0) {
       return NextResponse.json(
         { success: false, message: 'Failed to delete property' },
         { status: 404 }
       );
     }
 
-    console.log('Property and associated data deleted successfully', {
+    console.log('Property deleted', {
       propertyId,
-      deletedTenants: tenantDeleteResult.deletedCount,
-      deletedInvoices: invoiceDeleteResult.deletedCount,
+      tenantsDeleted: tenDel.deletedCount,
+      invoicesDeleted: invDel.deletedCount,
     });
+
     return NextResponse.json({
       success: true,
-      message: 'Property, associated tenants, and invoices deleted successfully',
+      message: 'Property, tenants, and invoices deleted successfully',
     });
-  } catch (error: unknown) {
-    console.error('Error in DELETE /api/properties/[propertyId]', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+  } catch (error) {
+    console.error('DELETE error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }

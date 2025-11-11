@@ -1,160 +1,207 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaArrowRight } from "react-icons/fa";
 import Cookies from "js-cookie";
 
-export default function Home() {
+export default function LoginPage() {
   const [isTenantPortal, setIsTenantPortal] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isDemo, setIsDemo] = useState(false); // Added for client-side demo check
   const router = useRouter();
+
+  // DEMO AUTO-FILL + isDemo detection
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const demo = params.get("demo");
+    setIsDemo(params.has("demo")); // Set isDemo safely on client
+
+    const clickSubmit = () =>
+      (document.querySelector('button[type="submit"]') as HTMLButtonElement | null)?.click();
+
+    if (demo === "owner") {
+      setEmail("demo@admin.com");
+      setPassword("Demo@2025!");
+      setIsTenantPortal(false);
+      setTimeout(clickSubmit, 200);
+    }
+    if (demo === "tenant") {
+      setEmail("tenant@demo.com");
+      setPassword("Tenant@2025!");
+      setIsTenantPortal(true);
+      setTimeout(clickSubmit, 200);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
-    const endpoint = "/api/signin";
-    const payload = { email, password, role: isTenantPortal ? "tenant" : "propertyOwner" };
+    const payload = {
+      email,
+      password,
+      role: isTenantPortal ? "tenant" : "propertyOwner",
+    };
 
     try {
-      const response = await fetch(endpoint, {
+      const res = await fetch("/api/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-      console.log("Signin response:", data);
-      if (!data.success) {
-        setError(data.message || "An error occurred");
-      } else {
-        if (data.userId && data.role) {
-          Cookies.set("userId", data.userId, { secure: true, sameSite: "Strict", expires: 7 });
-          Cookies.set("role", data.role, { secure: true, sameSite: "Strict", expires: 7 });
-          console.log("Client-side cookies set:", { userId: data.userId, role: data.role });
-        }
-        if (data.redirect) {
-          console.log(`Sign-in successful, redirecting to ${data.redirect}`);
-          setTimeout(() => router.push(data.redirect), 100);
-        } else {
-          setError("No redirect path provided");
-        }
-      }
-    } catch (err) {
-      console.error("Submission error:", err);
-      setError("Failed to connect to the server. Please try again.");
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Login failed");
+
+      Cookies.set("userId", data.userId, { secure: true, sameSite: "Strict", expires: 7 });
+      Cookies.set("role", data.role, { secure: true, sameSite: "Strict", expires: 7 });
+
+      router.push(data.redirect || "/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Something went wrong");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row overflow-hidden">
-      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-dark-blue to-light-green text-foreground items-center justify-center p-10 relative overflow-hidden">
-        <div className="text-center space-y-6 z-10">
-          <Image
-            src="/logo.png"
-            alt="Smart Choice Rentals Logo"
-            width={120}
-            height={120}
-            className="mx-auto mb-6 animate-pulse"
-          />
-          <h2 className="text-4xl font-extrabold tracking-wide">Smart Choice Rentals</h2>
-          <p className="text-xl leading-relaxed">
-            Unlock your perfect rental experience. <br />
-            Seamless management for tenants and property owners.
-          </p>
+    <div className="min-h-screen flex flex-col lg:flex-row overflow-hidden bg-gradient-to-br from-gray-50 to-blue-50">
+      {/* Left: Branding */}
+      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-blue-900 to-teal-600 text-white items-center justify-center p-10 relative">
+        <div className="text-center space-y-8 z-10">
+          <Image src="/logo.png" alt="Logo" width={140} height={140} className="mx-auto drop-shadow-2xl" />
+          <h2 className="text-5xl font-black tracking-tight">Smart Choice Rentals</h2>
+          <p className="text-xl opacity-90">Instant access. Zero hassle. Real results.</p>
+          <div className="pt-6">
+            <a
+              href="https://smartchoicerentalmanagement.com"
+              className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-6 py-3 rounded-full hover:bg-white/30 transition"
+            >
+              Visit Homepage <FaArrowRight />
+            </a>
+          </div>
         </div>
-        <div className="absolute top-0 left-0 w-full h-full opacity-10 animate-pulse-slow">
-          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="white" strokeWidth="1" opacity="0.3" />
-            <circle cx="30" cy="30" r="10" fill="light-green" opacity="0.4" />
-            <circle cx="70" cy="70" r="15" fill="light-green" opacity="0.4" />
+        <div className="absolute inset-0 opacity-20">
+          <svg className="w-full h-full" viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="80" fill="none" stroke="white" strokeWidth="2" />
+            <circle cx="60" cy="60" r="20" fill="white" opacity="0.3" />
+            <circle cx="140" cy="140" r="25" fill="white" opacity="0.3" />
           </svg>
         </div>
       </div>
-      <div className="flex flex-col w-full lg:w-1/2 items-center justify-center bg-background px-4 py-10 lg:p-12 relative">
-        <div className="w-full max-w-md bg-background shadow-2xl rounded-2xl border border-dark-blue p-6 lg:p-8 space-y-6 transform transition-all duration-300 hover:shadow-3xl">
+
+      {/* Right: Login Form */}
+      <div className="flex flex-col w-full lg:w-1/2 items-center justify-center p-6 lg:p-12">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-blue-200 p-8 space-y-8">
+          {/* Mobile Logo */}
           <div className="flex justify-center lg:hidden">
-            <Image
-              src="/logo.png"
-              alt="Smart Choice Rentals Logo"
-              width={80}
-              height={80}
-              className="mb-4"
-            />
+            <Image src="/logo.png" alt="Logo" width={90} height={90} />
           </div>
-          <h1 className="text-3xl lg:text-4xl font-extrabold text-center text-foreground">
-            {isTenantPortal ? "Tenant Portal Login" : "Property Owner Login"}
-          </h1>
-          {error && (
-            <p className="text-red-500 text-center animate-fade-in">{error}</p>
-          )}
-          {isLoading && (
-            <div className="flex justify-center">
-              <div className="w-8 h-8 border-4 border-t-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+
+          {/* Demo Banner */}
+          {isDemo && (
+            <div className="p-4 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-xl text-center font-bold animate-pulse">
+              DEMO MODE ACTIVE — Welcome aboard!
             </div>
           )}
-          <div className="text-center mb-4">
+
+          <div className="text-center">
+            <h1 className="text-4xl font-extrabold text-blue-900">
+              {isTenantPortal ? "Tenant Portal" : "Property Owner"} Login
+            </h1>
+            <p className="text-gray-600 mt-2">Enter your credentials to continue</p>
+          </div>
+
+          {error && (
+            <p className="p-3 bg-red-100 text-red-700 rounded-lg text-center animate-fade-in">{error}</p>
+          )}
+
+          {/* Portal Switch */}
+          <div className="text-center">
             <button
               type="button"
               onClick={() => setIsTenantPortal(!isTenantPortal)}
-              className="text-accent font-medium hover:underline transition-colors"
+              className="text-teal-600 font-semibold hover:underline"
             >
-              {isTenantPortal ? "Switch to Property Owner Login" : "Switch to Tenant Portal Login"}
+              {isTenantPortal ? "Switch to Owner Login" : "Switch to Tenant Portal"}
             </button>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
+
+          <form onSubmit={handleSubmit} className="space-y-5">
             <input
               type="email"
               placeholder="Email Address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-dark-blue rounded-lg focus:outline-none focus:ring-2 focus:ring-accent transition duration-200"
+              className="w-full px-5 py-4 border-2 border-blue-200 rounded-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition"
               required
             />
+
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-dark-blue rounded-lg focus:outline-none focus:ring-2 focus:ring-accent transition duration-200 pr-10"
+                className="w-full px-5 py-4 border-2 border-blue-200 rounded-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition pr-12"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-foreground hover:text-accent"
-                aria-label="Toggle password visibility"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600"
               >
-                {showPassword ? <FaEyeSlash size={20} /> : <FaEye size={20} />}
+                {showPassword ? <FaEyeSlash size={22} /> : <FaEye size={22} />}
               </button>
             </div>
+
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-accent text-foreground font-semibold py-3 rounded-lg hover:bg-green-400 transition-all duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-blue-600 to-teal-500 text-white font-bold py-4 rounded-xl hover:from-blue-700 hover:to-teal-600 transform hover:scale-105 transition disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3"
             >
-              {isLoading ? "Processing..." : isTenantPortal ? "Tenant Login" : "Property Owner Login"}
+              {isLoading ? (
+                <>Processing...</>
+              ) : (
+                <>
+                  {isTenantPortal ? "Tenant Login" : "Owner Login"} <FaArrowRight />
+                </>
+              )}
             </button>
           </form>
-          <p className="text-center text-sm text-foreground">
-            Don&apos;t have an account?{" "}
-            <a
-              href="/sign-up"
-              className="text-accent font-medium hover:underline transition-colors"
-            >
-              Sign Up
+
+          <p className="text-center text-gray-600">
+            New here?{" "}
+            <a href="/sign-up" className="text-teal-600 font-bold hover:underline">
+              Sign Up Free
             </a>
           </p>
+
+          {/* Demo Buttons */}
+          <div className="pt-6 space-y-3 border-t border-gray-200">
+            <p className="text-center text-sm font-medium text-gray-500">Try instantly:</p>
+            <div className="grid grid-cols-2 gap-3">
+              <a
+                href="?demo=owner"
+                className="block text-center bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
+              >
+                Owner Demo
+              </a>
+              <a
+                href="?demo=tenant"
+                className="block text-center bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition font-semibold"
+              >
+                Tenant Demo
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
