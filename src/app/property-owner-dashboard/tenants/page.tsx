@@ -768,31 +768,37 @@ export default function TenantsPage() {
                   <select
                     value={selectedUnitType}
                     onChange={async (e) => {
-                      const uniqueType = e.target.value;
-                      setSelectedUnitType(uniqueType);
+                      const selectedType = e.target.value;           // <-- now the real `type`
+                      setSelectedUnitType(selectedType);
+
                       const selectedProperty = properties.find((p) => p._id === selectedPropertyId);
-                      const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === uniqueType);
+                      const unit = selectedProperty?.unitTypes.find((u) => u.type === selectedType);
+
                       if (unit) {
                         setPrice(unit.price.toString());
                         setDeposit(unit.deposit.toString());
+
+                        // Clear previous errors
                         setFormErrors((prev) => ({
                           ...prev,
-                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
-                          price: unit.price >= 0 ? undefined : "Price must be a non-negative number",
-                          deposit: unit.deposit >= 0 ? undefined : "Deposit must be a non-negative number",
+                          selectedUnitType: undefined,
+                          price: undefined,
+                          deposit: undefined,
                         }));
-                        if (tenants.length >= 3 && uniqueType && modalMode === "add") {
-                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, uniqueType);
+
+                        // Invoice check for >3 tenants (only on add)
+                        if (tenants.length >= 3 && modalMode === "add") {
+                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, selectedType);
                           if (invoiceStatus !== "completed") {
                             const tenantData: Partial<TenantRequest> = {
                               name: tenantName,
                               email: tenantEmail,
                               phone: tenantPhone,
-                              password: tenantPassword,
+                              password: tenantPassword || undefined,
                               propertyId: selectedPropertyId,
-                              unitType: uniqueType,
-                              price: parseFloat(price) || unit.price,
-                              deposit: parseFloat(deposit) || unit.deposit,
+                              unitType: selectedType,               // <-- send real type
+                              price: unit.price,
+                              deposit: unit.deposit,
                               houseNumber,
                               leaseStartDate,
                               leaseEndDate,
@@ -805,45 +811,31 @@ export default function TenantsPage() {
                             setPendingTenantData(tenantData);
                             setError(
                               invoiceStatus === "pending"
-                                ? `Cannot add more tenants until the pending invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} is paid.`
-                                : invoiceStatus === "failed"
-                                  ? `Cannot add tenants because the invoice for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"} has failed. Please contact support.`
-                                  : `No invoice found for unit type ${unit.type} in property ${selectedProperty?.name || "unknown"}. Please create an invoice.`
+                                ? `Pending invoice for "${unit.type}" must be paid first.`
+                                : `No paid invoice found for "${unit.type}".`
                             );
                             setIsModalOpen(false);
                             setIsPaymentPromptOpen(true);
                           } else {
                             setPendingTenantData(null);
-                            setIsPaymentPromptOpen(false);
                             setError(null);
                           }
-                        } else {
-                          setPendingTenantData(null);
-                          setIsPaymentPromptOpen(false);
-                          setError(null);
                         }
                       } else {
                         setPrice("");
                         setDeposit("");
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          selectedUnitType: uniqueType ? undefined : "Unit type is required",
-                          price: undefined,
-                          deposit: undefined,
-                        }));
-                        setPendingTenantData(null);
-                        setIsPaymentPromptOpen(false);
                         setError("Selected unit type not found.");
                       }
                     }}
                     required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"}`}
+                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"
+                      }`}
                   >
                     <option value="">Select Unit Type</option>
                     {properties
                       .find((p) => p._id === selectedPropertyId)
                       ?.unitTypes.map((u) => (
-                        <option key={u.uniqueType} value={u.uniqueType}>
+                        <option key={u.uniqueType} value={u.type}>   {/* ← value = u.type */}
                           {u.type} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
                         </option>
                       ))}
@@ -942,7 +934,7 @@ export default function TenantsPage() {
                   <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
                 )}
               </div>
-              
+
               <div className="flex flex-col sm:flex-row justify-end gap-3">
                 <button
                   type="button"

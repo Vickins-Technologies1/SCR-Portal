@@ -3,7 +3,6 @@
 import { Inter } from "next/font/google";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
-import MaintenanceRequests from "./components/MaintenanceRequests";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Users, DollarSign, AlertCircle, BarChart2, Home, MapPin, Hash } from "lucide-react";
@@ -551,11 +550,6 @@ export default function PropertyOwnerDashboard() {
               </div>
             )}
           </section>
-
-          {/* Maintenance Requests Section */}
-          {userId && csrfToken && (
-            <MaintenanceRequests userId={userId} csrfToken={csrfToken} properties={properties} />
-          )}
         </main>
       </div>
     </div>

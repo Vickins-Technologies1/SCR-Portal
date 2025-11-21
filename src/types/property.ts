@@ -1,3 +1,4 @@
+// src/types/property.ts
 import { ObjectId } from "mongodb";
 
 export interface UnitType {

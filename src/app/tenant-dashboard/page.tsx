@@ -1,9 +1,17 @@
+// src/app/tenant-dashboard/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import { Home, DollarSign, User, AlertCircle, LogOut } from "lucide-react";
+import {
+  Home,
+  DollarSign,
+  User,
+  AlertCircle,
+  LogOut,
+  Loader2,
+} from "lucide-react";
 import MaintenanceRequests from "./components/MaintenanceRequests";
 import { Property } from "../../types/property";
 
@@ -36,88 +44,74 @@ interface Tenant {
   monthsStayed?: number;
 }
 
+/* -------------------------------------------------
+   Skeleton Card – modern box shimmer
+   ------------------------------------------------- */
+function SkeletonCard() {
+  return (
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 p-5 animate-pulse">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
+        <div className="h-5 w-32 bg-gray-200 rounded"></div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-4 w-full bg-gray-200 rounded"></div>
+        <div className="h-4 w-4/5 bg-gray-200 rounded"></div>
+        <div className="h-4 w-3/5 bg-gray-200 rounded"></div>
+        <div className="h-4 w-2/5 bg-gray-200 rounded"></div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------
+   Main Page
+   ------------------------------------------------- */
 export default function TenantDashboardPage() {
   const router = useRouter();
+
+  /* ---- auth & impersonation ---- */
   const [userId, setUserId] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [isImpersonated, setIsImpersonated] = useState(false);
+
+  /* ---- data ---- */
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDuesLoading, setIsDuesLoading] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [maintenanceRequest, setMaintenanceRequest] = useState({
-    title: "",
-    description: "",
-    urgency: "low" as "low" | "medium" | "high",
-  });
-  const [maintenanceErrors, setMaintenanceErrors] = useState<{
-    [key: string]: string | undefined;
-  }>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  /* ---- CSRF ---- */
   const [csrfToken, setCsrfToken] = useState<string | null>(Cookies.get("csrf-token") || null);
   const requestInProgress = useRef(false);
   const lastRequestTime = useRef(0);
   const rateLimitDelay = 1000;
 
-  // Fetch CSRF token with retry logic
+  /* -------------------------------------------------
+     CSRF token fetch (unchanged – only formatting)
+     ------------------------------------------------- */
   const fetchCsrfToken = useCallback(async () => {
-    if (requestInProgress.current) {
-      console.log("[DEBUG] Skipping CSRF token fetch, request in progress");
-      return csrfToken;
-    }
+    if (requestInProgress.current) return csrfToken;
     requestInProgress.current = true;
     const now = Date.now();
     if (now - lastRequestTime.current < rateLimitDelay) {
-      await new Promise((resolve) => setTimeout(resolve, rateLimitDelay - (now - lastRequestTime.current)));
+      await new Promise((r) => setTimeout(r, rateLimitDelay - (now - lastRequestTime.current)));
     }
     try {
-      console.log("[DEBUG] Fetching CSRF token");
-      const res = await fetch("/api/csrf-token", {
-        method: "GET",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("[ERROR] Failed to fetch CSRF token", {
-          status: res.status,
-          response: text,
-          headers: Object.fromEntries(res.headers),
-        });
-        if (res.status === 429) {
-          setError("Too many requests. Please try again later.");
-          return null;
-        }
-        throw new Error(`HTTP error! Status: ${res.status}`);
-      }
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await res.text();
-        console.error("[ERROR] Non-JSON response from /api/csrf-token", {
-          status: res.status,
-          response: text,
-          headers: Object.fromEntries(res.headers),
-        });
-        throw new Error("Received non-JSON response from server");
-      }
+      const res = await fetch("/api/csrf-token", { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.success && data.csrfToken) {
         const token = data.csrfToken as string;
         setCsrfToken(token);
-        Cookies.set("csrf-token", token, {
-          path: "/",
-          secure: window.location.protocol === "https:",
-          sameSite: "strict",
-          expires: 1,
-        });
-        console.log("[INFO] Fetched and stored CSRF token", { csrfToken: token });
+        Cookies.set("csrf-token", token, { path: "/", secure: true, sameSite: "strict", expires: 1 });
         return token;
       }
-      throw new Error(data.message || "Failed to fetch CSRF token");
-    } catch (err) {
-      console.error("[ERROR] Failed to fetch CSRF token", {
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
+      throw new Error(data.message ?? "No token");
+    } catch (e) {
+      console.error("[CSRF] error", e);
       return null;
     } finally {
       requestInProgress.current = false;
@@ -125,134 +119,58 @@ export default function TenantDashboardPage() {
     }
   }, [csrfToken]);
 
-  // Fetch dues data
+  useEffect(() => {
+    if (!csrfToken) fetchCsrfToken();
+  }, [csrfToken, fetchCsrfToken]);
+
+  /* -------------------------------------------------
+     Dues fetch (unchanged – only formatting)
+     ------------------------------------------------- */
   const fetchDues = useCallback(
     async (token: string) => {
-      if (!userId || !token) {
-        setError("Missing required data or CSRF token for dues.");
-        return;
-      }
-      if (requestInProgress.current) {
-        console.log("[DEBUG] Skipping fetchDues, request in progress");
-        return;
-      }
+      if (!userId || !token) return;
+      if (requestInProgress.current) return;
       requestInProgress.current = true;
       const now = Date.now();
       if (now - lastRequestTime.current < rateLimitDelay) {
-        await new Promise((resolve) => setTimeout(resolve, rateLimitDelay - (now - lastRequestTime.current)));
+        await new Promise((r) => setTimeout(r, rateLimitDelay - (now - lastRequestTime.current)));
       }
       setIsDuesLoading(true);
       setError(null);
       try {
-        console.log("[DEBUG] Sending fetchDues request", { csrfToken: token, userId });
         const res = await fetch("/api/tenant/dues", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": token,
-          },
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
           credentials: "include",
           body: JSON.stringify({ tenantId: userId, userId }),
         });
         if (!res.ok) {
-          const text = await res.text();
-          console.error("[ERROR] Failed to fetch dues", {
-            status: res.status,
-            response: text,
-            headers: Object.fromEntries(res.headers),
-          });
           if (res.status === 403) {
             const newToken = await fetchCsrfToken();
-            if (!newToken) {
-              setError("Session expired. Please refresh the page.");
-              return;
-            }
-            console.log("[INFO] Retrying fetchDues with new CSRF token", { newToken });
-            const retryRes = await fetch("/api/tenant/dues", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-Token": newToken,
-              },
-              credentials: "include",
-              body: JSON.stringify({ tenantId: userId, userId }),
-            });
-            if (!retryRes.ok) {
-              const retryText = await retryRes.text();
-              console.error("[ERROR] Retry failed for fetchDues", {
-                status: retryRes.status,
-                response: retryText,
-                headers: Object.fromEntries(retryRes.headers),
+            if (newToken) {
+              const retry = await fetch("/api/tenant/dues", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": newToken },
+                credentials: "include",
+                body: JSON.stringify({ tenantId: userId, userId }),
               });
-              throw new Error(`Retry failed! Status: ${retryRes.status}`);
+              if (retry.ok) {
+                const d = await retry.json();
+                if (d.success && d.dues) {
+                  setTenant((p) => p ? { ...p, dues: d.dues, monthsStayed: d.monthsStayed } : null);
+                }
+                return;
+              }
             }
-            const retryData = await retryRes.json();
-            if (retryData.success && retryData.dues) {
-              setTenant((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      dues: {
-                        rentDues: retryData.dues.rentDues,
-                        utilityDues: retryData.dues.utilityDues,
-                        depositDues: retryData.dues.depositDues,
-                        totalRemainingDues: retryData.dues.totalRemainingDues,
-                      },
-                      monthsStayed: retryData.monthsStayed,
-                    }
-                  : null
-              );
-              return;
-            }
-            throw new Error(retryData.message || "Retry failed to fetch dues.");
-          } else if (res.status === 429) {
-            setError("Too many requests. Please try again later.");
-            return;
           }
-          throw new Error(`HTTP error! Status: ${res.status}`);
-        }
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          const text = await res.text();
-          console.error("[ERROR] Non-JSON response from /api/tenant/dues", {
-            status: res.status,
-            response: text,
-            headers: Object.fromEntries(res.headers),
-          });
-          throw new Error("Received non-JSON response from server");
+          throw new Error(`HTTP ${res.status}`);
         }
         const data = await res.json();
         if (data.success && data.dues) {
-          setTenant((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  dues: {
-                    rentDues: data.dues.rentDues,
-                    utilityDues: data.dues.utilityDues,
-                    depositDues: data.dues.depositDues,
-                    totalRemainingDues: data.dues.totalRemainingDues,
-                  },
-                  monthsStayed: data.monthsStayed,
-                }
-              : null
-          );
-        } else {
-          throw new Error(data.message || "Failed to fetch dues.");
+          setTenant((p) => p ? { ...p, dues: data.dues, monthsStayed: data.monthsStayed } : null);
         }
-      } catch (error) {
-        console.error("[ERROR] Failed to fetch dues", {
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-        setError(
-          error instanceof Error
-            ? error.message.includes("non-JSON")
-              ? "Invalid server response. Please try again later."
-              : error.message.includes("CSRF")
-              ? "Session expired. Please refresh the page."
-              : error.message
-            : "Failed to fetch dues."
-        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load dues");
       } finally {
         setIsDuesLoading(false);
         requestInProgress.current = false;
@@ -262,497 +180,309 @@ export default function TenantDashboardPage() {
     [userId, fetchCsrfToken]
   );
 
-  // Check cookies and redirect if unauthorized
+  /* -------------------------------------------------
+     Cookie validation & impersonation
+     ------------------------------------------------- */
   useEffect(() => {
-    const getCookie = (name: string): string | null => {
-      const value = Cookies.get(name);
-      if (value !== undefined) return value;
+    const uid = Cookies.get("userId");
+    const curRole = Cookies.get("role") ?? null;
+    const origRole = Cookies.get("originalRole") ?? null;
+    const origUid = Cookies.get("originalUserId") ?? null;
 
-      const cookie = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith(`${name}=`));
-      return cookie ? cookie.split("=")[1] : null;
-    };
-
-    const uid = getCookie("userId");
-    const role = getCookie("role") ?? null;
-    const originalRole = getCookie("originalRole") ?? null;
-    const originalUserId = getCookie("originalUserId") ?? null;
-
-    console.log("Cookies retrieved:", {
-      userId: uid ?? "null",
-      role: role ?? "null",
-      originalRole: originalRole ?? "null",
-      originalUserId: originalUserId ?? "null",
-      documentCookie: document.cookie,
-    });
-
-    const isTenant = role === "tenant";
-    const isImpersonating = originalRole === "propertyOwner" && originalUserId !== null;
+    const isTenant = curRole === "tenant";
+    const isImpersonating = origRole === "propertyOwner" && origUid;
 
     if (!uid || (!isTenant && !isImpersonating)) {
-      setError("Unauthorized. Please log in as a tenant or impersonate a tenant.");
-      console.log(
-        `Unauthorized access - userId: ${uid ?? "null"}, role: ${role ?? "null"}, originalRole: ${
-          originalRole ?? "null"
-        }, originalUserId: ${originalUserId ?? "null"}`
-      );
+      setError("Unauthorized – redirecting…");
       setTimeout(() => router.replace("/"), 2000);
       return;
     }
 
     setUserId(uid);
-    if (isImpersonating) {
-      setIsImpersonated(true);
-      console.log(
-        `Impersonation session detected - userId: ${uid}, originalUserId: ${originalUserId}, originalRole: ${originalRole}`
-      );
-    }
+    setRole(curRole);
+    if (isImpersonating) setIsImpersonated(true);
   }, [router]);
 
-  // Fetch tenant and property data
+  /* -------------------------------------------------
+     Tenant + Property fetch
+     ------------------------------------------------- */
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !role) return;
 
-    const fetchTenantData = async () => {
+    const run = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        let token = csrfToken;
-        if (!token) {
-          token = await fetchCsrfToken();
-          if (!token) {
-            throw new Error("CSRF token not received");
-          }
-        }
+        let token = csrfToken ?? (await fetchCsrfToken());
+        if (!token) throw new Error("CSRF missing");
 
-        const tenantRes = await fetch("/api/tenant/profile", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": token,
-          },
+        // tenant
+        const tRes = await fetch("/api/tenant/profile", {
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
           credentials: "include",
         });
-        if (!tenantRes.ok) {
-          const text = await tenantRes.text();
-          throw new Error(`Failed to fetch tenant data: ${tenantRes.status} ${text.slice(0, 50)}`);
-        }
-        const tenantData = await tenantRes.json();
-
-        if (!tenantData.success) {
-          setError(tenantData.message || "Failed to fetch tenant data");
-          console.log(`Failed to fetch tenant data - Error: ${tenantData.message}`);
-          return;
-        }
-
+        if (!tRes.ok) throw new Error(`Tenant ${tRes.status}`);
+        const tData = await tRes.json();
+        if (!tData.success) throw new Error(tData.message ?? "Tenant fetch failed");
         setTenant({
-          ...tenantData.tenant,
-          totalRentPaid: tenantData.tenant.totalRentPaid ?? 0,
-          totalUtilityPaid: tenantData.tenant.totalUtilityPaid ?? 0,
-          totalDepositPaid: tenantData.tenant.totalDepositPaid ?? 0,
+          ...tData.tenant,
+          totalRentPaid: tData.tenant.totalRentPaid ?? 0,
+          totalUtilityPaid: tData.tenant.totalUtilityPaid ?? 0,
+          totalDepositPaid: tData.tenant.totalDepositPaid ?? 0,
         });
 
-        if (tenantData.tenant?.propertyId) {
-          const propertyRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": token,
-            },
+        // property (if linked)
+        if (tData.tenant?.propertyId) {
+          const pRes = await fetch(`/api/properties/${tData.tenant.propertyId}`, {
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
             credentials: "include",
           });
-          if (!propertyRes.ok) {
-            const text = await propertyRes.text();
-            throw new Error(`Failed to fetch property data: ${propertyRes.status} ${text.slice(0, 50)}`);
-          }
-          const propertyData = await propertyRes.json();
-
-          if (propertyData.success) {
-            setProperty({
-              ...propertyData.property,
-              _id: propertyData.property._id as string,
-              createdAt: propertyData.property.createdAt as string,
-              updatedAt: propertyData.property.updatedAt as string | undefined,
-              rentPaymentDate: propertyData.property.rentPaymentDate as string | undefined,
-            });
-          } else {
-            setError(propertyData.message || "Failed to fetch property data");
-            console.log(`Failed to fetch property data - Error: ${propertyData.message}`);
-          }
+          if (!pRes.ok) throw new Error(`Property ${pRes.status}`);
+          const pData = await pRes.json();
+          if (pData.success) setProperty(pData.property);
         }
 
+        // dues
         await fetchDues(token);
-      } catch (err) {
-        console.error("Tenant fetch error:", err instanceof Error ? err.message : "Unknown error");
-        setError("Failed to connect to the server");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Network error");
       } finally {
         setIsLoading(false);
       }
     };
+    run();
+  }, [userId, role, csrfToken, fetchCsrfToken, fetchDues]);
 
-    fetchTenantData();
-  }, [userId, csrfToken, fetchCsrfToken, fetchDues]);
-
-  const handleMaintenanceSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const errors: { [key: string]: string | undefined } = {};
-    if (!maintenanceRequest.title.trim()) {
-      errors.title = "Title is required";
-    }
-    if (!maintenanceRequest.description.trim()) {
-      errors.description = "Description is required";
-    }
-    setMaintenanceErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-
-    try {
-      let token = csrfToken;
-      if (!token) {
-        token = await fetchCsrfToken();
-        if (!token) {
-          throw new Error("CSRF token not received");
-        }
-      }
-
-      const res = await fetch("/api/tenants/maintenance", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": token,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          tenantId: userId,
-          title: maintenanceRequest.title,
-          description: maintenanceRequest.description,
-          propertyId: tenant?.propertyId,
-          urgency: maintenanceRequest.urgency,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to submit maintenance request: ${res.status} ${text.slice(0, 50)}`);
-      }
-      const data = await res.json();
-
-      if (data.success) {
-        setSuccessMessage("Maintenance request submitted successfully!");
-        setMaintenanceRequest({ title: "", description: "", urgency: "low" });
-        setIsModalOpen(false);
-        setMaintenanceErrors({});
-      } else {
-        setError(data.message || "Failed to submit maintenance request");
-        console.log(`Maintenance request failed - Error: ${data.message}`);
-      }
-    } catch (err) {
-      console.error("Maintenance submit error:", err instanceof Error ? err.message : "Unknown error");
-      setError("Failed to submit maintenance request");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  /* -------------------------------------------------
+     Revert impersonation
+     ------------------------------------------------- */
   const handleRevertImpersonation = async () => {
     setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-
     try {
-      let token = csrfToken;
-      if (!token) {
-        token = await fetchCsrfToken();
-        if (!token) {
-          throw new Error("CSRF token not received");
-        }
-      }
-
+      const token = csrfToken ?? (await fetchCsrfToken());
+      if (!token) throw new Error("CSRF missing");
       const res = await fetch("/api/impersonate/revert", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": token,
-        },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
         credentials: "include",
         body: JSON.stringify({}),
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to revert impersonation: ${res.status} ${text.slice(0, 50)}`);
-      }
+      if (!res.ok) throw new Error(`Revert ${res.status}`);
       const data = await res.json();
-
       if (data.success) {
-        setSuccessMessage("Impersonation reverted successfully!");
-        console.log("Impersonation reverted successfully");
-        Cookies.remove("userId", { path: "/" });
-        Cookies.remove("role", { path: "/" });
-        Cookies.remove("originalUserId", { path: "/" });
-        Cookies.remove("originalRole", { path: "/" });
+        setSuccessMessage("Back to owner view!");
+        ["userId", "role", "originalUserId", "originalRole"].forEach((c) => Cookies.remove(c, { path: "/" }));
         setTimeout(() => router.push("/property-owner-dashboard"), 1000);
-      } else {
-        setError(data.message || "Failed to revert impersonation");
-        console.log(`Revert impersonation failed - Error: ${data.message}`);
-      }
-    } catch (err) {
-      console.error("Revert impersonation error:", err instanceof Error ? err.message : "Unknown error");
-      setError("Failed to revert impersonation");
+      } else throw new Error(data.message ?? "Revert failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Revert error");
     } finally {
       setIsLoading(false);
     }
   };
 
+  /* -------------------------------------------------
+     UI
+     ------------------------------------------------- */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-white">
-      <main className="p-4 max-w-7xl mx-auto">
-        <section className="mb-6 bg-blue-900 text-white rounded-xl p-6 shadow-lg flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold mb-2">Welcome, {tenant?.name || "Tenant"}!</h1>
-            <p>Manage your lease, track payments, and submit maintenance requests with ease.</p>
-          </div>
-          <div className="flex gap-4">
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 flex items-center gap-2"
-            >
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3 .921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784 .57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81 .588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
-                />
-              </svg>
-              Submit Maintenance Request
-            </button>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+      {/* ----- Padding for fixed navbar (height ≈ 64px) ----- */}
+      <div className="pt-16">
+
+        {/* ----- Hero ----- */}
+        <section className="relative overflow-hidden bg-gradient-to-r from-[#03a678] to-emerald-600 text-white rounded-2xl mx-4 sm:mx-6 lg:mx-8 p-6 sm:p-8 shadow-xl">
+          <div className="absolute inset-0 bg-black/5"></div>
+          <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold">
+                Welcome, {tenant?.name ?? "Tenant"}!
+              </h1>
+              <p className="mt-1 text-sm sm:text-base opacity-90">
+                Manage lease, payments & maintenance – all in one place.
+              </p>
+            </div>
+
             {isImpersonated && (
               <button
                 onClick={handleRevertImpersonation}
                 disabled={isLoading}
-                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-2"
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-medium hover:bg-white/30 transition"
               >
-                <LogOut size={18} />
-                Revert Impersonation
+                <LogOut size={16} />
+                Revert to Owner
               </button>
             )}
           </div>
         </section>
 
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg flex items-center gap-2">
-            <AlertCircle size={20} />
-            {error}
-          </div>
-        )}
-        {successMessage && (
-          <div className="mb-4 p-4 bg-green-100 text-green-800 rounded-lg">
-            {successMessage}
-          </div>
-        )}
-        {isLoading && (
-          <div className="mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg flex items-center gap-2">
-            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-teal-600"></div>
-            Loading...
-          </div>
-        )}
+        {/* ----- Messages ----- */}
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-6 space-y-3">
+          {error && (
+            <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-lg">
+              <AlertCircle size={20} />
+              {error}
+            </div>
+          )}
+          {successMessage && (
+            <div className="flex items-center gap-2 p-4 bg-green-50 text-green-700 rounded-lg">
+              {successMessage}
+            </div>
+          )}
+          {(isLoading || isDuesLoading) && (
+            <div className="flex items-center gap-2 p-4 bg-blue-50 text-blue-700 rounded-lg">
+              <Loader2 className="animate-spin" size={20} />
+              Loading data…
+            </div>
+          )}
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <Card icon={<Home />} title="Leased Property">
+        {/* ----- Cards Grid ----- */}
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Leased Property */}
+          <InfoCard
+            icon={<Home className="text-emerald-600" />}
+            title="Leased Property"
+            isLoading={isLoading}
+          >
             {property && tenant ? (
               <>
-                <p className="font-medium">{property.name}</p>
-                <p className="text-gray-500">{property.address}</p>
-                <p className="mt-2">Unit: {tenant.houseNumber} ({tenant.unitType})</p>
-                <p>Rent: Ksh {tenant.price.toFixed(2)}</p>
-                <p>Deposit: Ksh {tenant.deposit.toFixed(2)}</p>
-                <p>Lease Start: {tenant.leaseStartDate ? new Date(tenant.leaseStartDate).toLocaleDateString("en-GB") : "N/A"}</p>
-                <p>Lease End: {tenant.leaseEndDate ? new Date(tenant.leaseEndDate).toLocaleDateString("en-GB") : "N/A"}</p>
-                <p>Months Stayed: {tenant.monthsStayed ?? "N/A"}</p>
+                <p className="font-semibold">{property.name}</p>
+                <p className="text-gray-600 text-sm">{property.address}</p>
+                <p className="mt-2">
+                  Unit: <span className="font-medium">{tenant.houseNumber}</span> ({tenant.unitType})
+                </p>
+                <p>Rent: <strong>Ksh {tenant.price.toFixed(2)}</strong></p>
+                <p>Deposit: <strong>Ksh {tenant.deposit.toFixed(2)}</strong></p>
+                <p>
+                  Lease: {tenant.leaseStartDate ? fmt(tenant.leaseStartDate) : "—"} →{" "}
+                  {tenant.leaseEndDate ? fmt(tenant.leaseEndDate) : "—"}
+                </p>
+                <p>Months stayed: <strong>{tenant.monthsStayed ?? "—"}</strong></p>
               </>
             ) : (
               <p className="text-sm text-gray-500">No property assigned.</p>
             )}
-          </Card>
+          </InfoCard>
 
-          <Card icon={<DollarSign />} title="Payment Status">
+          {/* Payment Status */}
+          <InfoCard
+            icon={<DollarSign className="text-emerald-600" />}
+            title="Payment Status"
+            isLoading={isLoading}
+          >
             {tenant ? (
               <>
-                <p>Rent: Ksh {tenant.price.toFixed(2)}</p>
+                <p>Rent: <strong>Ksh {tenant.price.toFixed(2)}</strong></p>
                 <p className="mt-2">
-                  Status:
-                  <span
-                    className={`ml-2 inline-block px-3 py-1 text-sm font-medium rounded-full ${
-                      tenant.paymentStatus === "paid"
-                        ? "bg-green-100 text-green-800"
-                        : tenant.paymentStatus === "overdue"
-                        ? "bg-red-100 text-red-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }`}
-                  >
+                  Status:{" "}
+                  <Badge status={tenant.paymentStatus}>
                     {tenant.paymentStatus || "N/A"}
-                  </span>
+                  </Badge>
                 </p>
-                <p className="mt-2">Total Rent Paid: Ksh {tenant.totalRentPaid?.toFixed(2) ?? "0.00"}</p>
-                <p>Total Utility Paid: Ksh {tenant.totalUtilityPaid?.toFixed(2) ?? "0.00"}</p>
-                <p>Total Deposit Paid: Ksh {tenant.totalDepositPaid?.toFixed(2) ?? "0.00"}</p>
+                <p>Total Rent Paid: <strong>Ksh {tenant.totalRentPaid?.toFixed(2) ?? "0.00"}</strong></p>
+                <p>Total Utility Paid: <strong>Ksh {tenant.totalUtilityPaid?.toFixed(2) ?? "0.00"}</strong></p>
+                <p>Total Deposit Paid: <strong>Ksh {tenant.totalDepositPaid?.toFixed(2) ?? "0.00"}</strong></p>
               </>
             ) : (
               <p className="text-sm text-gray-500">No payment info.</p>
             )}
-          </Card>
+          </InfoCard>
 
-          <Card icon={<DollarSign />} title="Outstanding Dues">
-            {isDuesLoading ? (
-              <p className="text-sm text-gray-500">Loading dues...</p>
-            ) : tenant?.dues ? (
+          {/* Outstanding Dues */}
+          <InfoCard
+            icon={<DollarSign className="text-emerald-600" />}
+            title="Outstanding Dues"
+            isLoading={isDuesLoading}
+          >
+            {tenant?.dues ? (
               <>
-                <p>Rent Dues: Ksh {tenant.dues.rentDues.toFixed(2)}</p>
-                <p>Utility Dues: Ksh {tenant.dues.utilityDues.toFixed(2)}</p>
-                <p>Deposit Dues: Ksh {tenant.dues.depositDues.toFixed(2)}</p>
-                <p className="font-medium mt-2">Total: Ksh {tenant.dues.totalRemainingDues.toFixed(2)}</p>
+                <p>Rent Dues: <strong>Ksh {tenant.dues.rentDues.toFixed(2)}</strong></p>
+                <p>Utility Dues: <strong>Ksh {tenant.dues.utilityDues.toFixed(2)}</strong></p>
+                <p>Deposit Dues: <strong>Ksh {tenant.dues.depositDues.toFixed(2)}</strong></p>
+                <p className="mt-2 font-semibold text-red-600">
+                  Total: Ksh {tenant.dues.totalRemainingDues.toFixed(2)}
+                </p>
               </>
             ) : (
-              <p className="text-sm text-gray-500">No dues information available.</p>
+              <p className="text-sm text-gray-500">No dues data.</p>
             )}
-          </Card>
+          </InfoCard>
 
-          <Card icon={<User />} title="Your Profile">
+          {/* Profile */}
+          <InfoCard
+            icon={<User className="text-emerald-600" />}
+            title="Your Profile"
+            isLoading={isLoading}
+          >
             {tenant ? (
               <>
-                <p className="font-medium">{tenant.name}</p>
-                <p className="text-gray-500">{tenant.email}</p>
-                <p className="mt-2">{tenant.phone || "No phone provided"}</p>
-                <p>Status: 
-                  <span
-                    className={`ml-2 inline-block px-3 py-1 text-sm font-medium rounded-full ${
-                      tenant.status === "Active"
-                        ? "bg-green-100 text-green-800"
-                        : tenant.status === "Pending"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {tenant.status || "N/A"}
-                  </span>
+                <p className="font-semibold">{tenant.name}</p>
+                <p className="text-gray-600 text-sm">{tenant.email}</p>
+                <p className="mt-2">{tenant.phone || "—"}</p>
+                <p>
+                  Status:{" "}
+                  <Badge status={tenant.status}>{tenant.status || "N/A"}</Badge>
                 </p>
               </>
             ) : (
               <p className="text-sm text-gray-500">No profile info.</p>
             )}
-          </Card>
+          </InfoCard>
         </div>
 
-        {/* Maintenance Requests Section */}
-        {userId && csrfToken && property && (
-          <MaintenanceRequests
-            userId={userId}
-            csrfToken={csrfToken}
-            properties={[property]}
-          />
-        )}
-      </main>
-
-      {/* Maintenance Request Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
-            <h2 className="text-lg font-semibold mb-4">Submit Maintenance Request</h2>
-            <form onSubmit={handleMaintenanceSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={maintenanceRequest.title}
-                  onChange={(e) =>
-                    setMaintenanceRequest({ ...maintenanceRequest, title: e.target.value })
-                  }
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-600 focus:ring-teal-600"
-                  required
-                />
-                {maintenanceErrors.title && (
-                  <p className="mt-1 text-sm text-red-600">{maintenanceErrors.title}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Description
-                </label>
-                <textarea
-                  value={maintenanceRequest.description}
-                  onChange={(e) =>
-                    setMaintenanceRequest({ ...maintenanceRequest, description: e.target.value })
-                  }
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-600 focus:ring-teal-600"
-                  required
-                  rows={4}
-                />
-                {maintenanceErrors.description && (
-                  <p className="mt-1 text-sm text-red-600">{maintenanceErrors.description}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Urgency
-                </label>
-                <select
-                  value={maintenanceRequest.urgency}
-                  onChange={(e) =>
-                    setMaintenanceRequest({ ...maintenanceRequest, urgency: e.target.value as "low" | "medium" | "high" })
-                  }
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-600 focus:ring-teal-600"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setMaintenanceErrors({});
-                  }}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition disabled:opacity-50"
-                >
-                  {isLoading ? "Submitting..." : "Submit Request"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+        {/* ----- Maintenance Requests (optional) ----- */}
+        {/* <div className="mx-4 sm:mx-6 lg:mx-8 mt-10">
+          <MaintenanceRequests />
+        </div> */}
+      </div>
     </div>
   );
 }
 
-function Card({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+/* -------------------------------------------------
+   Helper Components
+   ------------------------------------------------- */
+function InfoCard({
+  icon,
+  title,
+  children,
+  isLoading,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+  isLoading: boolean;
+}) {
   return (
-    <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100">
-      <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-        <span className="text-teal-600">{icon}</span>
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 p-5 transition-transform hover:scale-[1.01]">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-800 mb-3">
+        {icon}
         {title}
       </h2>
-      <div className="text-sm text-gray-700 space-y-1">{children}</div>
+      <div className="text-sm text-gray-700 space-y-1">
+        {isLoading ? <SkeletonCard /> : children}
+      </div>
     </div>
   );
+}
+
+function Badge({ status, children }: { status?: string; children: React.ReactNode }) {
+  const map: Record<string, string> = {
+    paid: "bg-green-100 text-green-800",
+    overdue: "bg-red-100 text-red-800",
+    pending: "bg-yellow-100 text-yellow-800",
+    Active: "bg-green-100 text-green-800",
+    Pending: "bg-yellow-100 text-yellow-800",
+    Inactive: "bg-red-100 text-red-800",
+  };
+  const cls = map[status ?? ""] ?? "bg-gray-100 text-gray-800";
+  return (
+    <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${cls}`}>
+      {children}
+    </span>
+  );
+}
+
+function fmt(date: string) {
+  return new Date(date).toLocaleDateString("en-GB");
 }

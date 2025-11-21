@@ -10,6 +10,7 @@ import {
   CreditCard,
   Settings,
   LogOut,
+  Wrench,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import Image from "next/image";
@@ -64,7 +65,11 @@ export default function TenantDashboardLayout({
       label: "Payments",
       icon: <CreditCard size={18} />,
     },
-
+    {
+      href: "/tenant-dashboard/maintenance",
+      label: "Maintenance",
+      icon: <Wrench size={18} />,
+    },
     {
       href: "/tenant-dashboard/settings",
       label: "Settings",
@@ -109,91 +114,127 @@ export default function TenantDashboardLayout({
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100">
-      {/* Navbar */}
-      <header className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 shadow px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            className="sm:hidden text-[#0a0a23]"
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            aria-label="Toggle Sidebar"
-          >
-            {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-          <h1 className="text-xl font-semibold text-[#0a0a23]">Tenant Dashboard</h1>
-        </div>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-gray-700">
-            {isLoading ? "Loading..." : error ? "Tenant" : name}
-          </span>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-gray-700 hover:text-[#03a678]"
-          >
-            <LogOut size={18} />
-            <span>Logout</span>
-          </button>
+    <div className="flex flex-col min-h-screen bg-gray-50">
+      {/* Sleek Professional Navbar */}
+      <header className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+        <div className="px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              className="lg:hidden text-gray-700 hover:text-[#03a678] transition-colors p-1.5 rounded-md hover:bg-gray-100"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              aria-label="Toggle Sidebar"
+            >
+              {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-[#03a678] rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">S</span>
+              </div>
+              <h1 className="text-lg font-bold text-gray-900 hidden sm:block">
+                Smart Choice
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-2 text-sm text-gray-600">
+              <div className="w-8 h-8 bg-gradient-to-br from-[#03a678] to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
+                {isLoading ? "?" : error ? "T" : name.charAt(0).toUpperCase()}
+              </div>
+              <span className="font-medium">
+                {isLoading ? "Loading..." : error ? "Tenant" : name}
+              </span>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#03a678] transition-colors px-3 py-1.5 rounded-md hover:bg-gray-50"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-16 left-0 z-30 h-[calc(100vh-4rem)] w-64 bg-white text-[#0a0a23] px-6 py-6 border-r border-gray-200 shadow-md transform transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} sm:translate-x-0 sm:block`}
+        className={`fixed top-16 left-0 z-30 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 shadow-lg transform transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:block`}
       >
-        <div className="flex justify-center mb-6">
-          <Image src="/logo.png" alt="Logo" width={56} height={56} className="object-contain" />
+        <div className="p-6">
+          <div className="flex justify-center mb-6">
+            <Image
+              src="/logo.png"
+              alt="Smart Choice Logo"
+              width={64}
+              height={64}
+              className="object-contain rounded-lg shadow-sm"
+            />
+          </div>
+
+          <div className="text-center mb-8">
+            <p className="text-xs text-gray-500 uppercase tracking-wider">Welcome</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">
+              {isLoading ? "Loading..." : error ? "Tenant" : name}
+            </p>
+          </div>
+
+          <nav className="space-y-1">
+            {links.map(({ href, label, icon }) => {
+              const isActive = pathname === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 group
+                  ${
+                    isActive
+                      ? "bg-[#03a678] text-white shadow-md"
+                      : "text-gray-700 hover:bg-[#03a678]/5 hover:text-[#03a678]"
+                  }`}
+                >
+                  <span className={isActive ? "text-white" : "text-gray-500 group-hover:text-[#03a678]"}>
+                    {icon}
+                  </span>
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
-        <h2 className="text-center text-gray-700 font-semibold mb-6">
-          {isLoading ? "Loading..." : error ? "Error: Tenant" : `Welcome ${name}`}
-        </h2>
-        <nav className="flex flex-col gap-2">
-          {links.map(({ href, label, icon }) => {
-            const isActive = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setIsSidebarOpen(false)}
-                className={`flex items-center gap-3 px-4 py-2 rounded-md font-medium transition text-sm ${
-                  isActive
-                    ? "bg-[#03a678] text-white shadow"
-                    : "text-gray-700 hover:bg-[#03a678]/10 hover:text-[#03a678]"
-                }`}
-              >
-                {icon}
-                <span>{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 mt-16 sm:ml-64 p-6">{children}</main>
+      <main className="flex-1 pt-16 lg:ml-64 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">{children}</div>
+      </main>
 
-      {/* Overlay on mobile */}
+      {/* Mobile Overlay */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-20 sm:hidden"
+          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 shadow-inner py-4 text-center text-sm text-gray-600 mt-auto">
-        <span className="text-[#03a678] font-semibold">Smart Choice Rental Management</span>
-        <br />
-        Created by{" "}
-        <a
-          href="https://vickins-technologies-lv2h.vercel.app/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[#03a678] font-semibold hover:underline"
-        >
-          Vickins Technologies
-        </a>
-        . All rights reserved.
+      <footer className="bg-white border-t border-gray-200 py-5 text-center text-xs text-gray-500 mt-auto">
+        <p>
+          <span className="text-[#03a678] font-semibold">Smart Choice Rental Management</span>
+          <br className="sm:hidden" />
+          {" "}© {new Date().getFullYear()} Created by{" "}
+          <a
+            href="https://vickins-technologies-lv2h.vercel.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#03a678] font-semibold hover:underline"
+          >
+            Vickins Technologies
+          </a>
+          . All rights reserved.
+        </p>
       </footer>
     </div>
   );

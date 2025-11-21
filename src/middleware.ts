@@ -105,7 +105,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/list-properties": { roles: ["propertyOwner"], isApi: true },
   "/api/tenants": { roles: ["propertyOwner", "tenant"], isApi: true },
   "/api/tenant/profile": { roles: ["tenant"], isApi: true },
-  "/api/tenants/maintenance": { roles: ["tenant"], isApi: true },
+  "/api/tenants/maintenance": { roles: ["tenant", "propertyOwner"], isApi: true }, // ← BOTH
   "/api/update-wallet": { roles: ["propertyOwner"], isApi: true },
   "/api/impersonate": { roles: ["propertyOwner"], isApi: true },
   "/api/impersonate/revert": { roles: ["tenant"], isApi: true },
@@ -118,7 +118,6 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/property-listings": { roles: [], isApi: false },
 };
 
-// ADMIN API ROUTES — SKIP CSRF (Safe: cookies are httpOnly + role-checked)
 const ADMIN_API_PATHS = [
   "/api/admin/property-owners",
   "/api/admin/properties",
@@ -127,20 +126,18 @@ const ADMIN_API_PATHS = [
 ];
 
 export async function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname;
+  const fullPath = request.nextUrl.pathname;
+  const path = fullPath.split("?")[0]; // ← STRIP QUERY STRING
   const method = request.method;
 
-  // Skip static & HMR
   if (path.startsWith("/_next/") || path === "/favicon.ico") {
     return NextResponse.next();
   }
 
-  // Public routes
   if (path === "/api/public-properties" && method === "GET") {
     return NextResponse.next();
   }
 
-  // Redirect old property URLs
   if (path.match(/^\/properties\/[^\/]+$/)) {
     const id = path.split("/")[2];
     return NextResponse.redirect(new URL(`/property-listings/${id}`, request.url));
@@ -154,7 +151,6 @@ export async function middleware(request: NextRequest) {
     const role = cookies.get("role")?.value as Role;
     const userId = cookies.get("userId")?.value;
 
-    // CSRF Token Endpoint
     if (path === "/api/csrf-token") {
       const token = generateCsrfToken();
       const res = NextResponse.json({ success: true, csrfToken: token });
@@ -167,28 +163,25 @@ export async function middleware(request: NextRequest) {
       return res;
     }
 
-    // Find route config
     const matchedRoute = Object.keys(routeAccessMap).find(
       (r) => path === r || path.startsWith(r + "/")
     );
     const config = matchedRoute ? routeAccessMap[matchedRoute] : null;
 
     if (!config) {
-      return NextResponse.next(); // Allow unmatched
+      return NextResponse.next();
     }
 
     if (config.roles.length === 0) {
-      return NextResponse.next(); // Public
+      return NextResponse.next();
     }
 
-    // Auth check
     if (!userId || !role) {
       return config.isApi
         ? NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
         : NextResponse.redirect(new URL("/", request.url));
     }
 
-    // Role check
     if (!config.roles.includes(role)) {
       logger.warn("Forbidden role", { path, role, allowed: config.roles });
       return config.isApi
@@ -196,7 +189,6 @@ export async function middleware(request: NextRequest) {
         : NextResponse.redirect(new URL("/", request.url));
     }
 
-    // Tenant self-access
     if (path.startsWith("/api/tenants/") && role === "tenant") {
       const tenantId = path.split("/")[3];
       if (tenantId && tenantId !== userId) {
@@ -204,7 +196,6 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // ADMIN APIs: SKIP CSRF (safe + fast)
     const isAdminApi = ADMIN_API_PATHS.some(p => path.startsWith(p));
 
     if (config.isApi && method !== "GET") {

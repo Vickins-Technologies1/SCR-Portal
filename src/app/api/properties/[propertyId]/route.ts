@@ -25,8 +25,8 @@ export interface Property {
   managementFee?: number;
   status: string;
   rentPaymentDate?: number;
-  createdAt: Date;
-  updatedAt?: Date;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
 }
 
 interface Tenant {
@@ -44,8 +44,8 @@ interface Tenant {
   houseNumber: string;
   leaseStartDate: string;
   leaseEndDate: string;
-  createdAt: Date;
-  updatedAt?: Date;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
   walletBalance: number;
   status?: string;
 }
@@ -55,6 +55,15 @@ interface PropertyRequest {
   address?: string;
   unitTypes?: UnitType[];
 }
+
+// ===============================================
+// HELPER: Safe ISO String Conversion
+// ===============================================
+const toISO = (date: Date | string | undefined): string | undefined => {
+  if (!date) return undefined;
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? undefined : d.toISOString();
+};
 
 // ===============================================
 // HELPER: Tenant Status
@@ -136,16 +145,16 @@ export async function GET(
         ...property,
         _id: property._id.toString(),
         ownerId: property.ownerId,
-        createdAt: property.createdAt.toISOString(),
-        updatedAt: property.updatedAt?.toISOString(),
+        createdAt: toISO(property.createdAt),
+        updatedAt: toISO(property.updatedAt),
       },
       tenants: tenants.map(t => ({
         ...t,
         _id: t._id.toString(),
         propertyId: t.propertyId.toString(),
         ownerId: t.ownerId,
-        createdAt: t.createdAt.toISOString(),
-        updatedAt: t.updatedAt?.toISOString(),
+        createdAt: toISO(t.createdAt),
+        updatedAt: toISO(t.updatedAt),
         walletBalance: t.walletBalance ?? 0,
         status: getTenantStatus(t.leaseStartDate, t.leaseEndDate),
       })),
@@ -168,7 +177,7 @@ export async function PUT(
 ) {
   try {
     const csrfHeader = request.headers.get('X-CSRF-Token');
-    const isValidCsrf = validateCsrfToken(request, csrfHeader); // Synchronous
+    const isValidCsrf = validateCsrfToken(request, csrfHeader);
 
     if (!isValidCsrf) {
       return NextResponse.json(
@@ -231,7 +240,6 @@ export async function PUT(
       const currentTypes = new Set(existing.unitTypes.map(u => u.type));
       const newTypes = new Set(update.unitTypes.map(u => u.type));
 
-      // Validate each unit
       for (const u of update.unitTypes) {
         if (
           !u.type ||
@@ -271,9 +279,7 @@ export async function PUT(
       // === TENANT CONFLICT CHECK ===
       const tenants = await db.collection<Tenant>('tenants').find({ propertyId }).toArray();
 
-      // Track which current types are being removed
       const removedTypes = [...currentTypes].filter(t => !newTypes.has(t));
-
       if (removedTypes.length > 0) {
         const tenantsInRemoved = tenants.filter(t => removedTypes.includes(t.unitType));
         if (tenantsInRemoved.length > 0) {
@@ -285,7 +291,6 @@ export async function PUT(
         }
       }
 
-      // Prevent price/deposit change for types with tenants
       for (const t of tenants) {
         const newUnit = validated.find(v => v.type === t.unitType);
         if (newUnit && (newUnit.price !== t.price || newUnit.deposit !== t.deposit)) {
@@ -326,8 +331,8 @@ export async function PUT(
         ...result,
         _id: result._id.toString(),
         ownerId: result.ownerId,
-        createdAt: result.createdAt.toISOString(),
-        updatedAt: result.updatedAt?.toISOString(),
+        createdAt: toISO(result.createdAt),
+        updatedAt: toISO(result.updatedAt),
       },
     });
   } catch (error) {
