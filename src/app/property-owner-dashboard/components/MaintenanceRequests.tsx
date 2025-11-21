@@ -1,3 +1,5 @@
+
+// src/app/property-owner-dashboard/components/MaintenanceRequests.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -41,48 +43,58 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
     setRole(userRole ?? null);
   }, []);
 
-  useEffect(() => {
-    const fetchMaintenanceRequests = async () => {
-      setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
+useEffect(() => {
+  const fetchMaintenanceRequests = async () => {
+    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
 
-      try {
-        const res = await fetch(
-          `/api/tenants/maintenance?userId=${encodeURIComponent(userId)}&page=${currentPage}&limit=${requestsPerPage}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              "x-csrf-token": csrfToken,
-            },
-            credentials: "include",
-          }
-        );
+    try {
+      const res = await fetch("/api/property-owners/maintenance", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include", // Important: sends cookies (userId, role)
+      });
 
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`Fetch failed for /api/tenants/maintenance: ${res.status} ${text.slice(0, 50)}`);
-        }
-
-        const data = await res.json();
-        if (!data.success) throw new Error(data.message || "Failed to fetch maintenance requests");
-
-        setRequests(data.data.requests);
-        setTotalPages(Math.ceil(data.data.total / requestsPerPage));
-        console.log("Maintenance requests fetched:", data.data.requests);
-      } catch (err) {
-        console.error("Maintenance requests fetch error:", err);
-        setError(`Failed to load maintenance requests: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setIsLoading(false);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to fetch: ${res.status} ${text}`);
       }
-    };
 
-    if (userId && csrfToken) {
-      fetchMaintenanceRequests();
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.message || "Failed to fetch maintenance requests");
+      }
+
+      // The backend already returns formatted requests with tenantName
+      setRequests(data.data.requests);
+
+      // Since your backend currently returns ALL requests (no pagination yet),
+      // we'll handle pagination client-side for now:
+      const total = data.data.requests.length;
+      setTotalPages(Math.ceil(total / requestsPerPage));
+
+      console.log("Maintenance requests fetched:", data.data.requests);
+    } catch (err) {
+      console.error("Maintenance requests fetch error:", err);
+      setError(
+        `Failed to load maintenance requests: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    } finally {
+      setIsLoading(false);
     }
-  }, [userId, csrfToken, currentPage]);
+  };
+
+  if (userId && csrfToken) {
+    fetchMaintenanceRequests();
+  }
+}, [userId, csrfToken, currentPage]); // Note: currentPage will trigger refetch
 
   const handleStatusUpdate = async (requestId: string, newStatus: "Pending" | "In Progress" | "Resolved") => {
     setIsLoading(true);
