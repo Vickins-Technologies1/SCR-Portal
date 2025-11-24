@@ -92,6 +92,14 @@ function rateLimitMiddleware(handler: (req: NextRequest) => Promise<NextResponse
   };
 }
 
+// Routes that handle their own CSRF validation
+const SELF_HANDLED_CSRF_ROUTES = [
+  "/api/tenants/maintenance",
+  "/api/tenant/payments",
+  "/api/tenant/change-password",
+  "/api/tenant/profile", // PUT
+];
+
 const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/users": { roles: ["admin"], isApi: true },
   "/api/invoices/generate": { roles: ["admin"], isApi: true },
@@ -105,7 +113,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/list-properties": { roles: ["propertyOwner"], isApi: true },
   "/api/tenants": { roles: ["propertyOwner", "tenant"], isApi: true },
   "/api/tenant/profile": { roles: ["tenant"], isApi: true },
-  "/api/tenants/maintenance": { roles: ["tenant", "propertyOwner"], isApi: true }, // ← BOTH
+  "/api/tenants/maintenance": { roles: ["tenant", "propertyOwner"], isApi: true },
   "/api/update-wallet": { roles: ["propertyOwner"], isApi: true },
   "/api/impersonate": { roles: ["propertyOwner"], isApi: true },
   "/api/impersonate/revert": { roles: ["tenant"], isApi: true },
@@ -127,7 +135,7 @@ const ADMIN_API_PATHS = [
 
 export async function middleware(request: NextRequest) {
   const fullPath = request.nextUrl.pathname;
-  const path = fullPath.split("?")[0]; // ← STRIP QUERY STRING
+  const path = fullPath.split("?")[0];
   const method = request.method;
 
   if (path.startsWith("/_next/") || path === "/favicon.ico") {
@@ -151,6 +159,7 @@ export async function middleware(request: NextRequest) {
     const role = cookies.get("role")?.value as Role;
     const userId = cookies.get("userId")?.value;
 
+    // Generate CSRF token endpoint
     if (path === "/api/csrf-token") {
       const token = generateCsrfToken();
       const res = NextResponse.json({ success: true, csrfToken: token });
@@ -198,8 +207,13 @@ export async function middleware(request: NextRequest) {
 
     const isAdminApi = ADMIN_API_PATHS.some(p => path.startsWith(p));
 
+    // Fixed: Skip middleware CSRF for routes that validate themselves
     if (config.isApi && method !== "GET") {
-      const handler = isAdminApi
+      const shouldSkipCsrf = SELF_HANDLED_CSRF_ROUTES.some(route =>
+        path === route || path.startsWith(route + "/")
+      );
+
+      const handler = isAdminApi || shouldSkipCsrf
         ? async () => NextResponse.next()
         : csrfMiddleware(async () => NextResponse.next());
 

@@ -62,7 +62,7 @@ export default function PaymentsPage() {
     if (!id) {
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Please log in to view payments.", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: "Please log in to view payments.", timestamp: new Date().toISOString() },
       ]);
       setLoading(false);
       return;
@@ -83,7 +83,7 @@ export default function PaymentsPage() {
       } else {
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: data.message || "Failed to fetch CSRF token", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "error", text: data.message || "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
         ]);
         setLoading(false);
       }
@@ -91,7 +91,7 @@ export default function PaymentsPage() {
       console.error("Error fetching CSRF token:", err);
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Failed to fetch CSRF token", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: "Failed to fetch CSRF token", timestamp: new Date().toISOString() },
       ]);
       setLoading(false);
     }
@@ -117,7 +117,7 @@ export default function PaymentsPage() {
       if (!tenantData.success || !tenantData.tenant) {
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: tenantData.message || "Failed to fetch tenant data", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "error", text: tenantData.message || "Failed to fetch tenant data", timestamp: new Date().toISOString() },
         ]);
         setLoading(false);
         return;
@@ -142,20 +142,20 @@ export default function PaymentsPage() {
         if (fetchedPayments.length === 0) {
           setMessages((prev) => [
             ...prev,
-            { type: "error", text: "No payment records found.", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+            { type: "error", text: "No payment records found.", timestamp: new Date().toISOString() },
           ]);
         }
       } else {
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: paymentsData.message || "Failed to fetch payments", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "error", text: paymentsData.message || "Failed to fetch payments", timestamp: new Date().toISOString() },
         ]);
       }
     } catch (err) {
       console.error("Error fetching data:", err);
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Failed to connect to the server", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: "Failed to connect to the server", timestamp: new Date().toISOString() },
       ]);
     } finally {
       setLoading(false);
@@ -185,7 +185,7 @@ export default function PaymentsPage() {
     if (!csrfToken || !tenantId || !tenant?.propertyId) {
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Missing CSRF token, tenant ID, or property ID", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: "Missing CSRF token, tenant ID, or property ID", timestamp: new Date().toISOString() },
       ]);
       throw new Error("Missing CSRF token, tenant ID, or property ID");
     }
@@ -206,13 +206,13 @@ export default function PaymentsPage() {
       if (data.success) {
         setMessages((prev) => [
           ...prev,
-          { type: "success", text: data.message || "Transaction status retrieved successfully", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "success", text: data.message || "Transaction status retrieved successfully", timestamp: new Date().toISOString() },
         ]);
         return data.status;
       } else {
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: data.message || "Failed to check transaction status", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "error", text: data.message || "Failed to check transaction status", timestamp: new Date().toISOString() },
         ]);
         throw new Error(data.message || "Failed to check transaction status");
       }
@@ -220,7 +220,7 @@ export default function PaymentsPage() {
       console.error("Error checking transaction status:", err);
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: `Failed to check transaction status: ${err instanceof Error ? err.message : "Unknown error"}`, timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: `Failed to check transaction status: ${err instanceof Error ? err.message : "Unknown error"}`, timestamp: new Date().toISOString() },
       ]);
       throw err;
     }
@@ -241,7 +241,7 @@ export default function PaymentsPage() {
             : !validatePhoneNumber(phoneNumber)
             ? "Please enter a valid phone number (e.g., +2547xxxxxxxx or 07xxxxxxxx)."
             : "CSRF token not available.",
-          timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString(),
+          timestamp: new Date().toISOString(),
         },
       ]);
       setIsProcessing(true);
@@ -274,7 +274,7 @@ export default function PaymentsPage() {
       if (!paymentData.success) {
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: paymentData.message || "Failed to initiate payment. Please check your phone number format (+2547xxxxxxxx or 07xxxxxxxx).", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "error", text: paymentData.message || "Failed to initiate payment. Please check your phone number format (+2547xxxxxxxx or 07xxxxxxxx).", timestamp: new Date().toISOString() },
         ]);
         setIsProcessing(false);
         return;
@@ -282,7 +282,7 @@ export default function PaymentsPage() {
 
       setMessages((prev) => [
         ...prev,
-        { type: "success", text: paymentData.message || "STK Push initiated successfully. Please check your phone.", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "success", text: paymentData.message || "STK Push initiated successfully. Please check your phone.", timestamp: new Date().toISOString() },
       ]);
 
       const { transaction_request_id } = paymentData;
@@ -298,7 +298,7 @@ export default function PaymentsPage() {
       if (status === "completed") {
         setMessages((prev) => [
           ...prev,
-          { type: "success", text: "Payment completed successfully! Confirmation sent to your email and phone.", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "success", text: "Payment completed successfully! Confirmation sent to your email and phone.", timestamp: new Date().toISOString() },
         ]);
         await fetchData();
         setIsModalOpen(false);
@@ -314,7 +314,7 @@ export default function PaymentsPage() {
             : "Payment timed out. User was not reachable.";
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: errorMessage, timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "error", text: errorMessage, timestamp: new Date().toISOString() },
         ]);
         setIsProcessing(false);
       }
@@ -322,7 +322,7 @@ export default function PaymentsPage() {
       console.error("Payment error:", err);
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Failed to process payment. Please check your connection.", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: "Failed to process payment. Please check your connection.", timestamp: new Date().toISOString() },
       ]);
       setIsProcessing(false);
     }
@@ -338,7 +338,7 @@ export default function PaymentsPage() {
     if (!csrfToken || !tenantId) {
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Missing CSRF token or tenant ID", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: "Missing CSRF token or tenant ID", timestamp: new Date().toISOString() },
       ]);
       return;
     }
@@ -371,19 +371,19 @@ export default function PaymentsPage() {
         window.URL.revokeObjectURL(url);
         setMessages((prev) => [
           ...prev,
-          { type: "success", text: "Receipt generated and downloaded successfully", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "success", text: "Receipt generated and downloaded successfully", timestamp: new Date().toISOString() },
         ]);
       } else {
         setMessages((prev) => [
           ...prev,
-          { type: "error", text: data.message || "Failed to generate receipt", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+          { type: "error", text: data.message || "Failed to generate receipt", timestamp: new Date().toISOString() },
         ]);
       }
     } catch (err) {
       console.error("Error generating receipt:", err);
       setMessages((prev) => [
         ...prev,
-        { type: "error", text: "Failed to generate receipt", timestamp: new Date("2025-08-07T15:26:00+03:00").toISOString() },
+        { type: "error", text: "Failed to generate receipt", timestamp: new Date().toISOString() },
       ]);
     }
   };
@@ -391,25 +391,28 @@ export default function PaymentsPage() {
   if (!isClient) return null;
 
   return (
-    <div className="min-h-screen bg-white p-4 sm:p-6 font-sans">
-      <div className="max-w-full sm:max-w-7xl mx-auto space-y-6 sm:space-y-8">
+    <div className="min-h-screen bg-gray-50 pt-16 sm:pt-20 lg:pt-24">
+      <div className="max-w-7xl mx-auto space-y-6 px-4 sm:px-6 lg:px-8">
+
         {/* Header Section */}
-        <section className="bg-[#1E3A8A] text-white rounded-xl sm:rounded-2xl p-6 sm:p-8 shadow-xl">
+        <section className="bg-[#1E3A8A] text-white rounded-2xl p-6 sm:p-8 shadow-xl">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Payment Dashboard</h1>
-          <p className="text-gray-200 text-xs sm:text-sm">Manage your rent, deposit and utility payments seamlessly.</p>
+          <p className="text-gray-200 text-sm opacity-90">Manage your rent, deposit and utility payments seamlessly.</p>
+          
           {tenant && (
-            <div className="mt-4 bg-[#1E3A8A]/20 p-4 rounded-lg">
-              <p className="text-xs sm:text-sm font-medium">
+            <div className="mt-5 bg-white/10 backdrop-blur-sm p-4 rounded-xl">
+              <p className="text-sm font-medium">
                 Wallet Balance:{" "}
-                <span className="font-bold text-base sm:text-lg text-[#6EE7B7]">
+                <span className="font-bold text-lg sm:text-2xl text-[#6EE7B7]">
                   KES {typeof tenant.walletBalance === "number" ? tenant.walletBalance.toLocaleString() : "0"}
                 </span>
               </p>
             </div>
           )}
+
           <button
             onClick={() => setIsModalOpen(true)}
-            className="mt-4 sm:mt-6 bg-[#6EE7B7] text-[#1E3A8A] font-semibold px-4 sm:px-6 py-2 rounded-full shadow-md hover:bg-[#4ADE80] transition-all duration-300 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+            className="mt-6 w-full sm:w-auto bg-[#6EE7B7] text-[#1E3A8A] font-bold px-6 py-3.5 rounded-full shadow-lg hover:bg-[#4ADE80] transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
             disabled={!tenantId || !tenant?.propertyId || !csrfToken}
           >
             Make a Payment
@@ -417,271 +420,299 @@ export default function PaymentsPage() {
         </section>
 
         {/* Payments Table */}
-        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg overflow-x-auto border border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Type</th>
-                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Amount (KES)</th>
-                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Status</th>
-                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Payment Date</th>
-                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Transaction ID</th>
-                <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs sm:text-sm font-semibold text-[#1E3A8A] whitespace-nowrap">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300">
+            <table className="w-full min-w-[800px] divide-y divide-gray-200">
+              <thead className="bg-gradient-to-r from-[#1E3A8A] to-[#1E40AF] text-white sticky top-0 z-10">
                 <tr>
-                  <td colSpan={6} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500">
-                    <div className="flex justify-center items-center">
-                      <div className="animate-spin w-5 sm:w-6 h-5 sm:h-6 border-4 border-[#1E3A8A] border-t-transparent rounded-full"></div>
-                      <span className="ml-2 text-sm">Loading payments...</span>
-                    </div>
-                  </td>
+                  <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider">Trans. ID</th>
+                  <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider">Action</th>
                 </tr>
-              ) : displayedPayments.length > 0 ? (
-                displayedPayments.map((p) => (
-                  <motion.tr
-                    key={p._id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="hover:bg-gray-50 transition-colors text-xs sm:text-sm"
-                  >
-                    <td className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-[#1E3A8A] capitalize">{p.type || "Other"}</td>
-                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-600">KES {p.amount.toLocaleString()}</td>
-                    <td className="px-4 sm:px-6 py-3 sm:py-4">
-                      <span
-                        className={`inline-flex px-2 sm:px-3 py-1 rounded-full text-xs font-semibold ${
-                          p.status === "completed"
-                            ? "bg-[#6EE7B7]/20 text-[#6EE7B7]"
-                            : p.status === "pending"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-red-100 text-red-700"
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-gray-700">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12">
+                      <div className="flex flex-col items-center">
+                        <div className="animate-spin w-10 h-10 border-4 border-[#1E3A8A] border-t-transparent rounded-full mb-3"></div>
+                        <span className="text-sm text-gray-500">Loading payments...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : displayedPayments.length > 0 ? (
+                  displayedPayments.map((p) => (
+                    <motion.tr
+                      key={p._id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="hover:bg-gray-50 transition-colors text-xs sm:text-sm"
+                    >
+                      <td className="px-4 py-4 font-semibold text-[#1E3A8A] capitalize">{p.type || "Other"}</td>
+                      <td className="px-4 py-4">KES {p.amount.toLocaleString()}</td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${
+                            p.status === "completed"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : p.status === "pending"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap text-gray-600">
+                        {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-KE") : "—"}
+                      </td>
+                      <td className="px-4 py-4 font-mono text-xs text-gray-600 max-w-[100px] truncate" title={p.transactionId}>
+                        {p.transactionId}
+                      </td>
+                      <td className="px-4 py-4">
+                        <button
+                          onClick={() => generateReceipt(p._id)}
+                          disabled={p.status !== "completed"}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-[#1E3A8A] rounded-lg hover:bg-[#1E40AF] disabled:bg-gray-300 disabled:text-gray-500 transition-all"
+                        >
+                          <Download size={14} />
+                          <span className="hidden xxs:inline">Receipt</span>
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="text-center py-16 text-gray-500">
+                      <p className="text-lg font-medium">No payment records found.</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 py-5 bg-gray-50 border-t">
+              <div className="text-xs sm:text-sm text-gray-600 order-2 sm:order-1">
+                Page <strong>{page}</strong> of <strong>{totalPages}</strong> ({total} payments)
+              </div>
+
+              <div className="flex items-center gap-2 order-1 sm:order-2 flex-wrap justify-center">
+                <button
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page === 1 || loading}
+                  className="flex items-center gap-1 px-4 py-2.5 text-xs font-medium rounded-lg bg-white border border-gray-300 text-[#1E3A8A] hover:bg-[#6EE7B7]/10 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronLeft size={16} /> Prev
+                </button>
+
+                <div className="flex gap-1.5">
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let num;
+                    if (totalPages <= 5) num = i + 1;
+                    else if (page <= 3) num = i + 1;
+                    else if (page >= totalPages - 2) num = totalPages - 4 + i;
+                    else num = page - 2 + i;
+
+                    return (
+                      <button
+                        key={num}
+                        onClick={() => handlePageChange(num)}
+                        className={`w-9 h-9 rounded-lg text-xs font-medium transition ${
+                          num === page
+                            ? "bg-[#1E3A8A] text-white"
+                            : "bg-white border border-gray-300 text-[#1E3A8A] hover:bg-[#6EE7B7]/10"
                         }`}
                       >
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-600 whitespace-nowrap">
-                      {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString() : "—"}
-                    </td>
-                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-gray-600 break-all">{p.transactionId}</td>
-                    <td className="px-4 sm:px-6 py-3 sm:py-4">
-                      <button
-                        onClick={() => generateReceipt(p._id)}
-                        disabled={p.status !== "completed"}
-                        className="flex items-center px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] disabled:bg-gray-300 disabled:text-gray-400 transition-all duration-300"
-                      >
-                        <Download size={14} className="mr-1" /> Generate Receipt
+                        {num}
                       </button>
-                    </td>
-                  </motion.tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="px-4 sm:px-6 py-4 sm:py-6 text-center text-gray-500 text-sm">
-                    No payment records found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    );
+                  })}
+                  {totalPages > 5 && page < totalPages - 2 && (
+                    <>
+                      <span className="px-2 text-gray-400">...</span>
+                      <button
+                        onClick={() => handlePageChange(totalPages)}
+                        className="w-9 h-9 rounded-lg text-xs font-medium bg-white border border-gray-300 text-[#1E3A8A] hover:bg-[#6EE7B7]/10"
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page === totalPages || loading}
+                  className="flex items-center gap-1 px-4 py-2.5 text-xs font-medium rounded-lg bg-white border border-gray-300 text-[#1E3A8A] hover:bg-[#6EE7B7]/10 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  Next <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 sm:mt-6 bg-white p-4 rounded-xl sm:rounded-2xl shadow-md border border-gray-200">
-            <button
-              onClick={() => handlePageChange(page - 1)}
-              disabled={page === 1 || loading}
-              className="flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-[#1E3A8A] bg-[#6EE7B7]/20 rounded-full hover:bg-[#6EE7B7]/30 disabled:bg-gray-100 disabled:text-gray-400 transition-all duration-300"
-            >
-              <ChevronLeft size={14} className="mr-1" />
-              Previous
-            </button>
-            <div className="flex items-center gap-2">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => handlePageChange(p)}
-                  disabled={p === page || loading}
-                  className={`px-3 py-1 text-xs sm:text-sm font-medium rounded-full ${
-                    p === page
-                      ? "bg-[#1E3A8A] text-white"
-                      : "bg-gray-100 text-[#1E3A8A] hover:bg-[#6EE7B7]/20"
-                  } transition-all duration-300`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-            <span className="text-xs sm:text-sm text-[#1E3A8A] font-medium">
-              Page {page} of {totalPages} ({total} total payments)
-            </span>
-            <button
-              onClick={() => handlePageChange(page + 1)}
-              disabled={page === totalPages || loading}
-              className="flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-[#1E3A8A] bg-[#6EE7B7]/20 rounded-full hover:bg-[#6EE7B7]/30 disabled:bg-gray-100 disabled:text-gray-400 transition-all duration-300"
-            >
-              Next
-              <ChevronRight size={14} className="ml-1" />
-            </button>
-          </div>
-        )}
-
         {/* Payment Modal */}
-        <AnimatePresence>
+        <AnimatePresence key="payment-modal">
           {isModalOpen && (
             <motion.div
-              key="payment-modal"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4"
+              onClick={() => setIsModalOpen(false)}
             >
               <motion.div
-                initial={{ scale: 0.95, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 20 }}
-                className="bg-white rounded-xl sm:rounded-2xl p-6 sm:p-8 w-full max-w-md sm:max-w-lg shadow-2xl"
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 100, opacity: 0 }}
+                transition={{ type: "spring", damping: 30 }}
+                className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
-                <h2 className="text-xl sm:text-2xl font-bold text-[#1E3A8A] mb-4 sm:mb-6">Make a Payment</h2>
-                <label className="block mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-[#1E3A8A]">Payment Type</span>
-                  <select
-                    className="mt-1 block w-full rounded-lg border border-gray-200 py-2 sm:py-3 px-3 sm:px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A] text-sm"
-                    value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value as "Rent" | "Utility" | "Deposit" | "Other")}
-                  >
-                    <option value="Rent">Rent</option>
-                    <option value="Utility">Utility</option>
-                    <option value="Deposit">Deposit</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </label>
-                <label className="block mb-4">
-                  <span className="text-xs sm:text-sm font-medium text-[#1E3A8A]">Amount (KES)</span>
-                  <input
-                    type="number"
-                    className="mt-1 block w-full rounded-lg border border-gray-200 py-2 sm:py-3 px-3 sm:px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A] text-sm"
-                    value={amount || ""}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    min="10"
-                    required
-                  />
-                </label>
-                <label className="block mb-4 sm:mb-6">
-                  <span className="text-xs sm:text-sm font-medium text-[#1E3A8A]">Phone Number</span>
-                  <input
-                    type="text"
-                    className="mt-1 block w-full rounded-lg border border-gray-200 py-2 sm:py-3 px-3 sm:px-4 focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition-all bg-gray-50 text-[#1E3A8A] text-sm"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="+2547xxxxxxxx or 07xxxxxxxx"
-                    required
-                  />
-                </label>
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 sm:px-6 py-2 text-xs sm:text-sm font-medium text-[#1E3A8A] bg-gray-100 rounded-full hover:bg-gray-200 transition-all duration-300"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handlePayment}
-                    disabled={isProcessing || amount < 10 || !validatePhoneNumber(phoneNumber) || !csrfToken}
-                    className="px-4 sm:px-6 py-2 text-xs sm:text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-300"
-                  >
-                    Pay Now
-                  </button>
+                <div className="p-6 sm:p-8">
+                  <h2 className="text-2xl font-bold text-[#1E3A8A] mb-6">Make a Payment</h2>
+
+                  <div className="space-y-5">
+                    <label className="block">
+                      <span className="text-sm font-semibold text-[#1E3A8A]">Payment Type</span>
+                      <select
+                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3.5 px-4 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] bg-gray-50 text-sm"
+                        value={paymentType}
+                        onChange={(e) => setPaymentType(e.target.value as any)}
+                      >
+                        <option value="Rent">Rent</option>
+                        <option value="Utility">Utility</option>
+                        <option value="Deposit">Deposit</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-semibold text-[#1E3A8A]">Amount (KES)</span>
+                      <input
+                        type="number"
+                        min="10"
+                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3.5 px-4 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] bg-gray-50 text-sm"
+                        value={amount || ""}
+                        onChange={(e) => setAmount(Number(e.target.value))}
+                        placeholder="Minimum 10"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-semibold text-[#1E3A8A]">Phone Number</span>
+                      <input
+                        type="text"
+                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3.5 px-4 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] bg-gray-50 text-sm"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        placeholder="+2547xxxxxxxx or 07xxxxxxxx"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex gap-3 mt-8">
+                    <button
+                      onClick={() => setIsModalOpen(false)}
+                      className="flex-1 py-3.5 px-6 bg-gray-100 text-[#1E3A8A] font-semibold rounded-xl hover:bg-gray-200 transition text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePayment}
+                      disabled={isProcessing || amount < 10 || !validatePhoneNumber(phoneNumber)}
+                      className="flex-1 py-3.5 px-6 bg-[#1E3A8A] text-white font-bold rounded-xl hover:bg-[#1E40AF] disabled:bg-gray-400 transition text-sm"
+                    >
+                      {isProcessing ? "Processing..." : "Pay Now"}
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* Processing/Status Modal */}
+        {/* Processing / Status Overlay */}
+        <AnimatePresence key="processing-overlay">
           {(isProcessing || messages.length > 0) && (
             <motion.div
-              key="processing-spinner"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
               onClick={() => {
-                setIsProcessing(false);
-                setMessages([]);
+                if (!isProcessing) {
+                  setMessages([]);
+                  setIsProcessing(false);
+                }
               }}
             >
               <motion.div
-                initial={{ scale: 0.95, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 20 }}
-                className="bg-white rounded-xl sm:rounded-2xl p-6 sm:p-8 w-full max-w-sm sm:max-w-md shadow-2xl text-center"
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center"
                 onClick={(e) => e.stopPropagation()}
               >
                 {isProcessing && (
-                  <div className="relative w-12 sm:w-16 h-12 sm:h-16 mx-auto mb-4 sm:mb-6">
+                  <div className="w-20 h-20 mx-auto mb-6 relative">
                     <motion.div
-                      className="absolute inset-0 border-4 border-[#6EE7B7]/50 rounded-full"
+                      className="absolute inset-0 border-8 border-[#6EE7B7]/30 rounded-full"
                       animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
                     />
                     <motion.div
-                      className="absolute inset-0 border-4 border-[#1E3A8A] rounded-full border-t-transparent"
-                      animate={{ rotate: 360 }}
+                      className="absolute inset-0 border-8 border-t-[#1E3A8A] border-l-[#1E3A8A] border-b-transparent border-r-transparent rounded-full"
+                      animate={{ rotate: -360 }}
                       transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                     />
                   </div>
                 )}
-                <h3 className="text-lg sm:text-xl font-bold text-[#1E3A8A]">
-                  {isProcessing ? "Processing Payment" : "Payment Status"}
+
+                <h3 className="text-xl font-bold text-[#1E3A8A] mb-3">
+                  {isProcessing ? "Processing Payment..." : "Payment Update"}
                 </h3>
+
                 {isProcessing && (
-                  <p className="text-xs sm:text-sm text-gray-500 mt-2 sm:mt-3">
-                    Please check your phone and enter your M-Pesa PIN to complete the payment.
+                  <p className="text-sm text-gray-600 mb-6">
+                    Please complete the M-Pesa prompt on your phone
                   </p>
                 )}
-                {messages.length > 0 && (
-                  <div className="mt-4 sm:mt-6 space-y-3 max-h-64 overflow-y-auto">
-                    {messages.map((msg, index) => (
-                      <div
-                        key={`message-${index}`}
-                        className={`p-3 sm:p-4 rounded-lg flex items-start gap-2 sm:gap-3 ${
-                          msg.type === "success" ? "bg-[#6EE7B7]/20 text-[#6EE7B7]" : "bg-red-50 text-red-700"
-                        }`}
-                      >
-                        {msg.type === "success" ? <CheckCircle size={16} className="sm:h-5 sm:w-5" /> : <AlertCircle size={16} className="sm:h-5 sm:w-5" />}
-                        <div>
-                          <p className="text-xs sm:text-sm font-medium">{msg.text}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(msg.timestamp).toLocaleString("en-US", {
-                              hour: "numeric",
-                              minute: "numeric",
-                              second: "numeric",
-                              hour12: true,
-                              timeZone: "Africa/Nairobi",
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {messages.length > 0 && (
-                  <div className="mt-4 sm:mt-6 flex justify-end">
-                    <button
-                      onClick={() => {
-                        setMessages([]);
-                        setIsProcessing(false);
-                      }}
-                      className="px-4 sm:px-6 py-2 text-xs sm:text-sm font-medium text-white bg-[#1E3A8A] rounded-full hover:bg-[#1E40AF] transition-all duration-300"
+
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {messages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`p-4 rounded-xl flex items-start gap-3 text-left text-sm ${
+                        msg.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                      }`}
                     >
-                      Close
-                    </button>
-                  </div>
+                      {msg.type === "success" ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                      <div>
+                        <p className="font-medium">{msg.text}</p>
+                        <p className="text-xs opacity-75 mt-1">
+                          {new Date(msg.timestamp).toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {!isProcessing && messages.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setMessages([]);
+                      setIsProcessing(false);
+                    }}
+                    className="mt-6 w-full py-3.5 bg-[#1E3A8A] text-white font-bold rounded-xl hover:bg-[#1E40AF] transition"
+                  >
+                    Close
+                  </button>
                 )}
               </motion.div>
             </motion.div>

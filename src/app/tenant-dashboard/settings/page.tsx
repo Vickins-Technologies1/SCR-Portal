@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Cookies from "js-cookie";
-import { Save, User, Lock, Eye, EyeOff, X, CheckCircle } from "lucide-react";
+import { Save, User, Lock, Eye, EyeOff, X, CheckCircle, AlertCircle } from "lucide-react";
 
 interface Tenant {
   name: string;
@@ -14,309 +14,294 @@ interface Notification {
   id: string;
   type: "success" | "error";
   message: string;
-  autoDismiss: boolean;
 }
 
 export default function SettingsPage() {
   const [tenant, setTenant] = useState<Tenant>({ name: "", email: "", phone: "" });
+  const [original, setOriginal] = useState<Tenant>({ name: "", email: "", phone: "" });
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const tenantId = Cookies.get("userId");
 
-  const addNotification = (type: "success" | "error", message: string, autoDismiss = true) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setNotifications((prev) => [...prev, { id, type, message, autoDismiss }]);
-  };
-
-  const removeNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  const notify = (type: "success" | "error", msg: string) => {
+    const id = Date.now().toString();
+    setNotifications((prev) => [...prev, { id, type, message: msg }]);
+    setTimeout(() => setNotifications((prev) => prev.filter((n) => n.id !== id)), 4000);
   };
 
   useEffect(() => {
-    const fetchCsrfToken = async () => {
+    const getCsrf = async () => {
       try {
-        const res = await fetch("/api/csrf-token", {
-          method: "GET",
+        const res = await fetch("/api/csrf-token", { credentials: "include" });
+        const data = await res.json();
+        if (data.success) setCsrfToken(data.csrfToken);
+      } catch {
+        notify("error", "Connection failed");
+      }
+    };
+    getCsrf();
+  }, []);
+
+  useEffect(() => {
+    if (!tenantId || !csrfToken) return;
+
+    const loadProfile = async () => {
+      try {
+        const res = await fetch("/api/tenant/profile", {
+          headers: { "x-csrf-token": csrfToken },
           credentials: "include",
         });
         const data = await res.json();
-        if (data.success) {
-          setCsrfToken(data.csrfToken);
-        } else {
-          addNotification("error", data.message || "Failed to fetch CSRF token", false);
+        if (data.success && data.tenant) {
+          const { name, email, phone } = data.tenant;
+          setTenant({ name, email, phone });
+          setOriginal({ name, email, phone });
         }
-      } catch (err) {
-        console.error("Error fetching CSRF token:", err);
-        addNotification("error", "Failed to fetch CSRF token", false);
+      } catch {
+        notify("error", "Failed to load profile");
+      } finally {
+        setLoading(false);
       }
     };
-
-    const fetchTenant = async () => {
-      if (!tenantId || !csrfToken) return;
-      try {
-        const res = await fetch(`/api/tenant/profile?tenantId=${tenantId}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken,
-          },
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (data.success) {
-          setTenant(data.tenant);
-        } else {
-          addNotification("error", data.message || "Failed to fetch profile", false);
-        }
-      } catch (error) {
-        console.error("Failed to fetch profile:", error);
-        addNotification("error", "Failed to fetch profile", false);
-      }
-    };
-
-    fetchCsrfToken();
-    if (tenantId && csrfToken) fetchTenant();
+    loadProfile();
   }, [tenantId, csrfToken]);
 
-  useEffect(() => {
-    const timers: NodeJS.Timeout[] = [];
-    notifications.forEach((n) => {
-      if (n.autoDismiss) {
-        const timer = setTimeout(() => removeNotification(n.id), 3000);
-        timers.push(timer);
-      }
-    });
-    return () => timers.forEach(clearTimeout);
-  }, [notifications]);
+  const hasChanges = () =>
+    tenant.name !== original.name ||
+    tenant.email !== original.email ||
+    tenant.phone !== original.phone;
 
-  const handleProfileUpdate = async () => {
-    if (!csrfToken) {
-      addNotification("error", "CSRF token not available. Please refresh the page.", false);
-      return;
-    }
-
-    setLoading(true);
+  const saveProfile = async () => {
+    if (!csrfToken) return;
+    setSaving(true);
     try {
       const res = await fetch("/api/tenant/profile", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         credentials: "include",
         body: JSON.stringify({ tenantId, ...tenant }),
       });
       const data = await res.json();
-      if (!data.success) {
-        addNotification("error", data.message || "Profile update failed", false);
-      } else {
-        addNotification("success", "Profile updated successfully");
-      }
-    } catch (error) {
-      console.error("Update error:", error);
-      addNotification("error", "Failed to update profile", false);
+      if (data.success) {
+        setOriginal(tenant);
+        notify("success", "Profile updated");
+      } else notify("error", data.message || "Update failed");
+    } catch {
+      notify("error", "Failed to save");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const handlePasswordChange = async () => {
-    if (!password || password !== confirmPassword) {
-      addNotification("error", "Passwords must match and not be empty.", false);
+  const changePassword = async () => {
+    if (password !== confirmPassword || password.length < 6) {
+      notify("error", "Passwords must match and be 6+ characters");
       return;
     }
-
-    if (!csrfToken) {
-      addNotification("error", "CSRF token not available. Please refresh the page.", false);
-      return;
-    }
-
+    setChanging(true);
     try {
       const res = await fetch("/api/tenant/change-password", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken! },
         credentials: "include",
         body: JSON.stringify({ tenantId, password }),
       });
       const data = await res.json();
-      if (!data.success) {
-        addNotification("error", data.message || "Password change failed.", false);
-      } else {
-        addNotification("success", "Password changed successfully");
+      if (data.success) {
+        notify("success", "Password changed");
         setPassword("");
         setConfirmPassword("");
-      }
-    } catch (err) {
-      console.error("Password change error:", err);
-      addNotification("error", "Failed to change password", false);
+      } else notify("error", data.message || "Failed");
+    } catch {
+      notify("error", "Password change failed");
+    } finally {
+      setChanging(false);
     }
   };
 
-  const toggleShowPassword = () => setShowPassword(!showPassword);
-  const toggleShowConfirmPassword = () => setShowConfirmPassword(!showConfirmPassword);
+  // Modern Fading Box Loader
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pt-16 px-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="h-32 bg-gradient-to-r from-gray-300 to-gray-400 rounded-2xl animate-pulse" />
+          {/* Profile Card */}
+          <div className="bg-white rounded-2xl p-6 space-y-6 animate-pulse">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gray-200 rounded-xl" />
+              <div className="h-7 bg-gray-200 rounded w-48" />
+            </div>
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i}>
+                  <div className="h-4 bg-gray-200 rounded w-24 mb-2" />
+                  <div className="h-12 bg-gray-100 rounded-xl" />
+                </div>
+              ))}
+            </div>
+            <div className="h-12 bg-gray-200 rounded-xl w-36 ml-auto" />
+          </div>
+          {/* Password Card */}
+          <div className="bg-white rounded-2xl p-6 space-y-6 animate-pulse">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-red-100 rounded-xl" />
+              <div className="h-7 bg-gray-200 rounded w-56" />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {[1, 2].map((i) => (
+                <div key={i}>
+                  <div className="h-4 bg-gray-200 rounded w-32 mb-2" />
+                  <div className="h-12 bg-gray-100 rounded-xl relative overflow-hidden">
+                    <div className="absolute right-3 top-3 w-10 h-6 bg-gray-200 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="h-12 bg-red-200 rounded-xl w-44 ml-auto" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Notifications */}
-      <div className="fixed top-4 right-4 space-y-2 z-50">
+    <>
+      {/* Toast Notifications */}
+      <div className="fixed top-20 right-4 z-50 space-y-3">
         {notifications.map((n) => (
           <div
             key={n.id}
-            className={`flex items-center gap-2 p-4 rounded-lg shadow-lg animate-slide-in ${
-              n.type === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+            className={`flex items-center gap-3 p-4 rounded-xl shadow-xl border text-sm font-medium animate-in slide-in-from-right ${
+              n.type === "success"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : "bg-red-50 border-red-200 text-red-800"
             }`}
           >
-            {n.type === "success" ? (
-              <CheckCircle className="w-5 h-5" />
-            ) : (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.732 6.732a1 1 0 011.414 0L10 7.586l.854-.854a1 1 0 111.414 1.414L11.414 9l.854.854a1 1 0 11-1.414 1.414L10 10.414l-.854.854a1 1 0 01-1.414-1.414L8.586 9l-.854-.854a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            )}
-            <span className="flex-1">{n.message}</span>
-            <button
-              onClick={() => removeNotification(n.id)}
-              className="text-current hover:text-gray-900"
-              aria-label="Close notification"
-            >
-              <X className="w-5 h-5" />
+            {n.type === "success" ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+            <span>{n.message}</span>
+            <button onClick={() => setNotifications(prev => prev.filter(x => x.id !== n.id))}>
+              <X size={16} />
             </button>
           </div>
         ))}
       </div>
 
-      {/* Header */}
-      <section className="mb-6 bg-blue-900 text-white rounded-xl p-6 shadow-lg">
-        <h1 className="text-2xl font-semibold mb-1">Account Settings</h1>
-        <p>Update your profile information and credentials.</p>
-      </section>
+      <div className="min-h-screen bg-gray-50 pt-16 px-4 pb-10">
+        <div className="max-w-2xl mx-auto space-y-6">
 
-      {/* Profile Section */}
-      <div className="bg-white rounded-lg shadow p-6 space-y-6">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <User className="text-[#03a678]" /> Profile Information
-        </h2>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Full Name</label>
-            <input
-              type="text"
-              value={tenant.name}
-              onChange={(e) => setTenant({ ...tenant, name: e.target.value })}
-              className="mt-1 w-full px-3 py-2 border rounded"
-            />
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[#1E3A8A] to-[#1E40AF] text-white rounded-2xl p-6 text-center">
+            <h1 className="text-2xl font-bold">Account Settings</h1>
+            <p className="text-blue-100 text-sm mt-1">Update your profile & password</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium">Email</label>
-            <input
-              type="email"
-              value={tenant.email}
-              onChange={(e) => setTenant({ ...tenant, email: e.target.value })}
-              className="mt-1 w-full px-3 py-2 border rounded"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Phone</label>
-            <input
-              type="tel"
-              value={tenant.phone}
-              onChange={(e) => setTenant({ ...tenant, phone: e.target.value })}
-              className="mt-1 w-full px-3 py-2 border rounded"
-            />
-          </div>
-        </div>
 
-        <button
-          onClick={handleProfileUpdate}
-          className="bg-[#03a678] text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-[#02956a]"
-          disabled={loading || !csrfToken}
-        >
-          <Save size={16} />
-          {loading ? "Saving..." : "Save Changes"}
-        </button>
-      </div>
+          {/* Profile Card */}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-[#6EE7B7]/20 rounded-xl">
+                <User className="w-5 h-5 text-[#1E3A8A]" />
+              </div>
+              <h2 className="text-xl font-bold">Profile Information</h2>
+            </div>
 
-      {/* Password Section */}
-      <div className="bg-white rounded-lg shadow p-6 space-y-6">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <Lock className="text-[#03a678]" /> Change Password
-        </h2>
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={tenant.name}
+                onChange={(e) => setTenant({ ...tenant, name: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] transition"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={tenant.email}
+                onChange={(e) => setTenant({ ...tenant, email: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] transition"
+              />
+              <input
+                type="tel"
+                placeholder="Phone (+254...)"
+                value={tenant.phone}
+                onChange={(e) => setTenant({ ...tenant, phone: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] transition"
+              />
+            </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="relative">
-            <label className="block text-sm font-medium">New Password</label>
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full px-3 py-2 pr-10 border rounded"
-            />
             <button
-              type="button"
-              onClick={toggleShowPassword}
-              className="absolute right-3 top-1/2 transform translate-y-1 mt-1 text-gray-500 hover:text-gray-700"
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={saveProfile}
+              disabled={saving || !hasChanges()}
+              className="w-full sm:w-auto px-8 py-3 bg-[#1E3A8A] text-white font-bold rounded-xl hover:bg-[#1E40AF] disabled:bg-gray-300 transition flex items-center justify-center gap-2"
             >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              <Save size={18} />
+              {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
-          <div className="relative">
-            <label className="block text-sm font-medium">Confirm Password</label>
-            <input
-              type={showConfirmPassword ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="mt-1 w-full px-3 py-2 pr-10 border rounded"
-            />
+
+          {/* Password Card */}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-red-100 rounded-xl">
+                <Lock className="w-5 h-5 text-red-600" />
+              </div>
+              <h2 className="text-xl font-bold">Change Password</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div className="relative">
+                <input
+                  type={showPass ? "text" : "password"}
+                  placeholder="New Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-300 focus:ring-4 focus:ring-red-500/20 focus:border-red-500 transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="absolute right-3 top-3.5 text-gray-500"
+                >
+                  {showPass ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showConfirm ? "text" : "password"}
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-300 focus:ring-4 focus:ring-red-500/20 focus:border-red-500 transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  className="absolute right-3 top-3.5 text-gray-500"
+                >
+                  {showConfirm ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+            </div>
+
             <button
-              type="button"
-              onClick={toggleShowConfirmPassword}
-              className="absolute right-3 top-1/2 transform translate-y-1 mt-1 text-gray-500 hover:text-gray-700"
-              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              onClick={changePassword}
+              disabled={changing || !password || password !== confirmPassword}
+              className="w-full sm:w-auto px-8 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:bg-gray-300 transition"
             >
-              {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              {changing ? "Changing..." : "Change Password"}
             </button>
           </div>
         </div>
-
-        <button
-          onClick={handlePasswordChange}
-          className="bg-[#012a4a] text-white px-4 py-2 rounded hover:bg-[#011d34]"
-          disabled={!csrfToken}
-        >
-          Change Password
-        </button>
       </div>
-
-      <style jsx>{`
-        @keyframes slide-in {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        .animate-slide-in {
-          animation: slide-in 0.3s ease-out;
-        }
-      `}</style>
-    </div>
+    </>
   );
 }
