@@ -9,6 +9,8 @@ import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
 import PaymentModal from "../components/PaymentModal";
+import AddTenantModal from "../components/AddTenantModal";
+import EditTenantModal from "../components/EditTenantModal";
 import TenantsTable from "../components/TenantsTable";
 
 interface Tenant {
@@ -464,41 +466,22 @@ export default function TenantsPage() {
     return Object.keys(errors).length === 0;
   }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, modalMode]);
 
-  // Handle tenant form submission
+  // Replace your current handleSubmit with this version
   const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!validateForm()) return;
+    async (tenantData: TenantRequest) => {
       if (!userId) {
         setError("User ID is missing.");
         return;
       }
+
       setIsLoading(true);
       setError(null);
       setSuccessMessage(null);
 
-      const tenantData: TenantRequest = {
-        name: tenantName,
-        email: tenantEmail,
-        phone: tenantPhone,
-        password: tenantPassword || undefined,
-        role: "tenant",
-        propertyId: selectedPropertyId,
-        unitType: selectedUnitType,
-        price: parseFloat(price) || 0,
-        deposit: parseFloat(deposit) || 0,
-        houseNumber,
-        leaseStartDate,
-        leaseEndDate,
-        ownerId: userId,
-        totalRentPaid: parseFloat(totalRentPaid) || 0,
-        totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
-        totalDepositPaid: parseFloat(totalDepositPaid) || 0,
-      };
-
       try {
         const url = modalMode === "add" ? "/api/tenants" : `/api/tenants/${editingTenantId}`;
         const method = modalMode === "add" ? "POST" : "PUT";
+
         const res = await fetch(url, {
           method,
           headers: {
@@ -506,9 +489,14 @@ export default function TenantsPage() {
             "X-CSRF-Token": csrfToken,
           },
           credentials: "include",
-          body: JSON.stringify(tenantData),
+          body: JSON.stringify({
+            ...tenantData,
+            ownerId: userId,
+          }),
         });
+
         const data = await res.json();
+
         if (data.success) {
           setSuccessMessage(`Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`);
           setIsModalOpen(false);
@@ -518,21 +506,30 @@ export default function TenantsPage() {
           fetchUserData();
           fetchPendingInvoices();
         } else {
-          if (data.message.includes("Cannot add more tenants until the invoice")) {
+          if (data.message.includes("invoice")) {
             setPendingTenantData(tenantData);
             setError(data.message);
             setIsPaymentPromptOpen(true);
           } else {
-            setError(data.message || `Failed to ${modalMode === "add" ? "add" : "update"} tenant.`);
+            setError(data.message || "Operation failed");
           }
         }
-      } catch {
-        setError("Failed to connect to the server.");
+      } catch (err) {
+        setError("Failed to connect to server");
       } finally {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingTenantId, tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, fetchTenants, fetchUserData, fetchPendingInvoices, resetForm, validateForm, csrfToken]
+    [
+      userId,
+      modalMode,
+      editingTenantId,
+      csrfToken,
+      resetForm,
+      fetchTenants,
+      fetchUserData,
+      fetchPendingInvoices,
+    ]
   );
 
   return (
@@ -579,7 +576,7 @@ export default function TenantsPage() {
             page={page}
             setPage={setPage}
             limit={limit}
-            setLimit={setLimit} // Added setLimit prop
+            setLimit={setLimit}
             totalTenants={totalTenants}
             isLoading={isLoading}
             userId={userId}
@@ -587,393 +584,35 @@ export default function TenantsPage() {
             onEdit={openEditModal}
             onDelete={handleDelete}
           />
-          <Modal
-            title={modalMode === "add" ? "Add Tenant" : "Edit Tenant"}
-            isOpen={isModalOpen}
+          <AddTenantModal
+            isOpen={isModalOpen && modalMode === "add"}
             onClose={() => {
               setIsModalOpen(false);
               resetForm();
               setPendingTenantData(null);
-              setError(null);
             }}
-          >
-            {error && (
-              <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
-                {error}
-              </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                <input
-                  placeholder="Enter full name"
-                  value={tenantName}
-                  onChange={(e) => {
-                    setTenantName(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      tenantName: e.target.value.trim() ? undefined : "Full name is required",
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantName ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.tenantName && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantName}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Email</label>
-                <input
-                  placeholder="Enter email"
-                  value={tenantEmail}
-                  onChange={(e) => {
-                    setTenantEmail(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      tenantEmail: e.target.value.trim()
-                        ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.target.value)
-                          ? undefined
-                          : "Invalid email format"
-                        : "Email is required",
-                    }));
-                  }}
-                  required
-                  type="email"
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantEmail ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.tenantEmail && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantEmail}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Phone</label>
-                <input
-                  placeholder="Enter phone number (e.g., +254123456789)"
-                  value={tenantPhone}
-                  onChange={(e) => {
-                    setTenantPhone(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      tenantPhone: e.target.value.trim()
-                        ? /^\+?\d{10,15}$/.test(e.target.value)
-                          ? undefined
-                          : "Invalid phone number (10-15 digits, optional +)"
-                        : "Phone number is required",
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPhone ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.tenantPhone && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.tenantPhone}</p>
-                )}
-              </div>
-              {modalMode === "add" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Temporary Password</label>
-                  <div className="relative">
-                    <input
-                      placeholder="Enter temporary password"
-                      value={tenantPassword}
-                      onChange={(e) => {
-                        setTenantPassword(e.target.value);
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          tenantPassword: e.target.value.trim() ? undefined : "Password is required",
-                        }));
-                      }}
-                      type={showPassword ? "text" : "password"}
-                      required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.tenantPassword ? "border-red-500" : "border-gray-300"}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={togglePasswordVisibility}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? (
-                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
-                      ) : (
-                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                  {formErrors.tenantPassword && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.tenantPassword}</p>
-                  )}
-                </div>
-              )}
-              {modalMode === "edit" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">New Password (optional)</label>
-                  <div className="relative">
-                    <input
-                      placeholder="Enter new password (optional)"
-                      value={tenantPassword}
-                      onChange={(e) => setTenantPassword(e.target.value)}
-                      type={showPassword ? "text" : "password"}
-                      className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base"
-                    />
-                    <button
-                      type="button"
-                      onClick={togglePasswordVisibility}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? (
-                        <EyeOffIcon className="h-5 w-5" aria-hidden="true" />
-                      ) : (
-                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Property</label>
-                <select
-                  value={selectedPropertyId}
-                  onChange={(e) => {
-                    setSelectedPropertyId(e.target.value);
-                    setSelectedUnitType("");
-                    setPrice("");
-                    setDeposit("");
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      selectedPropertyId: e.target.value ? undefined : "Property is required",
-                      selectedUnitType: undefined,
-                      price: undefined,
-                      deposit: undefined,
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedPropertyId ? "border-red-500" : "border-gray-300"}`}
-                >
-                  <option value="">Select Property</option>
-                  {properties.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                {formErrors.selectedPropertyId && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.selectedPropertyId}</p>
-                )}
-              </div>
-              {selectedPropertyId && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Unit Type</label>
-                  <select
-                    value={selectedUnitType}
-                    onChange={async (e) => {
-                      const selectedType = e.target.value;           // <-- now the real `type`
-                      setSelectedUnitType(selectedType);
+            onSubmit={handleSubmit}
+            properties={properties}
+            pendingTenantData={pendingTenantData}
+            isLoading={isLoading}
+            csrfToken={csrfToken}
+            tenantsCount={tenants.length}
+          />
 
-                      const selectedProperty = properties.find((p) => p._id === selectedPropertyId);
-                      const unit = selectedProperty?.unitTypes.find((u) => u.type === selectedType);
-
-                      if (unit) {
-                        setPrice(unit.price.toString());
-                        setDeposit(unit.deposit.toString());
-
-                        // Clear previous errors
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          selectedUnitType: undefined,
-                          price: undefined,
-                          deposit: undefined,
-                        }));
-
-                        // Invoice check for >3 tenants (only on add)
-                        if (tenants.length >= 3 && modalMode === "add") {
-                          const invoiceStatus = await fetchInvoiceStatus(selectedPropertyId, selectedType);
-                          if (invoiceStatus !== "completed") {
-                            const tenantData: Partial<TenantRequest> = {
-                              name: tenantName,
-                              email: tenantEmail,
-                              phone: tenantPhone,
-                              password: tenantPassword || undefined,
-                              propertyId: selectedPropertyId,
-                              unitType: selectedType,               // <-- send real type
-                              price: unit.price,
-                              deposit: unit.deposit,
-                              houseNumber,
-                              leaseStartDate,
-                              leaseEndDate,
-                              totalRentPaid: parseFloat(totalRentPaid) || 0,
-                              totalUtilityPaid: parseFloat(totalUtilityPaid) || 0,
-                              totalDepositPaid: parseFloat(totalDepositPaid) || 0,
-                              role: "tenant",
-                              ownerId: userId || "",
-                            };
-                            setPendingTenantData(tenantData);
-                            setError(
-                              invoiceStatus === "pending"
-                                ? `Pending invoice for "${unit.type}" must be paid first.`
-                                : `No paid invoice found for "${unit.type}".`
-                            );
-                            setIsModalOpen(false);
-                            setIsPaymentPromptOpen(true);
-                          } else {
-                            setPendingTenantData(null);
-                            setError(null);
-                          }
-                        }
-                      } else {
-                        setPrice("");
-                        setDeposit("");
-                        setError("Selected unit type not found.");
-                      }
-                    }}
-                    required
-                    className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.selectedUnitType ? "border-red-500" : "border-gray-300"
-                      }`}
-                  >
-                    <option value="">Select Unit Type</option>
-                    {properties
-                      .find((p) => p._id === selectedPropertyId)
-                      ?.unitTypes.map((u) => (
-                        <option key={u.uniqueType} value={u.type}>   {/* ← value = u.type */}
-                          {u.type} (Price: Ksh {u.price}, Deposit: Ksh {u.deposit}, {u.managementType}: Ksh {u.managementFee}/mo)
-                        </option>
-                      ))}
-                  </select>
-                  {formErrors.selectedUnitType && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.selectedUnitType}</p>
-                  )}
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Price (Ksh/month)</label>
-                <input
-                  placeholder="Price (auto-filled)"
-                  value={price}
-                  readOnly
-                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.price ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.price && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Deposit (Ksh)</label>
-                <input
-                  placeholder="Deposit (auto-filled)"
-                  value={deposit}
-                  readOnly
-                  className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm sm:text-base ${formErrors.deposit ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.deposit && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.deposit}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">House Number</label>
-                <input
-                  placeholder="Enter house number"
-                  value={houseNumber}
-                  onChange={(e) => {
-                    setHouseNumber(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      houseNumber: e.target.value.trim() ? undefined : "House number is required",
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.houseNumber ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.houseNumber && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.houseNumber}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Lease Start Date</label>
-                <input
-                  type="date"
-                  value={leaseStartDate}
-                  onChange={(e) => {
-                    setLeaseStartDate(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      leaseStartDate: e.target.value ? undefined : "Lease start date is required",
-                      leaseEndDate:
-                        e.target.value && leaseEndDate && new Date(leaseEndDate) <= new Date(e.target.value)
-                          ? "Lease end date must be after start date"
-                          : prev.leaseEndDate,
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseStartDate ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.leaseStartDate && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseStartDate}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Lease End Date</label>
-                <input
-                  type="date"
-                  value={leaseEndDate}
-                  onChange={(e) => {
-                    setLeaseEndDate(e.target.value);
-                    setFormErrors((prev) => ({
-                      ...prev,
-                      leaseEndDate: e.target.value
-                        ? new Date(e.target.value) <= new Date(leaseStartDate)
-                          ? "Lease end date must be after start date"
-                          : undefined
-                        : "Lease end date is required",
-                    }));
-                  }}
-                  required
-                  className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base ${formErrors.leaseEndDate ? "border-red-500" : "border-gray-300"}`}
-                />
-                {formErrors.leaseEndDate && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.leaseEndDate}</p>
-                )}
-              </div>
-
-              <div className="flex flex-col sm:flex-row justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    resetForm();
-                    setPendingTenantData(null);
-                    setError(null);
-                  }}
-                  className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
-                  aria-label="Cancel tenant form"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={
-                    isLoading ||
-                    Object.values(formErrors).some((v) => v !== undefined) ||
-                    !selectedPropertyId ||
-                    !selectedUnitType
-                  }
-                  className={`px-4 py-2 text-white rounded-lg transition flex items-center gap-2 text-sm sm:text-base ${isLoading ||
-                    Object.values(formErrors).some((v) => v !== undefined) ||
-                    !selectedPropertyId ||
-                    !selectedUnitType
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#012a4a] hover:bg-[#014a7a]"
-                    }`}
-                  aria-label={modalMode === "add" ? "Add tenant" : "Update tenant"}
-                >
-                  {isLoading && (
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                  )}
-                  {modalMode === "add" ? "Add Tenant" : "Update Tenant"}
-                </button>
-              </div>
-            </form>
-          </Modal>
+          {editingTenantId && (
+            <EditTenantModal
+              isOpen={isModalOpen && modalMode === "edit"}
+              onClose={() => {
+                setIsModalOpen(false);
+                resetForm();
+              }}
+              tenant={tenants.find(t => t._id === editingTenantId)}
+              properties={properties}
+              onSubmit={handleSubmit}
+              isLoading={isLoading}
+              csrfToken={csrfToken}
+            />
+          )}
           <Modal
             title="Confirm Delete"
             isOpen={isDeleteModalOpen}

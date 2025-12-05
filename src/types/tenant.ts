@@ -1,5 +1,4 @@
 // src/types/tenant.ts
-
 import { ObjectId } from "mongodb";
 
 export interface Tenant {

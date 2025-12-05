@@ -450,6 +450,7 @@ export async function GET(
   }
 }
 
+// ==================== PUT: Update Tenant ====================
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> }
@@ -459,284 +460,173 @@ export async function PUT(
 
   const { tenantId } = await params;
   if (!tenantId || !ObjectId.isValid(tenantId)) {
-    logger.warn("Invalid tenantId", { tenantId });
-    return NextResponse.json(
-      { success: false, message: "Invalid or missing tenant ID" },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
   }
 
   if (!(await validateCsrfToken(request, tenantId))) {
-    logger.warn("Invalid CSRF token", { path: request.nextUrl.pathname, tenantId });
-    return NextResponse.json(
-      { success: false, message: "Invalid or missing CSRF token" },
-      { status: 403 }
-    );
+    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
   try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get("userId")?.value;
-    const role = cookieStore.get("role")?.value;
+    const userId = (await cookies()).get("userId")?.value;
+    const role = (await cookies()).get("role")?.value;
 
     if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
-      logger.warn("Unauthorized", { userId, role, tenantId });
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in as a property owner." },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const requestData: Partial<TenantRequest> = await request.json();
-    logger.debug("PUT /api/tenants/[tenantId] - Request body", { requestData, tenantId });
+    const body: Partial<TenantRequest> = await request.json();
+    logger.debug("PUT /tenants/[tenantId]", { tenantId, body });
 
-    // Input validation
-    const errors: { [key: string]: string } = {};
-    if (requestData.name && !requestData.name.trim()) {
-      errors.name = "Name cannot be empty";
-    }
-    if (requestData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestData.email)) {
-      errors.email = "Invalid email format";
-    }
-    if (requestData.phone && !/^\+?\d{10,15}$/.test(requestData.phone)) {
-      errors.phone = "Invalid phone number (10-15 digits, optional +)";
-    }
-    if (requestData.houseNumber && !requestData.houseNumber.trim()) {
-      errors.houseNumber = "House number cannot be empty";
-    }
-    if (requestData.leaseStartDate && isNaN(Date.parse(requestData.leaseStartDate))) {
-      errors.leaseStartDate = "Invalid lease start date";
-    }
-    if (requestData.leaseEndDate && isNaN(Date.parse(requestData.leaseEndDate))) {
-      errors.leaseEndDate = "Invalid lease end date";
-    }
-    if (
-      requestData.leaseStartDate &&
-      requestData.leaseEndDate &&
-      new Date(requestData.leaseEndDate) <= new Date(requestData.leaseStartDate)
-    ) {
-      errors.leaseEndDate = "Lease end date must be after start date";
-    }
-    if (requestData.price && (isNaN(Number(requestData.price)) || Number(requestData.price) < 0)) {
-      errors.price = "Price must be a non-negative number";
-    }
-    if (requestData.deposit && (isNaN(Number(requestData.deposit)) || Number(requestData.deposit) < 0)) {
-      errors.deposit = "Deposit must be a non-negative number";
-    }
-    if (
-      requestData.totalRentPaid &&
-      (isNaN(Number(requestData.totalRentPaid)) || Number(requestData.totalRentPaid) < 0)
-    ) {
-      errors.totalRentPaid = "Total rent paid must be a non-negative number";
-    }
-    if (
-      requestData.totalUtilityPaid &&
-      (isNaN(Number(requestData.totalUtilityPaid)) || Number(requestData.totalUtilityPaid) < 0)
-    ) {
-      errors.totalUtilityPaid = "Total utility paid must be a non-negative number";
-    }
-    if (
-      requestData.totalDepositPaid &&
-      (isNaN(Number(requestData.totalDepositPaid)) || Number(requestData.totalDepositPaid) < 0)
-    ) {
-      errors.totalDepositPaid = "Total deposit paid must be a non-negative number";
-    }
-    if (
-      requestData.walletBalance &&
-      (isNaN(Number(requestData.walletBalance)) || Number(requestData.walletBalance) < 0)
-    ) {
-      errors.walletBalance = "Wallet balance must be a non-negative number";
-    }
-    if (requestData.status && !["Active", "Pending", "Inactive"].includes(requestData.status)) {
-      errors.status = "Invalid status value";
-    }
-    if (requestData.paymentStatus && !["current", "overdue"].includes(requestData.paymentStatus)) {
-      errors.paymentStatus = "Invalid payment status value";
-    }
-    if (requestData.role && requestData.role !== "tenant") {
-      errors.role = "Role must be 'tenant'";
-    }
+    const { db } = await connectToDatabase();
 
-    if (Object.keys(errors).length > 0) {
-      logger.warn("Validation errors", { errors, tenantId });
-      return NextResponse.json({ success: false, message: "Validation errors", errors }, { status: 400 });
-    }
-
-    const { db }: { db: Db } = await connectToDatabase();
-    logger.debug("Connected to database", { database: "rentaldb", collection: "tenants" });
-
+    // Fetch current tenant
     const tenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(tenantId),
       ownerId: userId,
     }) as WithId<Tenant> | null;
 
     if (!tenant) {
-      logger.warn("Tenant lookup failed", { tenantId, userId });
-      return NextResponse.json(
-        { success: false, message: "Tenant not found or not owned by user" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Tenant not found or not owned by you" }, { status: 404 });
     }
 
-    const updatableFields: (keyof TenantRequest)[] = [
-      "name",
-      "email",
-      "phone",
-      "password",
-      "propertyId",
-      "unitType",
-      "price",
-      "deposit",
-      "houseNumber",
-      "leaseStartDate",
-      "leaseEndDate",
-      "status",
-      "paymentStatus",
-      "totalRentPaid",
-      "totalUtilityPaid",
-      "totalDepositPaid",
-      "walletBalance",
-    ];
+    const updateData: Partial<Tenant> = { updatedAt: new Date() };
 
-    const updateData: Partial<Tenant> = {};
-    for (const field of updatableFields) {
-      const value = requestData[field];
-      if (value !== undefined) {
-        if (
-          field === "price" ||
-          field === "deposit" ||
-          field === "totalRentPaid" ||
-          field === "totalUtilityPaid" ||
-          field === "totalDepositPaid" ||
-          field === "walletBalance"
-        ) {
-          const numericValue = typeof value === "string" ? Number(value) : value;
-          if (isNaN(numericValue) || numericValue < 0) {
-            logger.warn(`Invalid ${field}`, { value, tenantId });
-            return NextResponse.json(
-              { success: false, message: `${field} must be a non-negative number` },
-              { status: 400 }
-            );
-          }
-          updateData[field] = numericValue as never;
-        } else if (field === "password" && value) {
-          updateData[field] = await bcrypt.hash(value as string, 10);
-        } else {
-          updateData[field] = value as never;
+    // === Simple string fields ===
+    const stringFields: (keyof TenantRequest)[] = [
+      "name", "email", "phone", "houseNumber",
+      "leaseStartDate", "leaseEndDate", "status", "paymentStatus"
+    ];
+    stringFields.forEach(field => {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field] as any;
+      }
+    });
+
+    // === Password ===
+    if (body.password?.trim()) {
+      updateData.password = await bcrypt.hash(body.password, 10);
+    }
+
+    // === Numeric fields ===
+    const numericFields: (keyof TenantRequest)[] = [
+      "totalRentPaid", "totalUtilityPaid", "totalDepositPaid", "walletBalance"
+    ];
+    numericFields.forEach(field => {
+      if (body[field] !== undefined) {
+        const num = Number(body[field]);
+        if (!isNaN(num) && num >= 0) {
+          updateData[field] = num as any;
         }
       }
-    }
+    });
 
-    if (Object.keys(updateData).length === 0) {
-      logger.warn("No fields provided for update", { tenantId });
-      return NextResponse.json(
-        { success: false, message: "No fields provided for update" },
-        { status: 400 }
-      );
-    }
-
-    if (updateData.unitType || updateData.propertyId) {
-      const propertyId = updateData.propertyId || tenant.propertyId;
-      if (!ObjectId.isValid(propertyId)) {
-        logger.warn("Invalid propertyId", { propertyId, tenantId });
+    // === Property & Unit Type Change ===
+    if (body.propertyId || body.unitType) {
+      const targetPropertyId = body.propertyId || tenant.propertyId;
+      if (!ObjectId.isValid(targetPropertyId)) {
         return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
       }
+
       const property = await db.collection<Property>("properties").findOne({
-        _id: new ObjectId(propertyId),
+        _id: new ObjectId(targetPropertyId),
         ownerId: userId,
       });
+
       if (!property) {
-        logger.warn("Property not found", { propertyId, tenantId });
-        return NextResponse.json(
-          { success: false, message: "Property not found or not owned by user" },
-          { status: 404 }
-        );
+        return NextResponse.json({ success: false, message: "Property not found or not owned by you" }, { status: 404 });
       }
-      const unitType = updateData.unitType || tenant.unitType;
-      const unit = property.unitTypes.find((u) => u.uniqueType === unitType);
+
+      const requestedUnitType = body.unitType || tenant.unitType;
+
+      // Match against UnitType.type (e.g., "1-Bedroom")
+      const unit = property.unitTypes.find(u => u.type === requestedUnitType);
+
       if (!unit) {
-        logger.warn("Unit type not found", { unitType, tenantId });
-        return NextResponse.json({ success: false, message: "Unit type not found" }, { status: 400 });
-      }
-      if (
-        (updateData.price !== undefined && updateData.price !== unit.price) ||
-        (updateData.deposit !== undefined && updateData.deposit !== unit.deposit)
-      ) {
-        logger.warn("Price or deposit mismatch", {
-          requestedPrice: updateData.price,
-          unitPrice: unit.price,
-          requestedDeposit: updateData.deposit,
-          unitDeposit: unit.deposit,
-          tenantId,
+        logger.warn("Unit type not found", {
+          requested: requestedUnitType,
+          property: property.name,
+          available: property.unitTypes.map(u => u.type),
         });
         return NextResponse.json(
-          { success: false, message: "Price or deposit does not match unit type" },
+          { success: false, message: `Unit type "${requestedUnitType}" not found in this property` },
           { status: 400 }
         );
       }
-      updateData.price = updateData.price ?? unit.price;
-      updateData.deposit = updateData.deposit ?? unit.deposit;
+
+      // Enforce price/deposit
+      if (body.price !== undefined && body.price !== unit.price) {
+        return NextResponse.json(
+          { success: false, message: "Price must match the selected unit type" },
+          { status: 400 }
+        );
+      }
+      if (body.deposit !== undefined && body.deposit !== unit.deposit) {
+        return NextResponse.json(
+          { success: false, message: "Deposit must match the selected unit type" },
+          { status: 400 }
+        );
+      }
+
+      updateData.propertyId = targetPropertyId;
+      updateData.unitType = unit.type;      // Store display name
+      updateData.price = unit.price;
+      updateData.deposit = unit.deposit;
     }
 
-    updateData.updatedAt = new Date();
-    const updatedTenant = await db.collection<Tenant>("tenants").findOneAndUpdate(
-      {
-        _id: new ObjectId(tenantId),
-        ownerId: userId,
-      },
+    // Prevent empty update
+    if (Object.keys(updateData).length === 1) {
+      return NextResponse.json({ success: false, message: "No changes to update" }, { status: 400 });
+    }
+
+    // Apply update
+    const result = await db.collection<Tenant>("tenants").findOneAndUpdate(
+      { _id: new ObjectId(tenantId), ownerId: userId },
       { $set: updateData },
       { returnDocument: "after" }
     );
 
-    if (!updatedTenant) {
-      logger.warn("Failed to update tenant", { tenantId });
-      return NextResponse.json(
-        { success: false, message: "Failed to update tenant" },
-        { status: 404 }
-      );
+    if (!result) {
+      return NextResponse.json({ success: false, message: "Failed to update tenant" }, { status: 500 });
     }
 
-    logger.info("Tenant updated", { tenantId, updatedFields: Object.keys(updateData) });
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Tenant updated successfully",
-        tenant: {
-          _id: updatedTenant._id.toString(),
-          ownerId: updatedTenant.ownerId,
-          name: updatedTenant.name,
-          email: updatedTenant.email,
-          phone: updatedTenant.phone,
-          role: updatedTenant.role,
-          propertyId: updatedTenant.propertyId,
-          unitType: updatedTenant.unitType,
-          price: updatedTenant.price,
-          deposit: updatedTenant.deposit,
-          houseNumber: updatedTenant.houseNumber,
-          leaseStartDate: updatedTenant.leaseStartDate,
-          leaseEndDate: updatedTenant.leaseEndDate,
-          status: updatedTenant.status,
-          paymentStatus: updatedTenant.paymentStatus,
-          createdAt: toISOStringSafe(updatedTenant.createdAt, "updatedTenant.createdAt"),
-          updatedAt: toISOStringSafe(updatedTenant.updatedAt, "updatedTenant.updatedAt"),
-          totalRentPaid: updatedTenant.totalRentPaid ?? 0,
-          totalUtilityPaid: updatedTenant.totalUtilityPaid ?? 0,
-          totalDepositPaid: updatedTenant.totalDepositPaid ?? 0,
-          walletBalance: updatedTenant.walletBalance ?? 0,
-        },
-      },
-      { status: 200 }
-    );
-  } catch (error: unknown) {
-    logger.error("Error in PUT /api/tenants/[tenantId]", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-      tenantId,
+    logger.info("Tenant updated", { tenantId, fields: Object.keys(updateData) });
+
+    // Build response matching ResponseTenant
+    const responseTenant: ResponseTenant = {
+      _id: result._id.toString(),
+      ownerId: result.ownerId,
+      name: result.name,
+      email: result.email,
+      phone: result.phone,
+      role: result.role,
+      propertyId: result.propertyId,
+      unitType: result.unitType,
+      price: result.price,
+      deposit: result.deposit,
+      houseNumber: result.houseNumber,
+      leaseStartDate: result.leaseStartDate,
+      leaseEndDate: result.leaseEndDate,
+      status: result.status,
+      paymentStatus: result.paymentStatus,
+      createdAt: toISOStringSafe(result.createdAt, "result.createdAt"),
+      updatedAt: toISOStringSafe(result.updatedAt, "result.updatedAt"),
+      totalRentPaid: result.totalRentPaid ?? 0,
+      totalUtilityPaid: result.totalUtilityPaid ?? 0,
+      totalDepositPaid: result.totalDepositPaid ?? 0,
+      walletBalance: result.walletBalance ?? 0,
+      deliveryMethod: result.deliveryMethod,
+    };
+
+    return NextResponse.json({
+      success: true,
+      message: "Tenant updated successfully",
+      tenant: responseTenant,
     });
-    return NextResponse.json(
-      { success: false, message: "Internal server error" },
-      { status: 500 }
-    );
+
+  } catch (error) {
+    logger.error("PUT /api/tenants/[tenantId] error", { error, tenantId });
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
   }
 }
 
