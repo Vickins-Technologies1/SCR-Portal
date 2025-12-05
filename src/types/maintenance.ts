@@ -1,5 +1,4 @@
-// src/types/maintenance.d.ts
-
+// src/types/maintenance.ts
 export type MaintenanceUrgency = "low" | "medium" | "high";
 export type MaintenanceStatus = "Pending" | "In Progress" | "Resolved";
 

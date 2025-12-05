@@ -198,10 +198,20 @@ export async function middleware(request: NextRequest) {
         : NextResponse.redirect(new URL("/", request.url));
     }
 
-    if (path.startsWith("/api/tenants/") && role === "tenant") {
-      const tenantId = path.split("/")[3];
-      if (tenantId && tenantId !== userId) {
-        return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 });
+    // NEW (FIXED)
+    if (
+      role === "tenant" &&
+      path.startsWith("/api/tenants/") &&
+      !path.startsWith("/api/tenants/maintenance") &&
+      !path.startsWith("/api/tenants/profile") &&
+      !path.startsWith("/api/tenants/payments")
+    ) {
+      const segments = path.split("/").filter(Boolean);
+      if (segments.length >= 3) {
+        const tenantIdFromPath = segments[2];
+        if (tenantIdFromPath && tenantIdFromPath !== userId) {
+          return NextResponse.json({ success: false, message: "Access denied" }, { status: 403 });
+        }
       }
     }
 
@@ -226,6 +236,8 @@ export async function middleware(request: NextRequest) {
     logger.error("Middleware error", { error });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
+
+
 }
 
 export const config = {

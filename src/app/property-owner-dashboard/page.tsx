@@ -1,3 +1,4 @@
+// src/app/property-owner-dashboard/page.tsx
 "use client";
 
 import { Inter } from "next/font/google";
@@ -6,9 +7,10 @@ import Navbar from "./components/Navbar";
 import MaintenanceRequests from "./components/MaintenanceRequests";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Users, DollarSign, AlertCircle, BarChart2, Home, MapPin, Hash } from "lucide-react";
+import { Building2, Users, DollarSign, AlertCircle, BarChart2, Home, MapPin, Wrench } from "lucide-react";
 import Cookies from "js-cookie";
 import { Line, Pie } from "react-chartjs-2";
+import { motion } from "framer-motion";
 import {
   Chart as ChartJS,
   LineElement,
@@ -19,8 +21,6 @@ import {
   Tooltip,
   Legend,
   ArcElement,
-  BarElement,
-  TooltipItem,
 } from "chart.js";
 import { Property } from "../../types/property";
 
@@ -29,7 +29,7 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
-ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement, BarElement);
+ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
 interface Tenant {
   _id: string;
@@ -104,7 +104,7 @@ export default function PropertyOwnerDashboard() {
   });
   const [chartData, setChartData] = useState<ChartData | null>(null);
 
-  // === All useEffect and data fetching logic remains 100% unchanged ===
+  // === AUTH & CSRF ===
   useEffect(() => {
     const uid = Cookies.get("userId");
     const r = Cookies.get("role");
@@ -115,73 +115,41 @@ export default function PropertyOwnerDashboard() {
       setRole(r);
     }
 
-    const fetchCsrfToken = async (retries = 3): Promise<string | null> => {
-      for (let i = 0; i < retries; i++) {
-        try {
-          const res = await fetch("/api/csrf-token", {
-            method: "GET",
-            credentials: "include",
-          });
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`CSRF token fetch failed: ${res.status} ${res.statusText} - ${text.slice(0, 50)}`);
-          }
-          const data = await res.json();
-          if (data.csrfToken) {
-            Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict" });
-            return data.csrfToken;
-          } else {
-            throw new Error("No CSRF token in response");
-          }
-        } catch (err) {
-          console.error(`CSRF token fetch attempt ${i + 1} failed:`, err);
-          if (i === retries - 1) {
-            setError(`Failed to fetch CSRF token: ${err instanceof Error ? err.message : String(err)}`);
-            return null;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
+    const fetchCsrfToken = async () => {
+      const token = Cookies.get("csrf-token");
+      if (token) {
+        setCsrfToken(token);
+        return;
       }
-      return null;
+
+      try {
+        const res = await fetch("/api/csrf-token", { credentials: "include" });
+        const data = await res.json();
+        if (data.csrfToken) {
+          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict" });
+          setCsrfToken(data.csrfToken);
+        }
+      } catch (err) {
+        console.error("CSRF fetch failed:", err);
+      }
     };
 
-    const token = Cookies.get("csrf-token");
-    if (!token) {
-      fetchCsrfToken().then((newToken) => setCsrfToken(newToken));
-    } else {
-      setCsrfToken(token);
-    }
+    fetchCsrfToken();
   }, [router]);
 
+  // === FETCH DASHBOARD DATA ===
   const fetchOwnerCharts = useCallback(async () => {
     if (!userId || !csrfToken) return;
-
     setIsChartsLoading(true);
-    setError(null);
-
     try {
-      const fetchUrl = `/api/ownercharts?tenantId=null&propertyOwnerId=${encodeURIComponent(userId)}`;
-      const res = await fetch(fetchUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
+      const res = await fetch(`/api/ownercharts?propertyOwnerId=${userId}`, {
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Fetch failed for /api/ownercharts: ${res.status} ${res.statusText} - ${text.slice(0, 50)}`);
-      }
-
       const data = await res.json();
-      if (!data.success) throw new Error(data.message || "Failed to fetch chart data");
-
-      setChartData(data.chartData);
+      if (data.success) setChartData(data.chartData);
     } catch (err) {
-      console.error("Chart data fetch error:", err);
-      setError(`Failed to load chart data: ${err instanceof Error ? err.message : String(err)}`);
+      console.error("Chart error:", err);
     } finally {
       setIsChartsLoading(false);
     }
@@ -190,128 +158,45 @@ export default function PropertyOwnerDashboard() {
   useEffect(() => {
     if (!userId || role !== "propertyOwner" || !csrfToken) return;
 
-    const fetchDashboardData = async () => {
+    const fetchAll = async () => {
       setIsLoading(true);
-      setError(null);
-
-      async function fetchAllData<T>(url: string): Promise<T[]> {
-        let allData: T[] = [];
-        let page = 1;
-        const limit = 100;
-        while (true) {
-          const fetchUrl = `${url}?userId=${encodeURIComponent(userId as string)}&page=${page}&limit=${limit}`;
-          try {
-            const res = await fetch(fetchUrl, {
-              headers: {
-                "Content-Type": "application/json",
-                "x-csrf-token": csrfToken as string,
-              },
-              credentials: "include",
-            });
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error(`Fetch failed for ${url} (page ${page}): ${res.status} ${res.statusText} - ${text.slice(0, 50)}`);
-            }
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message || `Failed to fetch data from ${url}`);
-            allData = [...allData, ...(data.tenants || data.payments || data.properties || [])];
-            if (!data.total || allData.length >= data.total) break;
-            page++;
-          } catch (err) {
-            console.error(`Error fetching ${url} (page ${page}):`, err);
-            throw err;
-          }
-        }
-        return allData;
-      }
-
-      async function fetchStats(retries = 3): Promise<Stats> {
-        const url = `/api/ownerstats?userId=${encodeURIComponent(userId as string)}`;
-        for (let i = 0; i < retries; i++) {
-          try {
-            const res = await fetch(url, {
-              headers: {
-                "Content-Type": "application/json",
-                "x-csrf-token": csrfToken as string,
-              },
-              credentials: "include",
-            });
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error(`Fetch failed for ${url}: ${res.status} ${res.statusText} - ${text.slice(0, 50)}`);
-            }
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message || "Failed to fetch stats");
-            return data.stats;
-          } catch (err) {
-            console.error(`Stats fetch attempt ${i + 1} failed:`, err);
-            if (i === retries - 1) throw err;
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          }
-        }
-        throw new Error("Failed to fetch stats after retries");
-      }
-
       try {
-        const [propertiesList, tenantsList, paymentsList, statsData] = await Promise.all([
-          fetchAllData<Property>("/api/properties"),
-          fetchAllData<Tenant>("/api/tenants"),
-          fetchAllData<Payment>("/api/tenant/payments"),
-          fetchStats(),
+        const [propsRes, tenantsRes, paymentsRes, statsRes] = await Promise.all([
+          fetch("/api/properties?userId=" + userId, { headers: { "x-csrf-token": csrfToken }, credentials: "include" }),
+          fetch("/api/tenants?userId=" + userId, { headers: { "x-csrf-token": csrfToken }, credentials: "include" }),
+          fetch("/api/tenant/payments?userId=" + userId, { headers: { "x-csrf-token": csrfToken }, credentials: "include" }),
+          fetch("/api/ownerstats?userId=" + userId, { headers: { "x-csrf-token": csrfToken }, credentials: "include" }),
         ]);
 
-        setProperties(propertiesList);
-        setTenants(tenantsList);
-        setPayments(paymentsList);
-        setStats(statsData);
+        const [props, ten, pay, st] = await Promise.all([propsRes.json(), tenantsRes.json(), paymentsRes.json(), statsRes.json()]);
+
+        setProperties(props.success ? props.properties || [] : []);
+        setTenants(ten.success ? ten.tenants || [] : []);
+        setPayments(pay.success ? pay.payments || [] : []);
+        setStats(st.success ? st.stats : stats);
 
         await fetchOwnerCharts();
       } catch (err) {
-        console.error("Dashboard fetch error:", err);
-        setError("Failed to load dashboard data: " + (err instanceof Error ? err.message : String(err)));
+        setError("Failed to load dashboard");
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchDashboardData();
+    fetchAll();
   }, [userId, role, csrfToken, fetchOwnerCharts]);
 
-  // Pie & Line Chart Data (unchanged logic)
-  const paymentStatusData = tenants.reduce(
-    (acc, tenant) => {
-      if (!tenant.leaseStartDate || !tenant.leaseEndDate) {
-        acc.pending += 1;
-        return acc;
-      }
-
-      const leaseStart = new Date(tenant.leaseStartDate);
-      const leaseEnd = new Date(tenant.leaseEndDate);
-      const today = new Date();
-
-      if (
-        isNaN(leaseStart.getTime()) ||
-        isNaN(leaseEnd.getTime()) ||
-        leaseStart > today ||
-        leaseEnd < today
-      ) {
-        acc.pending += 1;
-        return acc;
-      }
-
-      const status = tenant.paymentStatus;
-      if (status === "overdue") {
-        acc.overdue += 1;
-      } else if (status === "up-to-date") {
-        acc.paid += 1;
-      } else {
-        acc.pending += 1;
-      }
-
-      return acc;
-    },
-    { paid: 0, overdue: 0, pending: 0 } as Record<string, number>
-  );
+  // === CHARTS ===
+  const paymentStatusData = tenants.reduce((acc, t) => {
+    if (!t.leaseStartDate || !t.leaseEndDate || new Date(t.leaseEndDate) < new Date()) {
+      acc.pending++;
+    } else if (t.paymentStatus === "overdue") {
+      acc.overdue++;
+    } else {
+      acc.paid++;
+    }
+    return acc;
+  }, { paid: 0, overdue: 0, pending: 0 });
 
   const pieChartData = {
     labels: ["Up to Date", "Overdue", "Pending"],
@@ -333,19 +218,10 @@ export default function PropertyOwnerDashboard() {
     ],
   };
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: "bottom" as const, labels: { padding: 20, font: { size: 13 } } },
-      tooltip: { padding: 12, titleFont: { size: 14 }, bodyFont: { size: 13 } },
-    },
-  };
-
   if (!userId || role !== "propertyOwner") {
     return (
       <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${inter.className}`}>
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#013a63]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-emerald-600"></div>
       </div>
     );
   }
@@ -359,7 +235,7 @@ export default function PropertyOwnerDashboard() {
         <main className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-8 mt-6">
-            <BarChart2 className="h-8 w-8 text-[#013a63]" />
+            <BarChart2 className="h-8 w-8 text-emerald-600" />
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Property Owner Dashboard</h1>
           </div>
 
@@ -368,12 +244,6 @@ export default function PropertyOwnerDashboard() {
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-xl flex items-center gap-3">
               <AlertCircle className="h-5 w-5" />
               <span className="font-medium">{error}</span>
-            </div>
-          )}
-          {(isLoading || isChartsLoading) && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-700 px-5 py-4 rounded-xl flex items-center gap-3">
-              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-[#013a63]"></div>
-              <span className="font-medium">Loading your dashboard...</span>
             </div>
           )}
 
@@ -389,10 +259,7 @@ export default function PropertyOwnerDashboard() {
               { title: "Tenants", value: stats.totalTenants, icon: Users, color: "green" },
               { title: "Vacant Units", value: stats.totalUnits - stats.occupiedUnits, icon: Home, color: "orange" },
             ].map((stat, i) => (
-              <div
-                key={i}
-                className={`bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}
-              >
+              <div key={i} className={`bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-lg transition-all duration-300 hover:-translate-y-1`}>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">{stat.title}</p>
@@ -413,63 +280,150 @@ export default function PropertyOwnerDashboard() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Payment Trends (6 Months)</h2>
               <div className="h-80">
-                <Line data={paymentChartData} options={chartOptions} />
+                <Line data={paymentChartData} options={{ responsive: true, maintainAspectRatio: false }} />
               </div>
             </div>
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Tenant Payment Status</h2>
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Payment Status</h2>
               <div className="h-80">
-                <Pie data={pieChartData} options={chartOptions} />
+                <Pie data={pieChartData} options={{ responsive: true, maintainAspectRatio: false }} />
               </div>
             </div>
           </div>
 
-          {/* Properties */}
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-gray-800 mb-5">Your Properties</h2>
-            {properties.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center text-gray-500">
-                No properties added yet. Click "List Property" to get started.
+          {/* Maintenance Requests Section */}
+          <div className="mb-10">
+            <MaintenanceRequests
+              userId={userId}
+              csrfToken={csrfToken!}
+              properties={properties}
+            />
+          </div>
+
+          {/* Properties Grid - Upgraded & Beautiful */}
+<section className="mb-12">
+  <h2 className="text-2xl font-bold text-gray-900 mb-8 flex items-center gap-3">
+    <Building2 className="w-8 h-8 text-emerald-600" />
+    Your Properties
+  </h2>
+
+  {properties.length === 0 ? (
+    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl border-2 border-dashed border-gray-300 p-16 text-center">
+      <div className="mx-auto w-24 h-24 bg-gray-200 border-2 border-dashed rounded-full mb-6" />
+      <p className="text-xl font-semibold text-gray-700">No properties listed yet</p>
+      <p className="text-gray-500 mt-2">Click "List Property" to add your first one!</p>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+      {properties.map((property) => {
+        const occupied = stats.occupiedUnits;
+        const total = stats.totalUnits;
+        const occupancyRate = total > 0 ? Math.round((occupied / total) * 100) : 0;
+
+        return (
+          <motion.div
+            key={property._id.toString()}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ y: -8, scale: 1.02 }}
+            transition={{ duration: 0.3 }}
+            onClick={() => router.push(`/properties/${property._id.toString()}`)}
+            className="group relative bg-white rounded-3xl shadow-lg hover:shadow-2xl border border-gray-200 overflow-hidden cursor-pointer transition-all duration-500"
+          >
+            {/* Premium Gradient Top Bar */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-600" />
+
+            {/* Property Image Placeholder */}
+            <div className="relative h-48 bg-gradient-to-br from-emerald-500/20 to-teal-600/20 backdrop-blur-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute bottom-4 left-4 right-4">
+                <h3 className="text-2xl font-bold text-white drop-shadow-lg">
+                  {property.name}
+                </h3>
+                <p className="text-white/90 text-sm flex items-center gap-2 mt-1 drop-shadow">
+                  <MapPin size={16} />
+                  {property.address}
+                </p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {properties.map((property) => (
-                  <div
-                    key={property._id.toString()}
-                    onClick={() => router.push(`/properties/${property._id.toString()}`)}
-                    className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-xl hover:border-gray-300 transition-all duration-300 cursor-pointer group"
-                  >
-                    <div className="h-32 bg-gradient-to-br from-blue-500 to-indigo-600 group-hover:from-indigo-600 group-hover:to-purple-600 transition-colors"></div>
-                    <div className="p-5">
-                      <h3 className="font-semibold text-lg text-gray-900 flex items-center gap-2">
-                        <Home className="h-5 w-5 text-indigo-600" />
-                        {property.name}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-2 flex items-center gap-2">
-                        <MapPin className="h-4 w-4" />
-                        {property.address}
-                      </p>
-                      <div className="mt-4 flex justify-between items-center">
-                        <span className="text-xs font-medium text-gray-500">Vacant Units</span>
-                        <span className="font-bold text-indigo-600">{stats.totalUnits - stats.occupiedUnits}</span>
-                      </div>
-                      <div className="mt-3">
-                        <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                          property.status === "occupied"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}>
-                          {property.status}
-                        </span>
-                      </div>
-                    </div>
+
+              {/* Occupancy Badge */}
+              <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <div className="relative w-10 h-10">
+                    <svg className="w-10 h-10 transform -rotate-90">
+                      <circle
+                        cx="20"
+                        cy="20"
+                        r="16"
+                        stroke="#e5e7eb"
+                        strokeWidth="3"
+                        fill="none"
+                      />
+                      <circle
+                        cx="20"
+                        cy="20"
+                        r="16"
+                        stroke="#10b981"
+                        strokeWidth="4"
+                        fill="none"
+                        strokeDasharray={`${occupancyRate * 1.005} 100`}
+                        className="transition-all duration-1000"
+                      />
+                    </svg>
+                    <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-emerald-600">
+                      {occupancyRate}%
+                    </span>
                   </div>
-                ))}
+                  <span className="text-xs font-semibold text-gray-700">Occupied</span>
+                </div>
               </div>
-            )}
-          </section>
+            </div>
 
+            {/* Card Body */}
+            <div className="p-6 space-y-5">
+              {/* Units Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-emerald-50 rounded-2xl p-4 text-center">
+                  <p className="text-xs text-emerald-600 font-medium">Total Units</p>
+                  <p className="text-2xl font-bold text-emerald-700 mt-1">{total}</p>
+                </div>
+                <div className="bg-amber-50 rounded-2xl p-4 text-center">
+                  <p className="text-xs text-amber-600 font-medium">Vacant</p>
+                  <p className="text-2xl font-bold text-amber-700 mt-1">{total - occupied}</p>
+                </div>
+              </div>
 
+              {/* Status Badge */}
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500">Status</span>
+                <span
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+                    property.status === "occupied"
+                      ? "bg-emerald-100 text-emerald-800 shadow-md"
+                      : property.status === "available"
+                      ? "bg-blue-100 text-blue-800 shadow-md"
+                      : "bg-purple-100 text-purple-800 shadow-md"
+                  }`}
+                >
+                  {property.status === "occupied" ? "Fully Occupied" : 
+                   property.status === "available" ? "Available" : 
+                   "Partially Occupied"}
+                </span>
+              </div>
+
+              {/* Hover Arrow */}
+              <div className="flex justify-end">
+                <div className="p-3 bg-emerald-600 rounded-full text-white opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300">
+                  <Home size={20} />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  )}
+</section>
         </main>
       </div>
     </div>

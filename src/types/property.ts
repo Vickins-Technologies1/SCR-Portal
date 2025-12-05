@@ -3,12 +3,19 @@ import { ObjectId } from "mongodb";
 
 export interface UnitType {
   type: string;
-  uniqueType?: string; // Still optional
+  uniqueType?: string;
   price: number;
   deposit: number;
-  managementType: "RentCollection" | "FullManagement"; // Now required
+  managementType: "RentCollection" | "FullManagement";
   quantity: number;
   managementFee?: number;
+}
+
+export interface Tenant {
+  _id: string;
+  name: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface Property {
@@ -22,4 +29,5 @@ export interface Property {
   rentPaymentDate?: number;
   createdAt: Date;
   updatedAt?: Date;
+  tenants?: Tenant[];
 }
