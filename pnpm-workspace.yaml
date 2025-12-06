@@ -1,0 +1,5 @@
+ignoredBuiltDependencies:
+  - bcrypt
+  - postinstall-postinstall
+  - sharp
+  - unrs-resolver
