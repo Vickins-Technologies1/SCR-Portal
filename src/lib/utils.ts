@@ -1,6 +1,7 @@
+// src/lib/utils.ts
 import { UnitType } from '../types/property';
 import { Tenant, ResponseTenant } from '../types/tenant';
-import { Db } from 'mongodb';
+import { Db, ObjectId } from 'mongodb';
 
 interface LogMeta {
   [key: string]: unknown;
@@ -65,41 +66,31 @@ export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = 
     const result = await db
       .collection('tenants')
       .aggregate([
-        {
-          $match: { _id: tenant._id },
-        },
+        { $match: { _id: tenant._id } },
         {
           $project: {
             monthsStayed: {
-              $add: [
-                {
-                  $dateDiff: {
-                    startDate: { $toDate: '$leaseStartDate' },
-                    endDate: today,
-                    unit: 'month',
-                  },
-                },
-                {
-                  $cond: {
-                    if: {
-                      $lte: [{ $toDate: '$leaseStartDate' }, today],
-                    },
-                    then: 1, // Include the current month
-                    else: 0,
-                  },
-                },
-              ],
+              $dateDiff: {
+                startDate: { $toDate: '$leaseStartDate' },
+                endDate: today,
+                unit: 'month',
+              },
             },
           },
         },
       ])
       .toArray();
     monthsStayed = result[0]?.monthsStayed || 0;
+    // Include current month if lease has started
+    if (new Date(tenant.leaseStartDate) <= today) {
+      monthsStayed += 1;
+    }
   }
 
-  const totalRentDue = tenant.leaseStartDate && tenant.price ? tenant.price * monthsStayed : 0;
+  const totalRentDue = tenant.price * monthsStayed;
   const totalDepositDue = tenant.deposit || 0;
-  const totalUtilityDue = 0; // Utility dues not tracked
+  const totalUtilityDue = 0;
+
   const totalPaid = (tenant.totalRentPaid || 0) + (tenant.totalUtilityPaid || 0) + (tenant.totalDepositPaid || 0);
   const totalRemainingDues = Math.max(0, totalRentDue + totalDepositDue + totalUtilityDue - totalPaid);
   const paymentStatus = totalRemainingDues > 0 ? 'overdue' : 'up-to-date';
@@ -114,27 +105,29 @@ export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = 
   };
 };
 
-export const convertTenantToResponse = (tenant: Tenant): ResponseTenant => ({
+// FIXED: Now handles unitIdentifier properly
+export const convertTenantToResponse = (tenant: Tenant & { unitIdentifier?: string }): ResponseTenant => ({
   _id: tenant._id.toString(),
   ownerId: tenant.ownerId,
   name: tenant.name,
   email: tenant.email,
   phone: tenant.phone,
-  role: tenant.role,
+  role: "tenant" as const,
   propertyId: tenant.propertyId,
   unitType: tenant.unitType,
+  unitIdentifier: tenant.unitIdentifier || "", // ← REQUIRED FIELD, safe fallback
   price: tenant.price,
   deposit: tenant.deposit,
   houseNumber: tenant.houseNumber,
   leaseStartDate: tenant.leaseStartDate,
   leaseEndDate: tenant.leaseEndDate,
-  status: tenant.status,
-  paymentStatus: tenant.paymentStatus,
+  status: tenant.status || "active",
+  paymentStatus: tenant.paymentStatus || "current",
   createdAt: toISOStringSafe(tenant.createdAt, 'tenant.createdAt'),
   updatedAt: toISOStringSafe(tenant.updatedAt, 'tenant.updatedAt'),
-  totalRentPaid: tenant.totalRentPaid,
-  totalUtilityPaid: tenant.totalUtilityPaid,
-  totalDepositPaid: tenant.totalDepositPaid,
-  walletBalance: tenant.walletBalance,
-  deliveryMethod: tenant.deliveryMethod,
+  totalRentPaid: tenant.totalRentPaid ?? 0,
+  totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
+  totalDepositPaid: tenant.totalDepositPaid ?? 0,
+  walletBalance: tenant.walletBalance ?? 0,
+  deliveryMethod: tenant.deliveryMethod || "both",
 });
