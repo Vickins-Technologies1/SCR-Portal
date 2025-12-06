@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@auth/core": "^0.34.3",
     "@hcaptcha/react-hcaptcha": "^1.12.0",
     "@types/bcrypt": "^5.0.2",
     "@upstash/ratelimit": "^2.0.6",
@@ -31,7 +32,7 @@
     "lucide-react": "^0.525.0",
     "mongodb": "^6.17.0",
     "next": "^16.0.7",
-    "next-auth": "^4.24.11",
+    "next-auth": "5.0.0-beta.30",
     "nodemailer": "^6.9.15",
     "p-queue": "^8.1.0",
     "pdf-lib": "^1.17.1",
