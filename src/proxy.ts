@@ -1,4 +1,4 @@
-// middleware.ts
+// src/proxy.ts
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import logger from "./lib/logger";
@@ -97,7 +97,7 @@ const SELF_HANDLED_CSRF_ROUTES = [
   "/api/tenants/maintenance",
   "/api/tenant/payments",
   "/api/tenant/change-password",
-  "/api/tenant/profile", // PUT
+  "/api/tenant/profile",
 ];
 
 const routeAccessMap: { [key: string]: RouteAccess } = {
@@ -133,7 +133,8 @@ const ADMIN_API_PATHS = [
   "/api/users",
 ];
 
-export async function middleware(request: NextRequest) {
+// THIS IS THE ONLY CHANGE YOU NEED
+export async function proxy(request: NextRequest) {
   const fullPath = request.nextUrl.pathname;
   const path = fullPath.split("?")[0];
   const method = request.method;
@@ -152,7 +153,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const startTime = Date.now();
-  logger.debug("Middleware processing", { path, method });
+  logger.debug("Proxy processing", { path, method });
 
   try {
     const cookies = request.cookies;
@@ -198,7 +199,7 @@ export async function middleware(request: NextRequest) {
         : NextResponse.redirect(new URL("/", request.url));
     }
 
-    // NEW (FIXED)
+    // Tenant access control
     if (
       role === "tenant" &&
       path.startsWith("/api/tenants/") &&
@@ -217,7 +218,6 @@ export async function middleware(request: NextRequest) {
 
     const isAdminApi = ADMIN_API_PATHS.some(p => path.startsWith(p));
 
-    // Fixed: Skip middleware CSRF for routes that validate themselves
     if (config.isApi && method !== "GET") {
       const shouldSkipCsrf = SELF_HANDLED_CSRF_ROUTES.some(route =>
         path === route || path.startsWith(route + "/")
@@ -233,13 +233,12 @@ export async function middleware(request: NextRequest) {
     logger.info("Request allowed", { path, method, role, duration: Date.now() - startTime });
     return NextResponse.next();
   } catch (error) {
-    logger.error("Middleware error", { error });
+    logger.error("Proxy error", { error });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
-
-
 }
 
+// New way to configure matcher in Next.js 16
 export const config = {
   matcher: [
     "/api/:path*",

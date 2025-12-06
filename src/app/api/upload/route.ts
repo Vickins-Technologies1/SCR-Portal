@@ -163,7 +163,5 @@ export async function POST(request: NextRequest) {
 }
 
 // Configure runtime for Vercel serverless
-export const config = {
-  runtime: 'edge',
-  maxDuration: 30,
-};
+export const runtime = 'edge';
+export const maxDuration = 30;
