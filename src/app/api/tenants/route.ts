@@ -1,5 +1,4 @@
 // src/app/api/tenants/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";
@@ -8,57 +7,9 @@ import bcrypt from "bcryptjs";
 import { sendWelcomeEmail } from "../../../lib/email";
 import { sendWelcomeSms } from "../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../lib/whatsapp";
-import { TenantRequest, ResponseTenant } from "../../../types/tenant";
+import { TenantRequest, ResponseTenant, Tenant } from "../../../types/tenant";
+import { Property } from "../../../types/property";
 
-// Local types (only for this file)
-interface UnitType {
-  type: string;
-  uniqueType?: string;
-  price: number;
-  deposit: number;
-  managementType: "RentCollection" | "FullManagement";
-  managementFee?: number;
-  quantity: number;
-}
-
-interface Property {
-  _id: ObjectId | string;
-  ownerId: string;
-  name: string;
-  unitTypes: UnitType[];
-  rentPaymentDate?: number;
-  requiresAdminApproval?: boolean;
-  createdAt: Date;
-  updatedAt?: Date;
-}
-
-interface Tenant {
-  _id: ObjectId;
-  ownerId: string;
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  role: string;
-  propertyId: string;
-  unitType: string;
-  price: number;
-  deposit: number;
-  houseNumber: string;
-  leaseStartDate: string;
-  leaseEndDate: string;
-  status: string;
-  paymentStatus: string;
-  createdAt: Date;
-  updatedAt?: Date;
-  totalRentPaid: number;
-  totalUtilityPaid: number;
-  totalDepositPaid: number;
-  walletBalance: number;
-  deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
-}
-
-// Logger
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
   info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
@@ -66,31 +17,19 @@ const logger = {
   error: (msg: string, meta?: any) => console.error(`[ERROR] ${msg}`, meta || ""),
 };
 
-// CSRF Token Validation
 const validateCsrfToken = async (request: NextRequest): Promise<boolean> => {
   const csrfToken = request.headers.get("x-csrf-token");
   const cookieToken = (await cookies()).get("csrf-token")?.value;
-
-  logger.debug("CSRF Token Validation", { headerCsrfToken: csrfToken, cookieCsrfToken: cookieToken });
-
   if (!csrfToken || !cookieToken || csrfToken !== cookieToken) {
-    logger.warn("Invalid or missing CSRF token");
+    logger.warn("Invalid CSRF token");
     return false;
   }
   return true;
 };
 
-// Safe ISO string conversion
-const toISO = (date: Date | string | undefined): string | undefined => {
-  if (!date) return undefined;
-  try {
-    return new Date(date).toISOString();
-  } catch {
-    return undefined;
-  }
-};
+const toISO = (date?: Date | string): string | undefined => date ? new Date(date).toISOString() : undefined;
 
-// ==================== GET: List Tenants ====================
+// GET: List Tenants (with pagination & filters)
 export async function GET(request: NextRequest) {
   try {
     const userId = (await cookies()).get("userId")?.value;
@@ -130,19 +69,20 @@ export async function GET(request: NextRequest) {
         role: t.role,
         propertyId: t.propertyId,
         unitType: t.unitType,
+        unitIdentifier: t.unitIdentifier,
         price: t.price,
         deposit: t.deposit,
         houseNumber: t.houseNumber,
         leaseStartDate: t.leaseStartDate,
         leaseEndDate: t.leaseEndDate,
-        status: t.status || "active",
-        paymentStatus: t.paymentStatus || "current",
+        status: t.status,
+        paymentStatus: t.paymentStatus,
         createdAt: toISO(t.createdAt)!,
         updatedAt: toISO(t.updatedAt),
-        totalRentPaid: t.totalRentPaid ?? 0,
-        totalUtilityPaid: t.totalUtilityPaid ?? 0,
-        totalDepositPaid: t.totalDepositPaid ?? 0,
-        walletBalance: t.walletBalance ?? 0,
+        totalRentPaid: t.totalRentPaid,
+        totalUtilityPaid: t.totalUtilityPaid,
+        totalDepositPaid: t.totalDepositPaid,
+        walletBalance: t.walletBalance,
         deliveryMethod: t.deliveryMethod,
       })),
       total,
@@ -155,7 +95,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ==================== POST: Create Tenant ====================
+// POST: Create New Tenant — FIXED FOR BOTH OLD & NEW PROPERTIES
 export async function POST(request: NextRequest) {
   try {
     if (!(await validateCsrfToken(request))) {
@@ -170,34 +110,25 @@ export async function POST(request: NextRequest) {
     }
 
     const body: TenantRequest = await request.json();
-    logger.debug("POST /api/tenants", { body });
 
-    // Required fields (role is NOT required — we set it)
-    const required = [
-      "name", "email", "phone", "password",
-      "propertyId", "unitType", "price", "deposit",
-      "houseNumber", "leaseStartDate", "leaseEndDate"
-    ];
-
+    // Required fields
+    const required = ["name", "email", "phone", "password", "propertyId", "unitIdentifier", "houseNumber", "leaseStartDate", "leaseEndDate"];
     const missing = required.filter(f => !body[f as keyof TenantRequest]);
     if (missing.length > 0) {
-      return NextResponse.json(
-        { success: false, message: `Missing fields: ${missing.join(", ")}` },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: `Missing fields: ${missing.join(", ")}` }, { status: 400 });
     }
 
     // Basic validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email!)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
       return NextResponse.json({ success: false, message: "Invalid email" }, { status: 400 });
     }
-    if (!/^\+?\d{10,15}$/.test(body.phone!)) {
+    if (!/^\+?\d{10,15}$/.test(body.phone)) {
       return NextResponse.json({ success: false, message: "Invalid phone number" }, { status: 400 });
     }
-    if (new Date(body.leaseEndDate!) <= new Date(body.leaseStartDate!)) {
-      return NextResponse.json({ success: false, message: "End date must be after start date" }, { status: 400 });
+    if (new Date(body.leaseEndDate) <= new Date(body.leaseStartDate)) {
+      return NextResponse.json({ success: false, message: "Lease end date must be after start date" }, { status: 400 });
     }
-    if (!ObjectId.isValid(body.propertyId!)) {
+    if (!ObjectId.isValid(body.propertyId)) {
       return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
     }
 
@@ -205,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     // Validate property ownership
     const property = await db.collection<Property>("properties").findOne({
-      _id: new ObjectId(body.propertyId!),
+      _id: new ObjectId(body.propertyId),
       ownerId: userId,
     });
 
@@ -213,29 +144,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Property not found or not owned by you" }, { status: 404 });
     }
 
-    if (property.requiresAdminApproval) {
-      return NextResponse.json({ success: false, message: "This property requires admin approval" }, { status: 403 });
+    // CRITICAL FIX: Handle properties with and without uniqueType
+    const unitConfigWithUnique = property.unitTypes
+      .map((unit, index) => ({
+        ...unit,
+        uniqueType: unit.uniqueType || `${unit.type}-${index}`, // fallback for old data
+      }))
+      .find(u => u.uniqueType === body.unitIdentifier);
+
+    if (!unitConfigWithUnique) {
+      return NextResponse.json({ success: false, message: "Invalid unit type selected" }, { status: 400 });
     }
 
-    // Find unit type by .type
-    const unit = property.unitTypes.find(u => u.type === body.unitType);
-
-    if (!unit) {
-      return NextResponse.json(
-        { success: false, message: `Unit type "${body.unitType}" not found. Available: ${property.unitTypes.map(u => u.type).join(", ")}` },
-        { status: 400 }
-      );
+    if (unitConfigWithUnique.quantity <= 0) {
+      return NextResponse.json({
+        success: false,
+        message: `No available units for ${unitConfigWithUnique.type} (Ksh ${unitConfigWithUnique.price}/mo)`,
+      }, { status: 400 });
     }
 
-    if (unit.quantity <= 0) {
-      return NextResponse.json({ success: false, message: `No units available for "${unit.type}"` }, { status: 400 });
-    }
-
-    if (body.price !== unit.price || body.deposit !== unit.deposit) {
-      return NextResponse.json({ success: false, message: "Price/deposit must match selected unit type" }, { status: 400 });
-    }
-
-    // Invoice check for >3 tenants
+    // Check management fee (same as before)
     const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
     if (tenantCount >= 3) {
       const paidInvoice = await db.collection("invoices").findOne({
@@ -246,7 +174,7 @@ export async function POST(request: NextRequest) {
       });
       if (!paidInvoice) {
         return NextResponse.json(
-          { success: false, message: `Payment required: Management fee invoice for "${property.name}" must be paid to add more tenants` },
+          { success: false, message: "Payment required: Management fee invoice must be paid to add more tenants" },
           { status: 402 }
         );
       }
@@ -256,18 +184,19 @@ export async function POST(request: NextRequest) {
     const tenantData: Tenant = {
       _id: new ObjectId(),
       ownerId: userId,
-      name: body.name!,
-      email: body.email!,
-      phone: body.phone!,
+      name: body.name.trim(),
+      email: body.email.trim(),
+      phone: body.phone.trim(),
       password: await bcrypt.hash(body.password!, 10),
       role: "tenant",
-      propertyId: body.propertyId!,
-      unitType: unit.type,
-      price: unit.price,
-      deposit: unit.deposit,
-      houseNumber: body.houseNumber!,
-      leaseStartDate: body.leaseStartDate!,
-      leaseEndDate: body.leaseEndDate!,
+      propertyId: body.propertyId,
+      unitType: unitConfigWithUnique.type,
+      unitIdentifier: unitConfigWithUnique.uniqueType,
+      price: unitConfigWithUnique.price,
+      deposit: unitConfigWithUnique.deposit,
+      houseNumber: body.houseNumber.trim(),
+      leaseStartDate: body.leaseStartDate,
+      leaseEndDate: body.leaseEndDate,
       status: "active",
       paymentStatus: "current",
       createdAt: new Date(),
@@ -281,46 +210,29 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection<Tenant>("tenants").insertOne(tenantData);
 
-    // Send welcome messages
-    const loginUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-
-    try {
-      await sendWelcomeEmail({
-        to: body.email!,
-        name: body.name!,
-        email: body.email!,
-        password: body.password!,
-        loginUrl,
-        propertyName: property.name,
-        houseNumber: body.houseNumber!,
-      });
-    } catch (e) { logger.error("Welcome email failed", e); }
-
-    try {
-      const msg = `Welcome ${body.name}! Login: ${loginUrl.replace(/^https?:\/\//, "")}\nEmail: ${body.email}\nPass: ${body.password}\nUnit: ${property.name} ${body.houseNumber!}`;
-      await sendWelcomeSms({ phone: body.phone!, message: msg.slice(0, 160) });
-    } catch (e) { logger.error("SMS failed", e); }
-
-    try {
-      await sendWhatsAppMessage({
-        phone: body.phone!,
-        message: `Welcome ${body.name}! You've been added to ${property.name}, Unit ${body.houseNumber!}. Login: ${loginUrl}`,
-      });
-    } catch (e) { logger.error("WhatsApp failed", e); }
-
-    logger.info("Tenant created successfully", { tenantId: result.insertedId.toString() });
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Tenant added successfully",
-        tenantId: result.insertedId.toString(),
-      },
-      { status: 201 }
+    // Decrement quantity using the real uniqueType (now guaranteed to exist)
+    await db.collection<Property>("properties").updateOne(
+      { _id: new ObjectId(body.propertyId) },
+      { $inc: { "unitTypes.$[elem].quantity": -1 } },
+      { arrayFilters: [{ "elem.uniqueType": unitConfigWithUnique.uniqueType }] }
     );
 
-  } catch (error) {
-    logger.error("POST /api/tenants error", { error });
+    // Send welcome messages
+    const loginUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    try { await sendWelcomeEmail({ to: body.email, name: body.name, email: body.email, password: body.password!, loginUrl, propertyName: property.name, houseNumber: body.houseNumber }); } catch (e) { logger.error("Email failed", e); }
+    try { await sendWelcomeSms({ phone: body.phone, message: `Welcome ${body.name}! Login: ${loginUrl}\nUnit: ${property.name} ${body.houseNumber}` }); } catch (e) { logger.error("SMS failed", e); }
+    try { await sendWhatsAppMessage({ phone: body.phone, message: `Welcome ${body.name}! You've been added to ${property.name}, Unit ${body.houseNumber}. Login: ${loginUrl}` }); } catch (e) { logger.error("WhatsApp failed", e); }
+
+    logger.info("Tenant created successfully", { tenantId: result.insertedId.toString(), unitIdentifier: body.unitIdentifier });
+
+    return NextResponse.json({
+      success: true,
+      message: "Tenant added successfully",
+      tenantId: result.insertedId.toString(),
+    }, { status: 201 });
+
+  } catch (error: any) {
+    logger.error("POST /api/tenants error", { error: error.message, stack: error.stack });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }

@@ -8,23 +8,24 @@ export interface Tenant {
   email: string;
   phone: string;
   password: string;
-  role: string;
+  role: "tenant";
   propertyId: string;
-  unitType: string;
+  unitType: string;           // Display name: "1-Bedroom"
+  unitIdentifier: string;     // Unique key: "1-Bedroom-0", "1-Bedroom-1"
   price: number;
   deposit: number;
   houseNumber: string;
   leaseStartDate: string;
   leaseEndDate: string;
-  status: string;
-  paymentStatus: string;
+  status: "active" | "inactive" | "evicted";
+  paymentStatus: "current" | "overdue" | "paid";
   createdAt: Date;
   updatedAt?: Date;
   totalRentPaid: number;
   totalUtilityPaid: number;
   totalDepositPaid: number;
   walletBalance: number;
-  deliveryMethod: "sms" | "email" | "whatsapp" | "both" | "app"; // Added "whatsapp"
+  deliveryMethod: "sms" | "email" | "whatsapp" | "both" | "app";
 }
 
 export interface ResponseTenant {
@@ -33,9 +34,10 @@ export interface ResponseTenant {
   name: string;
   email: string;
   phone: string;
-  role: string;
+  role: "tenant";
   propertyId: string;
   unitType: string;
+  unitIdentifier: string;
   price: number;
   deposit: number;
   houseNumber: string;
@@ -49,7 +51,7 @@ export interface ResponseTenant {
   totalUtilityPaid: number;
   totalDepositPaid: number;
   walletBalance: number;
-  deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app"; // Added for API responses
+  deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
   dues?: {
     rentDues: number;
     utilityDues: number;
@@ -59,23 +61,15 @@ export interface ResponseTenant {
 }
 
 export interface TenantRequest {
-  name?: string;
-  email?: string;
-  phone?: string;
+  name: string;
+  email: string;
+  phone: string;
   password?: string;
-  role?: string;
-  propertyId?: string;
-  unitType?: string;
+  propertyId: string;
+  unitIdentifier: string;        // REQUIRED: uniqueType like "1-Bedroom-0"
+  houseNumber: string;
+  leaseStartDate: string;
+  leaseEndDate: string;
   price?: number;
   deposit?: number;
-  houseNumber?: string;
-  leaseStartDate?: string;
-  leaseEndDate?: string;
-  status?: string;
-  paymentStatus?: string;
-  totalRentPaid?: number;
-  totalUtilityPaid?: number;
-  totalDepositPaid?: number;
-  walletBalance?: number;
-  ownerId?: string;
 }

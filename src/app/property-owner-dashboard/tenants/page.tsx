@@ -1,39 +1,19 @@
+// src/app/property-owner-dashboard/tenants/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Users, Plus, EyeIcon, EyeOffIcon } from "lucide-react";
-import { TenantRequest } from "../../../types/tenant";
+import { Users, Plus } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
 import PaymentModal from "../components/PaymentModal";
-import AddTenantModal from "../components/AddTenantModal";
-import EditTenantModal from "../components/EditTenantModal";
 import TenantsTable from "../components/TenantsTable";
+import TenantFormContent from "../components/TenantFormContent";
 
-interface Tenant {
-  _id: string;
-  name: string;
-  email: string;
-  phone: string;
-  propertyId: string;
-  unitType: string;
-  price: number;
-  deposit: number;
-  houseNumber: string;
-  leaseStartDate: string;
-  leaseEndDate: string;
-  createdAt: string;
-  updatedAt?: string;
-  walletBalance: number;
-  totalRentPaid: number;
-  totalUtilityPaid: number;
-  totalDepositPaid: number;
-  status: string;
-  paymentStatus: string;
-}
+// Import correct Tenant type
+import { TenantRequest, ResponseTenant } from "../../../types/tenant";
 
 interface ClientProperty {
   _id: string;
@@ -65,7 +45,7 @@ interface FilterConfig {
 
 export default function TenantsPage() {
   const router = useRouter();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenants, setTenants] = useState<ResponseTenant[]>([]);
   const [properties, setProperties] = useState<ClientProperty[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -76,31 +56,17 @@ export default function TenantsPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPaymentPromptOpen, setIsPaymentPromptOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
-  const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
+  const [editingTenant, setEditingTenant] = useState<ResponseTenant | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<string | null>(null);
-  const [tenantName, setTenantName] = useState("");
-  const [tenantEmail, setTenantEmail] = useState("");
-  const [tenantPhone, setTenantPhone] = useState("");
-  const [tenantPassword, setTenantPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [selectedPropertyId, setSelectedPropertyId] = useState("");
-  const [selectedUnitType, setSelectedUnitType] = useState("");
-  const [price, setPrice] = useState("");
-  const [deposit, setDeposit] = useState("");
-  const [houseNumber, setHouseNumber] = useState("");
-  const [leaseStartDate, setLeaseStartDate] = useState("");
-  const [leaseEndDate, setLeaseEndDate] = useState("");
-  const [totalRentPaid, setTotalRentPaid] = useState("");
-  const [totalUtilityPaid, setTotalUtilityPaid] = useState("");
-  const [totalDepositPaid, setTotalDepositPaid] = useState("");
+  const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
+  const [csrfToken, setCsrfToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
-  const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
-  const [csrfToken, setCsrfToken] = useState("");
+
+  // Pagination & Filters
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10); // Changed to dynamic state with setLimit
+  const [limit, setLimit] = useState(10);
   const [totalTenants, setTotalTenants] = useState(0);
   const [filters, setFilters] = useState<FilterConfig>({
     tenantName: "",
@@ -108,11 +74,6 @@ export default function TenantsPage() {
     propertyId: "",
     unitType: "",
   });
-
-  // Toggle password visibility
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
 
   // Fetch CSRF token
   useEffect(() => {
@@ -123,200 +84,103 @@ export default function TenantsPage() {
         if (data.success) {
           setCsrfToken(data.csrfToken);
           Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
-        } else {
-          setError("Failed to fetch CSRF token.");
         }
       } catch {
-        setError("Failed to connect to server for CSRF token.");
+        setError("Failed to connect to server.");
       }
     };
     fetchCsrfToken();
   }, []);
 
-  // Check cookies and redirect if unauthorized
+  // Auth check
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
     setUserId(uid || null);
     setRole(userRole || null);
     if (!uid || userRole !== "propertyOwner") {
-      setError("Unauthorized. Please log in as a property owner.");
       router.push("/");
     }
   }, [router]);
 
   // Fetch user data
   const fetchUserData = useCallback(async () => {
-    if (!userId || !role) return;
+    if (!userId || !csrfToken) return;
     try {
-      const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
+      const res = await fetch(`/api/user?userId=${userId}&role=${role}`, {
+        headers: { "X-CSRF-Token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
         setPaymentStatus(data.user.paymentStatus || "inactive");
         setWalletBalance(data.user.walletBalance || 0);
-      } else {
-        if (res.status === 404) {
-          setError("User account not found. Please log in again.");
-          Cookies.remove("userId");
-          Cookies.remove("role");
-          router.push("/");
-        } else {
-          setError(data.message || "Failed to fetch user data.");
-        }
       }
-    } catch {
-      setError("Failed to connect to the server. Please try again later.");
-    }
-  }, [userId, role, router, csrfToken]);
+    } catch {}
+  }, [userId, role, csrfToken]);
 
   // Fetch tenants
   const fetchTenants = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !csrfToken) return;
     setIsLoading(true);
     try {
       const query = new URLSearchParams({
-        userId: encodeURIComponent(userId),
+        userId,
         page: page.toString(),
-        limit: limit.toString(), // Updated to use dynamic limit
+        limit: limit.toString(),
         ...(filters.tenantName && { name: filters.tenantName }),
         ...(filters.tenantEmail && { email: filters.tenantEmail }),
         ...(filters.propertyId && { propertyId: filters.propertyId }),
         ...(filters.unitType && { unitType: filters.unitType }),
       }).toString();
+
       const res = await fetch(`/api/tenants?${query}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
+        headers: { "X-CSRF-Token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
-        const normalizedTenants = (data.tenants || []).map((tenant: Tenant) => ({
-          ...tenant,
-          walletBalance: tenant.walletBalance ?? 0,
-          totalRentPaid: tenant.totalRentPaid ?? 0,
-          totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
-          totalDepositPaid: tenant.totalDepositPaid ?? 0,
-          status: tenant.status || "active",
-          paymentStatus: tenant.paymentStatus || "active",
-        }));
-        setTenants(normalizedTenants);
+        setTenants(data.tenants || []);
         setTotalTenants(data.total || 0);
       } else {
-        setError(data.message || "Failed to fetch tenants.");
+        setError(data.message || "Failed to load tenants");
       }
     } catch {
-      setError("Failed to connect to the server.");
+      setError("Failed to load tenants.");
     } finally {
       setIsLoading(false);
     }
-  }, [userId, page, limit, csrfToken, filters]); // Added limit to dependencies
+  }, [userId, csrfToken, page, limit, filters]);
 
   // Fetch properties
   const fetchProperties = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !csrfToken) return;
     try {
-      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
+      const res = await fetch(`/api/properties?userId=${userId}`, {
+        headers: { "X-CSRF-Token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
-        const properties = data.properties.map((p: ClientProperty) => ({
-          ...p,
-          unitTypes: p.unitTypes.map((u: ClientProperty["unitTypes"][0], index: number) => ({
-            ...u,
-            uniqueType: u.uniqueType || `${u.type}-${index}`,
-            managementFee: typeof u.managementFee === "string" ? parseFloat(u.managementFee) : u.managementFee,
-            quantity: u.quantity ?? 1,
-          })),
-          address: p.address || "",
-          managementFee: p.managementFee || 0,
-          createdAt: p.createdAt || new Date().toISOString(),
-          updatedAt: p.updatedAt || new Date().toISOString(),
-          rentPaymentDate: p.rentPaymentDate || "1",
-          ownerId: p.ownerId || userId,
-          status: p.status || "active",
-        }));
-        setProperties(properties || []);
-      } else {
-        setError(data.message || "Failed to fetch properties.");
+        setProperties(data.properties || []);
       }
-    } catch {
-      setError("Failed to connect to the server.");
-    }
+    } catch {}
   }, [userId, csrfToken]);
 
   // Fetch pending invoices
   const fetchPendingInvoices = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !csrfToken) return;
     try {
-      const res = await fetch(`/api/invoices`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
+      const res = await fetch("/api/invoices", {
+        headers: { "X-CSRF-Token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
-      if (data.success) {
-        setPendingInvoices(data.pendingInvoices || 0);
-      } else {
-        setError(data.message || "Failed to fetch invoice status.");
-      }
-    } catch {
-      setError("Failed to connect to the server.");
-    }
+      if (data.success) setPendingInvoices(data.pendingInvoices || 0);
+    } catch {}
   }, [userId, csrfToken]);
 
-  // Fetch invoice status
-  const fetchInvoiceStatus = useCallback(
-    async (propertyId: string, uniqueType: string) => {
-      if (!userId || !propertyId || !uniqueType) {
-        setError("Missing required parameters to check invoice status.");
-        return null;
-      }
-      try {
-        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(
-          propertyId
-        )}&unitType=${encodeURIComponent(uniqueType)}`;
-        const res = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (data.success && (data.status === null || ["pending", "completed", "failed"].includes(data.status))) {
-          return data.status;
-        }
-        setError(data.message || "Failed to fetch invoice status.");
-        return null;
-      } catch {
-        setError("Failed to connect to the server while checking invoice status.");
-        return null;
-      }
-    },
-    [userId, csrfToken]
-  );
-
-  // Fetch initial data
+  // Load initial data
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
       Promise.all([
@@ -324,106 +188,77 @@ export default function TenantsPage() {
         fetchTenants(),
         fetchProperties(),
         fetchPendingInvoices(),
-      ]).catch(() => {
-        setError("Failed to load initial data. Please try again.");
-      });
+      ]).catch(() => setError("Failed to load data."));
     }
   }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
-  // Reset tenant form
-  const resetForm = useCallback(() => {
-    setTenantName("");
-    setTenantEmail("");
-    setTenantPhone("");
-    setTenantPassword("");
-    setShowPassword(false);
-    setSelectedPropertyId("");
-    setSelectedUnitType("");
-    setPrice("");
-    setDeposit("");
-    setHouseNumber("");
-    setLeaseStartDate("");
-    setLeaseEndDate("");
-    setTotalRentPaid("");
-    setTotalUtilityPaid("");
-    setTotalDepositPaid("");
-    setFormErrors({});
-    setError(null);
-  }, []);
-
-  // Open add tenant modal
-  const openAddModal = useCallback(async () => {
-    if (paymentStatus === null || walletBalance === null) {
-      setError("Unable to verify payment status. Please try again or log in.");
-      return;
-    }
-    resetForm();
+  // Open Add Modal
+  const openAddModal = () => {
     setModalMode("add");
-    setEditingTenantId(null);
-    if (pendingTenantData) {
-      setTenantName(pendingTenantData.name || "");
-      setTenantEmail(pendingTenantData.email || "");
-      setTenantPhone(pendingTenantData.phone || "");
-      setTenantPassword(pendingTenantData.password || "");
-      setSelectedPropertyId(pendingTenantData.propertyId || "");
-      setSelectedUnitType(pendingTenantData.unitType || "");
-      setPrice(pendingTenantData.price?.toString() || "");
-      setDeposit(pendingTenantData.deposit?.toString() || "");
-      setHouseNumber(pendingTenantData.houseNumber || "");
-      setLeaseStartDate(pendingTenantData.leaseStartDate || "");
-      setLeaseEndDate(pendingTenantData.leaseEndDate || "");
-      setTotalRentPaid(pendingTenantData.totalRentPaid?.toString() || "");
-      setTotalUtilityPaid(pendingTenantData.totalUtilityPaid?.toString() || "");
-      setTotalDepositPaid(pendingTenantData.totalDepositPaid?.toString() || "");
-    }
+    setEditingTenant(null);
+    setPendingTenantData(null);
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance, pendingTenantData, resetForm]);
+  };
 
-  // Open edit tenant modal
-  const openEditModal = useCallback((tenant: Tenant) => {
-    if (paymentStatus === null || walletBalance === null) {
-      setError("Unable to verify payment status. Please try again or log in.");
-      return;
-    }
+  // Open Edit Modal
+  const openEditModal = (tenant: ResponseTenant) => {
     setModalMode("edit");
-    setEditingTenantId(tenant._id);
-    setTenantName(tenant.name);
-    setTenantEmail(tenant.email);
-    setTenantPhone(tenant.phone);
-    setSelectedPropertyId(tenant.propertyId);
-    setSelectedUnitType(tenant.unitType);
-    setPrice(tenant.price.toString());
-    setDeposit(tenant.deposit.toString());
-    setHouseNumber(tenant.houseNumber);
-    setLeaseStartDate(tenant.leaseStartDate);
-    setLeaseEndDate(tenant.leaseEndDate);
-    setTotalRentPaid((tenant.totalRentPaid ?? 0).toString());
-    setTotalUtilityPaid((tenant.totalUtilityPaid ?? 0).toString());
-    setTotalDepositPaid((tenant.totalDepositPaid ?? 0).toString());
-    setTenantPassword("");
-    setShowPassword(false);
-    setFormErrors({});
-    setError(null);
+    setEditingTenant(tenant);
     setIsModalOpen(true);
-  }, [paymentStatus, walletBalance]);
+  };
 
-  // Handle tenant deletion
-  const handleDelete = useCallback((id: string) => {
-    setTenantToDelete(id);
-    setIsDeleteModalOpen(true);
-  }, []);
+  // Handle tenant submit
+  const handleTenantSubmit = async (data: any) => {
+    if (!userId || !csrfToken) return;
 
-  // Confirm tenant deletion
-  const confirmDelete = useCallback(async () => {
-    if (!tenantToDelete) return;
     setIsLoading(true);
+    setError(null);
+
     try {
-      const res = await fetch(`/api/tenants/${tenantToDelete}`, {
-        method: "DELETE",
+      const url = modalMode === "add" ? "/api/tenants" : `/api/tenants/${editingTenant?._id}`;
+      const method = modalMode === "add" ? "POST" : "PUT";
+
+      const res = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": csrfToken,
         },
+        credentials: "include",
+        body: JSON.stringify({ ...data, ownerId: userId }),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setSuccessMessage(`Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`);
+        setIsModalOpen(false);
+        setPendingTenantData(null);
+        fetchTenants();
+        fetchUserData();
+        fetchPendingInvoices();
+      } else if (result.message?.includes("invoice")) {
+        setPendingTenantData(data);
+        setError(result.message);
+        setIsPaymentPromptOpen(true);
+      } else {
+        setError(result.message || "Operation failed");
+      }
+    } catch {
+      setError("Failed to connect to server");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Delete tenant
+  const confirmDelete = async () => {
+    if (!tenantToDelete || !csrfToken) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/tenants/${tenantToDelete}`, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -431,106 +266,16 @@ export default function TenantsPage() {
         setSuccessMessage("Tenant deleted successfully!");
         fetchTenants();
       } else {
-        setError(data.message || "Failed to delete tenant.");
+        setError(data.message || "Failed to delete tenant");
       }
     } catch {
-      setError("Failed to connect to the server.");
+      setError("Failed to delete tenant");
     } finally {
       setIsLoading(false);
       setIsDeleteModalOpen(false);
       setTenantToDelete(null);
     }
-  }, [tenantToDelete, fetchTenants, csrfToken]);
-
-  // Validate tenant form
-  const validateForm = useCallback(() => {
-    const errors: { [key: string]: string | undefined } = {};
-    if (!tenantName.trim()) errors.tenantName = "Full name is required";
-    if (!tenantEmail.trim()) errors.tenantEmail = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantEmail)) errors.tenantEmail = "Invalid email format";
-    if (!tenantPhone.trim()) errors.tenantPhone = "Phone number is required";
-    else if (!/^\+?\d{10,15}$/.test(tenantPhone)) errors.tenantPhone = "Invalid phone number (10-15 digits, optional +)";
-    if (modalMode === "add" && !tenantPassword.trim()) errors.tenantPassword = "Password is required";
-    if (!selectedPropertyId) errors.selectedPropertyId = "Property is required";
-    if (!selectedUnitType) errors.selectedUnitType = "Unit type is required";
-    if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0) errors.price = "Price must be a non-negative number";
-    if (!deposit || isNaN(parseFloat(deposit)) || parseFloat(deposit) < 0) errors.deposit = "Deposit must be a non-negative number";
-    if (!houseNumber.trim()) errors.houseNumber = "House number is required";
-    if (!leaseStartDate || isNaN(Date.parse(leaseStartDate))) errors.leaseStartDate = "Valid lease start date is required";
-    if (!leaseEndDate || isNaN(Date.parse(leaseEndDate))) errors.leaseEndDate = "Valid lease end date is required";
-    else if (new Date(leaseEndDate) <= new Date(leaseStartDate)) errors.leaseEndDate = "Lease end date must be after start date";
-    if (totalRentPaid && (isNaN(parseFloat(totalRentPaid)) || parseFloat(totalRentPaid) < 0)) errors.totalRentPaid = "Total rent paid must be a non-negative number";
-    if (totalUtilityPaid && (isNaN(parseFloat(totalUtilityPaid)) || parseFloat(totalUtilityPaid) < 0)) errors.totalUtilityPaid = "Total utility paid must be a non-negative number";
-    if (totalDepositPaid && (isNaN(parseFloat(totalDepositPaid)) || parseFloat(totalDepositPaid) < 0)) errors.totalDepositPaid = "Total deposit paid must be a non-negative number";
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [tenantName, tenantEmail, tenantPhone, tenantPassword, selectedPropertyId, selectedUnitType, price, deposit, houseNumber, leaseStartDate, leaseEndDate, totalRentPaid, totalUtilityPaid, totalDepositPaid, modalMode]);
-
-  // Replace your current handleSubmit with this version
-  const handleSubmit = useCallback(
-    async (tenantData: TenantRequest) => {
-      if (!userId) {
-        setError("User ID is missing.");
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-      setSuccessMessage(null);
-
-      try {
-        const url = modalMode === "add" ? "/api/tenants" : `/api/tenants/${editingTenantId}`;
-        const method = modalMode === "add" ? "POST" : "PUT";
-
-        const res = await fetch(url, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            ...tenantData,
-            ownerId: userId,
-          }),
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          setSuccessMessage(`Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`);
-          setIsModalOpen(false);
-          setPendingTenantData(null);
-          resetForm();
-          fetchTenants();
-          fetchUserData();
-          fetchPendingInvoices();
-        } else {
-          if (data.message.includes("invoice")) {
-            setPendingTenantData(tenantData);
-            setError(data.message);
-            setIsPaymentPromptOpen(true);
-          } else {
-            setError(data.message || "Operation failed");
-          }
-        }
-      } catch (err) {
-        setError("Failed to connect to server");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [
-      userId,
-      modalMode,
-      editingTenantId,
-      csrfToken,
-      resetForm,
-      fetchTenants,
-      fetchUserData,
-      fetchPendingInvoices,
-    ]
-  );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
@@ -545,29 +290,37 @@ export default function TenantsPage() {
             </h1>
             <button
               onClick={openAddModal}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium text-sm sm:text-base ${isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"}`}
-              disabled={isLoading}
-              aria-label="Add new tenant"
+              className="flex items-center gap-2 px-6 py-3 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition font-medium"
             >
               <Plus className="h-5 w-5" />
               Add Tenant
             </button>
           </div>
+
           {tenants.length >= 3 && (
-            <div className="bg-yellow-100 text-yellow-700 p-4 mb-4 rounded-lg shadow">
-              Note: Adding more tenants may require payment of a management fee for the selected unit type if no invoice has been paid.
+            <div className="bg-yellow-100 text-yellow-700 p-4 mb-4 rounded-lg">
+              Note: Adding more tenants may require a management fee payment.
             </div>
           )}
+
           {pendingInvoices > 0 && (
-            <div className="bg-blue-100 text-blue-700 p-4 mb-4 rounded-lg shadow">
-              You have {pendingInvoices} pending invoice{pendingInvoices === 1 ? '' : 's'}. Please settle them to add more tenants.
+            <div className="bg-blue-100 text-blue-700 p-4 mb-4 rounded-lg">
+              You have {pendingInvoices} pending invoice{pendingInvoices > 1 ? "s" : ""}.
             </div>
           )}
+
           {successMessage && (
-            <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+            <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg animate-pulse">
               {successMessage}
             </div>
           )}
+
+          {error && (
+            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg">
+              {error}
+            </div>
+          )}
+
           <TenantsTable
             tenants={tenants}
             properties={properties}
@@ -582,102 +335,92 @@ export default function TenantsPage() {
             userId={userId}
             csrfToken={csrfToken}
             onEdit={openEditModal}
-            onDelete={handleDelete}
-          />
-          <AddTenantModal
-            isOpen={isModalOpen && modalMode === "add"}
-            onClose={() => {
-              setIsModalOpen(false);
-              resetForm();
-              setPendingTenantData(null);
+            onDelete={(id) => {
+              setTenantToDelete(id);
+              setIsDeleteModalOpen(true);
             }}
-            onSubmit={handleSubmit}
-            properties={properties}
-            pendingTenantData={pendingTenantData}
-            isLoading={isLoading}
-            csrfToken={csrfToken}
-            tenantsCount={tenants.length}
           />
 
-          {editingTenantId && (
-            <EditTenantModal
-              isOpen={isModalOpen && modalMode === "edit"}
-              onClose={() => {
-                setIsModalOpen(false);
-                resetForm();
-              }}
-              tenant={tenants.find(t => t._id === editingTenantId)}
+          {/* Unified Tenant Form Modal */}
+          <Modal
+            title={modalMode === "add" ? "Add New Tenant" : "Edit Tenant"}
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+          >
+            <TenantFormContent
+              mode={modalMode}
+              initialData={
+                modalMode === "edit" && editingTenant
+                  ? {
+                      ...editingTenant,
+                      leaseStartDate: editingTenant.leaseStartDate.split("T")[0],
+                      leaseEndDate: editingTenant.leaseEndDate.split("T")[0],
+                    }
+                  : pendingTenantData || {}
+              }
               properties={properties}
-              onSubmit={handleSubmit}
+              onSubmit={handleTenantSubmit}
+              onCancel={() => setIsModalOpen(false)}
               isLoading={isLoading}
               csrfToken={csrfToken}
+              tenantsCount={tenants.length}
             />
-          )}
+          </Modal>
+
+          {/* Delete Confirmation */}
           <Modal
             title="Confirm Delete"
             isOpen={isDeleteModalOpen}
             onClose={() => setIsDeleteModalOpen(false)}
           >
-            <p className="mb-6 text-gray-700 text-sm sm:text-base">
+            <p className="mb-6 text-gray-700">
               Are you sure you want to delete this tenant? This action cannot be undone.
             </p>
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
-                aria-label="Cancel delete tenant"
+                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2 text-sm sm:text-base"
                 disabled={isLoading}
-                aria-label="Confirm delete tenant"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
-                {isLoading && (
-                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                )}
-                Delete
+                {isLoading ? "Deleting..." : "Delete"}
               </button>
             </div>
           </Modal>
+
+          {/* Payment Prompt */}
           <PaymentModal
             isOpen={isPaymentPromptOpen}
             onClose={() => {
               setIsPaymentPromptOpen(false);
               setIsModalOpen(true);
-              setError(null);
             }}
             onSuccess={() => {
-              setSuccessMessage("Payment processed successfully!");
+              setSuccessMessage("Payment successful! Tenant added.");
               setPendingTenantData(null);
               fetchUserData();
               fetchPendingInvoices();
               fetchTenants();
               setIsPaymentPromptOpen(false);
-              setIsModalOpen(true);
-              setError(null);
             }}
-            onError={(message) => {
-              setError(message);
-              setIsPaymentPromptOpen(false);
-              setIsModalOpen(true);
-            }}
+            onError={(msg) => setError(msg)}
             properties={properties}
-            initialPropertyId={pendingTenantData?.propertyId ?? ""}
-            initialPhone={pendingTenantData?.phone ?? ""}
-            userId={userId ?? ""}
+            initialPropertyId={pendingTenantData?.propertyId || ""}
+            initialPhone={pendingTenantData?.phone || ""}
+            userId={userId || ""}
           />
         </main>
       </div>
+
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body {
-          font-family: 'Inter', sans-serif;
-        }
-      `}
-      </style>
+        body { font-family: 'Inter', sans-serif; }
+      `}</style>
     </div>
   );
 }

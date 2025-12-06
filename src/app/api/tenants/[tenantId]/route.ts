@@ -1,585 +1,180 @@
+// src/app/api/tenants/[tenantId]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import rateLimit from "express-rate-limit";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../../lib/mongodb";
-import { Db, ObjectId, WithId } from "mongodb";
+import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { Tenant, ResponseTenant, TenantRequest } from "../../../../types/tenant";
 import { Property } from "../../../../types/property";
 
-// Logger
-interface LogMeta {
-  [key: string]: unknown;
-}
-
 const logger = {
-  debug: (message: string, meta?: LogMeta) => {
-    if (process.env.NODE_ENV !== "production") {
-      console.debug(`[DEBUG] ${message}`, meta || "");
-    }
-  },
-  warn: (message: string, meta?: LogMeta) => {
-    console.warn(`[WARN] ${message}`, meta || "");
-    return { message, meta, level: "warn" };
-  },
-  error: (message: string, meta?: LogMeta) => {
-    console.error(`[ERROR] ${message}`, meta || "");
-    return { message, meta, level: "error" };
-  },
-  info: (message: string, meta?: LogMeta) => {
-    console.info(`[INFO] ${message}`, meta || "");
-    return { message, meta, level: "info" };
-  },
+  info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
+  warn: (msg: string, meta?: any) => console.warn(`[WARN] ${msg}`, meta || ""),
+  error: (msg: string, meta?: any) => console.error(`[ERROR] ${msg}`, meta || ""),
 };
 
-// Helper to convert potential string or Date to ISO string
-const toISOStringSafe = (value: Date | string | undefined | null, field: string): string => {
-  if (!value) {
-    logger.warn(`Empty value for ${field}, returning empty string`, { value, field });
-    return "";
-  }
-  try {
-    if (typeof value === "string") {
-      const date = new Date(value);
-      if (!isNaN(date.getTime())) {
-        return date.toISOString();
-      }
-      logger.warn(`Invalid date string for ${field}, returning original string`, { value, field });
-      return value;
-    }
-    if (value instanceof Date && !isNaN(value.getTime())) {
-      return value.toISOString();
-    }
-    logger.warn(`Invalid Date object for ${field}, returning empty string`, { value, field });
-    return "";
-  } catch (error) {
-    logger.error(`Error converting ${field} to ISO string`, {
-      value,
-      field,
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-    return "";
-  }
+// CSRF Validation
+const validateCsrfToken = async (request: NextRequest): Promise<boolean> => {
+  const headerToken = request.headers.get("x-csrf-token");
+  const cookieToken = (await cookies()).get("csrf-token")?.value;
+  return headerToken === cookieToken && !!headerToken;
 };
 
-// Helper to extract client IP
-const getClientIp = (request: NextRequest): string => {
-  const xForwardedFor = request.headers.get("x-forwarded-for");
-  if (xForwardedFor) {
-    return xForwardedFor.split(",")[0].trim();
-  }
-  const xRealIp = request.headers.get("x-real-ip");
-  if (xRealIp) {
-    return xRealIp.trim();
-  }
-  logger.warn("No client IP found in headers", {
-    path: request.nextUrl.pathname,
-    headers: Object.fromEntries(request.headers),
-  });
-  return "unknown";
-};
+// Helper: enrich unitTypes with uniqueType if missing
+const enrichUnitTypes = (unitTypes: any[]) =>
+  unitTypes.map((unit, index) => ({
+    ...unit,
+    uniqueType: unit.uniqueType || `${unit.type}-${index}`,
+  }));
 
-// Rate limiter configuration
-interface RateLimitRequest {
-  ip: string;
-  clientIp: string;
-  headers: Record<string, string>;
-  method: string;
-  url: string;
-}
-
-interface RateLimitResponse {
-  statusCode: number;
-  setHeader: () => void;
-}
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req: RateLimitRequest) => req.clientIp || "unknown",
-});
-
-// Apply rate limiter
-const applyRateLimit = async (request: NextRequest): Promise<NextResponse | null> => {
-  return new Promise((resolve) => {
-    const mockReq: RateLimitRequest = {
-      ip: getClientIp(request),
-      clientIp: getClientIp(request),
-      headers: Object.fromEntries(request.headers),
-      method: request.method,
-      url: request.nextUrl.pathname,
-    };
-    const mockRes: RateLimitResponse = {
-      statusCode: 200,
-      setHeader: () => {},
-    };
-    limiter(mockReq, mockRes, (err: Error | null) => {
-      if (err || mockRes.statusCode === 429) {
-        logger.warn("Rate limit exceeded", {
-          path: request.nextUrl.pathname,
-          clientIp: mockReq.clientIp,
-        });
-        resolve(
-          NextResponse.json(
-            { success: false, message: "Too many requests, please try again later" },
-            { status: 429 }
-          )
-        );
-      } else {
-        resolve(null);
-      }
-    });
-  });
-};
-
-// CSRF token validation
-const validateCsrfToken = async (request: NextRequest, tenantId: string): Promise<boolean> => {
-  const csrfToken = request.headers.get("x-csrf-token");
-  const cookieStore = await cookies();
-  const cookieCsrfToken = cookieStore.get("csrf-token")?.value;
-  const requestTime = new Date().toISOString();
-  logger.debug("CSRF Token Validation", {
-    headerCsrfToken: csrfToken,
-    cookieCsrfToken,
-    path: request.nextUrl.pathname,
-    tenantId,
-    requestTime,
-  });
-  if (!csrfToken || !cookieCsrfToken) {
-    logger.warn("CSRF token missing", {
-      headerCsrfToken: csrfToken,
-      cookieCsrfToken,
-      path: request.nextUrl.pathname,
-      tenantId,
-      requestTime,
-    });
-    return false;
-  }
-  if (csrfToken !== cookieCsrfToken) {
-    logger.warn("CSRF token mismatch", {
-      headerCsrfToken: csrfToken,
-      cookieCsrfToken,
-      path: request.nextUrl.pathname,
-      tenantId,
-      requestTime,
-    });
-    return false;
-  }
-  logger.debug("CSRF token validated successfully", {
-    headerCsrfToken: csrfToken,
-    path: request.nextUrl.pathname,
-    tenantId,
-    requestTime,
-  });
-  return true;
-};
-
+// GET: Fetch single tenant
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> }
 ) {
-  const rateLimitResponse = await applyRateLimit(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
-  const userId = request.cookies.get("userId")?.value;
-  const role = request.cookies.get("role")?.value;
   const { tenantId } = await params;
-  const url = new URL(request.url);
-  const includeDues = url.searchParams.get("includeDues") === "true";
-  const csrfToken = request.headers.get("x-csrf-token");
+  const userId = (await cookies()).get("userId")?.value;
+  const role = (await cookies()).get("role")?.value;
 
-  if (!userId || !role || !["propertyOwner", "admin"].includes(role)) {
-    logger.error("Unauthorized access attempt", { userId, role, tenantId });
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 }
-    );
+  if (!userId || !ObjectId.isValid(userId) || !["propertyOwner", "admin"].includes(role || "")) {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!(await validateCsrfToken(request, tenantId))) {
-    logger.error("Invalid CSRF token", {
-      userId,
-      tenantId,
-      cookies: request.cookies.getAll(),
-    });
-    return NextResponse.json(
-      { success: false, message: "Invalid CSRF token" },
-      { status: 403 }
-    );
+  if (!(await validateCsrfToken(request))) {
+    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
-  if (!ObjectId.isValid(tenantId) || !ObjectId.isValid(userId)) {
-    logger.error("Invalid tenantId or userId", { tenantId, userId });
-    return NextResponse.json(
-      { success: false, message: "Invalid tenant ID or user ID" },
-      { status: 400 }
-    );
+  if (!ObjectId.isValid(tenantId)) {
+    return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
   }
 
   try {
-    const { db }: { db: Db } = await connectToDatabase();
-    const startTime = Date.now();
+    const { db } = await connectToDatabase();
 
-    await db.collection<Tenant>("tenants").createIndex({ _id: 1, ownerId: 1 });
-    await db.collection<Property>("properties").createIndex({ _id: 1, ownerId: 1 });
-
-    const tenant = await db
-      .collection<Tenant>("tenants")
-      .findOne({ _id: new ObjectId(tenantId) });
+    const tenant = await db.collection<Tenant>("tenants").findOne({
+      _id: new ObjectId(tenantId),
+      ownerId: userId,
+    });
 
     if (!tenant) {
-      logger.error("Tenant not found", { tenantId });
-      return NextResponse.json(
-        { success: false, message: "Tenant not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
     const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(tenant.propertyId),
       ownerId: userId,
-    }) as WithId<Property> | null;
+    });
 
     if (!property) {
-      logger.error("Property not found or not owned", {
-        propertyId: tenant.propertyId,
-        userId,
-      });
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Property not found for this tenant or not owned by user",
-        },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
-
-    // Validate and update payment fields from payments collection
-    const paymentTotals = await db
-      .collection("payments")
-      .aggregate([
-        { $match: { tenantId: tenant._id.toString(), status: "completed" } },
-        {
-          $group: {
-            _id: "$type",
-            total: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-
-    let totalRentPaid = 0,
-      totalUtilityPaid = 0,
-      totalDepositPaid = 0,
-      walletBalance = tenant.walletBalance ?? 0;
-
-    paymentTotals.forEach((p) => {
-      if (p._id === "Rent") totalRentPaid = p.total;
-      if (p._id === "Utility") totalUtilityPaid = p.total;
-      if (p._id === "Deposit") totalDepositPaid = p.total;
-      if (p._id === "Other") walletBalance += p.total;
-    });
-
-    if (
-      tenant.totalRentPaid !== totalRentPaid ||
-      tenant.totalUtilityPaid !== totalUtilityPaid ||
-      tenant.totalDepositPaid !== totalDepositPaid ||
-      tenant.walletBalance !== walletBalance
-    ) {
-      logger.warn("Payment field discrepancies detected, updating tenant", {
-        tenantId,
-        stored: {
-          totalRentPaid: tenant.totalRentPaid,
-          totalUtilityPaid: tenant.totalUtilityPaid,
-          totalDepositPaid: tenant.totalDepositPaid,
-          walletBalance: tenant.walletBalance,
-        },
-        calculated: {
-          totalRentPaid,
-          totalUtilityPaid,
-          totalDepositPaid,
-          walletBalance,
-        },
-      });
-
-      await db.collection<Tenant>("tenants").updateOne(
-        { _id: new ObjectId(tenantId) },
-        {
-          $set: {
-            totalRentPaid,
-            totalUtilityPaid,
-            totalDepositPaid,
-            walletBalance,
-            updatedAt: new Date(),
-          },
-        }
-      );
-    }
-
-    // Build tenant data
-    let tenantData: ResponseTenant = {
-      _id: tenant._id.toString(),
-      ownerId: tenant.ownerId,
-      name: tenant.name,
-      email: tenant.email,
-      phone: tenant.phone,
-      role: tenant.role,
-      propertyId: tenant.propertyId,
-      unitType: tenant.unitType,
-      price: tenant.price,
-      deposit: tenant.deposit,
-      houseNumber: tenant.houseNumber,
-      leaseStartDate: tenant.leaseStartDate,
-      leaseEndDate: tenant.leaseEndDate,
-      status: tenant.status,
-      paymentStatus: tenant.paymentStatus,
-      createdAt: toISOStringSafe(tenant.createdAt, "tenant.createdAt"),
-      updatedAt: toISOStringSafe(tenant.updatedAt, "tenant.updatedAt"),
-      totalRentPaid,
-      totalUtilityPaid,
-      totalDepositPaid,
-      walletBalance,
-    };
-
-    // Fetch dues if requested
-    if (includeDues) {
-      if (!csrfToken) {
-        logger.error("CSRF token missing for check-dues request", {
-          tenantId,
-          userId,
-        });
-        return NextResponse.json(
-          { success: false, message: "CSRF token required for dues check" },
-          { status: 403 }
-        );
-      }
-
-      try {
-        const cookieHeader = request.headers.get("cookie") || "";
-        const checkDuesResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/tenants/check-dues`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRF-Token": csrfToken,
-              Cookie: cookieHeader,
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              tenantId,
-              userId,
-            }),
-          }
-        );
-
-        const checkDuesData = await checkDuesResponse.json();
-
-        if (!checkDuesData.success) {
-          logger.error("Failed to fetch dues from check-dues API", {
-            tenantId,
-            userId,
-            message: checkDuesData.message,
-            status: checkDuesResponse.status,
-          });
-          return NextResponse.json(
-            {
-              success: false,
-              message: checkDuesData.message || "Failed to fetch dues",
-            },
-            { status: checkDuesResponse.status }
-          );
-        }
-
-        tenantData = {
-          ...tenantData,
-          paymentStatus: checkDuesData.tenant.paymentStatus,
-          updatedAt: toISOStringSafe(checkDuesData.tenant.updatedAt, "checkDues.tenant.updatedAt"),
-          dues: checkDuesData.dues,
-        };
-      } catch (error) {
-        logger.error("Error calling check-dues API", {
-          tenantId,
-          userId,
-          message: error instanceof Error ? error.message : "Unknown error",
-        });
-        return NextResponse.json(
-          { success: false, message: "Failed to fetch dues from check-dues API" },
-          { status: 500 }
-        );
-      }
-    }
-
-    const propertyData = {
-      _id: property._id.toString(),
-      name: property.name,
-      createdAt: toISOStringSafe(property.createdAt, "property.createdAt"),
-      updatedAt: toISOStringSafe(property.updatedAt, "property.updatedAt"),
-    };
-
-    logger.info("Tenant data fetched successfully", {
-      tenantId,
-      userId,
-      includeDues,
-      walletBalance: tenantData.walletBalance,
-      totalRentPaid: tenantData.totalRentPaid,
-      totalUtilityPaid: tenantData.totalUtilityPaid,
-      totalDepositPaid: tenantData.totalDepositPaid,
-      duration: Date.now() - startTime,
-    });
 
     return NextResponse.json({
       success: true,
-      tenant: tenantData,
-      property: propertyData,
+      tenant: {
+        ...tenant,
+        _id: tenant._id.toString(),
+        createdAt: tenant.createdAt?.toISOString() || "",
+        updatedAt: tenant.updatedAt?.toISOString() || "",
+      },
+      property: {
+        _id: property._id.toString(),
+        name: property.name,
+      },
     });
-  } catch (error: unknown) {
-    logger.error("Error in GET /api/tenants/[tenantId]", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      userId,
-      role,
-      tenantId,
-      includeDues,
-    });
-    return NextResponse.json(
-      { success: false, message: "Internal server error" },
-      { status: 500 }
-    );
+  } catch (error) {
+    logger.error("GET /api/tenants/[tenantId]", { error });
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
 
-// ==================== PUT: Update Tenant ====================
+// PUT: Update tenant (supports unit/property change)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> }
 ) {
-  const rateLimitResponse = await applyRateLimit(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
   const { tenantId } = await params;
-  if (!tenantId || !ObjectId.isValid(tenantId)) {
-    return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
+  const userId = (await cookies()).get("userId")?.value;
+
+  if (!ObjectId.isValid(tenantId) || !userId || !ObjectId.isValid(userId)) {
+    return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 });
   }
 
-  if (!(await validateCsrfToken(request, tenantId))) {
+  if (!(await validateCsrfToken(request))) {
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
   try {
-    const userId = (await cookies()).get("userId")?.value;
-    const role = (await cookies()).get("role")?.value;
-
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-    }
-
     const body: Partial<TenantRequest> = await request.json();
-    logger.debug("PUT /tenants/[tenantId]", { tenantId, body });
-
     const { db } = await connectToDatabase();
 
-    // Fetch current tenant
     const tenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(tenantId),
       ownerId: userId,
-    }) as WithId<Tenant> | null;
+    });
 
     if (!tenant) {
-      return NextResponse.json({ success: false, message: "Tenant not found or not owned by you" }, { status: 404 });
+      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    const updateData: Partial<Tenant> = { updatedAt: new Date() };
+    const updateData: any = { updatedAt: new Date() };
 
-    // === Simple string fields ===
-    const stringFields: (keyof TenantRequest)[] = [
-      "name", "email", "phone", "houseNumber",
-      "leaseStartDate", "leaseEndDate", "status", "paymentStatus"
-    ];
-    stringFields.forEach(field => {
-      if (body[field] !== undefined) {
-        updateData[field] = body[field] as any;
-      }
-    });
+    // Simple fields
+    if (body.name) updateData.name = body.name.trim();
+    if (body.email) updateData.email = body.email.trim();
+    if (body.phone) updateData.phone = body.phone.trim();
+    if (body.houseNumber) updateData.houseNumber = body.houseNumber.trim();
+    if (body.leaseStartDate) updateData.leaseStartDate = body.leaseStartDate;
+    if (body.leaseEndDate) updateData.leaseEndDate = body.leaseEndDate;
+    if (body.password?.trim()) updateData.password = await bcrypt.hash(body.password.trim(), 10);
 
-    // === Password ===
-    if (body.password?.trim()) {
-      updateData.password = await bcrypt.hash(body.password, 10);
-    }
-
-    // === Numeric fields ===
-    const numericFields: (keyof TenantRequest)[] = [
-      "totalRentPaid", "totalUtilityPaid", "totalDepositPaid", "walletBalance"
-    ];
-    numericFields.forEach(field => {
-      if (body[field] !== undefined) {
-        const num = Number(body[field]);
-        if (!isNaN(num) && num >= 0) {
-          updateData[field] = num as any;
-        }
-      }
-    });
-
-    // === Property & Unit Type Change ===
-    if (body.propertyId || body.unitType) {
+    // Handle property/unit change
+    if (body.propertyId || body.unitIdentifier) {
       const targetPropertyId = body.propertyId || tenant.propertyId;
-      if (!ObjectId.isValid(targetPropertyId)) {
-        return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
-      }
-
       const property = await db.collection<Property>("properties").findOne({
         _id: new ObjectId(targetPropertyId),
         ownerId: userId,
       });
 
       if (!property) {
-        return NextResponse.json({ success: false, message: "Property not found or not owned by you" }, { status: 404 });
+        return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
       }
 
-      const requestedUnitType = body.unitType || tenant.unitType;
+      const enrichedUnits = enrichUnitTypes(property.unitTypes);
+      const targetUnit = enrichedUnits.find(u => u.uniqueType === (body.unitIdentifier || tenant.unitIdentifier));
 
-      // Match against UnitType.type (e.g., "1-Bedroom")
-      const unit = property.unitTypes.find(u => u.type === requestedUnitType);
+      if (!targetUnit) {
+        return NextResponse.json({ success: false, message: "Invalid unit selected" }, { status: 400 });
+      }
 
-      if (!unit) {
-        logger.warn("Unit type not found", {
-          requested: requestedUnitType,
-          property: property.name,
-          available: property.unitTypes.map(u => u.type),
-        });
-        return NextResponse.json(
-          { success: false, message: `Unit type "${requestedUnitType}" not found in this property` },
-          { status: 400 }
+      if (targetUnit.quantity <= 0 && targetUnit.uniqueType !== tenant.unitIdentifier) {
+        return NextResponse.json({ success: false, message: "This unit is fully booked" }, { status: 400 });
+      }
+
+      // Only decrement old unit if changing
+      if (tenant.propertyId !== targetPropertyId || tenant.unitIdentifier !== targetUnit.uniqueType) {
+        // Increment old unit
+        await db.collection<Property>("properties").updateOne(
+          { _id: new ObjectId(tenant.propertyId) },
+          { $inc: { "unitTypes.$[elem].quantity": 1 } },
+          { arrayFilters: [{ "elem.uniqueType": tenant.unitIdentifier }] }
         );
-      }
 
-      // Enforce price/deposit
-      if (body.price !== undefined && body.price !== unit.price) {
-        return NextResponse.json(
-          { success: false, message: "Price must match the selected unit type" },
-          { status: 400 }
-        );
-      }
-      if (body.deposit !== undefined && body.deposit !== unit.deposit) {
-        return NextResponse.json(
-          { success: false, message: "Deposit must match the selected unit type" },
-          { status: 400 }
+        // Decrement new unit
+        await db.collection<Property>("properties").updateOne(
+          { _id: new ObjectId(targetPropertyId) },
+          { $inc: { "unitTypes.$[elem].quantity": -1 } },
+          { arrayFilters: [{ "elem.uniqueType": targetUnit.uniqueType }] }
         );
       }
 
       updateData.propertyId = targetPropertyId;
-      updateData.unitType = unit.type;      // Store display name
-      updateData.price = unit.price;
-      updateData.deposit = unit.deposit;
+      updateData.unitType = targetUnit.type;
+      updateData.unitIdentifier = targetUnit.uniqueType;
+      updateData.price = targetUnit.price;
+      updateData.deposit = targetUnit.deposit;
     }
 
-    // Prevent empty update
-    if (Object.keys(updateData).length === 1) {
-      return NextResponse.json({ success: false, message: "No changes to update" }, { status: 400 });
-    }
-
-    // Apply update
     const result = await db.collection<Tenant>("tenants").findOneAndUpdate(
       { _id: new ObjectId(tenantId), ownerId: userId },
       { $set: updateData },
@@ -587,164 +182,79 @@ export async function PUT(
     );
 
     if (!result) {
-      return NextResponse.json({ success: false, message: "Failed to update tenant" }, { status: 500 });
+      return NextResponse.json({ success: false, message: "Update failed" }, { status: 500 });
     }
 
-    logger.info("Tenant updated", { tenantId, fields: Object.keys(updateData) });
-
-    // Build response matching ResponseTenant
-    const responseTenant: ResponseTenant = {
-      _id: result._id.toString(),
-      ownerId: result.ownerId,
-      name: result.name,
-      email: result.email,
-      phone: result.phone,
-      role: result.role,
-      propertyId: result.propertyId,
-      unitType: result.unitType,
-      price: result.price,
-      deposit: result.deposit,
-      houseNumber: result.houseNumber,
-      leaseStartDate: result.leaseStartDate,
-      leaseEndDate: result.leaseEndDate,
-      status: result.status,
-      paymentStatus: result.paymentStatus,
-      createdAt: toISOStringSafe(result.createdAt, "result.createdAt"),
-      updatedAt: toISOStringSafe(result.updatedAt, "result.updatedAt"),
-      totalRentPaid: result.totalRentPaid ?? 0,
-      totalUtilityPaid: result.totalUtilityPaid ?? 0,
-      totalDepositPaid: result.totalDepositPaid ?? 0,
-      walletBalance: result.walletBalance ?? 0,
-      deliveryMethod: result.deliveryMethod,
-    };
+    logger.info("Tenant updated", { tenantId, updatedFields: Object.keys(updateData) });
 
     return NextResponse.json({
       success: true,
       message: "Tenant updated successfully",
-      tenant: responseTenant,
+      tenant: {
+        ...result,
+        _id: result._id.toString(),
+        createdAt: result.createdAt?.toISOString() || "",
+        updatedAt: result.updatedAt?.toISOString() || "",
+      },
     });
-
   } catch (error) {
-    logger.error("PUT /api/tenants/[tenantId] error", { error, tenantId });
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
+    logger.error("PUT /api/tenants/[tenantId]", { error });
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
 
+// DELETE: Remove tenant and restore unit quantity
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> }
 ) {
-  const rateLimitResponse = await applyRateLimit(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
   const { tenantId } = await params;
-  if (!tenantId || !ObjectId.isValid(tenantId)) {
-    logger.warn("Invalid tenantId", { tenantId });
-    return NextResponse.json(
-      { success: false, message: "Invalid or missing tenant ID" },
-      { status: 400 }
-    );
+  const userId = (await cookies()).get("userId")?.value;
+
+  if (!ObjectId.isValid(tenantId) || !userId || !ObjectId.isValid(userId)) {
+    return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 });
   }
 
-  if (!(await validateCsrfToken(request, tenantId))) {
-    logger.warn("Invalid CSRF token", { path: request.nextUrl.pathname, tenantId });
-    return NextResponse.json(
-      { success: false, message: "Invalid or missing CSRF token" },
-      { status: 403 }
-    );
+  if (!(await validateCsrfToken(request))) {
+    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
   try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get("userId")?.value;
-    const role = cookieStore.get("role")?.value;
-
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
-      logger.warn("Unauthorized", { userId, role, tenantId });
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in as a property owner." },
-        { status: 401 }
-      );
-    }
-
-    const { db }: { db: Db } = await connectToDatabase();
-    logger.debug("Connected to database", { database: "rentaldb", collection: "tenants" });
+    const { db } = await connectToDatabase();
 
     const tenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(tenantId),
       ownerId: userId,
-    }) as WithId<Tenant> | null;
+    });
 
     if (!tenant) {
-      logger.warn("Tenant lookup failed", { tenantId, userId });
-      return NextResponse.json(
-        { success: false, message: "Tenant not found or not owned by user" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    // Check for pending invoices before deletion
-    const pendingInvoices = await db.collection("invoices").countDocuments({
-      tenantId: tenant._id.toString(),
-      status: "pending",
-    });
+    // Delete tenant
+    await db.collection<Tenant>("tenants").deleteOne({ _id: new ObjectId(tenantId) });
 
-    if (pendingInvoices > 0) {
-      logger.warn("Cannot delete tenant with pending invoices", { tenantId, pendingInvoices });
-      return NextResponse.json(
-        { success: false, message: "Cannot delete tenant with pending invoices" },
-        { status: 400 }
-      );
-    }
-
-    // Delete all payments associated with the tenant
-    const paymentDeleteResult = await db.collection("payments").deleteMany({
+    // Delete payments
+    const { deletedCount } = await db.collection("payments").deleteMany({
       tenantId: tenant._id.toString(),
     });
 
-    logger.info("Payments deleted for tenant", {
-      tenantId,
-      deletedCount: paymentDeleteResult.deletedCount,
-    });
-
-    const deleteResult = await db.collection<Tenant>("tenants").deleteOne({
-      _id: new ObjectId(tenantId),
-      ownerId: userId,
-    });
-
-    if (deleteResult.deletedCount === 0) {
-      logger.warn("Failed to delete tenant", { tenantId });
-      return NextResponse.json(
-        { success: false, message: "Failed to delete tenant" },
-        { status: 404 }
-      );
-    }
-
-    // Update property unit quantity
+    // Restore unit quantity
     await db.collection<Property>("properties").updateOne(
-      { _id: new ObjectId(tenant.propertyId), "unitTypes.uniqueType": tenant.unitType },
-      { $inc: { "unitTypes.$.quantity": 1 } }
+      { _id: new ObjectId(tenant.propertyId) },
+      { $inc: { "unitTypes.$[elem].quantity": 1 } },
+      { arrayFilters: [{ "elem.uniqueType": tenant.unitIdentifier }] }
     );
-    logger.debug("Updated property unit quantity", { propertyId: tenant.propertyId, unitType: tenant.unitType });
 
-    logger.info("Tenant deleted successfully", { tenantId });
-    return NextResponse.json(
-      {
-        success: true,
-        message: "Tenant and associated payments deleted successfully",
-        deletedPaymentsCount: paymentDeleteResult.deletedCount,
-      },
-      { status: 200 }
-    );
-  } catch (error: unknown) {
-    logger.error("Error in DELETE /api/tenants/[tenantId]", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-      tenantId,
+    logger.info("Tenant deleted", { tenantId, restoredUnit: tenant.unitIdentifier, deletedPayments: deletedCount });
+
+    return NextResponse.json({
+      success: true,
+      message: "Tenant deleted successfully",
+      deletedPaymentsCount: deletedCount,
     });
-    return NextResponse.json(
-      { success: false, message: "Internal server error" },
-      { status: 500 }
-    );
+  } catch (error) {
+    logger.error("DELETE /api/tenants/[tenantId]", { error });
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
