@@ -5,7 +5,7 @@ import { Inter } from "next/font/google";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import MaintenanceRequests from "./components/MaintenanceRequests";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2,
@@ -112,7 +112,9 @@ export default function PropertyOwnerDashboard() {
             Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict" });
             token = data.csrfToken;
           }
-        } catch {}
+        } catch (err) {
+          console.error("CSRF fetch failed:", err);
+        }
       }
       setCsrfToken(token || null);
     };
@@ -125,6 +127,8 @@ export default function PropertyOwnerDashboard() {
     if (!userId || !csrfToken) return;
 
     setIsLoading(true);
+    setError(null);
+
     try {
       const [propsRes, tenantsRes, statsRes, chartsRes] = await Promise.all([
         fetch(`/api/properties?userId=${userId}`, { headers: { "x-csrf-token": csrfToken }, credentials: "include" }),
@@ -132,6 +136,10 @@ export default function PropertyOwnerDashboard() {
         fetch(`/api/ownerstats?userId=${userId}`, { headers: { "x-csrf-token": csrfToken }, credentials: "include" }),
         fetch(`/api/ownercharts?propertyOwnerId=${userId}`, { headers: { "x-csrf-token": csrfToken }, credentials: "include" }),
       ]);
+
+      if (!propsRes.ok || !tenantsRes.ok || !statsRes.ok || !chartsRes.ok) {
+        throw new Error("Failed to fetch dashboard data");
+      }
 
       const [propsData, tenantsData, statsData, chartsData] = await Promise.all([
         propsRes.json(),
@@ -144,8 +152,9 @@ export default function PropertyOwnerDashboard() {
       setTenants(tenantsData.success ? tenantsData.tenants || [] : []);
       setStats(statsData.success ? statsData.stats || stats : stats);
       setChartData(chartsData.success ? chartsData.chartData : null);
-    } catch {
-      setError("Failed to load dashboard data");
+    } catch (err) {
+      setError("Failed to load dashboard data. Please try again.");
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -155,49 +164,56 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-// CORRECT & ROBUST OCCUPANCY CALCULATION
-const getPropertyStats = (property: Property) => {
-  const propertyIdStr = property._id.toString();
+  // ACCURATE PROPERTY STATS (per property)
+  const getPropertyStats = useCallback((property: Property) => {
+    const propertyIdStr = property._id.toString();
 
-  // Total units available = sum of all unitTypes.quantity
-  const totalUnits = property.unitTypes.reduce((sum, ut) => {
-    return sum + (Number(ut.quantity) || 0);
-  }, 0);
+    // Total units from unitTypes
+    const totalUnits = Array.isArray(property.unitTypes)
+      ? property.unitTypes.reduce((sum, ut) => sum + (Number(ut.quantity) || 0), 0)
+      : 0;
 
-  // Count ONLY active tenants currently living in this property
-  const activeTenantsInProperty = tenants.filter((tenant) => {
-    return (
-      tenant.propertyId === propertyIdStr &&
-      tenant.status !== "inactive" &&
-      (!tenant.leaseEndDate || new Date(tenant.leaseEndDate) >= new Date())
-    );
-  });
+    // Active tenants currently living in this property
+    const activeTenantsInProperty = tenants.filter((tenant) => {
+      const isAssigned = tenant.propertyId === propertyIdStr;
+      const isActive = tenant.status !== "inactive";
+      const leaseNotEnded = !tenant.leaseEndDate || new Date(tenant.leaseEndDate) >= new Date();
+      return isAssigned && isActive && leaseNotEnded;
+    });
 
-  const occupiedUnits = activeTenantsInProperty.length;
-  const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
-  const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+    const occupiedUnits = activeTenantsInProperty.length;
+    const vacantUnits = totalUnits > 0 ? Math.max(0, totalUnits - occupiedUnits) : 0;
+    const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
-  const isFullyOccupied = occupiedUnits >= totalUnits && totalUnits > 0;
-  const isVacant = occupiedUnits === 0 && totalUnits > 0;
-  const hasNoUnits = totalUnits === 0;
+    const isFullyOccupied = occupiedUnits >= totalUnits && totalUnits > 0;
+    const isVacant = occupiedUnits === 0 && totalUnits > 0;
+    const hasNoUnits = totalUnits === 0;
 
-  return {
-    totalUnits,
-    occupiedUnits,
-    vacantUnits,
-    occupancyRate,
-    isFullyOccupied,
-    isVacant,
-    hasNoUnits,
-  };
-};
+    return {
+      totalUnits,
+      occupiedUnits,
+      vacantUnits,
+      occupancyRate,
+      isFullyOccupied,
+      isVacant,
+      hasNoUnits,
+    };
+  }, [tenants]);
 
-  // GLOBAL STATS (for top cards)
-  const totalVacantUnits = properties.reduce((sum, prop) => sum + getPropertyStats(prop).vacantUnits, 0);
-  const totalOccupiedUnits = tenants.filter(t =>
-    t.status !== "inactive" &&
-    (!t.leaseEndDate || new Date(t.leaseEndDate) >= new Date())
-  ).length;
+  // GLOBAL VACANT UNITS — 100% ACCURATE
+  const totalVacantUnits = useMemo(() => {
+    return properties.reduce((sum, prop) => {
+      return sum + getPropertyStats(prop).vacantUnits;
+    }, 0);
+  }, [properties, getPropertyStats]);
+
+  // GLOBAL ACTIVE TENANTS
+  const totalActiveTenants = useMemo(() => {
+    return tenants.filter(t => {
+      const leaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
+      return t.status !== "inactive" && leaseActive;
+    }).length;
+  }, [tenants]);
 
   // PAYMENT STATUS
   const getTenantPaymentStatus = (tenant: Tenant): "paid" | "overdue" | "expired" => {
@@ -206,16 +222,18 @@ const getPropertyStats = (property: Property) => {
     return "paid";
   };
 
-  const paymentSummary = tenants.reduce(
-    (acc, t) => {
-      const status = getTenantPaymentStatus(t);
-      if (status === "paid") acc.paid++;
-      else if (status === "overdue") acc.overdue++;
-      else acc.expired++;
-      return acc;
-    },
-    { paid: 0, overdue: 0, expired: 0 }
-  );
+  const paymentSummary = useMemo(() => {
+    return tenants.reduce(
+      (acc, t) => {
+        const status = getTenantPaymentStatus(t);
+        if (status === "paid") acc.paid++;
+        else if (status === "overdue") acc.overdue++;
+        else acc.expired++;
+        return acc;
+      },
+      { paid: 0, overdue: 0, expired: 0 }
+    );
+  }, [tenants]);
 
   const pieData = {
     labels: ["Paid", "Overdue", "Lease Expired"],
@@ -256,7 +274,6 @@ const getPropertyStats = (property: Property) => {
           )}
 
           {isLoading ? (
-            // Skeleton
             <div className="space-y-8">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
                 {[...Array(8)].map((_, i) => (
@@ -280,7 +297,7 @@ const getPropertyStats = (property: Property) => {
                   { title: "Deposits", value: `Ksh ${stats.totalDepositPaid.toLocaleString()}`, icon: DollarSign, color: "indigo" },
                   { title: "Utilities", value: `Ksh ${stats.totalUtilityPaid.toLocaleString()}`, icon: DollarSign, color: "pink" },
                   { title: "Properties", value: stats.activeProperties, icon: Building2, color: "purple" },
-                  { title: "Active Tenants", value: paymentSummary.paid + paymentSummary.overdue, icon: Users, color: "green" },
+                  { title: "Active Tenants", value: totalActiveTenants, icon: Users, color: "green" },
                   { title: "Vacant Units", value: totalVacantUnits, icon: Home, color: "orange" },
                 ].map((s, i) => (
                   <motion.div
@@ -293,7 +310,9 @@ const getPropertyStats = (property: Property) => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-gray-600">{s.title}</p>
-                        <p className="text-xl font-bold text-gray-900 mt-2">{s.value}</p>
+                        <p className="text-xl font-bold text-gray-900 mt-2">
+                          {typeof s.value === "number" && !isNaN(s.value) ? s.value : s.value}
+                        </p>
                       </div>
                       <div className={`p-3 rounded-xl bg-${s.color}-100`}>
                         <s.icon className={`h-6 w-6 text-${s.color}-600`} />
@@ -366,7 +385,7 @@ const getPropertyStats = (property: Property) => {
                                   stroke="#10b981"
                                   strokeWidth="10"
                                   fill="none"
-                                  strokeDasharray={`${occupancyRate * 1.32} 132`}
+                                  strokeDasharray={`${(occupancyRate / 100) * 132} 132`}
                                   className="transition-all duration-1000"
                                 />
                               </svg>
