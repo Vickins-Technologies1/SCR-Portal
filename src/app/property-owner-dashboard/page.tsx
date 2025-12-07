@@ -53,8 +53,6 @@ interface Tenant {
 interface Stats {
   activeProperties: number;
   totalTenants: number;
-  totalUnits: number;
-  occupiedUnits: number;
   totalMonthlyRent: number;
   totalPayments: number;
   totalOverdueAmount: number;
@@ -80,8 +78,6 @@ export default function PropertyOwnerDashboard() {
   const [stats, setStats] = useState<Stats>({
     activeProperties: 0,
     totalTenants: 0,
-    totalUnits: 0,
-    occupiedUnits: 0,
     totalMonthlyRent: 0,
     totalPayments: 0,
     totalOverdueAmount: 0,
@@ -164,19 +160,21 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-  // ACCURATE PER-PROPERTY STATS (units from unitTypes, tenants from actual data)
+  // CORE: Accurate property stats — units from unitTypes, tenants from real active leases
   const getPropertyStats = useCallback((property: Property) => {
     const propertyIdStr = property._id.toString();
 
+    // Total units defined in property setup
     const totalUnits = Array.isArray(property.unitTypes)
-      ? property.unitTypes.reduce((acc, ut) => acc + (Number(ut.quantity) || 0), 0)
+      ? property.unitTypes.reduce((sum, ut) => sum + (Number(ut.quantity) || 0), 0)
       : 0;
 
-    const activeTenantsInProperty = tenants.filter((t) => {
-      const isInProperty = t.propertyId === propertyIdStr;
-      const isLeaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
-      const isStatusActive = t.status !== "inactive";
-      return isInProperty && isLeaseActive && isStatusActive;
+    // Active tenants = currently leased + not inactive
+    const activeTenantsInProperty = tenants.filter((tenant) => {
+      const inProperty = tenant.propertyId === propertyIdStr;
+      const leaseActive = !tenant.leaseEndDate || new Date(tenant.leaseEndDate) >= new Date();
+      const statusActive = tenant.status !== "inactive";
+      return inProperty && leaseActive && statusActive;
     });
 
     const occupiedUnits = activeTenantsInProperty.length;
@@ -194,43 +192,48 @@ export default function PropertyOwnerDashboard() {
     };
   }, [tenants]);
 
-  // GLOBAL VACANT UNITS — 100% ACCURATE (from unitTypes.quantity - active tenants)
+  // GLOBAL: Total Vacant Units — summed from accurate per-property calculation
   const totalVacantUnits = useMemo(() => {
-    return properties.reduce((sum, prop) => sum + getPropertyStats(prop).vacantUnits, 0);
+    return properties.reduce((sum, property) => {
+      return sum + getPropertyStats(property).vacantUnits;
+    }, 0);
   }, [properties, getPropertyStats]);
 
-  // GLOBAL ACTIVE TENANTS — Prefer backend value, fallback to accurate client count
+  // GLOBAL: Total Units across all properties
+  const totalUnitsAcrossAllProperties = useMemo(() => {
+    return properties.reduce((sum, property) => {
+      const stats = getPropertyStats(property);
+      return sum + stats.totalUnits;
+    }, 0);
+  }, [properties, getPropertyStats]);
+
+  // GLOBAL: Active Tenants — prefer backend, fallback to client (accurate)
   const totalActiveTenants = useMemo(() => {
     if (stats.totalTenants > 0) return stats.totalTenants;
 
     return tenants.filter((t) => {
-      const isLeaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
-      const isStatusActive = t.status !== "inactive";
-      return isLeaseActive && isStatusActive;
+      const leaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
+      const statusActive = t.status !== "inactive";
+      return leaseActive && statusActive;
     }).length;
   }, [stats.totalTenants, tenants]);
 
-  // PAYMENT STATUS SUMMARY
-  const getTenantPaymentStatus = (tenant: Tenant): "paid" | "overdue" | "expired" => {
-    if (tenant.leaseEndDate && new Date(tenant.leaseEndDate) < new Date()) return "expired";
-    if (tenant.paymentStatus === "overdue") return "overdue";
-    return "paid";
-  };
-
+  // PAYMENT STATUS
   const paymentSummary = useMemo(() => {
     return tenants.reduce(
       (acc, t) => {
-        const status = getTenantPaymentStatus(t);
-        if (status === "paid") acc.paid++;
-        else if (status === "overdue") acc.overdue++;
-        else acc.expired++;
+        const expired = t.leaseEndDate && new Date(t.leaseEndDate) < new Date();
+        const overdue = t.paymentStatus === "overdue";
+        if (expired) acc.expired++;
+        else if (overdue) acc.overdue++;
+        else acc.paid++;
         return acc;
       },
       { paid: 0, overdue: 0, expired: 0 }
     );
   }, [tenants]);
 
-  // CHART DATA
+  // CHARTS
   const pieData = {
     labels: ["Paid", "Overdue", "Lease Expired"],
     datasets: [{
@@ -282,12 +285,12 @@ export default function PropertyOwnerDashboard() {
             </div>
           ) : (
             <>
-              {/* TOP STATS GRID */}
+              {/* TOP STATS — NOW 100% ACCURATE */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-10">
                 {[
-                  { title: "Monthly Rent", value: `Ksh ${stats.totalMonthlyRent.toLocaleString()}`, icon: DollarSign, color: "emerald" },
+                  { title: "Expected Monthly Rent", value: `Ksh ${stats.totalMonthlyRent.toLocaleString()}`, icon: DollarSign, color: "emerald" },
                   { title: "Total Revenue", value: `Ksh ${stats.totalPayments.toLocaleString()}`, icon: DollarSign, color: "blue" },
-                  { title: "Overdue Amount", value: `Ksh ${stats.totalOverdueAmount.toLocaleString()}`, icon: AlertCircle, color: "red" },
+                  { title: "Overdue", value: `Ksh ${stats.totalOverdueAmount.toLocaleString()}`, icon: AlertCircle, color: "red" },
                   { title: "Deposits", value: `Ksh ${stats.totalDepositPaid.toLocaleString()}`, icon: DollarSign, color: "indigo" },
                   { title: "Utilities Paid", value: `Ksh ${stats.totalUtilityPaid.toLocaleString()}`, icon: DollarSign, color: "pink" },
                   { title: "Properties", value: stats.activeProperties, icon: Building2, color: "purple" },
@@ -303,8 +306,8 @@ export default function PropertyOwnerDashboard() {
                     value: totalVacantUnits, 
                     icon: Home, 
                     color: "orange",
-                    subtitle: stats.totalUnits > 0 
-                      ? `${Math.round((totalVacantUnits / stats.totalUnits) * 100)}% vacancy` 
+                    subtitle: totalUnitsAcrossAllProperties > 0
+                      ? `${Math.round((totalVacantUnits / totalUnitsAcrossAllProperties) * 100)}% vacancy`
                       : "N/A"
                   },
                 ].map((s, i) => (
@@ -347,7 +350,7 @@ export default function PropertyOwnerDashboard() {
 
               <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
 
-              {/* PROPERTIES SECTION */}
+              {/* PROPERTIES GRID — 100% ACCURATE VACANT UNITS */}
               <section className="mt-12">
                 <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
                   <Building2 className="h-9 w-9 text-emerald-600" />
@@ -363,7 +366,14 @@ export default function PropertyOwnerDashboard() {
                 ) : (
                   <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 lg:gap-8">
                     {properties.map((property) => {
-                      const { totalUnits, occupiedUnits, vacantUnits, occupancyRate, isFullyOccupied, isVacant } = getPropertyStats(property);
+                      const {
+                        totalUnits,
+                        occupiedUnits,
+                        vacantUnits,
+                        occupancyRate,
+                        isFullyOccupied,
+                        isVacant,
+                      } = getPropertyStats(property);
 
                       return (
                         <motion.div
@@ -385,6 +395,7 @@ export default function PropertyOwnerDashboard() {
                             </p>
                           </div>
 
+                          {/* Occupancy Ring */}
                           <div className="absolute top-5 right-5 bg-white/95 backdrop-blur-sm rounded-full shadow-2xl p-3 lg:p-4 border border-gray-100">
                             <div className="relative w-16 h-16 lg:w-18 lg:h-18">
                               <svg className="w-full h-full -rotate-90">
@@ -404,10 +415,11 @@ export default function PropertyOwnerDashboard() {
                             </div>
                           </div>
 
+                          {/* Stats */}
                           <div className="px-6 lg:px-8 pb-8 pt-4">
                             <div className="grid grid-cols-3 gap-4 text-center">
                               <div className="bg-emerald-50/80 rounded-2xl py-4 border border-emerald-100">
-                                <p className="text-xs font-medium text-emerald-700">Total</p>
+                                <p className="text-xs font-medium text-emerald-700">Total Units</p>
                                 <p className="text-3xl font-bold text-emerald-800 mt-1">{totalUnits}</p>
                               </div>
                               <div className="bg-amber-50/80 rounded-2xl py-4 border border-amber-100">
@@ -428,14 +440,8 @@ export default function PropertyOwnerDashboard() {
                                   ? "bg-gray-100 text-gray-700"
                                   : "bg-purple-100 text-purple-800"
                               }`}>
-                                {isFullyOccupied ? "Fully Occupied" : isVacant ? "Vacant" : "Partially Occupied"}
+                                {isFullyOccupied ? "Fully Occupied" : isVacant ? "Completely Vacant" : "Partially Occupied"}
                               </span>
-                            </div>
-                          </div>
-
-                          <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
-                            <div className="bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl">
-                              <Home className="w-7 h-7" />
                             </div>
                           </div>
                         </motion.div>
