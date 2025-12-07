@@ -155,34 +155,42 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-  // CORRECT OCCUPANCY CALCULATION — BASED ON REAL TENANTS
-  const getPropertyStats = (property: Property) => {
-    const propertyIdStr = property._id.toString();
+// CORRECT & ROBUST OCCUPANCY CALCULATION
+const getPropertyStats = (property: Property) => {
+  const propertyIdStr = property._id.toString();
 
-    // Count active tenants in this property
-    const activeTenantsInProperty = tenants.filter(t =>
-      t.propertyId === propertyIdStr &&
-      t.status !== "inactive" &&
-      (!t.leaseEndDate || new Date(t.leaseEndDate) >= new Date())
+  // Total units available = sum of all unitTypes.quantity
+  const totalUnits = property.unitTypes.reduce((sum, ut) => {
+    return sum + (Number(ut.quantity) || 0);
+  }, 0);
+
+  // Count ONLY active tenants currently living in this property
+  const activeTenantsInProperty = tenants.filter((tenant) => {
+    return (
+      tenant.propertyId === propertyIdStr &&
+      tenant.status !== "inactive" &&
+      (!tenant.leaseEndDate || new Date(tenant.leaseEndDate) >= new Date())
     );
+  });
 
-    const occupiedUnits = activeTenantsInProperty.length;
+  const occupiedUnits = activeTenantsInProperty.length;
+  const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
+  const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
-    // Total available units (sum of all unitTypes.quantity)
-    const totalUnits = property.unitTypes.reduce((sum, ut) => sum + (ut.quantity || 0), 0);
+  const isFullyOccupied = occupiedUnits >= totalUnits && totalUnits > 0;
+  const isVacant = occupiedUnits === 0 && totalUnits > 0;
+  const hasNoUnits = totalUnits === 0;
 
-    const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
-    const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
-
-    return {
-      totalUnits,
-      occupiedUnits,
-      vacantUnits,
-      occupancyRate,
-      isFullyOccupied: occupiedUnits >= totalUnits && totalUnits > 0,
-      isVacant: occupiedUnits === 0,
-    };
+  return {
+    totalUnits,
+    occupiedUnits,
+    vacantUnits,
+    occupancyRate,
+    isFullyOccupied,
+    isVacant,
+    hasNoUnits,
   };
+};
 
   // GLOBAL STATS (for top cards)
   const totalVacantUnits = properties.reduce((sum, prop) => sum + getPropertyStats(prop).vacantUnits, 0);
