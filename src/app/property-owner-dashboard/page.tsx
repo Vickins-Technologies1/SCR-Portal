@@ -165,40 +165,28 @@ export default function PropertyOwnerDashboard() {
   }, [userId, csrfToken, fetchData]);
 
   // ACCURATE PROPERTY STATS (per property)
-  const getPropertyStats = useCallback((property: Property) => {
-    const propertyIdStr = property._id.toString();
+const getPropertyStats = useCallback((property: Property) => {
+  const propertyIdStr = property._id.toString();
 
-    // Total units from unitTypes
-    const totalUnits = Array.isArray(property.unitTypes)
-      ? property.unitTypes.reduce((sum, ut) => sum + (Number(ut.quantity) || 0), 0)
-      : 0;
+  const totalUnits = Array.isArray(property.unitTypes)
+    ? property.unitTypes.reduce((acc, ut) => acc + (Number(ut.quantity) || 0), 0)
+    : 0;
 
-    // Active tenants currently living in this property
-    const activeTenantsInProperty = tenants.filter((tenant) => {
-      const isAssigned = tenant.propertyId === propertyIdStr;
-      const isActive = tenant.status !== "inactive";
-      const leaseNotEnded = !tenant.leaseEndDate || new Date(tenant.leaseEndDate) >= new Date();
-      return isAssigned && isActive && leaseNotEnded;
-    });
+  const tenantsInThisProperty = tenants.filter(t => t.propertyId === propertyIdStr);
+  const occupiedUnits = tenantsInThisProperty.length;
+  const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
+  const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
-    const occupiedUnits = activeTenantsInProperty.length;
-    const vacantUnits = totalUnits > 0 ? Math.max(0, totalUnits - occupiedUnits) : 0;
-    const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
-
-    const isFullyOccupied = occupiedUnits >= totalUnits && totalUnits > 0;
-    const isVacant = occupiedUnits === 0 && totalUnits > 0;
-    const hasNoUnits = totalUnits === 0;
-
-    return {
-      totalUnits,
-      occupiedUnits,
-      vacantUnits,
-      occupancyRate,
-      isFullyOccupied,
-      isVacant,
-      hasNoUnits,
-    };
-  }, [tenants]);
+  return {
+    totalUnits,
+    occupiedUnits,
+    vacantUnits,
+    occupancyRate,
+    isFullyOccupied: occupiedUnits >= totalUnits && totalUnits > 0,
+    isVacant: occupiedUnits === 0 && totalUnits > 0,
+    hasNoUnits: totalUnits === 0,
+  };
+}, [tenants]);
 
   // GLOBAL VACANT UNITS — 100% ACCURATE
   const totalVacantUnits = useMemo(() => {
