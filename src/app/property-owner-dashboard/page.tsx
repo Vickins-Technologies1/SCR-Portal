@@ -164,46 +164,53 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-  // ACCURATE PROPERTY STATS (per property)
-const getPropertyStats = useCallback((property: Property) => {
-  const propertyIdStr = property._id.toString();
+  // ACCURATE PER-PROPERTY STATS (units from unitTypes, tenants from actual data)
+  const getPropertyStats = useCallback((property: Property) => {
+    const propertyIdStr = property._id.toString();
 
-  const totalUnits = Array.isArray(property.unitTypes)
-    ? property.unitTypes.reduce((acc, ut) => acc + (Number(ut.quantity) || 0), 0)
-    : 0;
+    const totalUnits = Array.isArray(property.unitTypes)
+      ? property.unitTypes.reduce((acc, ut) => acc + (Number(ut.quantity) || 0), 0)
+      : 0;
 
-  const tenantsInThisProperty = tenants.filter(t => t.propertyId === propertyIdStr);
-  const occupiedUnits = tenantsInThisProperty.length;
-  const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
-  const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+    const activeTenantsInProperty = tenants.filter((t) => {
+      const isInProperty = t.propertyId === propertyIdStr;
+      const isLeaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
+      const isStatusActive = t.status !== "inactive";
+      return isInProperty && isLeaseActive && isStatusActive;
+    });
 
-  return {
-    totalUnits,
-    occupiedUnits,
-    vacantUnits,
-    occupancyRate,
-    isFullyOccupied: occupiedUnits >= totalUnits && totalUnits > 0,
-    isVacant: occupiedUnits === 0 && totalUnits > 0,
-    hasNoUnits: totalUnits === 0,
-  };
-}, [tenants]);
+    const occupiedUnits = activeTenantsInProperty.length;
+    const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
+    const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
-  // GLOBAL VACANT UNITS — 100% ACCURATE
-  const totalVacantUnits = useMemo(() => {
-    return properties.reduce((sum, prop) => {
-      return sum + getPropertyStats(prop).vacantUnits;
-    }, 0);
-  }, [properties, getPropertyStats]);
-
-  // GLOBAL ACTIVE TENANTS
-  const totalActiveTenants = useMemo(() => {
-    return tenants.filter(t => {
-      const leaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
-      return t.status !== "inactive" && leaseActive;
-    }).length;
+    return {
+      totalUnits,
+      occupiedUnits,
+      vacantUnits,
+      occupancyRate,
+      isFullyOccupied: occupiedUnits >= totalUnits && totalUnits > 0,
+      isVacant: occupiedUnits === 0 && totalUnits > 0,
+      hasNoUnits: totalUnits === 0,
+    };
   }, [tenants]);
 
-  // PAYMENT STATUS
+  // GLOBAL VACANT UNITS — 100% ACCURATE (from unitTypes.quantity - active tenants)
+  const totalVacantUnits = useMemo(() => {
+    return properties.reduce((sum, prop) => sum + getPropertyStats(prop).vacantUnits, 0);
+  }, [properties, getPropertyStats]);
+
+  // GLOBAL ACTIVE TENANTS — Prefer backend value, fallback to accurate client count
+  const totalActiveTenants = useMemo(() => {
+    if (stats.totalTenants > 0) return stats.totalTenants;
+
+    return tenants.filter((t) => {
+      const isLeaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
+      const isStatusActive = t.status !== "inactive";
+      return isLeaseActive && isStatusActive;
+    }).length;
+  }, [stats.totalTenants, tenants]);
+
+  // PAYMENT STATUS SUMMARY
   const getTenantPaymentStatus = (tenant: Tenant): "paid" | "overdue" | "expired" => {
     if (tenant.leaseEndDate && new Date(tenant.leaseEndDate) < new Date()) return "expired";
     if (tenant.paymentStatus === "overdue") return "overdue";
@@ -223,6 +230,7 @@ const getPropertyStats = useCallback((property: Property) => {
     );
   }, [tenants]);
 
+  // CHART DATA
   const pieData = {
     labels: ["Paid", "Overdue", "Lease Expired"],
     datasets: [{
@@ -262,31 +270,43 @@ const getPropertyStats = useCallback((property: Property) => {
           )}
 
           {isLoading ? (
-            <div className="space-y-8">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="bg-white/80 rounded-2xl h-32 shadow-lg animate-pulse">
-                    <div className="p-5 space-y-4">
-                      <div className="h-4 bg-gray-200 rounded-lg w-24" />
-                      <div className="h-10 bg-gray-300 rounded-xl" />
-                    </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-white/80 rounded-2xl h-32 shadow-lg animate-pulse">
+                  <div className="p-5 space-y-4">
+                    <div className="h-4 bg-gray-200 rounded-lg w-24" />
+                    <div className="h-10 bg-gray-300 rounded-xl" />
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           ) : (
             <>
-              {/* STATS GRID */}
+              {/* TOP STATS GRID */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-10">
                 {[
                   { title: "Monthly Rent", value: `Ksh ${stats.totalMonthlyRent.toLocaleString()}`, icon: DollarSign, color: "emerald" },
-                  { title: "Revenue", value: `Ksh ${stats.totalPayments.toLocaleString()}`, icon: DollarSign, color: "blue" },
-                  { title: "Overdue", value: `Ksh ${stats.totalOverdueAmount.toLocaleString()}`, icon: AlertCircle, color: "red" },
+                  { title: "Total Revenue", value: `Ksh ${stats.totalPayments.toLocaleString()}`, icon: DollarSign, color: "blue" },
+                  { title: "Overdue Amount", value: `Ksh ${stats.totalOverdueAmount.toLocaleString()}`, icon: AlertCircle, color: "red" },
                   { title: "Deposits", value: `Ksh ${stats.totalDepositPaid.toLocaleString()}`, icon: DollarSign, color: "indigo" },
-                  { title: "Utilities", value: `Ksh ${stats.totalUtilityPaid.toLocaleString()}`, icon: DollarSign, color: "pink" },
+                  { title: "Utilities Paid", value: `Ksh ${stats.totalUtilityPaid.toLocaleString()}`, icon: DollarSign, color: "pink" },
                   { title: "Properties", value: stats.activeProperties, icon: Building2, color: "purple" },
-                  { title: "Active Tenants", value: totalActiveTenants, icon: Users, color: "green" },
-                  { title: "Vacant Units", value: totalVacantUnits, icon: Home, color: "orange" },
+                  { 
+                    title: "Active Tenants", 
+                    value: totalActiveTenants, 
+                    icon: Users, 
+                    color: "green",
+                    subtitle: `${paymentSummary.paid} paid • ${paymentSummary.overdue} overdue`
+                  },
+                  { 
+                    title: "Vacant Units", 
+                    value: totalVacantUnits, 
+                    icon: Home, 
+                    color: "orange",
+                    subtitle: stats.totalUnits > 0 
+                      ? `${Math.round((totalVacantUnits / stats.totalUnits) * 100)}% vacancy` 
+                      : "N/A"
+                  },
                 ].map((s, i) => (
                   <motion.div
                     key={i}
@@ -298,9 +318,12 @@ const getPropertyStats = useCallback((property: Property) => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-gray-600">{s.title}</p>
-                        <p className="text-xl font-bold text-gray-900 mt-2">
-                          {typeof s.value === "number" && !isNaN(s.value) ? s.value : s.value}
+                        <p className="text-2xl font-bold text-gray-900 mt-2">
+                          {typeof s.value === "number" ? s.value : s.value}
                         </p>
+                        {s.subtitle && (
+                          <p className="text-xs text-gray-500 mt-1">{s.subtitle}</p>
+                        )}
                       </div>
                       <div className={`p-3 rounded-xl bg-${s.color}-100`}>
                         <s.icon className={`h-6 w-6 text-${s.color}-600`} />
@@ -324,7 +347,7 @@ const getPropertyStats = useCallback((property: Property) => {
 
               <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
 
-              {/* PROPERTIES GRID — NOW 100% ACCURATE */}
+              {/* PROPERTIES SECTION */}
               <section className="mt-12">
                 <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
                   <Building2 className="h-9 w-9 text-emerald-600" />
@@ -340,8 +363,7 @@ const getPropertyStats = useCallback((property: Property) => {
                 ) : (
                   <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 lg:gap-8">
                     {properties.map((property) => {
-                      const stats = getPropertyStats(property);
-                      const { totalUnits, occupiedUnits, vacantUnits, occupancyRate, isFullyOccupied, isVacant } = stats;
+                      const { totalUnits, occupiedUnits, vacantUnits, occupancyRate, isFullyOccupied, isVacant } = getPropertyStats(property);
 
                       return (
                         <motion.div
@@ -363,7 +385,6 @@ const getPropertyStats = useCallback((property: Property) => {
                             </p>
                           </div>
 
-                          {/* Occupancy Ring */}
                           <div className="absolute top-5 right-5 bg-white/95 backdrop-blur-sm rounded-full shadow-2xl p-3 lg:p-4 border border-gray-100">
                             <div className="relative w-16 h-16 lg:w-18 lg:h-18">
                               <svg className="w-full h-full -rotate-90">
@@ -383,7 +404,6 @@ const getPropertyStats = useCallback((property: Property) => {
                             </div>
                           </div>
 
-                          {/* Stats Boxes */}
                           <div className="px-6 lg:px-8 pb-8 pt-4">
                             <div className="grid grid-cols-3 gap-4 text-center">
                               <div className="bg-emerald-50/80 rounded-2xl py-4 border border-emerald-100">
