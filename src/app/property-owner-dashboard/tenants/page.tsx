@@ -5,6 +5,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Users, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Shared components
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
@@ -12,7 +15,7 @@ import PaymentModal from "../components/PaymentModal";
 import TenantsTable from "../components/TenantsTable";
 import TenantFormContent from "../components/TenantFormContent";
 
-// Import correct Tenant type
+// Types
 import { TenantRequest, ResponseTenant } from "../../../types/tenant";
 
 interface ClientProperty {
@@ -45,6 +48,7 @@ interface FilterConfig {
 
 export default function TenantsPage() {
   const router = useRouter();
+
   const [tenants, setTenants] = useState<ResponseTenant[]>([]);
   const [properties, setProperties] = useState<ClientProperty[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -79,14 +83,15 @@ export default function TenantsPage() {
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        const res = await fetch("/api/csrf-token");
+        const res = await fetch("/api/csrf-token", {
+          credentials: "include",
+        });
         const data = await res.json();
-        if (data.success) {
+        if (data.success && data.csrfToken) {
           setCsrfToken(data.csrfToken);
-          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
         }
       } catch {
-        setError("Failed to connect to server.");
+        setError("Failed to fetch CSRF token.");
       }
     };
     fetchCsrfToken();
@@ -98,6 +103,7 @@ export default function TenantsPage() {
     const userRole = Cookies.get("role");
     setUserId(uid || null);
     setRole(userRole || null);
+
     if (!uid || userRole !== "propertyOwner") {
       router.push("/");
     }
@@ -108,7 +114,7 @@ export default function TenantsPage() {
     if (!userId || !csrfToken) return;
     try {
       const res = await fetch(`/api/user?userId=${userId}&role=${role}`, {
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -135,7 +141,7 @@ export default function TenantsPage() {
       }).toString();
 
       const res = await fetch(`/api/tenants?${query}`, {
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -157,7 +163,7 @@ export default function TenantsPage() {
     if (!userId || !csrfToken) return;
     try {
       const res = await fetch(`/api/properties?userId=${userId}`, {
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -172,7 +178,7 @@ export default function TenantsPage() {
     if (!userId || !csrfToken) return;
     try {
       const res = await fetch("/api/invoices", {
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -180,7 +186,7 @@ export default function TenantsPage() {
     } catch {}
   }, [userId, csrfToken]);
 
-  // Load initial data
+  // Load all data
   useEffect(() => {
     if (userId && role === "propertyOwner" && csrfToken) {
       Promise.all([
@@ -188,11 +194,11 @@ export default function TenantsPage() {
         fetchTenants(),
         fetchProperties(),
         fetchPendingInvoices(),
-      ]).catch(() => setError("Failed to load data."));
+      ]).catch(() => setError("Failed to load initial data."));
     }
   }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
-  // Open Add Modal
+  // Modal handlers
   const openAddModal = () => {
     setModalMode("add");
     setEditingTenant(null);
@@ -200,7 +206,6 @@ export default function TenantsPage() {
     setIsModalOpen(true);
   };
 
-  // Open Edit Modal
   const openEditModal = (tenant: ResponseTenant) => {
     setModalMode("edit");
     setEditingTenant(tenant);
@@ -213,6 +218,7 @@ export default function TenantsPage() {
 
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       const url = modalMode === "add" ? "/api/tenants" : `/api/tenants/${editingTenant?._id}`;
@@ -222,7 +228,7 @@ export default function TenantsPage() {
         method,
         headers: {
           "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
+          "x-csrf-token": csrfToken,
         },
         credentials: "include",
         body: JSON.stringify({ ...data, ownerId: userId }),
@@ -233,11 +239,10 @@ export default function TenantsPage() {
       if (result.success) {
         setSuccessMessage(`Tenant ${modalMode === "add" ? "added" : "updated"} successfully!`);
         setIsModalOpen(false);
-        setPendingTenantData(null);
         fetchTenants();
         fetchUserData();
         fetchPendingInvoices();
-      } else if (result.message?.includes("invoice")) {
+      } else if (result.message?.toLowerCase().includes("invoice") || result.message?.includes("payment")) {
         setPendingTenantData(data);
         setError(result.message);
         setIsPaymentPromptOpen(true);
@@ -258,7 +263,7 @@ export default function TenantsPage() {
     try {
       const res = await fetch(`/api/tenants/${tenantToDelete}`, {
         method: "DELETE",
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -281,145 +286,181 @@ export default function TenantsPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
+
+      {/* Main Content — matches Properties page exactly */}
+      <div className="sm:ml-64 mt-16"> {/* ← Critical fix: was pt-16 + wrong ml */}
         <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <div className="flex justify-between items-center mb-6">
+          {/* Header */}
+          <motion.div
+            className="flex justify-between items-center mb-6"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
             <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
               <Users className="text-[#012a4a]" />
               Manage Tenants
             </h1>
             <button
               onClick={openAddModal}
-              className="flex items-center gap-2 px-6 py-3 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition font-medium"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${
+                isLoading || !csrfToken
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-[#012a4a] hover:bg-[#014a7a]"
+              }`}
+              disabled={isLoading || !csrfToken}
             >
               <Plus className="h-5 w-5" />
               Add Tenant
             </button>
-          </div>
+          </motion.div>
 
-          {tenants.length >= 3 && (
-            <div className="bg-yellow-100 text-yellow-700 p-4 mb-4 rounded-lg">
-              Note: Adding more tenants may require a management fee payment.
+          {/* Alerts */}
+          <AnimatePresence>
+            {successMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="bg-green-100 border border-green-300 text-green-800 p-4 mb-4 rounded-lg"
+              >
+                {successMessage}
+              </motion.div>
+            )}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="bg-red-100 border border-red-300 text-red-800 p-4 mb-4 rounded-lg"
+              >
+                {error}
+              </motion.div>
+            )}
+            {pendingInvoices > 0 && (
+              <div className="bg-blue-100 border border-blue-300 text-blue-800 p-4 mb-6 rounded-lg">
+                You have {pendingInvoices} pending invoice{pendingInvoices > 1 ? "s" : ""}.
+              </div>
+            )}
+            {tenants.length >= 3 && paymentStatus !== "active" && (
+              <div className="bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 mb-6 rounded-lg">
+                Note: Adding more tenants may require a management fee payment.
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Tenants Table */}
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#012a4a]"></div>
+              <p className="mt-4 text-gray-600">Loading tenants...</p>
             </div>
-          )}
-
-          {pendingInvoices > 0 && (
-            <div className="bg-blue-100 text-blue-700 p-4 mb-4 rounded-lg">
-              You have {pendingInvoices} pending invoice{pendingInvoices > 1 ? "s" : ""}.
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg animate-pulse">
-              {successMessage}
-            </div>
-          )}
-
-          {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <TenantsTable
-            tenants={tenants}
-            properties={properties}
-            filters={filters}
-            setFilters={setFilters}
-            page={page}
-            setPage={setPage}
-            limit={limit}
-            setLimit={setLimit}
-            totalTenants={totalTenants}
-            isLoading={isLoading}
-            userId={userId}
-            csrfToken={csrfToken}
-            onEdit={openEditModal}
-            onDelete={(id) => {
-              setTenantToDelete(id);
-              setIsDeleteModalOpen(true);
-            }}
-          />
-
-          {/* Unified Tenant Form Modal */}
-          <Modal
-            title={modalMode === "add" ? "Add New Tenant" : "Edit Tenant"}
-            isOpen={isModalOpen}
-            onClose={() => setIsModalOpen(false)}
-          >
-            <TenantFormContent
-              mode={modalMode}
-              initialData={
-                modalMode === "edit" && editingTenant
-                  ? {
-                      ...editingTenant,
-                      leaseStartDate: editingTenant.leaseStartDate.split("T")[0],
-                      leaseEndDate: editingTenant.leaseEndDate.split("T")[0],
-                    }
-                  : pendingTenantData || {}
-              }
+          ) : (
+            <TenantsTable
+              tenants={tenants}
               properties={properties}
-              onSubmit={handleTenantSubmit}
-              onCancel={() => setIsModalOpen(false)}
+              filters={filters}
+              setFilters={setFilters}
+              page={page}
+              setPage={setPage}
+              limit={limit}
+              setLimit={setLimit}
+              totalTenants={totalTenants}
               isLoading={isLoading}
+              userId={userId}
               csrfToken={csrfToken}
-              tenantsCount={tenants.length}
+              onEdit={openEditModal}
+              onDelete={(id) => {
+                setTenantToDelete(id);
+                setIsDeleteModalOpen(true);
+              }}
             />
-          </Modal>
+          )}
 
-          {/* Delete Confirmation */}
-          <Modal
-            title="Confirm Delete"
-            isOpen={isDeleteModalOpen}
-            onClose={() => setIsDeleteModalOpen(false)}
-          >
-            <p className="mb-6 text-gray-700">
-              Are you sure you want to delete this tenant? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+          {/* Modals */}
+          <AnimatePresence>
+            {isModalOpen && (
+              <Modal
+                title={modalMode === "add" ? "Add New Tenant" : "Edit Tenant"}
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
               >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={isLoading}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-              >
-                {isLoading ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </Modal>
+                <TenantFormContent
+                  mode={modalMode}
+                  initialData={
+                    modalMode === "edit" && editingTenant
+                      ? {
+                          ...editingTenant,
+                          leaseStartDate: editingTenant.leaseStartDate.split("T")[0],
+                          leaseEndDate: editingTenant.leaseEndDate.split("T")[0],
+                        }
+                      : pendingTenantData || {}
+                  }
+                  properties={properties}
+                  onSubmit={handleTenantSubmit}
+                  onCancel={() => setIsModalOpen(false)}
+                  isLoading={isLoading}
+                  csrfToken={csrfToken}
+                  tenantsCount={tenants.length}
+                />
+              </Modal>
+            )}
 
-          {/* Payment Prompt */}
-          <PaymentModal
-            isOpen={isPaymentPromptOpen}
-            onClose={() => {
-              setIsPaymentPromptOpen(false);
-              setIsModalOpen(true);
-            }}
-            onSuccess={() => {
-              setSuccessMessage("Payment successful! Tenant added.");
-              setPendingTenantData(null);
-              fetchUserData();
-              fetchPendingInvoices();
-              fetchTenants();
-              setIsPaymentPromptOpen(false);
-            }}
-            onError={(msg) => setError(msg)}
-            properties={properties}
-            initialPropertyId={pendingTenantData?.propertyId || ""}
-            initialPhone={pendingTenantData?.phone || ""}
-            userId={userId || ""}
-          />
+            {isDeleteModalOpen && (
+              <Modal title="Confirm Delete" isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}>
+                <p className="mb-6 text-gray-700">
+                  Are you sure you want to delete this tenant? This action cannot be undone.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setIsDeleteModalOpen(false)}
+                    className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={isLoading}
+                    className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+                  >
+                    {isLoading ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </Modal>
+            )}
+
+            {isPaymentPromptOpen && pendingTenantData && (
+              <PaymentModal
+                isOpen={isPaymentPromptOpen}
+                onClose={() => {
+                  setIsPaymentPromptOpen(false);
+                  setIsModalOpen(true); // re-open form on cancel
+                }}
+                onSuccess={() => {
+                  setSuccessMessage("Payment successful! Tenant added.");
+                  setPendingTenantData(null);
+                  fetchUserData();
+                  fetchPendingInvoices();
+                  fetchTenants();
+                  setIsPaymentPromptOpen(false);
+                }}
+                onError={(msg) => setError(msg)}
+                properties={properties}
+                initialPropertyId={pendingTenantData.propertyId || ""}
+                initialPhone={pendingTenantData.phone || ""}
+                userId={userId || ""}
+              />
+            )}
+          </AnimatePresence>
         </main>
       </div>
 
+      {/* Global Font */}
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
+        body {
+          font-family: 'Inter', sans-serif;
+        }
       `}</style>
     </div>
   );

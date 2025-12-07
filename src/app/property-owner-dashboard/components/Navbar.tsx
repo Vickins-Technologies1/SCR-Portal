@@ -1,8 +1,8 @@
-
 "use client";
 
 import React from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function Navbar() {
   const router = useRouter();
@@ -14,24 +14,37 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sm:ml-64 fixed top-0 left-0 right-0 z-10 bg-white border-b border-gray-200 shadow-sm h-16 flex items-center px-4 sm:px-8">
-      <div className="flex justify-between items-center w-full">
-        {/* Logo or Title (optional for desktop view) */}
-        <div className="hidden sm:block">
-          <h1 className="text-lg font-semibold text-[#0a0a23] tracking-wide">
-            Smart Choice Rental Management
-          </h1>
+    <header className="fixed top-0 z-40 h-16 w-full border-b border-gray-200 bg-white/90 backdrop-blur-md shadow-sm md:pl-72">
+      {/* md:pl-72 = exact width of sidebar (w-72) */}
+      <div className="flex h-full items-center justify-between px-6 lg:px-10">
+        
+        {/* Left: Logo + Title */}
+        <div className="flex items-center gap-4">
+          <Image
+            src="/logo.png"
+            alt="Smart Choice Rental"
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-lg object-contain drop-shadow-sm"
+          />
+          <div>
+            <h1 className="text-lg font-bold bg-gradient-to-r from-[#03a678] to-[#028a63] bg-clip-text text-transparent">
+              Smart Choice Rental
+            </h1>
+            <p className="hidden text-xs text-gray-500 sm:block">Management Dashboard</p>
+          </div>
         </div>
 
-        {/* Right Side Items */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleSignOut}
-            className="text-sm font-medium bg-[#03a678] text-white px-4 py-1.5 rounded-md shadow-sm hover:bg-[#029c6b] transition"
-          >
-            Logout
-          </button>
-        </div>
+        {/* Right: Logout Button */}
+        <button
+          onClick={handleSignOut}
+          className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-[#03a678] to-[#029c6b] px-6 py-2.5 font-medium text-white shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-[#03a678]/30 hover:-translate-y-0.5"
+        >
+          <span className="relative z-10 flex items-center gap-2">
+            <span>Logout</span>
+          </span>
+          <div className="absolute inset-0 -translate-x-full bg-white/20 transition-transform duration-500 group-hover:translate-x-0" />
+        </button>
       </div>
     </header>
   );

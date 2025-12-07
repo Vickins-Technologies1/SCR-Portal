@@ -1,7 +1,6 @@
-// components/AddTenantModal.tsx
+// src/app/property-owner-dashboard/components/AddTenantModal.tsx
 "use client";
 
-import React from "react";
 import Modal from "./Modal";
 import TenantFormContent from "./TenantFormContent";
 

@@ -27,6 +27,13 @@ const enrichUnitTypes = (unitTypes: any[]) =>
     uniqueType: unit.uniqueType || `${unit.type}-${index}`,
   }));
 
+// Safe date formatter (handles string, Date, or invalid values)
+const formatDate = (date: any): string => {
+  if (!date) return "";
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? "" : d.toISOString();
+};
+
 // GET: Fetch single tenant
 export async function GET(
   request: NextRequest,
@@ -74,16 +81,16 @@ export async function GET(
       tenant: {
         ...tenant,
         _id: tenant._id.toString(),
-        createdAt: tenant.createdAt?.toISOString() || "",
-        updatedAt: tenant.updatedAt?.toISOString() || "",
+        createdAt: formatDate(tenant.createdAt),
+        updatedAt: formatDate(tenant.updatedAt),
       },
       property: {
         _id: property._id.toString(),
         name: property.name,
       },
     });
-  } catch (error) {
-    logger.error("GET /api/tenants/[tenantId]", { error });
+  } catch (error: any) {
+    logger.error("GET /api/tenants/[tenantId]", { error: error.message });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
@@ -193,12 +200,12 @@ export async function PUT(
       tenant: {
         ...result,
         _id: result._id.toString(),
-        createdAt: result.createdAt?.toISOString() || "",
-        updatedAt: result.updatedAt?.toISOString() || "",
+        createdAt: formatDate(result.createdAt),
+        updatedAt: formatDate(result.updatedAt),
       },
     });
-  } catch (error) {
-    logger.error("PUT /api/tenants/[tenantId]", { error });
+  } catch (error: any) {
+    logger.error("PUT /api/tenants/[tenantId]", { error: error.message });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
@@ -253,8 +260,8 @@ export async function DELETE(
       message: "Tenant deleted successfully",
       deletedPaymentsCount: deletedCount,
     });
-  } catch (error) {
-    logger.error("DELETE /api/tenants/[tenantId]", { error });
+  } catch (error: any) {
+    logger.error("DELETE /api/tenants/[tenantId]", { error: error.message });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }

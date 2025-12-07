@@ -57,7 +57,7 @@ export default function TenantDashboardLayout({
   const links = [
     {
       href: "/tenant-dashboard",
-      label: "Dashboard",
+      label: "Overview",
       icon: <LayoutDashboard size={18} />,
     },
     {
