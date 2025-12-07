@@ -53,10 +53,7 @@ interface Tenant {
 interface Stats {
   activeProperties: number;
   totalTenants: number;
-  totalUnits: number;
-  occupiedUnits: number;
   totalMonthlyRent: number;
-  overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
   totalDepositPaid: number;
@@ -81,10 +78,7 @@ export default function PropertyOwnerDashboard() {
   const [stats, setStats] = useState<Stats>({
     activeProperties: 0,
     totalTenants: 0,
-    totalUnits: 0,
-    occupiedUnits: 0,
     totalMonthlyRent: 0,
-    overduePayments: 0,
     totalPayments: 0,
     totalOverdueAmount: 0,
     totalDepositPaid: 0,
@@ -166,14 +160,16 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-  // ACCURATE PROPERTY STATS — Truth Source
+  // CORE: Accurate property stats — units from unitTypes, tenants from real active leases
   const getPropertyStats = useCallback((property: Property) => {
     const propertyIdStr = property._id.toString();
 
+    // Total units defined in property setup
     const totalUnits = Array.isArray(property.unitTypes)
       ? property.unitTypes.reduce((sum, ut) => sum + (Number(ut.quantity) || 0), 0)
       : 0;
 
+    // Active tenants = currently leased + not inactive
     const activeTenantsInProperty = tenants.filter((tenant) => {
       const inProperty = tenant.propertyId === propertyIdStr;
       const leaseActive = !tenant.leaseEndDate || new Date(tenant.leaseEndDate) >= new Date();
@@ -196,26 +192,33 @@ export default function PropertyOwnerDashboard() {
     };
   }, [tenants]);
 
-  // GLOBAL ACCURATE VACANT UNITS — Real truth
+  // GLOBAL: Total Vacant Units — summed from accurate per-property calculation
   const totalVacantUnits = useMemo(() => {
-    return properties.reduce((sum, property) => sum + getPropertyStats(property).vacantUnits, 0);
+    return properties.reduce((sum, property) => {
+      return sum + getPropertyStats(property).vacantUnits;
+    }, 0);
   }, [properties, getPropertyStats]);
 
-  // GLOBAL TOTAL UNITS — Real truth
-  const totalUnitsAcrossAll = useMemo(() => {
-    return properties.reduce((sum, property) => sum + getPropertyStats(property).totalUnits, 0);
+  // GLOBAL: Total Units across all properties
+  const totalUnitsAcrossAllProperties = useMemo(() => {
+    return properties.reduce((sum, property) => {
+      const stats = getPropertyStats(property);
+      return sum + stats.totalUnits;
+    }, 0);
   }, [properties, getPropertyStats]);
 
-  // GLOBAL ACTIVE TENANTS — Now matches backend exactly
+  // GLOBAL: Active Tenants — prefer backend, fallback to client (accurate)
   const totalActiveTenants = useMemo(() => {
+    if (stats.totalTenants > 0) return stats.totalTenants;
+
     return tenants.filter((t) => {
       const leaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
       const statusActive = t.status !== "inactive";
       return leaseActive && statusActive;
     }).length;
-  }, [tenants]);
+  }, [stats.totalTenants, tenants]);
 
-  // PAYMENT STATUS SUMMARY
+  // PAYMENT STATUS
   const paymentSummary = useMemo(() => {
     return tenants.reduce(
       (acc, t) => {
@@ -230,7 +233,7 @@ export default function PropertyOwnerDashboard() {
     );
   }, [tenants]);
 
-  // CHART DATA
+  // CHARTS
   const pieData = {
     labels: ["Paid", "Overdue", "Lease Expired"],
     datasets: [{
@@ -282,7 +285,7 @@ export default function PropertyOwnerDashboard() {
             </div>
           ) : (
             <>
-              {/* TOP STATS — NOW 100% ACCURATE & CONSISTENT */}
+              {/* TOP STATS — NOW 100% ACCURATE */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-10">
                 {[
                   { title: "Expected Monthly Rent", value: `Ksh ${stats.totalMonthlyRent.toLocaleString()}`, icon: DollarSign, color: "emerald" },
@@ -303,9 +306,9 @@ export default function PropertyOwnerDashboard() {
                     value: totalVacantUnits, 
                     icon: Home, 
                     color: "orange",
-                    subtitle: totalUnitsAcrossAll > 0
-                      ? `${Math.round((totalVacantUnits / totalUnitsAcrossAll) * 100)}% vacancy`
-                      : "No units"
+                    subtitle: totalUnitsAcrossAllProperties > 0
+                      ? `${Math.round((totalVacantUnits / totalUnitsAcrossAllProperties) * 100)}% vacancy`
+                      : "N/A"
                   },
                 ].map((s, i) => (
                   <motion.div
@@ -319,7 +322,7 @@ export default function PropertyOwnerDashboard() {
                       <div>
                         <p className="text-xs font-medium text-gray-600">{s.title}</p>
                         <p className="text-2xl font-bold text-gray-900 mt-2">
-                          {s.value}
+                          {typeof s.value === "number" ? s.value : s.value}
                         </p>
                         {s.subtitle && (
                           <p className="text-xs text-gray-500 mt-1">{s.subtitle}</p>
@@ -347,7 +350,7 @@ export default function PropertyOwnerDashboard() {
 
               <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
 
-              {/* PROPERTIES GRID — 100% ACCURATE */}
+              {/* PROPERTIES GRID — 100% ACCURATE VACANT UNITS */}
               <section className="mt-12">
                 <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
                   <Building2 className="h-9 w-9 text-emerald-600" />
@@ -419,7 +422,7 @@ export default function PropertyOwnerDashboard() {
                                 <p className="text-xs font-medium text-emerald-700">Total Units</p>
                                 <p className="text-3xl font-bold text-emerald-800 mt-1">{totalUnits}</p>
                               </div>
-                              <div className="bg-amber-50/80 rounded-2xl py-4 border border-amber-amber-100">
+                              <div className="bg-amber-50/80 rounded-2xl py-4 border border-amber-100">
                                 <p className="text-xs font-medium text-amber-700">Vacant</p>
                                 <p className="text-3xl font-bold text-amber-800 mt-1">{vacantUnits}</p>
                               </div>
