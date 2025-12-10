@@ -1,12 +1,10 @@
-
 // src/app/property-owner-dashboard/components/MaintenanceRequests.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { Wrench, Filter, Trash2 } from "lucide-react";
+import { Wrench, Filter, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Property } from "../../../types/property";
-import Cookies from "js-cookie";
-import { motion } from "framer-motion";
 
 interface MaintenanceRequest {
   _id: string;
@@ -16,8 +14,8 @@ interface MaintenanceRequest {
   tenantId: string;
   propertyId: string;
   date: string;
-  tenantName?: string;
   urgency: "low" | "medium" | "high";
+  tenantName?: string;
 }
 
 interface MaintenanceRequestsProps {
@@ -28,355 +26,270 @@ interface MaintenanceRequestsProps {
 
 export default function MaintenanceRequests({ userId, csrfToken, properties }: MaintenanceRequestsProps) {
   const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const requestsPerPage = 5;
-  const [role, setRole] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"All" | "Pending" | "In Progress" | "Resolved">("All");
 
+  // Fetch all maintenance requests (owner sees all via tenant endpoint)
   useEffect(() => {
-    // Fetch user role from cookies
-    const userRole = Cookies.get("role");
-    setRole(userRole ?? null);
-  }, []);
+    const fetchRequests = async () => {
+      if (!csrfToken) return;
 
-useEffect(() => {
-  const fetchMaintenanceRequests = async () => {
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
+      setIsLoading(true);
+      setError(null);
 
-    try {
-      const res = await fetch("/api/property-owners/maintenance", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include", // Important: sends cookies (userId, role)
-      });
+      try {
+        const res = await fetch("/api/property-owners/maintenance", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          credentials: "include",
+        });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to fetch: ${res.status} ${text}`);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text.slice(0, 100)}`);
+        }
+
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || "Failed to load requests");
+
+        // Enrich with real tenant names from your properties
+        const enrichedRequests: MaintenanceRequest[] = data.data.requests.map((req: any) => {
+          let tenantName = "Unknown Tenant";
+
+          // Find tenant in properties
+          for (const property of properties) {
+            const tenant = property.tenants?.find((t: any) => t._id === req.tenantId);
+            if (tenant) {
+              tenantName = tenant.name || tenant.email || "Unknown Tenant";
+              break;
+            }
+          }
+
+          return {
+            ...req,
+            tenantName,
+          };
+        });
+
+        setRequests(enrichedRequests);
+      } catch (err: any) {
+        console.error("Failed to fetch maintenance requests:", err);
+        setError(err.message || "Failed to load maintenance requests");
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-      const data = await res.json();
+    fetchRequests();
+  }, [csrfToken, properties]);
 
-      if (!data.success) {
-        throw new Error(data.message || "Failed to fetch maintenance requests");
-      }
-
-      // The backend already returns formatted requests with tenantName
-      setRequests(data.data.requests);
-
-      // Since your backend currently returns ALL requests (no pagination yet),
-      // we'll handle pagination client-side for now:
-      const total = data.data.requests.length;
-      setTotalPages(Math.ceil(total / requestsPerPage));
-
-      console.log("Maintenance requests fetched:", data.data.requests);
-    } catch (err) {
-      console.error("Maintenance requests fetch error:", err);
-      setError(
-        `Failed to load maintenance requests: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (userId && csrfToken) {
-    fetchMaintenanceRequests();
-  }
-}, [userId, csrfToken, currentPage]); // Note: currentPage will trigger refetch
-
-  const handleStatusUpdate = async (requestId: string, newStatus: "Pending" | "In Progress" | "Resolved") => {
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-
+  const updateStatus = async (id: string, status: "Pending" | "In Progress" | "Resolved") => {
     try {
-      const res = await fetch(`/api/tenants/maintenance/${requestId}`, {
+      const res = await fetch(`/api/tenants/maintenance/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           "x-csrf-token": csrfToken,
         },
         credentials: "include",
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status }),
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to update status: ${res.status} ${text.slice(0, 50)}`);
-      }
+      if (!res.ok) throw new Error("Failed to update status");
 
-      const data = await res.json();
-      if (data.success) {
-        setRequests((prev) =>
-          prev.map((req) => (req._id === requestId ? { ...req, status: newStatus } : req))
-        );
-        setSuccessMessage("Status updated successfully!");
-      } else {
-        throw new Error(data.message || "Failed to update status");
-      }
+      setRequests(prev => prev.map(r => r._id === id ? { ...r, status } : r));
+      setSuccess("Status updated successfully");
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error("Status update error:", err);
-      setError(`Failed to update status: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsLoading(false);
+      setError("Failed to update status");
+      setTimeout(() => setError(null), 3000);
     }
   };
 
-  const handleDeleteRequest = async (requestId: string) => {
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
+  const deleteRequest = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this maintenance request?")) return;
 
     try {
-      const res = await fetch(`/api/tenants/maintenance/${requestId}`, {
+      const res = await fetch(`/api/tenants/maintenance/${id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Failed to delete request: ${res.status} ${text.slice(0, 50)}`);
-      }
+      if (!res.ok) throw new Error("Failed to delete");
 
-      const data = await res.json();
-      if (data.success) {
-        setRequests((prev) => prev.filter((req) => req._id !== requestId));
-        setSuccessMessage("Maintenance request deleted successfully!");
-      } else {
-        throw new Error(data.message || "Failed to delete request");
-      }
+      setRequests(prev => prev.filter(r => r._id !== id));
+      setSuccess("Request deleted");
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error("Delete request error:", err);
-      setError(`Failed to delete request: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsLoading(false);
+      setError("Failed to delete request");
+      setTimeout(() => setError(null), 3000);
     }
   };
-
-  const filteredRequests = statusFilter === "All" ? requests : requests.filter((req) => req.status === statusFilter);
 
   const getPropertyName = (propertyId: string) => {
-    const property = properties.find((p) => p._id === propertyId);
-    return property ? property.name : "Unknown Property";
+    return properties.find(p => p._id.toString() === propertyId)?.name || "Unknown Property";
   };
 
-  const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
+  const filteredRequests = filter === "All"
+    ? requests
+    : requests.filter(r => r.status === filter);
 
   return (
     <motion.section
-      className="mb-6 sm:mb-8"
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.6 }}
+      className="mb-12"
     >
-      <div className="flex items-center justify-between mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 flex items-center gap-2">
-          <Wrench className="h-5 w-5 text-teal-600" /> Maintenance Requests
-        </h2>
-        <div className="relative">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-8 py-2 text-sm sm:text-base text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-          >
-            <option value="All">All</option>
-            <option value="Pending">Pending</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Resolved">Resolved</option>
-          </select>
-          <Filter className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-emerald-100 rounded-xl">
+            <Wrench className="w-8 h-8 text-emerald-600" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Maintenance Requests</h2>
+            <p className="text-gray-600">Manage and resolve tenant issues</p>
+          </div>
         </div>
+
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as any)}
+          className="px-5 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+        >
+          <option value="All">All Requests</option>
+          <option value="Pending">Pending</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+        </select>
       </div>
 
-      {error && (
-        <motion.div
-          className="mb-4 sm:mb-6 bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 flex items-center gap-2 text-sm sm:text-base"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Wrench className="h-5 w-5" /> {error}
-        </motion.div>
-      )}
-      {successMessage && (
-        <motion.div
-          className="mb-4 sm:mb-6 bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 flex items-center gap-2 text-sm sm:text-base"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Wrench className="h-5 w-5" /> {successMessage}
-        </motion.div>
-      )}
+      {/* Messages */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3"
+          >
+            <AlertCircle size={20} />
+            {error}
+          </motion.div>
+        )}
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center gap-3"
+          >
+            <CheckCircle2 size={20} />
+            {success}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Loading State */}
       {isLoading && (
-        <motion.div
-          className="mb-4 sm:mb-6 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl p-4 flex items-center gap-2 text-sm sm:text-base"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-teal-600"></div>
-          Loading maintenance requests...
-        </motion.div>
-      )}
-      {!isLoading && filteredRequests.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm text-gray-600 text-sm sm:text-base">
-          No maintenance requests found.
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 animate-pulse">
+              <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
+              <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+            </div>
+          ))}
         </div>
-      ) : (
-        <>
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {["Title", "Description", "Status", "Urgency", "Tenant", "Property", "Date", ...(role === "propertyOwner" ? ["Actions"] : [])].map((header) => (
-                    <th
-                      key={header}
-                      className="px-4 sm:px-6 py-3 text-left text-xs sm:text-sm font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredRequests.map((request) => (
-                  <tr key={request._id} className="hover:bg-gray-50 transition-colors duration-150">
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base text-gray-900">
-                      {request.title}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 text-sm sm:text-base text-gray-500 max-w-xs truncate">
-                      {request.description}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-block px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium rounded-full ${
-                          request.status === "Pending"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : request.status === "In Progress"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-green-100 text-green-800"
-                        }`}
-                      >
-                        {request.status}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base text-gray-500">
-                      <span
-                        className={`inline-block px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium rounded-full ${
-                          request.urgency === "low"
-                            ? "bg-green-100 text-green-800"
-                            : request.urgency === "medium"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {request.urgency.charAt(0).toUpperCase() + request.urgency.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base text-gray-500">
-                      {request.tenantName || "Unknown Tenant"}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base text-gray-500">
-                      {getPropertyName(request.propertyId)}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base text-gray-500">
-                      {new Date(request.date).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </td>
-                    {role === "propertyOwner" && (
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm sm:text-base">
-                        <div className="flex gap-2">
-                          <select
-                            value={request.status}
-                            onChange={(e) => handleStatusUpdate(request._id, e.target.value as "Pending" | "In Progress" | "Resolved")}
-                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                            disabled={isLoading}
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Resolved">Resolved</option>
-                          </select>
-                          <button
-                            onClick={() => handleDeleteRequest(request._id)}
-                            disabled={isLoading}
-                            className="text-red-600 hover:text-red-800 disabled:text-gray-400"
-                            title="Delete Request"
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* Pagination Controls */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              Showing {(currentPage - 1) * requestsPerPage + 1} to{" "}
-              {Math.min(currentPage * requestsPerPage, (currentPage - 1) * requestsPerPage + filteredRequests.length)} of{" "}
-              {requests.length} requests
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1 || isLoading}
-                className="px-3 py-1 bg-teal-600 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-teal-700 transition-colors"
-              >
-                Previous
-              </button>
-              <div className="flex gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => handlePageChange(page)}
-                    className={`px-3 py-1 rounded-lg ${
-                      currentPage === page
-                        ? "bg-teal-600 text-white"
-                        : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
-                    }`}
-                    disabled={isLoading}
-                  >
-                    {page}
-                  </button>
-                ))}
+      )}
+
+      {/* Empty State */}
+      {!isLoading && filteredRequests.length === 0 && (
+        <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
+          <Wrench className="w-20 h-20 text-gray-300 mx-auto mb-4" />
+          <p className="text-xl font-medium text-gray-500">
+            {filter === "All" ? "No maintenance requests yet" : `No ${filter.toLowerCase()} requests`}
+          </p>
+          <p className="text-gray-400 mt-2">All clear! Your tenants are happy</p>
+        </div>
+      )}
+
+      {/* Requests Grid */}
+      {!isLoading && filteredRequests.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredRequests.map((req) => (
+            <motion.div
+              key={req._id}
+              layout
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-xl transition-all duration-300 group"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="font-bold text-lg text-gray-900 line-clamp-2">{req.title}</h3>
+                <span className={`px-3 py-1 text-xs font-bold rounded-full ${req.urgency === "high" ? "bg-red-100 text-red-700" :
+                    req.urgency === "medium" ? "bg-yellow-100 text-yellow-700" :
+                      "bg-green-100 text-green-700"
+                  }`}>
+                  {req.urgency.toUpperCase()}
+                </span>
               </div>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages || isLoading}
-                className="px-3 py-1 bg-teal-600 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-teal-700 transition-colors"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </>
+
+              {/* Description */}
+              <p className="text-gray-600 text-sm mb-5 line-clamp-3">{req.description}</p>
+
+              {/* Details */}
+              <div className="space-y-3 text-sm border-t border-gray-100 pt-4">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Tenant</span>
+                  <span className="font-medium text-gray-900">{req.tenantName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Property</span>
+                  <span className="font-medium text-gray-900 truncate max-w-32">
+                    {getPropertyName(req.propertyId)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Date</span>
+                  <span className="font-medium text-gray-900">
+                    {new Date(req.date).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+                <select
+                  value={req.status}
+                  onChange={(e) => updateStatus(req._id, e.target.value as any)}
+                  className="text-sm px-4 py-2 border border-gray-300 rounded-xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Resolved">Resolved</option>
+                </select>
+
+                <button
+                  onClick={() => deleteRequest(req._id)}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition group-hover:scale-110"
+                  title="Delete request"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
       )}
     </motion.section>
   );
