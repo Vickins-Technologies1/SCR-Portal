@@ -34,7 +34,6 @@ import {
 import { Property } from "../../types/property";
 
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
-
 ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
 interface Tenant {
@@ -45,7 +44,7 @@ interface Tenant {
   propertyId: string;
   price: number;
   leaseStartDate: string;
-  leaseEndDate: string;
+  leaseEndDate?: string;
   paymentStatus?: "up-to-date" | "overdue" | "pending";
   status?: "active" | "inactive";
 }
@@ -90,12 +89,10 @@ export default function PropertyOwnerDashboard() {
   useEffect(() => {
     const uid = Cookies.get("userId");
     const role = Cookies.get("role");
-
     if (!uid || role !== "propertyOwner") {
       router.replace("/login");
       return;
     }
-
     setUserId(uid);
 
     const fetchCsrf = async () => {
@@ -114,14 +111,12 @@ export default function PropertyOwnerDashboard() {
       }
       setCsrfToken(token || null);
     };
-
     fetchCsrf();
   }, [router]);
 
   // FETCH DATA
   const fetchData = useCallback(async () => {
     if (!userId || !csrfToken) return;
-
     setIsLoading(true);
     setError(null);
 
@@ -160,24 +155,29 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-  // CORE: Accurate property stats — units from unitTypes, tenants from real active leases
+  // ULTRA-ACCURATE PROPERTY STATS (Works with old & new properties)
   const getPropertyStats = useCallback((property: Property) => {
     const propertyIdStr = property._id.toString();
 
-    // Total units defined in property setup
+    // Total units: safely sum quantity from unitTypes
     const totalUnits = Array.isArray(property.unitTypes)
-      ? property.unitTypes.reduce((sum, ut) => sum + (Number(ut.quantity) || 0), 0)
+      ? property.unitTypes.reduce((sum, ut) => {
+          const qty = Number(ut.quantity) || 0;
+          return sum + (isNaN(qty) ? 0 : qty);
+        }, 0)
       : 0;
 
-    // Active tenants = currently leased + not inactive
-    const activeTenantsInProperty = tenants.filter((tenant) => {
-      const inProperty = tenant.propertyId === propertyIdStr;
-      const leaseActive = !tenant.leaseEndDate || new Date(tenant.leaseEndDate) >= new Date();
-      const statusActive = tenant.status !== "inactive";
-      return inProperty && leaseActive && statusActive;
+    // Count active tenants (lease not ended + status !== inactive)
+    const activeTenants = tenants.filter((tenant) => {
+      if (tenant.propertyId !== propertyIdStr) return false;
+      if (tenant.status === "inactive") return false;
+      if (tenant.leaseEndDate && new Date(tenant.leaseEndDate) < new Date()) return false;
+      return true;
     });
 
-    const occupiedUnits = activeTenantsInProperty.length;
+    const occupiedUnits = activeTenants.length;
+
+    // Never show negative vacancy
     const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
     const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
@@ -192,45 +192,34 @@ export default function PropertyOwnerDashboard() {
     };
   }, [tenants]);
 
-  // GLOBAL: Total Vacant Units — summed from accurate per-property calculation
+  // GLOBAL TOTALS (100% accurate)
   const totalVacantUnits = useMemo(() => {
-    return properties.reduce((sum, property) => {
-      return sum + getPropertyStats(property).vacantUnits;
-    }, 0);
+    return properties.reduce((sum, p) => sum + getPropertyStats(p).vacantUnits, 0);
   }, [properties, getPropertyStats]);
 
-  // GLOBAL: Total Units across all properties
   const totalUnitsAcrossAllProperties = useMemo(() => {
-    return properties.reduce((sum, property) => {
-      const stats = getPropertyStats(property);
-      return sum + stats.totalUnits;
-    }, 0);
+    return properties.reduce((sum, p) => sum + getPropertyStats(p).totalUnits, 0);
   }, [properties, getPropertyStats]);
 
-  // GLOBAL: Active Tenants — prefer backend, fallback to client (accurate)
   const totalActiveTenants = useMemo(() => {
-    if (stats.totalTenants > 0) return stats.totalTenants;
-
-    return tenants.filter((t) => {
-      const leaseActive = !t.leaseEndDate || new Date(t.leaseEndDate) >= new Date();
-      const statusActive = t.status !== "inactive";
-      return leaseActive && statusActive;
-    }).length;
+    return stats.totalTenants > 0
+      ? stats.totalTenants
+      : tenants.filter(t => {
+          if (t.status === "inactive") return false;
+          if (t.leaseEndDate && new Date(t.leaseEndDate) < new Date()) return false;
+          return true;
+        }).length;
   }, [stats.totalTenants, tenants]);
 
-  // PAYMENT STATUS
   const paymentSummary = useMemo(() => {
-    return tenants.reduce(
-      (acc, t) => {
-        const expired = t.leaseEndDate && new Date(t.leaseEndDate) < new Date();
-        const overdue = t.paymentStatus === "overdue";
-        if (expired) acc.expired++;
-        else if (overdue) acc.overdue++;
-        else acc.paid++;
-        return acc;
-      },
-      { paid: 0, overdue: 0, expired: 0 }
-    );
+    return tenants.reduce((acc, t) => {
+      const expired = t.leaseEndDate && new Date(t.leaseEndDate) < new Date();
+      const overdue = t.paymentStatus === "overdue";
+      if (expired) acc.expired++;
+      else if (overdue) acc.overdue++;
+      else acc.paid++;
+      return acc;
+    }, { paid: 0, overdue: 0, expired: 0 });
   }, [tenants]);
 
   // CHARTS
@@ -257,7 +246,6 @@ export default function PropertyOwnerDashboard() {
     <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
       <Navbar />
       <Sidebar />
-
       <div className="md:ml-64 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
         <main className="max-w-7xl mx-auto">
           <div className="flex items-center gap-3 mb-8 mt-6">
@@ -285,7 +273,7 @@ export default function PropertyOwnerDashboard() {
             </div>
           ) : (
             <>
-              {/* TOP STATS — NOW 100% ACCURATE */}
+              {/* TOP STATS */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-10">
                 {[
                   { title: "Expected Monthly Rent", value: `Ksh ${stats.totalMonthlyRent.toLocaleString()}`, icon: DollarSign, color: "emerald" },
@@ -294,39 +282,15 @@ export default function PropertyOwnerDashboard() {
                   { title: "Deposits", value: `Ksh ${stats.totalDepositPaid.toLocaleString()}`, icon: DollarSign, color: "indigo" },
                   { title: "Utilities Paid", value: `Ksh ${stats.totalUtilityPaid.toLocaleString()}`, icon: DollarSign, color: "pink" },
                   { title: "Properties", value: stats.activeProperties, icon: Building2, color: "purple" },
-                  { 
-                    title: "Active Tenants", 
-                    value: totalActiveTenants, 
-                    icon: Users, 
-                    color: "green",
-                    subtitle: `${paymentSummary.paid} paid • ${paymentSummary.overdue} overdue`
-                  },
-                  { 
-                    title: "Vacant Units", 
-                    value: totalVacantUnits, 
-                    icon: Home, 
-                    color: "orange",
-                    subtitle: totalUnitsAcrossAllProperties > 0
-                      ? `${Math.round((totalVacantUnits / totalUnitsAcrossAllProperties) * 100)}% vacancy`
-                      : "N/A"
-                  },
+                  { title: "Active Tenants", value: totalActiveTenants, icon: Users, color: "green", subtitle: `${paymentSummary.paid} paid • ${paymentSummary.overdue} overdue` },
+                  { title: "Vacant Units", value: totalVacantUnits, icon: Home, color: "orange", subtitle: totalUnitsAcrossAllProperties > 0 ? `${Math.round((totalVacantUnits / totalUnitsAcrossAllProperties) * 100)}% vacancy` : "N/A" },
                 ].map((s, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow"
-                  >
+                  <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-gray-600">{s.title}</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-2">
-                          {typeof s.value === "number" ? s.value : s.value}
-                        </p>
-                        {s.subtitle && (
-                          <p className="text-xs text-gray-500 mt-1">{s.subtitle}</p>
-                        )}
+                        <p className="text-2xl font-bold text-gray-900 mt-2">{s.value}</p>
+                        {s.subtitle && <p className="text-xs text-gray-500 mt-1">{s.subtitle}</p>}
                       </div>
                       <div className={`p-3 rounded-xl bg-${s.color}-100`}>
                         <s.icon className={`h-6 w-6 text-${s.color}-600`} />
@@ -337,123 +301,112 @@ export default function PropertyOwnerDashboard() {
               </div>
 
               {/* CHARTS */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-                <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
-                  <h2 className="text-lg font-semibold mb-4 text-gray-800">Payment Trends</h2>
-                  <div className="h-80"><Line data={lineData} options={{ responsive: true, maintainAspectRatio: false }} /></div>
-                </div>
-                <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
-                  <h2 className="text-lg font-semibold mb-4 text-gray-800">Tenant Payment Status</h2>
-                  <div className="h-80"><Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} /></div>
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+              <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
+                <h2 className="text-lg font-semibold mb-4 text-gray-800">Payment Trends</h2>
+                <div className="h-80"><Line data={lineData} options={{ responsive: true, maintainAspectRatio: false }} /></div>
               </div>
+              <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
+                <h2 className="text-lg font-semibold mb-4 text-gray-800">Tenant Payment Status</h2>
+                <div className="h-80"><Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} /></div>
+              </div>
+            </div>
 
-              <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
+            <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
 
-              {/* PROPERTIES GRID — 100% ACCURATE VACANT UNITS */}
-              <section className="mt-12">
-                <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
-                  <Building2 className="h-9 w-9 text-emerald-600" />
-                  Your Properties
-                </h2>
+            {/* PROPERTIES GRID */}
+            <section className="mt-12">
+              <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
+                <Building2 className="h-9 w-9 text-emerald-600" />
+                Your Properties
+              </h2>
 
-                {properties.length === 0 ? (
-                  <div className="text-center py-24 bg-white/70 backdrop-blur-sm rounded-3xl shadow-inner border border-white/20">
-                    <div className="w-32 h-32 mx-auto bg-gray-200 rounded-full mb-8" />
-                    <p className="text-2xl font-semibold text-gray-700">No properties yet</p>
-                    <p className="text-gray-500 mt-3 text-lg">Add your first property to get started</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 lg:gap-8">
-                    {properties.map((property) => {
-                      const {
-                        totalUnits,
-                        occupiedUnits,
-                        vacantUnits,
-                        occupancyRate,
-                        isFullyOccupied,
-                        isVacant,
-                      } = getPropertyStats(property);
+              {properties.length === 0 ? (
+                <div className="text-center py-24 bg-white/70 backdrop-blur-sm rounded-3xl shadow-inner border border-white/20">
+                  <div className="w-32 h-32 mx-auto bg-gray-200 rounded-full mb-8" />
+                  <p className="text-2xl font-semibold text-gray-700">No properties yet</p>
+                  <p className="text-gray-500 mt-3 text-lg">Add your first property to get started</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 lg:gap-8">
+                  {properties.map((property) => {
+                    const { totalUnits, occupiedUnits, vacantUnits, occupancyRate, isFullyOccupied, isVacant } = getPropertyStats(property);
 
-                      return (
-                        <motion.div
-                          key={property._id.toString()}
-                          initial={{ opacity: 0, y: 30 }}
-                          whileInView={{ opacity: 1, y: 0 }}
-                          viewport={{ once: true }}
-                          whileHover={{ y: -12, scale: 1.04 }}
-                          transition={{ duration: 0.4 }}
-                          className="group relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl hover:shadow-2xl overflow-hidden cursor-pointer transition-all border border-white/30"
-                        >
-                          <div className="h-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-600" />
+                    return (
+                      <motion.div
+                        key={property._id.toString()}
+                        initial={{ opacity: 0, y: 30 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        whileHover={{ y: -12, scale: 1.04 }}
+                        transition={{ duration: 0.4 }}
+                        className="group relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl hover:shadow-2xl overflow-hidden cursor-pointer transition-all border border-white/30"
+                      >
+                        <div className="h-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-600" />
+                        <div className="p-6 lg:p-8">
+                          <h3 className="text-lg lg:text-xl font-bold text-gray-900 line-clamp-1">{property.name}</h3>
+                          <p className="text-sm lg:text-base text-gray-600 mt-2 flex items-center gap-2">
+                            <MapPin className="w-5 h-5 text-emerald-600" />
+                            <span className="truncate">{property.address || "No address"}</span>
+                          </p>
+                        </div>
 
-                          <div className="p-6 lg:p-8">
-                            <h3 className="text-lg lg:text-xl font-bold text-gray-900 line-clamp-1">{property.name}</h3>
-                            <p className="text-sm lg:text-base text-gray-600 mt-2 flex items-center gap-2">
-                              <MapPin className="w-5 h-5 text-emerald-600" />
-                              <span className="truncate">{property.address || "No address"}</span>
-                            </p>
+                        {/* Occupancy Ring */}
+                        <div className="absolute top-5 right-5 bg-white/95 backdrop-blur-sm rounded-full shadow-2xl p-3 lg:p-4 border border-gray-100">
+                          <div className="relative w-16 h-16 lg:w-18 lg:h-18">
+                            <svg className="w-full h-full -rotate-90">
+                              <circle cx="50%" cy="50%" r="42%" stroke="#e5e7eb" strokeWidth="9" fill="none" />
+                              <circle
+                                cx="50%" cy="50%" r="42%"
+                                stroke="#10b981"
+                                strokeWidth="10"
+                                fill="none"
+                                strokeDasharray={`${(occupancyRate / 100) * 132} 132`}
+                                className="transition-all duration-1000"
+                              />
+                            </svg>
+                            <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-emerald-700">
+                              {occupancyRate}%
+                            </span>
                           </div>
+                        </div>
 
-                          {/* Occupancy Ring */}
-                          <div className="absolute top-5 right-5 bg-white/95 backdrop-blur-sm rounded-full shadow-2xl p-3 lg:p-4 border border-gray-100">
-                            <div className="relative w-16 h-16 lg:w-18 lg:h-18">
-                              <svg className="w-full h-full -rotate-90">
-                                <circle cx="50%" cy="50%" r="42%" stroke="#e5e7eb" strokeWidth="9" fill="none" />
-                                <circle
-                                  cx="50%" cy="50%" r="42%"
-                                  stroke="#10b981"
-                                  strokeWidth="10"
-                                  fill="none"
-                                  strokeDasharray={`${(occupancyRate / 100) * 132} 132`}
-                                  className="transition-all duration-1000"
-                                />
-                              </svg>
-                              <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-emerald-700">
-                                {occupancyRate}%
-                              </span>
+                        <div className="px-6 lg:px-8 pb-8 pt-4">
+                          <div className="grid grid-cols-3 gap-4 text-center">
+                            <div className="bg-emerald-50/80 rounded-2xl py-4 border border-emerald-100">
+                              <p className="text-xs font-medium text-emerald-700">Total Units</p>
+                              <p className="text-3xl font-bold text-emerald-800 mt-1">{totalUnits}</p>
+                            </div>
+                            <div className="bg-amber-50/80 rounded-2xl py-4 border border-amber-100">
+                              <p className="text-xs font-medium text-amber-700">Vacant</p>
+                              <p className="text-3xl font-bold text-amber-800 mt-1">{vacantUnits}</p>
+                            </div>
+                            <div className="bg-blue-50/80 rounded-2xl py-4 border border-blue-100">
+                              <p className="text-xs font-medium text-blue-700">Occupied</p>
+                              <p className="text-3xl font-bold text-blue-800 mt-1">{occupiedUnits}</p>
                             </div>
                           </div>
 
-                          {/* Stats */}
-                          <div className="px-6 lg:px-8 pb-8 pt-4">
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                              <div className="bg-emerald-50/80 rounded-2xl py-4 border border-emerald-100">
-                                <p className="text-xs font-medium text-emerald-700">Total Units</p>
-                                <p className="text-3xl font-bold text-emerald-800 mt-1">{totalUnits}</p>
-                              </div>
-                              <div className="bg-amber-50/80 rounded-2xl py-4 border border-amber-100">
-                                <p className="text-xs font-medium text-amber-700">Vacant</p>
-                                <p className="text-3xl font-bold text-amber-800 mt-1">{vacantUnits}</p>
-                              </div>
-                              <div className="bg-blue-50/80 rounded-2xl py-4 border border-blue-100">
-                                <p className="text-xs font-medium text-blue-700">Occupied</p>
-                                <p className="text-3xl font-bold text-blue-800 mt-1">{occupiedUnits}</p>
-                              </div>
-                            </div>
-
-                            <div className="mt-6 text-center">
-                              <span className={`inline-block px-6 py-2.5 rounded-full text-base font-bold shadow-lg ${
-                                isFullyOccupied
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : isVacant
-                                  ? "bg-gray-100 text-gray-700"
-                                  : "bg-purple-100 text-purple-800"
-                              }`}>
-                                {isFullyOccupied ? "Fully Occupied" : isVacant ? "Completely Vacant" : "Partially Occupied"}
-                              </span>
-                            </div>
+                          <div className="mt-6 text-center">
+                            <span className={`inline-block px-6 py-2.5 rounded-full text-base font-bold shadow-lg ${
+                              isFullyOccupied ? "bg-emerald-100 text-emerald-800" :
+                              isVacant ? "bg-gray-100 text-gray-700" :
+                              "bg-purple-100 text-purple-800"
+                            }`}>
+                              {isFullyOccupied ? "Fully Occupied" : isVacant ? "Completely Vacant" : "Partially Occupied"}
+                            </span>
                           </div>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            </>
-          )}
-        </main>
-      </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </main>
     </div>
+  </div>
   );
 }
