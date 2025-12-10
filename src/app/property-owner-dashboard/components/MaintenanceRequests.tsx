@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Wrench, Filter, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Wrench, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Property } from "../../../types/property";
 
@@ -15,7 +15,7 @@ interface MaintenanceRequest {
   propertyId: string;
   date: string;
   urgency: "low" | "medium" | "high";
-  tenantName?: string;
+  tenantName: string; // ← Now guaranteed from backend
 }
 
 interface MaintenanceRequestsProps {
@@ -31,7 +31,6 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
   const [success, setSuccess] = useState<string | null>(null);
   const [filter, setFilter] = useState<"All" | "Pending" | "In Progress" | "Resolved">("All");
 
-  // Fetch all maintenance requests (owner sees all via tenant endpoint)
   useEffect(() => {
     const fetchRequests = async () => {
       if (!csrfToken) return;
@@ -57,26 +56,8 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
         const data = await res.json();
         if (!data.success) throw new Error(data.message || "Failed to load requests");
 
-        // Enrich with real tenant names from your properties
-        const enrichedRequests: MaintenanceRequest[] = data.data.requests.map((req: any) => {
-          let tenantName = "Unknown Tenant";
-
-          // Find tenant in properties
-          for (const property of properties) {
-            const tenant = property.tenants?.find((t: any) => t._id === req.tenantId);
-            if (tenant) {
-              tenantName = tenant.name || tenant.email || "Unknown Tenant";
-              break;
-            }
-          }
-
-          return {
-            ...req,
-            tenantName,
-          };
-        });
-
-        setRequests(enrichedRequests);
+        // tenantName is now included directly!
+        setRequests(data.data.requests);
       } catch (err: any) {
         console.error("Failed to fetch maintenance requests:", err);
         setError(err.message || "Failed to load maintenance requests");
@@ -86,7 +67,7 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
     };
 
     fetchRequests();
-  }, [csrfToken, properties]);
+  }, [csrfToken]); // Only depend on csrfToken
 
   const updateStatus = async (id: string, status: "Pending" | "In Progress" | "Resolved") => {
     try {
@@ -100,13 +81,16 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
         body: JSON.stringify({ status }),
       });
 
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to update status");
+      }
 
       setRequests(prev => prev.map(r => r._id === id ? { ...r, status } : r));
       setSuccess("Status updated successfully");
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      setError("Failed to update status");
+    } catch (err: any) {
+      setError(err.message || "Failed to update status");
       setTimeout(() => setError(null), 3000);
     }
   };
@@ -124,7 +108,7 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
       if (!res.ok) throw new Error("Failed to delete");
 
       setRequests(prev => prev.filter(r => r._id !== id));
-      setSuccess("Request deleted");
+      setSuccess("Request deleted successfully");
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError("Failed to delete request");
@@ -197,7 +181,7 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
         )}
       </AnimatePresence>
 
-      {/* Loading State */}
+      {/* Loading & Empty States */}
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map((i) => (
@@ -210,7 +194,6 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
         </div>
       )}
 
-      {/* Empty State */}
       {!isLoading && filteredRequests.length === 0 && (
         <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
           <Wrench className="w-20 h-20 text-gray-300 mx-auto mb-4" />
@@ -233,21 +216,19 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-xl transition-all duration-300 group"
             >
-              {/* Header */}
               <div className="flex justify-between items-start mb-4">
                 <h3 className="font-bold text-lg text-gray-900 line-clamp-2">{req.title}</h3>
-                <span className={`px-3 py-1 text-xs font-bold rounded-full ${req.urgency === "high" ? "bg-red-100 text-red-700" :
-                    req.urgency === "medium" ? "bg-yellow-100 text-yellow-700" :
-                      "bg-green-100 text-green-700"
-                  }`}>
+                <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+                  req.urgency === "high" ? "bg-red-100 text-red-700" :
+                  req.urgency === "medium" ? "bg-yellow-100 text-yellow-700" :
+                  "bg-green-100 text-green-700"
+                }`}>
                   {req.urgency.toUpperCase()}
                 </span>
               </div>
 
-              {/* Description */}
               <p className="text-gray-600 text-sm mb-5 line-clamp-3">{req.description}</p>
 
-              {/* Details */}
               <div className="space-y-3 text-sm border-t border-gray-100 pt-4">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Tenant</span>
@@ -267,7 +248,6 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
                 <select
                   value={req.status}

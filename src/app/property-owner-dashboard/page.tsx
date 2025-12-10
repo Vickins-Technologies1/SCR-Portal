@@ -178,9 +178,9 @@ export default function PropertyOwnerDashboard() {
     <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
       <Navbar />
       <Sidebar />
-      <div className="md:ml-64 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="md:ml-72 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
         <main className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-3 mb-8 mt-6">
+          <div className="flex items-center gap-1 mb-8 mt-6">
             <BarChart2 className="h-8 w-8 text-emerald-600" />
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
           </div>

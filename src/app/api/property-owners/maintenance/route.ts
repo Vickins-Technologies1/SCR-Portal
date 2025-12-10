@@ -1,78 +1,155 @@
 // src/app/api/property-owners/maintenance/route.ts
 
-import { NextRequest, NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
-import { ObjectId } from "mongodb";
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { Db, MongoClient, ObjectId } from "mongodb";
 
-interface TenantDoc {
+// ─────────────────────────────────────────────────────────────────────────────
+// DB Document Types – These match exactly what’s stored in MongoDB
+// ─────────────────────────────────────────────────────────────────────────────
+interface TenantDocument {
   _id: ObjectId;
   name: string;
+  email: string;
+  phone: string;
+  ownerId: string;
+  role: "tenant";
+  propertyId: string;
+  unitType: string;
+  unitIdentifier: string;
+  price: number;
+  deposit: number;
+  houseNumber: string;
+  leaseStartDate: string;
+  leaseEndDate: string;
+  status: "active" | "inactive" | "evicted";
+  paymentStatus: "current" | "overdue" | "paid";
+  createdAt: Date;
+  updatedAt?: Date;
+  totalRentPaid: number;
+  totalUtilityPaid: number;
+  totalDepositPaid: number;
+  walletBalance: number;
+  deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
 }
 
-export async function GET(req: NextRequest) {
-  const csrfHeader = req.headers.get("x-csrf-token");
-  if (!csrfHeader || !(await validateCsrfToken(req, csrfHeader))) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
-  }
+interface MaintenanceRequestDocument {
+  _id: ObjectId;
+  title: string;
+  description: string;
+  status: "Pending" | "In Progress" | "Resolved";
+  tenantId: ObjectId;
+  propertyId: ObjectId;
+  ownerId: string;
+  date: string;
+  urgency: "low" | "medium" | "high";
+}
 
-  const userId = req.cookies.get("userId")?.value;
-  const role = req.cookies.get("role")?.value;
+// ─────────────────────────────────────────────────────────────────────────────
+// Response type sent to frontend
+// ─────────────────────────────────────────────────────────────────────────────
+interface MaintenanceRequestResponse {
+  _id: string;
+  title: string;
+  description: string;
+  status: "Pending" | "In Progress" | "Resolved";
+  tenantId: string;
+  propertyId: string;
+  date: string;
+  urgency: "low" | "medium" | "high";
+  tenantName: string;
+}
 
-  if (!userId || role !== "propertyOwner") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// Database connection (cached)
+// ─────────────────────────────────────────────────────────────────────────────
+const client = new MongoClient(process.env.MONGODB_URI!);
+let cachedDb: Db | null = null;
 
+const connectToDatabase = async (): Promise<Db> => {
+  if (cachedDb) return cachedDb;
+  await client.connect();
+  cachedDb = client.db("rentaldb");
+  return cachedDb;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/property-owners/maintenance
+// ─────────────────────────────────────────────────────────────────────────────
+export async function GET() {
   try {
-    const { db } = await connectToDatabase();
+    const cookieStore = await cookies();
+    const userId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
 
-    // CRITICAL FIX: Accept both string and ObjectId
-    let ownerIdQuery: any = userId;
-    if (ObjectId.isValid(userId)) {
-      ownerIdQuery = { $in: [userId, new ObjectId(userId)] }; // match both!
+    if (!userId || role !== "propertyOwner") {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
-    const requests = await db
-      .collection("maintenance_requests")
-      .find({ ownerId: ownerIdQuery })
-      .sort({ date: -1 })
+    const db = await connectToDatabase();
+
+    // 1. Get all property IDs owned by this owner
+    const properties = await db
+      .collection("properties")
+      .find({ ownerId: userId })
       .toArray();
 
-    if (requests.length === 0) {
-      console.log("No requests found for ownerId:", userId);
+    const propertyIds = properties.map((p) => p._id as ObjectId);
+
+    if (propertyIds.length === 0) {
       return NextResponse.json({ success: true, data: { requests: [] } });
     }
 
-    // Get tenant names
-    const tenantIds = [...new Set(requests.map(r => r.tenantId.toString()))];
-    const tenants: TenantDoc[] = tenantIds.length > 0
-      ? (await db.collection("tenants").find({
-          _id: { $in: tenantIds.map(id => new ObjectId(id)) }
-        }).toArray()) as TenantDoc[]
-      : [];
+    // 2. Fetch maintenance requests
+    const maintenanceColl = db.collection<MaintenanceRequestDocument>("maintenance_requests");
+    const tenantColl = db.collection<TenantDocument>("tenants");
 
-    const tenantMap = new Map(tenants.map(t => [t._id.toString(), t.name]));
+    const requests = await maintenanceColl
+      .find({ propertyId: { $in: propertyIds } })
+      .sort({ date: -1 })
+      .toArray();
 
-    const formatted = requests.map(r => ({
-      _id: r._id.toString(),
-      title: r.title,
-      description: r.description,
-      status: r.status,
-      urgency: r.urgency,
-      date: r.date.toISOString(),
-      propertyId: r.propertyId.toString(),
-      tenantId: r.tenantId.toString(),
-      tenantName: tenantMap.get(r.tenantId.toString()) || "Unknown Tenant",
-    }));
+    // 3. Enrich with tenant name
+    const enrichedRequests: MaintenanceRequestResponse[] = await Promise.all(
+      requests.map(async (req) => {
+        let tenantName = "Unknown Tenant";
 
-    return NextResponse.json(
-      { success: true, data: { requests: formatted } },
-      { status: 200 }
+        if (req.tenantId) {
+          const tenant = await tenantColl.findOne(
+            { _id: req.tenantId }, // ObjectId matches ObjectId → TypeScript happy!
+            { projection: { name: 1, email: 1 } }
+          );
+
+          if (tenant) {
+            tenantName = tenant.name || tenant.email || "Unknown Tenant";
+          }
+        }
+
+        return {
+          _id: req._id.toString(),
+          title: req.title,
+          description: req.description,
+          status: req.status,
+          tenantId: req.tenantId.toString(),
+          propertyId: req.propertyId.toString(),
+          date: req.date,
+          urgency: req.urgency,
+          tenantName,
+        };
+      })
     );
-  } catch (error: any) {
-    console.error("Owner maintenance fetch error:", error);
+
+    return NextResponse.json({
+      success: true,
+      data: { requests: enrichedRequests },
+    });
+  } catch (error) {
+    console.error("Error in /api/property-owners/maintenance:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Server error" },
+      { success: false, message: "Failed to fetch maintenance requests" },
       { status: 500 }
     );
   }
