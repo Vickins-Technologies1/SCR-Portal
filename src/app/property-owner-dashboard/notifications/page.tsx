@@ -1,13 +1,15 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
-import { Bell, Plus, Send, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
-import { motion } from "framer-motion";
+import { Bell, Plus, Send, Trash2, ChevronLeft, ChevronRight, Eye, RefreshCw, ChevronDown } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
+import NotificationsHeader from "../components/notifications/NotificationsHeader";
+import NotificationsTable from "../components/notifications/NotificationsTable";
+import PaginationControls from "../components/notifications/PaginationControls";
 
+// Interfaces
 interface Tenant {
   _id: string;
   ownerId: string;
@@ -92,7 +94,7 @@ interface UpcomingReminder {
   reminderType: "fiveDaysBefore" | "paymentDate";
 }
 
-interface ApiResponse<T> {
+interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   properties?: T;
@@ -122,7 +124,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [newNotification, setNewNotification] = useState({
@@ -138,19 +140,16 @@ export default function NotificationsPage() {
         method: "GET",
         credentials: "include",
       });
-      const data: ApiResponse<never> = await response.json();
+      const data: ApiResponse = await response.json();
       if (data.success && data.csrfToken) {
         setCsrfToken(data.csrfToken);
         Cookies.set("csrfToken", data.csrfToken, { sameSite: "strict", secure: true });
-        console.log("[INFO] CSRF token fetched and stored:", data.csrfToken);
         return data.csrfToken;
       } else {
-        console.error("[ERROR] Failed to fetch CSRF token:", data.message);
         setError("Failed to fetch CSRF token. Please try again.");
         return null;
       }
     } catch (err) {
-      console.error("[ERROR] Error fetching CSRF token:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to fetch CSRF token. Please refresh the page.");
       return null;
     }
@@ -160,11 +159,8 @@ export default function NotificationsPage() {
     async (url: string, options: RequestInit, retries = 1): Promise<Response> => {
       if (!csrfToken) {
         const newToken = await fetchCsrfToken();
-        if (!newToken) {
-          throw new Error("Unable to fetch CSRF token");
-        }
+        if (!newToken) throw new Error("Unable to fetch CSRF token");
       }
-
       const headers = new Headers(options.headers || {});
       headers.set("X-CSRF-Token", csrfToken!);
       headers.set("Content-Type", "application/json");
@@ -176,7 +172,6 @@ export default function NotificationsPage() {
       });
 
       if (response.status === 403 && retries > 0) {
-        console.log("[INFO] CSRF token invalid, retrying with new token...");
         const newToken = await fetchCsrfToken();
         if (newToken) {
           headers.set("X-CSRF-Token", newToken);
@@ -185,18 +180,13 @@ export default function NotificationsPage() {
           return makeAuthenticatedRequest(url, { ...options, headers }, retries - 1);
         }
       }
-
       return response;
     },
     [csrfToken, fetchCsrfToken]
   );
 
   const fetchTenantsAndPayments = useCallback(async () => {
-    if (!userId || !csrfToken) {
-      console.log("[DEBUG] Skipping fetchTenantsAndPayments: missing userId or csrfToken", { userId, csrfToken });
-      setError("Please log in to fetch tenant and payment data.");
-      return;
-    }
+    if (!userId || !csrfToken) return;
     setIsLoading(true);
     try {
       const propertiesRes = await makeAuthenticatedRequest(
@@ -204,19 +194,11 @@ export default function NotificationsPage() {
         { method: "GET" }
       );
       const propertiesData: ApiResponse<Property[]> = await propertiesRes.json();
-      console.log("[INFO] Properties fetch response:", {
-        success: propertiesData.success,
-        properties: propertiesData.properties?.length,
-        message: propertiesData.message,
-        status: propertiesRes.status,
-      });
-
       if (!propertiesData.success || !propertiesData.properties) {
         setError(propertiesData.message || "Unable to fetch properties.");
         setIsLoading(false);
         return;
       }
-
       const fetchedProperties = propertiesData.properties;
 
       const tenantsRes = await makeAuthenticatedRequest(
@@ -224,19 +206,11 @@ export default function NotificationsPage() {
         { method: "GET" }
       );
       const tenantsData: ApiResponse<Tenant[]> = await tenantsRes.json();
-      console.log("[INFO] Tenants fetch response:", {
-        success: tenantsData.success,
-        tenants: tenantsData.tenants?.length,
-        message: tenantsData.message,
-        status: tenantsRes.status,
-      });
-
       if (!tenantsData.success || !tenantsData.tenants) {
         setError(tenantsData.message || "Unable to fetch tenants.");
         setIsLoading(false);
         return;
       }
-
       const fetchedTenants = tenantsData.tenants;
       setTenants(fetchedTenants);
       setNewNotification((prev) => ({
@@ -244,86 +218,39 @@ export default function NotificationsPage() {
         tenantIds: fetchedTenants.length > 0 ? ["all"] : [],
       }));
 
-      const tenantIds = fetchedTenants.map((tenant) => tenant._id);
-      if (tenantIds.length === 0) {
-        setError("No tenants found. Add tenants to view reminders.");
-        setIsLoading(false);
-        return;
-      }
-
       const paymentsRes = await makeAuthenticatedRequest(
         `/api/payments?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
         { method: "GET" }
       );
       const paymentsData: ApiResponse<Payment[]> = await paymentsRes.json();
-      console.log("[INFO] Payments fetch response:", {
-        success: paymentsData.success,
-        payments: paymentsData.payments?.length,
-        message: paymentsData.message,
-        status: paymentsRes.status,
-      });
-
       if (!paymentsData.success || !paymentsData.payments) {
         setError(paymentsData.message || "Unable to fetch payments.");
         setIsLoading(false);
         return;
       }
-
       const fetchedPayments = paymentsData.payments;
+
       const reminders: UpcomingReminder[] = [];
+      const currentDate = new Date();
+      const utilityAmount = 1000;
 
       for (const tenant of fetchedTenants) {
         const property = fetchedProperties.find((p) => p._id === tenant.propertyId);
-        if (!property) {
-          console.warn(`[WARN] Property not found for tenant ${tenant._id}`);
-          continue;
-        }
-
-        const leaseStartDate = new Date(tenant.leaseStartDate);
-        const currentDate = new Date();
-        if (isNaN(leaseStartDate.getTime()) || leaseStartDate > currentDate) {
-          console.warn(`[WARN] Invalid or future lease start date for tenant ${tenant._id}`);
-          continue;
-        }
-
-        if (isNaN(property.rentPaymentDate) || property.rentPaymentDate < 1 || property.rentPaymentDate > 31) {
-          console.warn(`[WARN] Invalid rent payment date for property ${property._id}`);
-          continue;
-        }
+        if (!property) continue;
 
         const unit = property.unitTypes.find((u) => u.uniqueType === tenant.unitType);
-        if (!unit && !tenant.price) {
-          console.warn(`[WARN] No valid unit type or price for tenant ${tenant._id}`);
-          continue;
-        }
         const rentAmount = unit ? unit.price : tenant.price;
         const depositAmount = unit ? unit.deposit : tenant.deposit;
-        const utilityAmount = 1000;
 
-        const tenantPayments = fetchedPayments.filter((p) =>
-          p.tenantId ? p.tenantId.toString() === tenant._id : false
-        );
-
+        const tenantPayments = fetchedPayments.filter((p) => p.tenantId === tenant._id);
         const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
         const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
         const rentPayments = tenantPayments
-          .filter(
-            (p) =>
-              p.type === "Rent" &&
-              p.status === "completed" &&
-              new Date(p.paymentDate) >= startOfMonth &&
-              new Date(p.paymentDate) <= endOfMonth
-          )
+          .filter((p) => p.type === "Rent" && p.status === "completed" && new Date(p.paymentDate) >= startOfMonth && new Date(p.paymentDate) <= endOfMonth)
           .reduce((sum, p) => sum + p.amount, 0);
         const utilityPayments = tenantPayments
-          .filter(
-            (p) =>
-              p.type === "Utility" &&
-              p.status === "completed" &&
-              new Date(p.paymentDate) >= startOfMonth &&
-              new Date(p.paymentDate) <= endOfMonth
-          )
+          .filter((p) => p.type === "Utility" && p.status === "completed" && new Date(p.paymentDate) >= startOfMonth && new Date(p.paymentDate) <= endOfMonth)
           .reduce((sum, p) => sum + p.amount, 0);
         const depositPayments = tenantPayments
           .filter((p) => p.type === "Deposit" && p.status === "completed")
@@ -332,24 +259,17 @@ export default function NotificationsPage() {
         const rentDue = Math.max(0, rentAmount - rentPayments);
         const utilityDue = Math.max(0, utilityAmount - utilityPayments);
         const depositDue = Math.max(0, depositAmount - depositPayments);
-
         const totalDue = rentDue + utilityDue + depositDue;
+
         if (totalDue <= 0) continue;
 
         const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), property.rentPaymentDate);
-        if (isNaN(dueDate.getTime())) {
-          console.warn(`[WARN] Invalid due date for property ${property._id}`);
-          continue;
-        }
-        const formattedDueDate = dueDate.toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        });
+        const formattedDueDate = dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
         const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
         const fiveDaysBefore = property.rentPaymentDate - 5;
         const adjustedFiveDaysBefore = fiveDaysBefore <= 0 ? fiveDaysBefore + daysInMonth : fiveDaysBefore;
+
         const reminderType =
           currentDate.getDate() === property.rentPaymentDate
             ? "paymentDate"
@@ -372,10 +292,8 @@ export default function NotificationsPage() {
           });
         }
       }
-      console.log("[INFO] Generated reminders:", reminders);
       setUpcomingReminders(reminders);
     } catch (err) {
-      console.error("[ERROR] Error fetching tenants, properties, or payments:", err instanceof Error ? err.message : "Unknown error");
       setError("Unable to fetch tenant, property, or payment data.");
     } finally {
       setIsLoading(false);
@@ -383,49 +301,25 @@ export default function NotificationsPage() {
   }, [userId, csrfToken, makeAuthenticatedRequest]);
 
   const fetchNotifications = useCallback(async () => {
-    if (!userId || !csrfToken) {
-      console.log("[DEBUG] Skipping fetchNotifications: missing userId or csrfToken", { userId, csrfToken });
-      return;
-    }
+    if (!userId || !csrfToken) return;
     try {
       const response = await makeAuthenticatedRequest(
         `/api/notifications?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
         { method: "GET" }
       );
       const data: ApiResponse<Notification[]> = await response.json();
-      console.log("[INFO] Notifications fetch response:", {
-        success: data.success,
-        notifications: data.data?.length,
-        message: data.message,
-        status: response.status,
-      });
-
       if (data.success && data.data) {
-        const validNotifications = data.data.filter((notification) => {
-          const isValid = notification.type && ["payment", "maintenance", "tenant", "other"].includes(notification.type);
-          if (!isValid) {
-            console.warn("[WARN] Invalid notification type found:", {
-              notificationId: notification._id,
-              type: notification.type,
-            });
-          }
-          return isValid;
-        });
-        setNotifications(validNotifications);
+        setNotifications(data.data);
       } else {
         setError(data.message || "Failed to fetch notifications.");
       }
     } catch (err) {
-      console.error("[ERROR] Error fetching notifications:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to fetch notifications.");
     }
   }, [userId, csrfToken, makeAuthenticatedRequest]);
 
   const triggerReminders = async () => {
-    if (!userId || !csrfToken) {
-      setError("Please log in to send reminders.");
-      return;
-    }
+    if (!userId || !csrfToken) return;
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest("/api/notifications/reminders", {
@@ -433,24 +327,13 @@ export default function NotificationsPage() {
         body: JSON.stringify({}),
       });
       const data: ApiResponse<Notification[]> = await response.json();
-      console.log("[INFO] Trigger reminders response:", {
-        success: data.success,
-        notifications: data.data?.length,
-        message: data.message,
-        status: response.status,
-      });
-
-      if (!data.success || !data.data) {
+      if (data.success && data.data) {
+        setNotifications((prev) => [...data.data!, ...prev]);
+        setUpcomingReminders([]);
+      } else {
         setError(data.message || "Failed to send reminders.");
-        setIsLoading(false);
-        return;
       }
-
-      setNotifications((prev) => [...data.data!, ...prev]);
-      setUpcomingReminders([]);
-      setError(null);
     } catch (err) {
-      console.error("[ERROR] Error triggering reminders:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to send reminders.");
     } finally {
       setIsLoading(false);
@@ -458,33 +341,20 @@ export default function NotificationsPage() {
   };
 
   const deleteNotification = useCallback(async (notificationId: string) => {
-    if (!userId || !csrfToken) {
-      setError("Please log in to delete notifications.");
-      return;
-    }
+    if (!userId || !csrfToken) return;
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest(
         `/api/notifications?notificationId=${encodeURIComponent(notificationId)}`,
         { method: "DELETE" }
       );
-      const data: ApiResponse<never> = await response.json();
-      console.log("[INFO] Delete notification response:", {
-        success: data.success,
-        message: data.message,
-        status: response.status,
-      });
-
-      if (!data.success) {
+      const data: ApiResponse = await response.json();
+      if (data.success) {
+        setNotifications((prev) => prev.filter((n) => n._id !== notificationId));
+      } else {
         setError(data.message || "Failed to delete notification.");
-        setIsLoading(false);
-        return;
       }
-
-      setNotifications((prev) => prev.filter((n) => n._id !== notificationId));
-      setError(null);
     } catch (err) {
-      console.error("[ERROR] Error deleting notification:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to delete notification.");
     } finally {
       setIsLoading(false);
@@ -494,35 +364,20 @@ export default function NotificationsPage() {
   }, [userId, csrfToken, makeAuthenticatedRequest]);
 
   const markAsRead = async (notificationId: string) => {
-    if (!userId || !csrfToken) {
-      setError("Please log in to mark notifications as read.");
-      return;
-    }
+    if (!userId || !csrfToken) return;
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest("/api/notifications/reminders/mark-read", {
         method: "POST",
         body: JSON.stringify({ notificationId }),
       });
-      const data: ApiResponse<never> = await response.json();
-      console.log("[INFO] Mark as read response:", {
-        success: data.success,
-        message: data.message,
-        status: response.status,
-      });
-
-      if (!data.success) {
-        setError(data.message || "Failed to mark notification as read.");
-        setIsLoading(false);
-        return;
+      const data: ApiResponse = await response.json();
+      if (data.success) {
+        setNotifications((prev) =>
+          prev.map((n) => (n._id === notificationId ? { ...n, status: "read" } : n))
+        );
       }
-
-      setNotifications((prev) =>
-        prev.map((n) => (n._id === notificationId ? { ...n, status: "read" } : n))
-      );
-      setError(null);
     } catch (err) {
-      console.error("[ERROR] Error marking notification as read:", err instanceof Error ? err.message : "Unknown error");
       setError("Failed to mark notification as read.");
     } finally {
       setIsLoading(false);
@@ -530,28 +385,12 @@ export default function NotificationsPage() {
   };
 
   const retryNotification = async (notificationId: string) => {
-    if (!userId || !csrfToken) {
-      setError("Please log in to retry notifications.");
-      return;
-    }
+    if (!userId || !csrfToken) return;
     setIsLoading(true);
     try {
       const notification = notifications.find((n) => n._id === notificationId);
-      if (!notification) {
-        setError("Notification not found.");
-        setIsLoading(false);
-        return;
-      }
-      if (
-        notification.deliveryStatus === "failed" &&
-        notification.errorDetails?.includes("Error code: 1007")
-      ) {
-        setError(
-          "Cannot retry: Device not found. Please verify the WhatsApp device ID in your configuration and try again."
-        );
-        setIsLoading(false);
-        return;
-      }
+      if (!notification) return;
+
       const response = await makeAuthenticatedRequest("/api/notifications", {
         method: "POST",
         body: JSON.stringify({
@@ -562,119 +401,52 @@ export default function NotificationsPage() {
         }),
       });
       const data: ApiResponse<Notification> = await response.json();
-      console.log("[INFO] Retry notification response:", {
-        success: data.success,
-        message: data.message,
-        status: response.status,
-      });
-
-      if (!data.success || !data.data) {
-        setError(data.message || "Failed to retry notification.");
-        setIsLoading(false);
-        return;
+      if (data.success && data.data) {
+        setNotifications((prev) => [data.data!, ...prev.filter((n) => n._id !== notificationId)]);
       }
-
-      setNotifications((prev) => [data.data!, ...prev.filter((n) => n._id !== notificationId)]);
-      setError(null);
     } catch (err) {
-      console.error("[ERROR] Error retrying notification:", err instanceof Error ? err.message : "Unknown error");
-      setError(
-        err instanceof Error && err.message.includes("Error code: 1007")
-          ? "Cannot retry: Device not found. Please verify the WhatsApp device ID in your configuration."
-          : "Failed to retry notification."
-      );
+      setError("Failed to retry notification.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const createNotification = async () => {
-    if (!userId || !csrfToken) {
-      setError("Please log in to create notifications.");
-      return;
-    }
-    if (newNotification.tenantIds.length === 0) {
-      setError("Please select at least one tenant or 'All Tenants' to send the notification.");
-      return;
-    }
-    const validTypes = ["payment", "maintenance", "tenant", "other"];
-    if (!newNotification.type || !validTypes.includes(newNotification.type)) {
-      setError("Please select a valid notification type.");
-      return;
-    }
-    const validDeliveryMethods = ["app", "sms", "email", "whatsapp", "both"];
-    if (!newNotification.deliveryMethod || !validDeliveryMethods.includes(newNotification.deliveryMethod)) {
-      setError("Please select a valid delivery method.");
-      return;
-    }
-    if (newNotification.type !== "payment" && !newNotification.message.trim()) {
-      setError("Please enter a message for non-payment notifications.");
-      return;
-    }
+    if (!userId || !csrfToken || newNotification.tenantIds.length === 0) return;
     setIsLoading(true);
     try {
       const tenantIds = newNotification.tenantIds.includes("all")
-        ? tenants.map((t) => t._id) // Expand "all" to individual tenant IDs
+        ? tenants.map((t) => t._id)
         : newNotification.tenantIds;
 
       const responses = await Promise.all(
         tenantIds.map(async (tenantId) => {
-          try {
-            const response = await makeAuthenticatedRequest("/api/notifications", {
-              method: "POST",
-              body: JSON.stringify({
-                message: newNotification.message,
-                tenantId,
-                type: newNotification.type,
-                deliveryMethod: newNotification.deliveryMethod,
-              }),
-            });
-            const data = await response.json() as ApiResponse<Notification>;
-            return { tenantId, data, status: response.status };
-          } catch (err) {
-            return {
+          const response = await makeAuthenticatedRequest("/api/notifications", {
+            method: "POST",
+            body: JSON.stringify({
+              message: newNotification.message,
               tenantId,
-              data: { success: false, message: err instanceof Error ? err.message : "Request failed" },
-              status: 500,
-            };
-          }
+              type: newNotification.type,
+              deliveryMethod: newNotification.deliveryMethod,
+            }),
+          });
+          return { tenantId, data: await response.json() as ApiResponse<Notification> };
         })
       );
 
-      const successfulNotifications: Notification[] = [];
-      let errorMessage: string | null = null;
-
-      responses.forEach(({ tenantId, data, status }) => {
-        if (data.success && data.data && validTypes.includes(data.data.type)) {
-          successfulNotifications.push(data.data);
-        } else {
-          console.error("[ERROR] Failed to create notification for tenant:", tenantId, {
-            message: data.message,
-            status,
-            responseData: data,
-          });
-          errorMessage = data.message || `Failed to create notification for tenant ${tenantId}.`;
-        }
+      const successful: Notification[] = [];
+      responses.forEach(({ data }) => {
+        if (data.success && data.data) successful.push(data.data);
       });
 
-      if (successfulNotifications.length > 0) {
-        setNotifications((prev) => [...successfulNotifications, ...prev]);
+      if (successful.length > 0) {
+        setNotifications((prev) => [...successful, ...prev]);
         setIsCreateModalOpen(false);
         setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
-        setCurrentPage(1);
-        setError(errorMessage);
-        // Refresh notifications to ensure consistency
         await fetchNotifications();
-      } else {
-        setError(errorMessage || "Failed to create notifications for any tenants.");
       }
     } catch (err) {
-      console.error("[ERROR] Error creating notification:", err instanceof Error ? err.message : "Unknown error");
-      setError(
-        err instanceof Error && err.message.includes("Error code: 1007")
-          ? "Cannot send: Device not found. Please verify the WhatsApp device ID in your configuration."
-          : "Failed to create notification."
-      );
+      setError("Failed to create notification.");
     } finally {
       setIsLoading(false);
     }
@@ -682,36 +454,19 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     const uid = Cookies.get("userId") ?? null;
-    const originalRole = Cookies.get("originalRole") ?? null;
-    const originalUserId = Cookies.get("originalUserId") ?? null;
+    const role = Cookies.get("role");
+    const originalRole = Cookies.get("originalRole");
+    const originalUserId = Cookies.get("originalUserId");
     const storedCsrfToken = Cookies.get("csrfToken") ?? null;
 
-    console.log("[DEBUG] Cookies retrieved:", {
-      userId: uid ?? "null",
-      role: Cookies.get("role") ?? "null",
-      originalRole: originalRole ?? "null",
-      originalUserId: originalUserId ?? "null",
-      csrfToken: storedCsrfToken ?? "null",
-      documentCookie: document.cookie,
-    });
-
-    if (!uid || !Cookies.get("role")) {
-      console.log("[ERROR] Missing userId or role, setting error");
-      setError("No user session found. Please log in to access all features.");
-      return;
-    }
-
-    if (Cookies.get("role") !== "propertyOwner" && !(originalRole === "propertyOwner" && originalUserId)) {
-      console.log("[ERROR] Unauthorized role, setting error", { uid, userRole: Cookies.get("role"), originalRole, originalUserId });
-      setError("Please log in as a property owner to access all features.");
+    if (!uid || !role || (role !== "propertyOwner" && !(originalRole === "propertyOwner" && originalUserId))) {
+      setError("Please log in as a property owner.");
       return;
     }
 
     setUserId(uid);
     setCsrfToken(storedCsrfToken);
-    if (!storedCsrfToken) {
-      fetchCsrfToken();
-    }
+    if (!storedCsrfToken) fetchCsrfToken();
   }, [fetchCsrfToken]);
 
   useEffect(() => {
@@ -738,668 +493,230 @@ export default function NotificationsPage() {
     setIsDeleteModalOpen(true);
   }, []);
 
-  const totalPages = Math.ceil(
-    (viewMode === "sent" ? notifications.length : upcomingReminders.length) / pageSize
-  );
+  const totalItems = viewMode === "sent" ? notifications.length : upcomingReminders.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
   const paginatedItems = (viewMode === "sent" ? notifications : upcomingReminders).slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
 
   const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
-
-  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setPageSize(Number(e.target.value));
-    setCurrentPage(1);
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
   const getDeliveryStatusText = (notification: Notification) => {
-    const status = notification.deliveryStatus || "Pending";
-    const errorDetails = notification.errorDetails || "";
-    let baseText: string;
-    switch (notification.deliveryMethod) {
-      case "both":
-        baseText = `SMS, Email & WhatsApp (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
-        break;
-      case "sms":
-        baseText = `SMS (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
-        break;
-      case "email":
-        baseText = `Email (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
-        break;
-      case "whatsapp":
-        baseText = `WhatsApp (${status}${errorDetails ? `: ${errorDetails}` : ""})`;
-        break;
-      default:
-        baseText = "App";
-    }
-    return errorDetails.includes("Error code: 1007")
-      ? `${baseText} - Verify WhatsApp device ID in configuration`
-      : baseText;
+    const method = notification.deliveryMethod || "app";
+    const status = notification.deliveryStatus || "pending";
+    const error = notification.errorDetails || "";
+    const base = method === "both" ? "SMS, Email & WhatsApp" : method.charAt(0).toUpperCase() + method.slice(1);
+    return error.includes("1007") ? `${base} - Verify Device ID` : `${base} (${status})`;
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans">
+    <>
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
-          <motion.div
-            className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3 text-[#012a4a]">
-              <Bell className="text-[#03a678] h-6 w-6 sm:h-8 sm:w-8" />
-              Notifications
-            </h1>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-              <div className="flex rounded-lg border border-gray-200 bg-white p-1 w-full sm:w-auto">
-                <button
-                  onClick={() => setViewMode("sent")}
-                  className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === "sent"
-                    ? "bg-[#03a678] text-white"
-                    : "bg-white text-[#012a4a] hover:bg-gray-100"
-                    }`}
-                >
-                  Sent Reminders
-                </button>
-                <button
-                  onClick={() => setViewMode("upcoming")}
-                  className={`flex-1 sm:flex-none px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === "upcoming"
-                    ? "bg-[#03a678] text-white"
-                    : "bg-white text-[#012a4a] hover:bg-gray-100"
-                    }`}
-                >
-                  Upcoming Reminders
-                </button>
-              </div>
-              <div className="flex gap-3 w-full sm:w-auto">
-                <div className="relative flex-1 sm:flex-none">
-                  <button
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="flex-1 sm:flex-none bg-gradient-to-r from-[#03a678] to-[#02956a] text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-transform transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                    disabled={tenants.length === 0 || !csrfToken}
-                    title={tenants.length === 0 ? "No tenants available to send notifications" : !csrfToken ? "Authenticating session..." : ""}
-                  >
-                    <Plus size={16} />
-                    Create Notification
-                  </button>
-                </div>
-                {viewMode === "upcoming" && (
-                  <div className="relative flex-1 sm:flex-none">
-                    <button
-                      onClick={triggerReminders}
-                      className="flex-1 sm:flex-none bg-gradient-to-r from-[#02956a] to-[#017b58] text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-transform transform hover:scale-105 shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                      disabled={isLoading || upcomingReminders.length === 0 || !csrfToken}
-                      title={
-                        isLoading
-                          ? "Sending in progress..."
-                          : upcomingReminders.length === 0
-                            ? "No upcoming reminders to send"
-                            : !csrfToken
-                              ? "Authenticating session..."
-                              : ""
-                      }
-                    >
-                      <Send size={16} />
-                      {isLoading ? "Sending..." : "Send Reminders Now"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
+
+      {/* Main Content - Perfectly aligned with fixed Navbar & Sidebar */}
+      <main className="min-h-screen bg-gray-50 pt-20 pb-10 md:ml-64 transition-all duration-300">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <NotificationsHeader
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            onCreateNotification={() => setIsCreateModalOpen(true)}
+            onSendReminders={viewMode === "upcoming" ? triggerReminders : undefined}
+            isLoading={isLoading}
+            tenantsCount={tenants.length}
+            csrfToken={csrfToken}
+          />
+
           {error && (
-            <motion.div
-              className="bg-red-100 text-red-700 p-4 mb-6 rounded-lg shadow"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 shadow-md">
               {error}
-            </motion.div>
-          )}
-          {isLoading ? (
-            <motion.div
-              className="text-center text-gray-600"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <span className="ml-3 text-base sm:text-lg">Loading...</span>
-            </motion.div>
-          ) : (viewMode === "sent" ? notifications.length : upcomingReminders.length) === 0 ? (
-            <motion.div
-              className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 shadow-sm text-[#012a4a] text-center"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <p className="text-base sm:text-lg font-medium">
-                {viewMode === "sent" ? "No sent reminders found." : "No upcoming reminders found."}
-              </p>
-              <p className="text-sm text-gray-500 mt-2">
-                {viewMode === "sent"
-                  ? "Create a new notification to get started."
-                  : "Add tenants or verify payment schedules to see upcoming reminders."}
-              </p>
-            </motion.div>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="hidden sm:block">
-                <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-[#012a4a] text-left text-xs sm:text-sm font-semibold">
-                      {viewMode === "sent"
-                        ? ["message", "type", "tenantName", "createdAt", "deliveryMethod", "status"].map((key) => (
-                          <th key={key} className="px-2 sm:px-4 py-2 sm:py-3">
-                            {key === "tenantName"
-                              ? "Tenant"
-                              : key === "createdAt"
-                                ? "Date"
-                                : key === "deliveryMethod"
-                                  ? "Delivery"
-                                  : key === "status"
-                                    ? "Status"
-                                    : key.charAt(0).toUpperCase() + key.slice(1)}
-                          </th>
-                        ))
-                        : ["tenantName", "propertyName", "rentDue", "utilityDue", "depositDue", "totalDue", "dueDate"].map((key) => (
-                          <th key={key} className="px-2 sm:px-4 py-2 sm:py-3">
-                            {key === "tenantName"
-                              ? "Tenant"
-                              : key === "propertyName"
-                                ? "Property"
-                                : key === "rentDue"
-                                  ? "Rent Due"
-                                  : key === "utilityDue"
-                                    ? "Utilities Due"
-                                    : key === "depositDue"
-                                      ? "Deposit Due"
-                                      : key === "totalDue"
-                                        ? "Total Due"
-                                        : "Due Date"}
-                          </th>
-                        ))}
-                      <th className="px-2 sm:px-4 py-2 sm:py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedItems.map((item, index) => (
-                      <motion.tr
-                        key={viewMode === "sent" ? (item as Notification)._id : `${(item as UpcomingReminder).tenantId}-${index}`}
-                        className="border-t border-gray-200 hover:bg-gray-50 cursor-pointer"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: index * 0.1 }}
-                        onClick={() =>
-                          viewMode === "sent"
-                            ? openNotificationDetails(item as Notification)
-                            : openReminderDetails(item as UpcomingReminder)
-                        }
-                      >
-                        {viewMode === "sent" ? (
-                          <>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a] truncate max-w-[150px] sm:max-w-xs">
-                              {(item as Notification).message}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as Notification).type
-                                ? (item as Notification).type.charAt(0).toUpperCase() + (item as Notification).type.slice(1)
-                                : "Unknown"}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as Notification).tenantName}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {new Date((item as Notification).createdAt).toLocaleDateString()}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {getDeliveryStatusText(item as Notification)}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as Notification).status.charAt(0).toUpperCase() + (item as Notification).status.slice(1)}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    markAsRead((item as Notification)._id);
-                                  }}
-                                  className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                                  disabled={(item as Notification).status === "read"}
-                                >
-                                  Mark as Read
-                                </button>
-                                {viewMode === "sent" && (item as Notification).deliveryStatus === "failed" && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      retryNotification((item as Notification)._id);
-                                    }}
-                                    className="text-yellow-600 hover:text-yellow-800 flex items-center gap-1"
-                                    disabled={(item as Notification).errorDetails?.includes("Error code: 1007")}
-                                    title={
-                                      (item as Notification).errorDetails?.includes("Error code: 1007")
-                                        ? "Cannot retry: Verify WhatsApp device ID in configuration"
-                                        : ""
-                                    }
-                                  >
-                                    Retry
-                                  </button>
-                                )}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openDeleteConfirmation((item as Notification)._id);
-                                  }}
-                                  className="text-red-600 hover:text-red-800 flex items-center gap-1"
-                                >
-                                  <Trash2 size={14} />
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as UpcomingReminder).tenantName}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as UpcomingReminder).propertyName}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              Ksh. {(item as UpcomingReminder).rentDue.toFixed(2)}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              Ksh. {(item as UpcomingReminder).utilityDue.toFixed(2)}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              Ksh. {(item as UpcomingReminder).depositDue.toFixed(2)}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              Ksh. {(item as UpcomingReminder).totalDue.toFixed(2)}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-[#012a4a]">
-                              {(item as UpcomingReminder).dueDate}
-                            </td>
-                            <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm"></td>
-                          </>
-                        )}
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="sm:hidden space-y-6">
-                {paginatedItems.map((item, index) => (
-                  <motion.div
-                    key={viewMode === "sent" ? (item as Notification)._id : `${(item as UpcomingReminder).tenantId}-${index}`}
-                    className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.1 }}
-                    onClick={() =>
-                      viewMode === "sent"
-                        ? openNotificationDetails(item as Notification)
-                        : openReminderDetails(item as UpcomingReminder)
-                    }
-                  >
-                    {viewMode === "sent" ? (
-                      <div className="space-y-3">
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Message: </span>
-                          <span className="text-[#012a4a] text-sm truncate">{(item as Notification).message}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Type: </span>
-                          <span className="text-[#012a4a] text-sm">
-                            {(item as Notification).type
-                              ? (item as Notification).type.charAt(0).toUpperCase() + (item as Notification).type.slice(1)
-                              : "Unknown"}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Tenant: </span>
-                          <span className="text-[#012a4a] text-sm">{(item as Notification).tenantName}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Date: </span>
-                          <span className="text-[#012a4a] text-sm">
-                            {new Date((item as Notification).createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Delivery: </span>
-                          <span className="text-[#012a4a] text-sm">
-                            {getDeliveryStatusText(item as Notification)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Status: </span>
-                          <span className="text-[#012a4a] text-sm">
-                            {(item as Notification).status.charAt(0).toUpperCase() + (item as Notification).status.slice(1)}
-                          </span>
-                        </div>
-                        <div className="flex gap-2 mt-3">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              markAsRead((item as Notification)._id);
-                            }}
-                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                            disabled={(item as Notification).status === "read"}
-                          >
-                            Mark as Read
-                          </button>
-                          {viewMode === "sent" && (item as Notification).deliveryStatus === "failed" && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                retryNotification((item as Notification)._id);
-                              }}
-                              className="text-yellow-600 hover:text-yellow-800 flex items-center gap-1 text-sm"
-                              disabled={(item as Notification).errorDetails?.includes("Error code: 1007")}
-                              title={
-                                (item as Notification).errorDetails?.includes("Error code: 1007")
-                                  ? "Cannot retry: Verify WhatsApp device ID in configuration"
-                                  : ""
-                              }
-                            >
-                              Retry
-                            </button>
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openDeleteConfirmation((item as Notification)._id);
-                            }}
-                            className="text-red-600 hover:text-red-800 flex items-center gap-1 text-sm"
-                          >
-                            <Trash2 size={14} />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Tenant: </span>
-                          <span className="text-[#012a4a] text-sm">{(item as UpcomingReminder).tenantName}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Property: </span>
-                          <span className="text-[#012a4a] text-sm">{(item as UpcomingReminder).propertyName}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Rent Due: </span>
-                          <span className="text-[#012a4a] text-sm">Ksh. {(item as UpcomingReminder).rentDue.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Utilities Due: </span>
-                          <span className="text-[#012a4a] text-sm">Ksh. {(item as UpcomingReminder).utilityDue.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Deposit Due: </span>
-                          <span className="text-[#012a4a] text-sm">Ksh. {(item as UpcomingReminder).depositDue.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Total Due: </span>
-                          <span className="text-[#012a4a] text-sm">Ksh. {(item as UpcomingReminder).totalDue.toFixed(2)}</span>
-                        </div>
-                        <div>
-                          <span className="font-medium text-[#012a4a] text-sm">Due Date: </span>
-                          <span className="text-[#012a4a] text-sm">{(item as UpcomingReminder).dueDate}</span>
-                        </div>
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </div>
-              <div className="flex flex-col sm:flex-row justify-between items-center mt-6">
-                <div className="flex items-center gap-2">
-                  <label htmlFor="pageSize" className="text-sm text-[#012a4a]">
-                    Show:
-                  </label>
-                  <select
-                    id="pageSize"
-                    value={pageSize}
-                    onChange={handlePageSizeChange}
-                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm text-[#012a4a]"
-                  >
-                    <option value="5">5</option>
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
-                  <span className="text-sm text-[#012a4a]">
-                    entries per page
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-4 sm:mt-0">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <span className="text-sm text-[#012a4a]">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg bg-[#03a678] text-white disabled:opacity-50"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
             </div>
           )}
+
+          {isLoading && paginatedItems.length === 0 ? (
+            <div className="flex flex-col items-center py-20">
+              <Bell className="mb-4 h-16 w-16 animate-pulse text-[#03a678]" />
+              <p className="text-lg text-gray-600">Loading notifications...</p>
+            </div>
+          ) : paginatedItems.length === 0 ? (
+            <div className="flex flex-col items-center rounded-2xl bg-white py-20 shadow-lg">
+              <Bell className="mb-6 h-20 w-20 text-gray-300" />
+              <p className="text-xl font-semibold text-[#012a4a]">
+                {viewMode === "sent" ? "No sent reminders yet" : "No upcoming reminders"}
+              </p>
+              <p className="mt-3 max-w-md text-center text-gray-500">
+                {viewMode === "sent"
+                  ? "Start communicating with your tenants by creating a new notification."
+                  : "Automatic reminders will appear here when rent or utilities are due."}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
+                <NotificationsTable
+                  items={paginatedItems}
+                  viewMode={viewMode}
+                  onViewDetails={(item: any) =>
+                    viewMode === "sent"
+                      ? openNotificationDetails(item as Notification)
+                      : openReminderDetails(item as UpcomingReminder)
+                  }
+                  onMarkAsRead={viewMode === "sent" ? markAsRead : undefined}
+                  onRetry={viewMode === "sent" ? retryNotification : undefined}
+                  onDelete={viewMode === "sent" ? openDeleteConfirmation : undefined}
+                />
+              </div>
+
+              <div className="mt-8">
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Details Modal */}
           <Modal
             isOpen={isModalOpen}
             onClose={() => {
               setIsModalOpen(false);
               setSelectedNotification(null);
               setSelectedReminder(null);
-              setError(null);
             }}
             title={viewMode === "sent" ? "Notification Details" : "Reminder Details"}
           >
             {selectedNotification && (
-              <div className="space-y-4 text-[#012a4a]">
-                <p>
-                  <strong>Message:</strong> {selectedNotification.message}
-                </p>
-                <p>
-                  <strong>Type:</strong>{" "}
-                  {selectedNotification.type
-                    ? selectedNotification.type.charAt(0).toUpperCase() + selectedNotification.type.slice(1)
-                    : "Unknown"}
-                </p>
-                <p>
-                  <strong>Tenant:</strong> {selectedNotification.tenantName}
-                </p>
-                <p>
-                  <strong>Date:</strong>{" "}
-                  {new Date(selectedNotification.createdAt).toLocaleDateString()}
-                </p>
-                <p>
-                  <strong>Delivery Method:</strong>{" "}
-                  {getDeliveryStatusText(selectedNotification)}
-                </p>
-                <p>
-                  <strong>Status:</strong>{" "}
-                  {selectedNotification.status.charAt(0).toUpperCase() + selectedNotification.status.slice(1)}
-                </p>
-                {selectedNotification.status !== "read" && (
-                  <button
-                    onClick={() => markAsRead(selectedNotification._id)}
-                    className="bg-[#03a678] text-white px-4 py-2 rounded-xl hover:bg-[#02956a] transition-colors"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Processing..." : "Mark as Read"}
-                  </button>
-                )}
-                {selectedNotification.deliveryStatus === "failed" && (
-                  <button
-                    onClick={() => retryNotification(selectedNotification._id)}
-                    className="bg-yellow-600 text-white px-4 py-2 rounded-xl hover:bg-yellow-700 transition-colors"
-                    disabled={isLoading || selectedNotification.errorDetails?.includes("Error code: 1007")}
-                    title={
-                      selectedNotification.errorDetails?.includes("Error code: 1007")
-                        ? "Cannot retry: Verify WhatsApp device ID in configuration"
-                        : ""
-                    }
-                  >
-                    {isLoading ? "Retrying..." : "Retry Notification"}
-                  </button>
-                )}
+              <div className="space-y-4">
+                <div>
+                  <p className="font-medium text-gray-600">Message</p>
+                  <p className="mt-1">{selectedNotification.message}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Type</p>
+                  <p className="mt-1 capitalize">{selectedNotification.type}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Tenant</p>
+                  <p className="mt-1">{selectedNotification.tenantName}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Date</p>
+                  <p className="mt-1">{new Date(selectedNotification.createdAt).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Delivery</p>
+                  <p className="mt-1">{getDeliveryStatusText(selectedNotification)}</p>
+                </div>
+                <div>
+                  <p className="font-medium text-gray-600">Status</p>
+                  <p className="mt-1 capitalize">{selectedNotification.status}</p>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  {selectedNotification.status !== "read" && (
+                    <button
+                      onClick={() => markAsRead(selectedNotification._id)}
+                      className="bg-[#03a678] text-white px-5 py-2.5 rounded-xl hover:bg-[#02956a] transition-colors shadow-md"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? "Processing..." : "Mark as Read"}
+                    </button>
+                  )}
+                  {selectedNotification.deliveryStatus === "failed" && (
+                    <button
+                      onClick={() => retryNotification(selectedNotification._id)}
+                      className="bg-yellow-600 text-white px-5 py-2.5 rounded-xl hover:bg-yellow-700 transition-colors shadow-md"
+                      disabled={isLoading || selectedNotification.errorDetails?.includes("1007")}
+                    >
+                      {isLoading ? "Retrying..." : "Retry"}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             {selectedReminder && (
-              <div className="space-y-4 text-[#012a4a]">
-                <p>
-                  <strong>Tenant:</strong> {selectedReminder.tenantName}
-                </p>
-                <p>
-                  <strong>Property:</strong> {selectedReminder.propertyName}
-                </p>
-                <p>
-                  <strong>House Number:</strong> {selectedReminder.houseNumber}
-                </p>
-                <p>
-                  <strong>Rent Due:</strong> Ksh. {selectedReminder.rentDue.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Utilities Due:</strong> Ksh. {selectedReminder.utilityDue.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Deposit Due:</strong> Ksh. {selectedReminder.depositDue.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Total Due:</strong> Ksh. {selectedReminder.totalDue.toFixed(2)}
-                </p>
-                <p>
-                  <strong>Due Date:</strong> {selectedReminder.dueDate}
-                </p>
-                <p>
-                  <strong>Reminder Type:</strong>{" "}
-                  {selectedReminder.reminderType === "paymentDate"
-                    ? "Payment Date"
-                    : "Five Days Before"}
-                </p>
+              <div className="space-y-4">
+                <div><p className="font-medium text-gray-600">Tenant</p><p>{selectedReminder.tenantName}</p></div>
+                <div><p className="font-medium text-gray-600">Property</p><p>{selectedReminder.propertyName}</p></div>
+                <div><p className="font-medium text-gray-600">House Number</p><p>{selectedReminder.houseNumber}</p></div>
+                <div><p className="font-medium text-gray-600">Rent Due</p><p>Ksh. {selectedReminder.rentDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Utilities Due</p><p>Ksh. {selectedReminder.utilityDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Deposit Due</p><p>Ksh. {selectedReminder.depositDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Total Due</p><p className="font-bold text-[#03a678]">Ksh. {selectedReminder.totalDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Due Date</p><p>{selectedReminder.dueDate}</p></div>
               </div>
             )}
           </Modal>
-          <Modal
-            isOpen={isCreateModalOpen}
-            onClose={() => {
-              setIsCreateModalOpen(false);
-              setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
-              setError(null);
-            }}
-            title="Create New Notification"
-          >
-            <div className="space-y-6 text-[#012a4a]">
+
+          {/* Create Notification Modal */}
+          <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Notification">
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium mb-2">Recipients</label>
+                <label className="block text-sm font-medium text-[#012a4a] mb-2">Recipients</label>
                 <div className="relative">
                   <button
-                    type="button"
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors flex justify-between items-center"
-                    disabled={tenants.length === 0}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-left flex justify-between items-center hover:bg-gray-50 transition-colors"
                   >
                     <span>
                       {newNotification.tenantIds.length === 0
-                        ? 'Select tenants'
-                        : newNotification.tenantIds.includes('all')
-                          ? 'All Tenants'
-                          : newNotification.tenantIds.length === 1
-                            ? tenants.find((t) => t._id === newNotification.tenantIds[0])?.name || '1 tenant selected'
-                            : `${newNotification.tenantIds.length} tenants selected`}
+                        ? "Select tenants"
+                        : newNotification.tenantIds.includes("all")
+                        ? "All Tenants"
+                        : `${newNotification.tenantIds.length} tenant${newNotification.tenantIds.length > 1 ? "s" : ""} selected`}
                     </span>
-                    <svg
-                      className={`w-5 h-5 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <ChevronDown className={`w-5 h-5 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
                   {isDropdownOpen && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                      <label className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
+                    <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+                      <label className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={newNotification.tenantIds.includes("all")}
-                          onChange={(e) => {
-                            setNewNotification({
-                              ...newNotification,
-                              tenantIds: e.target.checked ? ["all"] : [],
-                            });
-                          }}
-                          className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
-                          disabled={tenants.length === 0}
+                          onChange={(e) => setNewNotification({ ...newNotification, tenantIds: e.target.checked ? ["all"] : [] })}
+                          className="w-5 h-5 text-[#03a678] rounded focus:ring-[#03a678]"
                         />
-                        <span className="text-sm font-medium text-[#012a4a]">All Tenants</span>
+                        <span className="font-medium">All Tenants</span>
                       </label>
                       {tenants.map((tenant) => (
-                        <label
-                          key={tenant._id}
-                          className="flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
-                        >
+                        <label key={tenant._id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer">
                           <input
                             type="checkbox"
-                            value={tenant._id}
                             checked={newNotification.tenantIds.includes(tenant._id)}
-                            onChange={(e) => {
-                              if (newNotification.tenantIds.includes("all")) return;
+                            disabled={newNotification.tenantIds.includes("all")}
+                            onChange={(e) =>
                               setNewNotification({
                                 ...newNotification,
                                 tenantIds: e.target.checked
                                   ? [...newNotification.tenantIds, tenant._id]
                                   : newNotification.tenantIds.filter((id) => id !== tenant._id),
-                              });
-                            }}
-                            className="w-5 h-5 rounded-md border-2 border-gray-300 text-[#03a678] focus:ring-[#03a678] focus:ring-offset-1 cursor-pointer transition-transform duration-200 checked:scale-110"
-                            disabled={tenants.length === 0 || newNotification.tenantIds.includes("all")}
+                              })
+                            }
+                            className="w-5 h-5 text-[#03a678] rounded focus:ring-[#03a678]"
                           />
-                          <span className="text-sm font-medium text-[#012a4a]">
-                            {tenant.name} ({tenant.houseNumber})
-                          </span>
+                          <span>{tenant.name} ({tenant.houseNumber})</span>
                         </label>
                       ))}
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Selecting &quot;All Tenants&quot; will override individual tenant selections.
-                </p>
               </div>
+
               <div>
-                <label htmlFor="type" className="block text-sm font-medium mb-2">
-                  Notification Type
-                </label>
+                <label className="block text-sm font-medium text-[#012a4a] mb-2">Notification Type</label>
                 <select
-                  id="type"
                   value={newNotification.type}
                   onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
                 >
                   <option value="payment">Payment</option>
                   <option value="maintenance">Maintenance</option>
@@ -1407,15 +724,13 @@ export default function NotificationsPage() {
                   <option value="other">Other</option>
                 </select>
               </div>
+
               <div>
-                <label htmlFor="deliveryMethod" className="block text-sm font-medium mb-2">
-                  Delivery Method
-                </label>
+                <label className="block text-sm font-medium text-[#012a4a] mb-2">Delivery Method</label>
                 <select
-                  id="deliveryMethod"
                   value={newNotification.deliveryMethod}
                   onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
                 >
                   <option value="app">In-App</option>
                   <option value="sms">SMS</option>
@@ -1424,78 +739,61 @@ export default function NotificationsPage() {
                   <option value="both">SMS, Email & WhatsApp</option>
                 </select>
               </div>
+
               {newNotification.type !== "payment" && (
                 <div>
-                  <label htmlFor="message" className="block text-sm font-medium mb-2">
-                    Message
-                  </label>
+                  <label className="block text-sm font-medium text-[#012a4a] mb-2">Message</label>
                   <textarea
-                    id="message"
                     value={newNotification.message}
                     onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#03a678] transition-colors"
-                    rows={4}
-                    placeholder="Enter your message here"
-                  ></textarea>
+                    rows={5}
+                    placeholder="Enter your message..."
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                  />
                 </div>
               )}
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-              <div className="flex justify-end gap-3">
+
+              <div className="flex justify-end gap-3 pt-4">
                 <button
-                  onClick={() => {
-                    setIsCreateModalOpen(false);
-                    setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
-                    setError(null);
-                  }}
-                  className="px-4 py-2 text-sm rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300 transition-colors"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-[#012a4a] hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={createNotification}
-                  className="px-4 py-2 text-sm rounded-lg bg-[#03a678] text-white hover:bg-[#02956a] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  disabled={isLoading}
+                  disabled={isLoading || newNotification.tenantIds.length === 0}
+                  className="px-6 py-2.5 bg-gradient-to-r from-[#03a678] to-[#02956a] text-white rounded-xl hover:scale-105 transition-transform shadow-md disabled:opacity-50"
                 >
                   {isLoading ? "Sending..." : "Send Notification"}
                 </button>
               </div>
             </div>
           </Modal>
-          <Modal
-            isOpen={isDeleteModalOpen}
-            onClose={() => {
-              setIsDeleteModalOpen(false);
-              setNotificationToDelete(null);
-              setError(null);
-            }}
-            title="Confirm Deletion"
-          >
-            <div className="space-y-4 text-[#012a4a] text-sm">
-              <p>Are you sure you want to delete this notification? This action cannot be undone.</p>
-              {error && <p className="text-red-600">{error}</p>}
+
+          {/* Delete Confirmation Modal */}
+          <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion">
+            <div className="py-4">
+              <p className="text-gray-700 mb-6">Are you sure you want to delete this notification? This action cannot be undone.</p>
               <div className="flex justify-end gap-3">
                 <button
-                  onClick={() => {
-                    setIsDeleteModalOpen(false);
-                    setNotificationToDelete(null);
-                    setError(null);
-                  }}
-                  className="px-4 py-2 rounded-lg bg-gray-200 text-[#012a4a] hover:bg-gray-300"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-[#012a4a] hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => notificationToDelete && deleteNotification(notificationToDelete)}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={isLoading}
+                  className="px-6 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
                   {isLoading ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>
           </Modal>
-        </main>
-      </div>
-    </div>
+        </div>
+      </main>
+    </>
   );
 }

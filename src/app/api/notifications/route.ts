@@ -219,12 +219,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       // === SEND WHATSAPP ===
       if (["whatsapp", "both"].includes(effectiveMethod) && tenant.phone) {
-        try {
-          const wa = await sendWhatsAppMessage({ phone: tenant.phone, message: finalMessage });
-          if (wa.success && deliveryStatus !== "failed") deliveryStatus = "success";
-        } catch (err: any) {
+        logger.debug("Attempting WhatsApp delivery", { 
+          phone: tenant.phone, 
+          tenantId: tenant._id.toString(),
+          messageLength: finalMessage.length 
+        });
+
+        const waResult = await sendWhatsAppMessage({ 
+          phone: tenant.phone, 
+          message: finalMessage 
+        });
+
+        if (waResult.success) {
+          logger.info("WhatsApp message sent successfully", { 
+            phone: tenant.phone, 
+            tenantName: tenant.name 
+          });
+          if (deliveryStatus !== "failed") deliveryStatus = "success";
+        } else {
+          const waError = waResult.error?.message || "Unknown WhatsApp error";
+          const waCode = waResult.error?.code || 0;
+
+          logger.error("WhatsApp delivery failed", { 
+            phone: tenant.phone, 
+            tenantName: tenant.name,
+            error: waError,
+            code: waCode
+          });
+
           deliveryStatus = "failed";
-          errorDetails = err.message;
+          errorDetails = `WhatsApp failed: ${waError}${waCode ? ` (Code: ${waCode})` : ""}`;
         }
       }
 

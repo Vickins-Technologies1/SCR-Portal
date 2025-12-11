@@ -1,41 +1,23 @@
 import logger from "./logger";
 
-interface WhatsAppResponse {
-  status?: string;
+interface ApiWapResponse {
   message?: string;
-  data?:
-    | Array<{
-        phone: string;
-        status: string;
-        message_id: string;
-      }>
-    | {
-        msg_id: string;
-        device_id: string;
-        recipients: string;
-        status: string;
-      }
-    | {
-        status: string;
-        error_code: number;
-        message: string;
-      };
   error?: string;
-  error_code?: number;
+  [key: string]: any;
 }
 
 interface SendWhatsAppOptions {
   phone: string | string[];
   message: string;
-  deviceId?: string;
 }
 
 export async function sendWhatsAppMessage({
   phone,
   message,
-  deviceId = process.env.UMS_DEFAULT_DEVICE_ID,
 }: SendWhatsAppOptions): Promise<{ success: boolean; error?: { code: number; message: string } }> {
-  // Validate inputs
+  const startTime = Date.now();
+
+  // === Input Validation ===
   if (!phone || !message) {
     logger.error("Phone number or message missing", { phone, message });
     return { success: false, error: { code: 1001, message: "Phone number or message missing" } };
@@ -48,218 +30,180 @@ export async function sendWhatsAppMessage({
     return { success: false, error: { code: 1002, message: "Message exceeds 4096 character limit" } };
   }
 
-  const apiKey = process.env.UMS_API_KEY;
-  const appId = process.env.UMS_APP_ID;
+  const apiToken = process.env.APIWAP_TOKEN;
 
-  if (!apiKey || !appId || !deviceId) {
-    logger.error("Missing WhatsApp API credentials", {
-      apiKey: !!apiKey,
-      appId: !!appId,
-      deviceId: !!deviceId,
-    });
+  if (!apiToken) {
+    logger.error("Missing APIWAP_TOKEN environment variable");
     return { success: false, error: { code: 1003, message: "Missing WhatsApp API credentials" } };
   }
 
-  // Normalize and validate phone numbers
+  // === Phone Normalization ===
   const normalizePhone = (phoneNum: string): string => {
     let normalized = phoneNum.replace(/\s/g, "").replace(/[^0-9+]/g, "");
     if (normalized.startsWith("0")) {
       normalized = "254" + normalized.slice(1);
     } else if (normalized.startsWith("+254")) {
-      normalized = normalized.replace("+", "");
-    } else if (!normalized.startsWith("254")) {
+      normalized = normalized.slice(1);
+    } else if (!normalized.startsWith("254") && !normalized.startsWith("+")) {
       normalized = "254" + normalized;
     }
-    // Validate phone number format (e.g., 254 followed by 9 digits)
-    if (!/^254[0-9]{9}$/.test(normalized)) {
-      logger.error("Invalid phone number format after normalization", {
-        original: phoneNum,
-        normalized,
-      });
-      return normalized; // Proceed but log warning
+    normalized = "+" + normalized.replace(/^\+/, "");
+    
+    logger.debug("Phone normalization step", { original: phoneNum, afterCleanup: normalized });
+    
+    if (!/^\+\d{10,15}$/.test(normalized)) {
+      logger.warn("Phone number may be invalid after normalization", { original: phoneNum, normalized });
     }
-    logger.debug("Normalized phone number", { original: phoneNum, normalized });
     return normalized;
   };
 
   const phoneNumbers = Array.isArray(phone)
-    ? phone.map(normalizePhone).join(",")
-    : normalizePhone(phone);
-  const isMultiple = Array.isArray(phone);
+    ? phone.map(normalizePhone)
+    : [normalizePhone(phone)];
 
-  logger.debug("Preparing WhatsApp API request", {
-    phoneNumbers,
-    isMultiple,
+  logger.info("Starting WhatsApp message send via ApiWap", {
+    phoneCount: phoneNumbers.length,
+    phones: phoneNumbers,
     messageLength: message.length,
-    messageContent: message,
-    deviceId,
+    messagePreview: message.substring(0, 50) + (message.length > 50 ? "..." : ""),
   });
 
-  // Warn about contact requirement
-  logger.warn("Ensure recipient has sender's WhatsApp number saved in contacts for business message delivery", {
-    phone: phoneNumbers,
-    deviceId,
-  });
+  // === Reminder about Instance ===
+  logger.warn("ENSURE your ApiWap instance is CONNECTED and ONLINE in the dashboard before sending!");
 
-  // Construct API request
-  const url = isMultiple
-    ? `https://comms.umeskiasoftwares.com/api/v1/whatsapp/send/ums?api_key=${apiKey}&app_id=${appId}&device_id=${deviceId}&message=${encodeURIComponent(
-        message
-      )}&phone=${phoneNumbers}`
-    : "https://comms.umeskiasoftwares.com/api/v1/whatsapp/send";
-
-  const headers: Record<string, string> = {
-    "x-api-key": apiKey,
+  const url = "https://api.apiwap.com/api/v1/whatsapp/send-message";
+  const headers = {
+    "Authorization": `Bearer ${apiToken}`,
+    "Content-Type": "application/json",
   };
-  if (!isMultiple) {
-    headers["Content-Type"] = "application/json";
-  }
 
-  const payload = isMultiple
-    ? null
-    : {
-        api_key: apiKey,
-        app_id: appId,
-        device_id: deviceId,
-        message,
-        phone: phoneNumbers,
-      };
+  const results: Array<{ success: boolean; error?: any }> = [];
 
-  logger.debug("WhatsApp API request details", {
-    url,
-    method: isMultiple ? "GET" : "POST",
-    headers,
-    payload,
-    encodedMessage: isMultiple ? encodeURIComponent(message) : undefined,
-  });
+  for (const [index, singlePhone] of phoneNumbers.entries()) {
+    const payload = {
+      phoneNumber: singlePhone,
+      message,
+      type: "text",
+    };
 
-  // Analyze message content for potential issues
-  logger.debug("Message content analysis", {
-    rawMessage: message,
-    encodedMessage: encodeURIComponent(message),
-    hasSpecialCharacters: /[^\w\s.,-]/.test(message),
-  });
-
-  try {
-    const response = await fetch(url, {
-      method: isMultiple ? "GET" : "POST",
-      headers,
-      body: payload ? JSON.stringify(payload) : null,
+    logger.debug(`Sending message to phone ${index + 1}/${phoneNumbers.length}`, {
+      phone: singlePhone,
+      payload,
+      headers: { ...headers, Authorization: "Bearer [REDACTED]" }, // Hide token in logs
+      url,
     });
 
-    // Log full response details
-    const contentType = response.headers.get("content-type");
-    const responseHeaders = Object.fromEntries(response.headers.entries());
-    logger.debug("WhatsApp API response received", {
-      status: response.status,
-      statusText: response.statusText,
-      contentType,
-      headers: responseHeaders,
-    });
+    let rawResponseText = "";
+    let parsedData: any = null;
 
-    // Parse response body
-    let data: WhatsAppResponse = {};
-    if (contentType?.includes("application/json")) {
-      data = await response.json();
-      logger.debug("WhatsApp API response body", { data });
-    } else {
-      const text = await response.text();
-      logger.warn("Non-JSON response received from WhatsApp API", {
-        status: response.status,
-        contentType,
-        body: text,
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
       });
-      return {
-        success: false,
-        error: { code: response.status, message: `Non-JSON response: ${text}` },
-      };
-    }
 
-    // Handle non-200 status codes
-    if (!response.ok) {
-      logger.warn("WhatsApp API returned error", {
+      const responseTime = Date.now() - startTime;
+      rawResponseText = await response.text(); // Get raw text first
+
+      logger.debug("Raw ApiWap response received", {
         status: response.status,
         statusText: response.statusText,
-        data,
+        headers: Object.fromEntries(response.headers.entries()),
+        responseTimeMs: responseTime,
+        rawBody: rawResponseText.substring(0, 1000), // Limit log size
       });
-      return {
-        success: false,
-        error: data.data && "error_code" in data.data && data.data.error_code && "message" in data.data
-          ? { code: data.data.error_code, message: data.data.message }
-          : { code: response.status, message: "API request failed" },
-      };
-    }
 
-    // Check response status
-    const dataStatus = Array.isArray(data.data)
-      ? data.data[0]?.status
-      : data.data?.status;
+      // Try to parse JSON, fall back to raw text
+      try {
+        parsedData = rawResponseText ? JSON.parse(rawResponseText) : {};
+      } catch (parseError) {
+        logger.warn("Failed to parse ApiWap response as JSON, treating as plain text", {
+          parseError: parseError instanceof Error ? parseError.message : String(parseError),
+          rawBody: rawResponseText,
+        });
+        parsedData = { message: rawResponseText.trim() || "Empty response body" };
+      }
 
-    logger.debug("Checking WhatsApp response status", {
-      apiStatus: data.status,
-      dataStatus,
-    });
+      logger.debug("Parsed ApiWap response body", { parsedData });
 
-    const success =
-      ["success", "complete", "queued", "sent"].includes(
-        data.status?.toLowerCase() || ""
-      ) || dataStatus?.toLowerCase() === "sent";
+      if (!response.ok) {
+        const errorMessage =
+          typeof parsedData === "string"
+            ? parsedData
+            : parsedData.message || parsedData.error || rawResponseText || "Unknown API error";
 
-    if (success) {
-      logger.info("WhatsApp message sent successfully", {
-        phone: phoneNumbers,
-        messageId: Array.isArray(data.data)
-          ? data.data[0]?.message_id
-          : (data.data as { msg_id: string; device_id: string; recipients: string; status: string })?.msg_id || "N/A",
-      });
-      return { success: true };
-    }
+        logger.warn("ApiWap API request failed", {
+          status: response.status,
+          phone: singlePhone,
+          errorMessage,
+          fullResponse: parsedData,
+        });
 
-    // Handle specific error codes
-    if (data.data && "error_code" in data.data && data.data.error_code) {
-      const error = { code: data.data.error_code, message: data.data.message || "Unknown error" };
-      logger.error("WhatsApp API returned specific error", {
-        errorCode: data.data.error_code,
-        errorMessage: data.data.message,
-        phone: phoneNumbers,
-        messageContent: message,
-        deviceId,
-      });
-      if (data.data.error_code === 1007) {
-        logger.error("Invalid WhatsApp Device ID", { deviceId });
-      } else if (data.data.error_code === 1010) {
-        logger.error(
-          "Failed to send WhatsApp message, possible issues: recipient contact not saved, invalid number, or device configuration",
-          {
-            phone: phoneNumbers,
-            deviceId,
-            error: data.data.message || "Failed to send message",
-            messageContent: message,
-          }
-        );
+        results.push({
+          success: false,
+          error: { code: response.status, message: errorMessage },
+        });
+        continue;
+      }
+
+      // Success check based on official docs
+      const successMessage = typeof parsedData === "string"
+        ? parsedData
+        : parsedData.message;
+
+      if (successMessage?.includes("successfully") || successMessage === "Message sent successfully") {
+        logger.info("WhatsApp message sent successfully via ApiWap", {
+          phone: singlePhone,
+          responseMessage: successMessage,
+          responseTimeMs: responseTime,
+        });
+        results.push({ success: true });
       } else {
-        logger.error("WhatsApp API returned unknown error code", {
-          errorCode: data.data.error_code,
-          errorMessage: data.data.message,
-          phone: phoneNumbers,
-          messageContent: message,
+        logger.warn("ApiWap returned unexpected success response format", {
+          phone: singlePhone,
+          response: parsedData,
+        });
+        results.push({
+          success: false,
+          error: { code: 0, message: "Unexpected success response format" },
         });
       }
-      return { success: false, error };
-    }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Network or unknown error";
+      const stack = error instanceof Error ? error.stack : undefined;
 
-    logger.warn("WhatsApp API returned unexpected response format", { data });
-    return { success: false, error: { code: 0, message: "Unexpected response format" } };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    const stack = error instanceof Error ? error.stack : undefined;
-    logger.error("Failed to send WhatsApp message", {
-      phone: phoneNumbers,
-      messageContent: message,
-      error: errorMessage,
-      stack,
-      deviceId,
+      logger.error("Exception during ApiWap request", {
+        phone: singlePhone,
+        error: errorMessage,
+        stack,
+        rawResponseSoFar: rawResponseText,
+      });
+
+      results.push({ success: false, error: { code: 1000, message: errorMessage } });
+    }
+  }
+
+  const allSuccess = results.every(r => r.success);
+  const duration = Date.now() - startTime;
+
+  if (allSuccess) {
+    logger.info("All WhatsApp messages sent successfully", {
+      phoneCount: phoneNumbers.length,
+      totalTimeMs: duration,
     });
-    return { success: false, error: { code: 1000, message: errorMessage } };
+    return { success: true };
+  } else {
+    const failed = results.filter(r => !r.success);
+    const firstError = failed[0]?.error || { code: 0, message: "Unknown failure" };
+
+    logger.error("Failed to send WhatsApp message(s)", {
+      successCount: results.filter(r => r.success).length,
+      failedCount: failed.length,
+      firstError,
+      totalTimeMs: duration,
+    });
+
+    return { success: false, error: firstError };
   }
 }
