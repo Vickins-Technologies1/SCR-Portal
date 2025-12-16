@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Smart Choice Rental Management
 
-## Getting Started
+<grok-card data-id="b87049" data-type="image_card"></grok-card>
 
-First, run the development server:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+**Premier Property Management Services in Kenya**  
+Expert solutions for residential and commercial rentals, maximizing returns and minimizing hassle.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Official Website:** [smartchoicerentalmanagement.com](https://smartchoicerentalmanagement.com)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## About Us
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Smart Choice Rental Management provides professional, reliable, and innovative property management services. We handle everything from tenant placement to maintenance, ensuring stress-free ownership for landlords and great experiences for tenants.
 
-## Learn More
+<grok-card data-id="9faef3" data-type="image_card"></grok-card>
 
-To learn more about Next.js, take a look at the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Why Choose Smart Choice?
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Local Expertise** — Deep market knowledge from seasoned professionals.
+- **Transparent Operations** — Clear and trustworthy processes every step of the way.
+- **Innovative Technology** — Modern tools for efficient management.
+- **Dedicated Support** — 24/7 assistance tailored to your needs.
 
-## Deploy on Vercel
+<grok-card data-id="92fb28" data-type="image_card"></grok-card>
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+<grok-card data-id="e5badd" data-type="image_card"></grok-card>
+
+
+
+<grok-card data-id="4eceb6" data-type="image_card"></grok-card>
+
+
+## Our Services
+
+We deliver comprehensive property management to protect and grow your investment:
+
+- **Full Property Management** — Complete day-to-day oversight.
+- **Tenant Placement** — Thorough screening to find reliable, long-term tenants.
+
+<grok-card data-id="3cdf0a" data-type="image_card"></grok-card>
+
+- **Rent Collection & Financial Reporting** — Timely payments and transparent reports.
+- **Maintenance & Repairs** — Fast, professional responses to issues.
+
+<grok-card data-id="761a27" data-type="image_card"></grok-card>
+
+- **Lease Management** — Handling agreements, renewals, and compliance.
+- **Legal Compliance** — Staying up-to-date with all regulations.
+
+## Client Testimonial
+
+> "Their tenant screening and client care are top-notch, making leasing effortless."  
+> — John Smith, Tenant
+
+## Get in Touch
+
+Ready to simplify your property ownership? Visit our website for more details or to get started.
+
+[Visit smartchoicerentalmanagement.com](https://smartchoicerentalmanagement.com)
