@@ -8,7 +8,6 @@ import logger from "@/lib/logger";
 
 interface Tenant {
   _id: ObjectId;
-  ownerId?: string; // Added for ownership check during impersonation
   name: string;
   email: string;
   phone: string;
@@ -45,6 +44,7 @@ interface Payment {
   paymentDate?: string;
 }
 
+
 // Helper: Calculate number of complete months from lease start to today (inclusive current month if started)
 async function calculateMonthsStayed(db: any, tenant: Tenant, today: Date): Promise<number> {
   if (!tenant.leaseStartDate) return 0;
@@ -78,7 +78,6 @@ async function calculateMonthsStayed(db: any, tenant: Tenant, today: Date): Prom
 }
 
 export async function GET(request: NextRequest) {
-  // GET remains unchanged — used only by property owners for stats
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
 
@@ -251,20 +250,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Impersonation detection
-  const cookies = request.cookies;
-  const role = cookies.get("role")?.value;
-  const currentUserId = cookies.get("userId")?.value;
-  const isImpersonating = cookies.get("isImpersonating")?.value === "true";
-  const impersonatingTenantId = cookies.get("impersonatingTenantId")?.value;
-
-  let effectiveTenantId = tenantId;
-
-  // If impersonating, override tenantId with the one from cookie (security: owner can only view their tenant)
-  if (isImpersonating && role === "propertyOwner" && impersonatingTenantId && ObjectId.isValid(impersonatingTenantId)) {
-    effectiveTenantId = impersonatingTenantId;
-  }
-
   try {
     const { db } = await connectToDatabase();
     const today = new Date();
@@ -272,7 +257,7 @@ export async function POST(request: NextRequest) {
 
     const tenant = await db
       .collection<Tenant>("tenants")
-      .findOne({ _id: new ObjectId(effectiveTenantId) });
+      .findOne({ _id: new ObjectId(tenantId) });
 
     if (!tenant) {
       return NextResponse.json(
@@ -281,23 +266,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Security: When impersonating, verify tenant belongs to the owner
-    if (isImpersonating && role === "propertyOwner" && currentUserId && tenant.ownerId !== currentUserId) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized: This tenant does not belong to you" },
-        { status: 403 }
-      );
-    }
-
-    // Security: Real tenants can only access their own data
-    if (role === "tenant" && currentUserId !== effectiveTenantId) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized: You can only view your own dues" },
-        { status: 403 }
-      );
-    }
-
-    const tenantIdStr = effectiveTenantId;
+    const tenantIdStr = tenantId.toString();
 
     // Fetch real payments
     const payments = await db
@@ -332,7 +301,7 @@ export async function POST(request: NextRequest) {
 
     // Update tenant with accurate totals + status
     await db.collection<Tenant>("tenants").updateOne(
-      { _id: new ObjectId(effectiveTenantId) },
+      { _id: new ObjectId(tenantId) },
       {
         $set: {
           totalRentPaid: rentPaid,
@@ -352,10 +321,7 @@ export async function POST(request: NextRequest) {
     };
 
     logger.info("Tenant dues recalculated and totals synced", {
-      tenantId: effectiveTenantId,
-      requestedBy: currentUserId,
-      role,
-      isImpersonating,
+      tenantId,
       monthsStayed,
       rentDue,
       depositDue,
@@ -379,7 +345,7 @@ export async function POST(request: NextRequest) {
       monthsStayed,
     });
   } catch (error) {
-    logger.error("Error checking tenant dues", { error, tenantId: effectiveTenantId });
+    logger.error("Error checking tenant dues", { error, tenantId });
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 }
