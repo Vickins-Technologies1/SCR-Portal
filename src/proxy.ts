@@ -12,12 +12,12 @@ interface RouteAccess {
 
 // Rate limiting
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_MAX = 100;
 
 function cleanupRateLimitStore() {
   const now = Date.now();
-  for (const [key, record] of rateLimitStore) {
+  for (const [key, record] of rateLimitStore.entries()) {
     if (now - record.lastReset > RATE_LIMIT_WINDOW_MS) {
       rateLimitStore.delete(key);
     }
@@ -28,10 +28,11 @@ function rateLimiter(ip: string): { success: boolean; remaining: number } {
   cleanupRateLimitStore();
   const now = Date.now();
   const key = ip || "unknown";
-  const record = rateLimitStore.get(key);
+  let record = rateLimitStore.get(key);
 
   if (!record || now - record.lastReset > RATE_LIMIT_WINDOW_MS) {
-    rateLimitStore.set(key, { count: 1, lastReset: now });
+    record = { count: 1, lastReset: now };
+    rateLimitStore.set(key, record);
     return { success: true, remaining: RATE_LIMIT_MAX - 1 };
   }
 
@@ -59,11 +60,11 @@ function csrfMiddleware(handler: (req: NextRequest) => Promise<NextResponse>) {
     if (!(await validateCsrfToken(req))) {
       logger.error("CSRF validation failed", {
         path: req.nextUrl.pathname,
-        storedToken: req.cookies.get("csrf-token")?.value,
-        headerToken: req.headers.get("x-csrf-token"),
+        method: req.method,
+        ip: req.headers.get("x-forwarded-for") || "unknown",
       });
       return NextResponse.json(
-        { success: false, message: "CSRF token validation failed" },
+        { success: false, message: "Invalid CSRF token" },
         { status: 403 }
       );
     }
@@ -77,27 +78,34 @@ function rateLimitMiddleware(handler: (req: NextRequest) => Promise<NextResponse
       req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
       req.headers.get("x-real-ip") ||
       "unknown";
-    const result = rateLimiter(ip);
 
-    if (!result.success) {
+    const { success, remaining } = rateLimiter(ip);
+
+    if (!success) {
       return NextResponse.json(
-        { success: false, message: "Too many requests" },
+        { success: false, message: "Too many requests. Please try again later." },
         { status: 429 }
       );
     }
 
     const response = await handler(req);
-    response.headers.set("X-RateLimit-Remaining", result.remaining.toString());
+    response.headers.set("X-RateLimit-Remaining", remaining.toString());
+    response.headers.set("X-RateLimit-Limit", RATE_LIMIT_MAX.toString());
     return response;
   };
 }
 
-// Routes that handle their own CSRF validation
+// Routes that handle their own CSRF
 const SELF_HANDLED_CSRF_ROUTES = [
   "/api/tenants/maintenance",
   "/api/tenant/payments",
   "/api/tenant/change-password",
   "/api/tenant/profile",
+];
+
+// Routes that are exempt from CSRF (safe operations)
+const CSRF_EXEMPT_ROUTES = [
+  "/api/revert-impersonation", // Called during impersonation from tenant view
 ];
 
 const routeAccessMap: { [key: string]: RouteAccess } = {
@@ -112,17 +120,21 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/properties": { roles: ["propertyOwner", "tenant"], isApi: true },
   "/api/list-properties": { roles: ["propertyOwner"], isApi: true },
   "/api/tenants": { roles: ["propertyOwner", "tenant"], isApi: true },
-  "/api/tenant/profile": { roles: ["tenant"], isApi: true },
+  "/api/tenants/:tenantId": { roles: ["propertyOwner"], isApi: true },
+  "/api/tenant/profile": { roles: ["tenant", "propertyOwner"], isApi: true },
+  "/api/tenants/check-dues": { roles: ["propertyOwner", "tenant"], isApi: true },
   "/api/tenants/maintenance": { roles: ["tenant", "propertyOwner"], isApi: true },
   "/api/update-wallet": { roles: ["propertyOwner"], isApi: true },
   "/api/impersonate": { roles: ["propertyOwner"], isApi: true },
-  "/api/impersonate/revert": { roles: ["tenant"], isApi: true },
+  "/api/revert-impersonation": { roles: ["propertyOwner", "tenant"], isApi: true },
   "/api/ownerstats": { roles: ["propertyOwner"], isApi: true },
   "/api/ownercharts": { roles: ["propertyOwner"], isApi: true },
+
+  // Page routes
   "/properties": { roles: ["propertyOwner", "tenant"], isApi: false },
-  "/tenants": { roles: ["propertyOwner", "tenant"], isApi: false },
+  "/tenants": { roles: ["propertyOwner"], isApi: false },
   "/property-owner-dashboard": { roles: ["propertyOwner"], isApi: false },
-  "/tenant-dashboard": { roles: ["tenant"], isApi: false },
+  "/tenant-dashboard": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/property-listings": { roles: [], isApi: false },
 };
 
@@ -133,34 +145,38 @@ const ADMIN_API_PATHS = [
   "/api/users",
 ];
 
-// THIS IS THE ONLY CHANGE YOU NEED
 export async function proxy(request: NextRequest) {
   const fullPath = request.nextUrl.pathname;
   const path = fullPath.split("?")[0];
   const method = request.method;
 
+  // Bypass static/assets
   if (path.startsWith("/_next/") || path === "/favicon.ico") {
     return NextResponse.next();
   }
 
+  // Public endpoints
   if (path === "/api/public-properties" && method === "GET") {
     return NextResponse.next();
   }
 
+  // Redirect old property detail URLs
   if (path.match(/^\/properties\/[^\/]+$/)) {
     const id = path.split("/")[2];
     return NextResponse.redirect(new URL(`/property-listings/${id}`, request.url));
   }
 
   const startTime = Date.now();
-  logger.debug("Proxy processing", { path, method });
+  logger.debug("Proxy request", { path, method });
 
   try {
     const cookies = request.cookies;
     const role = cookies.get("role")?.value as Role;
     const userId = cookies.get("userId")?.value;
+    const isImpersonating = cookies.get("isImpersonating")?.value === "true";
+    const impersonatingTenantId = cookies.get("impersonatingTenantId")?.value;
 
-    // Generate CSRF token endpoint
+    // CSRF token generation endpoint
     if (path === "/api/csrf-token") {
       const token = generateCsrfToken();
       const res = NextResponse.json({ success: true, csrfToken: token });
@@ -169,43 +185,57 @@ export async function proxy(request: NextRequest) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         maxAge: 3600,
+        path: "/",
       });
       return res;
     }
 
-    const matchedRoute = Object.keys(routeAccessMap).find(
-      (r) => path === r || path.startsWith(r + "/")
-    );
+    // Find matching route (with support for dynamic :tenantId)
+    let matchedRoute = Object.keys(routeAccessMap).find((r) => {
+      if (path === r) return true;
+      if (r === "/api/tenants/:tenantId" && /^\/api\/tenants\/[a-zA-Z0-9]{24}$/.test(path)) {
+        return true;
+      }
+      if (path.startsWith(r + "/")) return true;
+      return false;
+    });
+
     const config = matchedRoute ? routeAccessMap[matchedRoute] : null;
 
+    // No rules defined → allow
     if (!config) {
       return NextResponse.next();
     }
 
+    // Public routes
     if (config.roles.length === 0) {
       return NextResponse.next();
     }
 
+    // Must be authenticated
     if (!userId || !role) {
       return config.isApi
         ? NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
-        : NextResponse.redirect(new URL("/", request.url));
+        : NextResponse.redirect(new URL("/login", request.url));
     }
 
-    if (!config.roles.includes(role)) {
-      logger.warn("Forbidden role", { path, role, allowed: config.roles });
+    // Allow propertyOwner access to tenant routes during impersonation
+    const effectiveRole = (isImpersonating && config.roles.includes("tenant")) ? "tenant" : role;
+
+    if (!config.roles.includes(effectiveRole)) {
+      logger.warn("Forbidden access attempt", { path, role, allowed: config.roles });
       return config.isApi
         ? NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
-        : NextResponse.redirect(new URL("/", request.url));
+        : NextResponse.redirect(new URL("/login", request.url));
     }
 
-    // Tenant access control
+    // Prevent real tenants from accessing other tenants' data
     if (
       role === "tenant" &&
+      !isImpersonating &&
       path.startsWith("/api/tenants/") &&
       !path.startsWith("/api/tenants/maintenance") &&
-      !path.startsWith("/api/tenants/profile") &&
-      !path.startsWith("/api/tenants/payments")
+      !path.startsWith("/api/tenants/profile")
     ) {
       const segments = path.split("/").filter(Boolean);
       if (segments.length >= 3) {
@@ -216,29 +246,38 @@ export async function proxy(request: NextRequest) {
       }
     }
 
-    const isAdminApi = ADMIN_API_PATHS.some(p => path.startsWith(p));
-
+    // Apply rate limiting + CSRF for non-GET API calls
     if (config.isApi && method !== "GET") {
-      const shouldSkipCsrf = SELF_HANDLED_CSRF_ROUTES.some(route =>
-        path === route || path.startsWith(route + "/")
-      );
+      const isAdminApi = ADMIN_API_PATHS.some((p) => path.startsWith(p));
+      const isCsrfExempt = CSRF_EXEMPT_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
+      const isSelfHandled = SELF_HANDLED_CSRF_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 
-      const handler = isAdminApi || shouldSkipCsrf
+      const handler = isAdminApi || isSelfHandled || isCsrfExempt
         ? async () => NextResponse.next()
         : csrfMiddleware(async () => NextResponse.next());
 
       return rateLimitMiddleware(handler)(request);
     }
 
-    logger.info("Request allowed", { path, method, role, duration: Date.now() - startTime });
+    logger.info("Request authorized", {
+      path,
+      method,
+      role,
+      impersonating: isImpersonating,
+      duration: Date.now() - startTime,
+    });
+
     return NextResponse.next();
   } catch (error) {
-    logger.error("Proxy error", { error });
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    logger.error("Proxy middleware error", {
+      error: error instanceof Error ? error.message : error,
+      path,
+      method,
+    });
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
   }
 }
 
-// New way to configure matcher in Next.js 16
 export const config = {
   matcher: [
     "/api/:path*",

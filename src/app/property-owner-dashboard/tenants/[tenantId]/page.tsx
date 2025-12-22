@@ -1,10 +1,9 @@
-// src/app/property-owner-dashboard/tenants/[tenantId]/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Cookies from "js-cookie";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { ResponseTenant } from "@/types/tenant";
 import Navbar from "../../components/Navbar";
@@ -40,6 +39,7 @@ export default function TenantDetailsPage() {
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isDuesLoading, setIsDuesLoading] = useState(false);
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showImpersonateModal, setShowImpersonateModal] = useState(false);
@@ -135,7 +135,7 @@ export default function TenantDetailsPage() {
     }
   }, [userId, tenantId]);
 
-  // Auth
+  // Authentication check
   useEffect(() => {
     const uid = Cookies.get("userId");
     const role = Cookies.get("role");
@@ -146,7 +146,7 @@ export default function TenantDetailsPage() {
     }
   }, [router]);
 
-  // Load data
+  // Load tenant data and dues
   useEffect(() => {
     if (userId) {
       const load = async () => {
@@ -160,7 +160,7 @@ export default function TenantDetailsPage() {
     }
   }, [userId]);
 
-  // Auto-fill amount
+  // Auto-fill payment amount based on selected type
   useEffect(() => {
     if (showPaymentModal && tenant?.dues) {
       const { rentDues, depositDues, utilityDues, totalRemainingDues } = tenant.dues;
@@ -223,6 +223,42 @@ export default function TenantDetailsPage() {
     }
   };
 
+  // Impersonation handler
+  const handleImpersonate = async () => {
+    if (!tenant || !userId || !csrfToken) return;
+
+    setIsImpersonating(true);
+
+    try {
+      const res = await fetch("/api/impersonate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          tenantId: tenant._id,
+          ownerId: userId,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        router.push("/tenant-dashboard");
+      } else {
+        alert(result.message || "Failed to impersonate tenant.");
+      }
+    } catch (err) {
+      console.error("Impersonation error:", err);
+      alert("Network error. Please try again.");
+    } finally {
+      setIsImpersonating(false);
+      setShowImpersonateModal(false);
+    }
+  };
+
   if (isPageLoading || !tenant) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -236,7 +272,7 @@ export default function TenantDetailsPage() {
 
   return (
     <>
-      {/* Recording Payment Loader */}
+      {/* Recording Payment Overlay */}
       {isRecordingPayment && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="text-center">
@@ -258,9 +294,8 @@ export default function TenantDetailsPage() {
         <Navbar />
         <Sidebar />
 
-        {/* Main Content - Mobile First */}
         <div className="pt-16 pb-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
-          {/* Header */}
+          {/* Back Button */}
           <div className="flex items-center justify-between mb-6 mt-4">
             <button
               onClick={() => router.push("/property-owner-dashboard/tenants")}
@@ -271,7 +306,7 @@ export default function TenantDetailsPage() {
             </button>
           </div>
 
-          {/* Avatar + Name */}
+          {/* Tenant Header */}
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg flex-shrink-0">
               {tenant.name.charAt(0).toUpperCase()}
@@ -284,22 +319,22 @@ export default function TenantDetailsPage() {
             </div>
           </div>
 
-          {/* Success */}
+          {/* Success Message */}
           {successMessage && (
             <div className="mb-5 bg-emerald-100 text-emerald-800 px-4 py-3 rounded-lg text-sm font-medium flex justify-between items-center">
               <span>{successMessage}</span>
-              <button onClick={() => setSuccessMessage(null)} className="text-xl">×</button>
+              <button onClick={() => setSuccessMessage(null)} className="text-xl">
+                ×
+              </button>
             </div>
           )}
 
-          {/* Card */}
+          {/* Main Card */}
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-            {/* Header */}
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white p-5">
               <h2 className="text-xl font-bold">Tenant Overview</h2>
             </div>
 
-            {/* Content */}
             <div className="p-5 space-y-8">
               <TenantInfoGrid tenant={tenant} property={property} />
               <DuesSection tenant={tenant} isDuesLoading={isDuesLoading} />
@@ -334,10 +369,8 @@ export default function TenantDetailsPage() {
           isOpen={showImpersonateModal}
           onClose={() => setShowImpersonateModal(false)}
           tenantName={tenant.name}
-          onConfirm={async () => {
-            setShowImpersonateModal(false);
-          }}
-          isLoading={false}
+          onConfirm={handleImpersonate}
+          isLoading={isImpersonating}
         />
       </div>
     </>

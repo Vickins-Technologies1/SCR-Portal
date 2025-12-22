@@ -11,8 +11,8 @@ import {
   AlertCircle,
   LogOut,
   Loader2,
+  Shield,
 } from "lucide-react";
-import MaintenanceRequests from "./components/MaintenanceRequests";
 import { Property } from "../../types/property";
 
 interface Tenant {
@@ -45,7 +45,7 @@ interface Tenant {
 }
 
 /* -------------------------------------------------
-   Skeleton Card – modern box shimmer
+   Skeleton Card
    ------------------------------------------------- */
 function SkeletonCard() {
   return (
@@ -74,12 +74,13 @@ export default function TenantDashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [isImpersonated, setIsImpersonated] = useState(false);
+  const [isReverting, setIsReverting] = useState(false);
 
   /* ---- data ---- */
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isDuesLoading, setIsDuesLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -89,9 +90,6 @@ export default function TenantDashboardPage() {
   const lastRequestTime = useRef(0);
   const rateLimitDelay = 1000;
 
-  /* -------------------------------------------------
-     CSRF token fetch (unchanged – only formatting)
-     ------------------------------------------------- */
   const fetchCsrfToken = useCallback(async () => {
     if (requestInProgress.current) return csrfToken;
     requestInProgress.current = true;
@@ -106,178 +104,164 @@ export default function TenantDashboardPage() {
       if (data.success && data.csrfToken) {
         const token = data.csrfToken as string;
         setCsrfToken(token);
-        Cookies.set("csrf-token", token, { path: "/", secure: true, sameSite: "strict", expires: 1 });
+        Cookies.set("csrf-token", token, { path: "/", secure: true, sameSite: "strict" });
         return token;
       }
-      throw new Error(data.message ?? "No token");
     } catch (e) {
       console.error("[CSRF] error", e);
-      return null;
     } finally {
       requestInProgress.current = false;
       lastRequestTime.current = Date.now();
     }
+    return null;
   }, [csrfToken]);
 
-  useEffect(() => {
-    if (!csrfToken) fetchCsrfToken();
-  }, [csrfToken, fetchCsrfToken]);
-
-  /* -------------------------------------------------
-     Dues fetch (unchanged – only formatting)
-     ------------------------------------------------- */
   const fetchDues = useCallback(
     async (token: string) => {
       if (!userId || !token) return;
-      if (requestInProgress.current) return;
-      requestInProgress.current = true;
-      const now = Date.now();
-      if (now - lastRequestTime.current < rateLimitDelay) {
-        await new Promise((r) => setTimeout(r, rateLimitDelay - (now - lastRequestTime.current)));
-      }
       setIsDuesLoading(true);
-      setError(null);
       try {
-        const res = await fetch("/api/tenant/dues", {
+        const impersonatingTenantId = Cookies.get("impersonatingTenantId");
+        const isImpersonating = Cookies.get("isImpersonating") === "true";
+        const res = await fetch("/api/tenants/check-dues", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
           credentials: "include",
-          body: JSON.stringify({ tenantId: userId, userId }),
+          body: JSON.stringify({
+            tenantId: isImpersonating ? impersonatingTenantId : userId,
+            userId,
+          }),
         });
-        if (!res.ok) {
-          if (res.status === 403) {
-            const newToken = await fetchCsrfToken();
-            if (newToken) {
-              const retry = await fetch("/api/tenant/dues", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRF-Token": newToken },
-                credentials: "include",
-                body: JSON.stringify({ tenantId: userId, userId }),
-              });
-              if (retry.ok) {
-                const d = await retry.json();
-                if (d.success && d.dues) {
-                  setTenant((p) => p ? { ...p, dues: d.dues, monthsStayed: d.monthsStayed } : null);
-                }
-                return;
-              }
-            }
-          }
-          throw new Error(`HTTP ${res.status}`);
-        }
+
+        if (!res.ok) throw new Error("Failed to fetch dues");
         const data = await res.json();
-        if (data.success && data.dues) {
-          setTenant((p) => p ? { ...p, dues: data.dues, monthsStayed: data.monthsStayed } : null);
+
+        if (data.success) {
+          setTenant((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  dues: data.dues,
+                  monthsStayed: data.monthsStayed,
+                  totalRentPaid: data.tenant.totalRentPaid,
+                  totalUtilityPaid: data.tenant.totalUtilityPaid,
+                  totalDepositPaid: data.tenant.totalDepositPaid,
+                  paymentStatus: data.tenant.paymentStatus,
+                }
+              : null
+          );
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load dues");
+        console.error("Dues fetch error:", e);
       } finally {
         setIsDuesLoading(false);
-        requestInProgress.current = false;
-        lastRequestTime.current = Date.now();
       }
     },
-    [userId, fetchCsrfToken]
+    [userId]
   );
 
   /* -------------------------------------------------
-     Cookie validation & impersonation
+     Auth & Impersonation Detection
      ------------------------------------------------- */
   useEffect(() => {
     const uid = Cookies.get("userId");
-    const curRole = Cookies.get("role") ?? null;
-    const origRole = Cookies.get("originalRole") ?? null;
-    const origUid = Cookies.get("originalUserId") ?? null;
+    const currentRole = Cookies.get("role");
+    const isImpersonating = Cookies.get("isImpersonating") === "true";
+    const impersonatingTenantId = Cookies.get("impersonatingTenantId");
 
-    const isTenant = curRole === "tenant";
-    const isImpersonating = origRole === "propertyOwner" && origUid;
-
-    if (!uid || (!isTenant && !isImpersonating)) {
-      setError("Unauthorized – redirecting…");
-      setTimeout(() => router.replace("/"), 2000);
+    // For real tenants, role must be tenant
+    // For owners impersonating, role is still propertyOwner, but allow access if impersonating
+    if (!uid || (currentRole !== "tenant" && !(currentRole === "propertyOwner" && isImpersonating))) {
+      router.replace("/");
       return;
     }
 
     setUserId(uid);
-    setRole(curRole);
-    if (isImpersonating) setIsImpersonated(true);
+    setRole(currentRole);
+    setIsImpersonated(isImpersonating);
   }, [router]);
 
   /* -------------------------------------------------
-     Tenant + Property fetch
+     Load Tenant Data
      ------------------------------------------------- */
   useEffect(() => {
-    if (!userId || !role) return;
+    if (!userId) return;
 
-    const run = async () => {
+    const loadData = async () => {
       setIsLoading(true);
       setError(null);
-      try {
-        let token = csrfToken ?? (await fetchCsrfToken());
-        if (!token) throw new Error("CSRF missing");
 
-        // tenant
-        const tRes = await fetch("/api/tenant/profile", {
-          headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      try {
+        let token = csrfToken || (await fetchCsrfToken());
+        if (!token) throw new Error("Failed to get CSRF token");
+
+        // Fetch tenant profile
+        const tenantRes = await fetch("/api/tenant/profile", {
+          headers: { "X-CSRF-Token": token },
           credentials: "include",
         });
-        if (!tRes.ok) throw new Error(`Tenant ${tRes.status}`);
-        const tData = await tRes.json();
-        if (!tData.success) throw new Error(tData.message ?? "Tenant fetch failed");
-        setTenant({
-          ...tData.tenant,
-          totalRentPaid: tData.tenant.totalRentPaid ?? 0,
-          totalUtilityPaid: tData.tenant.totalUtilityPaid ?? 0,
-          totalDepositPaid: tData.tenant.totalDepositPaid ?? 0,
-        });
+        if (!tenantRes.ok) throw new Error("Failed to load profile");
+        const tenantData = await tenantRes.json();
+        if (!tenantData.success) throw new Error(tenantData.message || "Profile error");
 
-        // property (if linked)
-        if (tData.tenant?.propertyId) {
-          const pRes = await fetch(`/api/properties/${tData.tenant.propertyId}`, {
-            headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        setTenant(tenantData.tenant);
+
+        // Fetch property if linked
+        if (tenantData.tenant.propertyId) {
+          const propRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
+            headers: { "X-CSRF-Token": token },
             credentials: "include",
           });
-          if (!pRes.ok) throw new Error(`Property ${pRes.status}`);
-          const pData = await pRes.json();
-          if (pData.success) setProperty(pData.property);
+          if (propRes.ok) {
+            const propData = await propRes.json();
+            if (propData.success) setProperty(propData.property);
+          }
         }
 
-        // dues
+        // Fetch dues
         await fetchDues(token);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Network error");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load dashboard");
       } finally {
         setIsLoading(false);
       }
     };
-    run();
-  }, [userId, role, csrfToken, fetchCsrfToken, fetchDues]);
+
+    loadData();
+  }, [userId, csrfToken, fetchCsrfToken, fetchDues]);
 
   /* -------------------------------------------------
-     Revert impersonation
+     Revert Impersonation
      ------------------------------------------------- */
   const handleRevertImpersonation = async () => {
-    setIsLoading(true);
+    if (isReverting) return;
+    setIsReverting(true);
+    setError(null);
+
     try {
-      const token = csrfToken ?? (await fetchCsrfToken());
-      if (!token) throw new Error("CSRF missing");
-      const res = await fetch("/api/impersonate/revert", {
+      const res = await fetch("/api/revert-impersonation", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
         credentials: "include",
-        body: JSON.stringify({}),
       });
-      if (!res.ok) throw new Error(`Revert ${res.status}`);
+
       const data = await res.json();
+
       if (data.success) {
-        setSuccessMessage("Back to owner view!");
-        ["userId", "role", "originalUserId", "originalRole"].forEach((c) => Cookies.remove(c, { path: "/" }));
-        setTimeout(() => router.push("/property-owner-dashboard"), 1000);
-      } else throw new Error(data.message ?? "Revert failed");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Revert error");
+        setSuccessMessage("Successfully reverted to Property Owner view");
+        // Clear impersonation cookies (optional, server does this)
+        Cookies.remove("impersonatingTenantId", { path: "/" });
+        Cookies.remove("isImpersonating", { path: "/" });
+
+        setTimeout(() => {
+          router.push("/property-owner-dashboard");
+        }, 800);
+      } else {
+        setError(data.message || "Failed to revert impersonation");
+      }
+    } catch (err) {
+      setError("Network error while reverting");
     } finally {
-      setIsLoading(false);
+      setIsReverting(false);
     }
   };
 
@@ -286,153 +270,153 @@ export default function TenantDashboardPage() {
      ------------------------------------------------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      {/* ----- Padding for fixed navbar (height ≈ 64px) ----- */}
-      <div className="pt-16">
-
-        {/* ----- Hero ----- */}
-        <section className="relative overflow-hidden bg-gradient-to-r from-[#03a678] to-emerald-600 text-white rounded-2xl mx-4 sm:mx-6 lg:mx-8 p-6 sm:p-8 shadow-xl">
-          <div className="absolute inset-0 bg-black/5"></div>
-          <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">
-                Welcome, {tenant?.name ?? "Tenant"}!
-              </h1>
-              <p className="mt-1 text-sm sm:text-base opacity-90">
-                Manage lease, payments & maintenance – all in one place.
-              </p>
+      {/* Impersonation Banner - Fixed Top */}
+      {isImpersonated && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white shadow-lg">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Shield className="w-6 h-6" />
+              <div>
+                <p className="font-bold">Impersonation Mode Active</p>
+                <p className="text-sm opacity-90">
+                  You are viewing this dashboard as <strong>{tenant?.name || "tenant"}</strong>
+                </p>
+              </div>
             </div>
+            <button
+              onClick={handleRevertImpersonation}
+              disabled={isReverting}
+              className="flex items-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-70"
+            >
+              {isReverting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Reverting...
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4" />
+                  Exit Impersonation
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
-            {isImpersonated && (
-              <button
-                onClick={handleRevertImpersonation}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg text-sm font-medium hover:bg-white/30 transition"
-              >
-                <LogOut size={16} />
-                Revert to Owner
-              </button>
-            )}
+      {/* Main Content - Padding for fixed banner */}
+      <div className={isImpersonated ? "pt-24" : "pt-16"}>
+        {/* Hero Section */}
+        <section className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl mx-4 sm:mx-6 lg:mx-8 p-8 shadow-xl">
+          <div className="absolute inset-0 bg-black/10"></div>
+          <div className="relative z-10">
+            <h1 className="text-3xl sm:text-4xl font-bold">
+              Welcome back, {tenant?.name?.split(" ")[0] || "Tenant"}!
+            </h1>
+            <p className="mt-2 text-lg opacity-90">
+              Here's your rental overview and account status.
+            </p>
           </div>
         </section>
 
-        {/* ----- Messages ----- */}
+        {/* Messages */}
         <div className="mx-4 sm:mx-6 lg:mx-8 mt-6 space-y-3">
           {error && (
-            <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-lg">
-              <AlertCircle size={20} />
-              {error}
+            <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span>{error}</span>
             </div>
           )}
           {successMessage && (
-            <div className="flex items-center gap-2 p-4 bg-green-50 text-green-700 rounded-lg">
-              {successMessage}
-            </div>
-          )}
-          {(isLoading || isDuesLoading) && (
-            <div className="flex items-center gap-2 p-4 bg-blue-50 text-blue-700 rounded-lg">
-              <Loader2 className="animate-spin" size={20} />
-              Loading data…
+            <div className="flex items-center gap-3 p-4 bg-green-50 text-green-700 rounded-xl border border-green-200">
+              <span>{successMessage}</span>
             </div>
           )}
         </div>
 
-        {/* ----- Cards Grid ----- */}
+        {/* Dashboard Cards */}
         <div className="mx-4 sm:mx-6 lg:mx-8 mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Leased Property */}
-          <InfoCard
-            icon={<Home className="text-emerald-600" />}
-            title="Leased Property"
-            isLoading={isLoading}
-          >
+          {/* Property Card */}
+          <InfoCard icon={<Home />} title="Leased Property" isLoading={isLoading}>
             {property && tenant ? (
               <>
-                <p className="font-semibold">{property.name}</p>
-                <p className="text-gray-600 text-sm">{property.address}</p>
-                <p className="mt-2">
-                  Unit: <span className="font-medium">{tenant.houseNumber}</span> ({tenant.unitType})
+                <p className="font-semibold text-lg">{property.name}</p>
+                <p className="text-gray-600">{property.address}</p>
+                <p className="mt-3">
+                  Unit: <strong>{tenant.houseNumber}</strong> ({tenant.unitType})
                 </p>
-                <p>Rent: <strong>Ksh {tenant.price.toFixed(2)}</strong></p>
-                <p>Deposit: <strong>Ksh {tenant.deposit.toFixed(2)}</strong></p>
-                <p>
+                <p>Rent: <strong>Ksh {tenant.price.toLocaleString()}</strong>/month</p>
+                <p>Deposit: <strong>Ksh {tenant.deposit.toLocaleString()}</strong></p>
+                <p className="text-sm mt-2">
                   Lease: {tenant.leaseStartDate ? fmt(tenant.leaseStartDate) : "—"} →{" "}
                   {tenant.leaseEndDate ? fmt(tenant.leaseEndDate) : "—"}
                 </p>
                 <p>Months stayed: <strong>{tenant.monthsStayed ?? "—"}</strong></p>
               </>
             ) : (
-              <p className="text-sm text-gray-500">No property assigned.</p>
+              <p className="text-gray-500">No property assigned yet.</p>
             )}
           </InfoCard>
 
-          {/* Payment Status */}
-          <InfoCard
-            icon={<DollarSign className="text-emerald-600" />}
-            title="Payment Status"
-            isLoading={isLoading}
-          >
+          {/* Payment Summary */}
+          <InfoCard icon={<DollarSign />} title="Payment Summary" isLoading={isLoading}>
             {tenant ? (
               <>
-                <p>Rent: <strong>Ksh {tenant.price.toFixed(2)}</strong></p>
-                <p className="mt-2">
+                <p>
                   Status:{" "}
-                  <Badge status={tenant.paymentStatus}>
-                    {tenant.paymentStatus || "N/A"}
-                  </Badge>
+                  <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "Unknown"}</Badge>
                 </p>
-                <p>Total Rent Paid: <strong>Ksh {tenant.totalRentPaid?.toFixed(2) ?? "0.00"}</strong></p>
-                <p>Total Utility Paid: <strong>Ksh {tenant.totalUtilityPaid?.toFixed(2) ?? "0.00"}</strong></p>
-                <p>Total Deposit Paid: <strong>Ksh {tenant.totalDepositPaid?.toFixed(2) ?? "0.00"}</strong></p>
+                <p className="mt-3">
+                  Total Rent Paid: <strong>Ksh {(tenant.totalRentPaid || 0).toLocaleString()}</strong>
+                </p>
+                <p>
+                  Utility Paid: <strong>Ksh {(tenant.totalUtilityPaid || 0).toLocaleString()}</strong>
+                </p>
+                <p>
+                  Deposit Paid: <strong>Ksh {(tenant.totalDepositPaid || 0).toLocaleString()}</strong>
+                </p>
               </>
             ) : (
-              <p className="text-sm text-gray-500">No payment info.</p>
+              <p className="text-gray-500">No payment history.</p>
             )}
           </InfoCard>
 
           {/* Outstanding Dues */}
-          <InfoCard
-            icon={<DollarSign className="text-emerald-600" />}
-            title="Outstanding Dues"
-            isLoading={isDuesLoading}
-          >
+          <InfoCard icon={<AlertCircle />} title="Outstanding Dues" isLoading={isDuesLoading}>
             {tenant?.dues ? (
               <>
-                <p>Rent Dues: <strong>Ksh {tenant.dues.rentDues.toFixed(2)}</strong></p>
-                <p>Utility Dues: <strong>Ksh {tenant.dues.utilityDues.toFixed(2)}</strong></p>
-                <p>Deposit Dues: <strong>Ksh {tenant.dues.depositDues.toFixed(2)}</strong></p>
-                <p className="mt-2 font-semibold text-red-600">
-                  Total: Ksh {tenant.dues.totalRemainingDues.toFixed(2)}
+                <p>Rent Due: <strong className="text-red-600">Ksh {tenant.dues.rentDues.toLocaleString()}</strong></p>
+                <p>Utility Due: <strong className="text-orange-600">Ksh {tenant.dues.utilityDues.toLocaleString()}</strong></p>
+                <p>Deposit Due: <strong className="text-purple-600">Ksh {tenant.dues.depositDues.toLocaleString()}</strong></p>
+                <p className="mt-4 text-lg font-bold text-red-700">
+                  Total Remaining: Ksh {tenant.dues.totalRemainingDues.toLocaleString()}
                 </p>
               </>
             ) : (
-              <p className="text-sm text-gray-500">No dues data.</p>
+              <p className="text-gray-500">Loading dues...</p>
             )}
           </InfoCard>
 
           {/* Profile */}
-          <InfoCard
-            icon={<User className="text-emerald-600" />}
-            title="Your Profile"
-            isLoading={isLoading}
-          >
+          <InfoCard icon={<User />} title="Your Profile" isLoading={isLoading}>
             {tenant ? (
               <>
-                <p className="font-semibold">{tenant.name}</p>
-                <p className="text-gray-600 text-sm">{tenant.email}</p>
-                <p className="mt-2">{tenant.phone || "—"}</p>
-                <p>
-                  Status:{" "}
-                  <Badge status={tenant.status}>{tenant.status || "N/A"}</Badge>
+                <p className="font-semibold text-lg">{tenant.name}</p>
+                <p className="text-gray-600">{tenant.email}</p>
+                <p className="mt-2">{tenant.phone || "No phone"}</p>
+                <p className="mt-3">
+                  Status: <Badge status={tenant.status}>{tenant.status}</Badge>
                 </p>
               </>
             ) : (
-              <p className="text-sm text-gray-500">No profile info.</p>
+              <p className="text-gray-500">Profile loading...</p>
             )}
           </InfoCard>
         </div>
 
-        {/* ----- Maintenance Requests (optional) ----- */}
-        {/* <div className="mx-4 sm:mx-6 lg:mx-8 mt-10">
-          <MaintenanceRequests />
+        {/* Optional: Maintenance Section */}
+        {/* <div className="mx-4 sm:mx-6 lg:mx-8 mt-12">
+          <MaintenanceRequests tenantId={userId!} />
         </div> */}
       </div>
     </div>
@@ -454,12 +438,12 @@ function InfoCard({
   isLoading: boolean;
 }) {
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 p-5 transition-transform hover:scale-[1.01]">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-800 mb-3">
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow">
+      <h3 className="flex items-center gap-3 text-xl font-bold text-gray-800 mb-4">
         {icon}
         {title}
-      </h2>
-      <div className="text-sm text-gray-700 space-y-1">
+      </h3>
+      <div className="text-gray-700 space-y-2">
         {isLoading ? <SkeletonCard /> : children}
       </div>
     </div>
@@ -467,22 +451,25 @@ function InfoCard({
 }
 
 function Badge({ status, children }: { status?: string; children: React.ReactNode }) {
-  const map: Record<string, string> = {
+  const styles: Record<string, string> = {
     paid: "bg-green-100 text-green-800",
     overdue: "bg-red-100 text-red-800",
     pending: "bg-yellow-100 text-yellow-800",
     Active: "bg-green-100 text-green-800",
+    Inactive: "bg-gray-100 text-gray-800",
     Pending: "bg-yellow-100 text-yellow-800",
-    Inactive: "bg-red-100 text-red-800",
   };
-  const cls = map[status ?? ""] ?? "bg-gray-100 text-gray-800";
-  return (
-    <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${cls}`}>
-      {children}
-    </span>
-  );
+
+  const base = "inline-flex px-3 py-1 text-xs font-semibold rounded-full";
+  const color = styles[status || ""] || "bg-gray-100 text-gray-800";
+
+  return <span className={`${base} ${color}`}>{children}</span>;
 }
 
 function fmt(date: string) {
-  return new Date(date).toLocaleDateString("en-GB");
+  return new Date(date).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }

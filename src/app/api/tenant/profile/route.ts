@@ -30,12 +30,14 @@ export async function GET(request: NextRequest) {
     const cookieStore = request.cookies;
     const userId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
-    console.log("GET /api/tenant/profile - Cookies - userId:", userId, "role:", role);
+    const impersonatingTenantId = cookieStore.get("impersonatingTenantId")?.value;
+    const isImpersonating = cookieStore.get("isImpersonating")?.value === "true";
+    console.log("GET /api/tenant/profile - Cookies - userId:", userId, "role:", role, "impersonating:", isImpersonating);
 
-    if (!userId || !ObjectId.isValid(userId) || role !== "tenant") {
+    if (!userId || !ObjectId.isValid(userId)) {
       console.log("Unauthorized - userId:", userId, "role:", role);
       return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in as a tenant." },
+        { success: false, message: "Unauthorized. Please log in." },
         { status: 401 }
       );
     }
@@ -43,12 +45,35 @@ export async function GET(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
     console.log("GET /api/tenant/profile - Connected to database: rentaldb, collection: tenants");
 
+    let targetTenantId = userId;
+
+    if (isImpersonating && impersonatingTenantId && ObjectId.isValid(impersonatingTenantId) && role === "propertyOwner") {
+      // Verify tenant belongs to owner
+      const tenantCheck = await db.collection("tenants").findOne({
+        _id: new ObjectId(impersonatingTenantId),
+        ownerId: userId,
+      });
+      if (tenantCheck) {
+        targetTenantId = impersonatingTenantId;
+      } else {
+        return NextResponse.json(
+          { success: false, message: "Unauthorized to view this tenant" },
+          { status: 401 }
+        );
+      }
+    } else if (role !== "tenant") {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized. Please log in as a tenant." },
+        { status: 401 }
+      );
+    }
+
     const tenant = await db.collection<Tenant>("tenants").findOne({
-      _id: new ObjectId(userId),
+      _id: new ObjectId(targetTenantId),
     });
 
     if (!tenant) {
-      console.log("Tenant not found:", userId);
+      console.log("Tenant not found:", targetTenantId);
       return NextResponse.json(
         { success: false, message: "Tenant not found" },
         { status: 404 }
@@ -62,7 +87,7 @@ export async function GET(request: NextRequest) {
         : new Date(tenant.updatedAt)
       : undefined;
 
-    console.log("Tenant fetched successfully:", { tenantId: userId });
+    console.log("Tenant fetched successfully:", { tenantId: targetTenantId });
     return NextResponse.json(
       {
         success: true,

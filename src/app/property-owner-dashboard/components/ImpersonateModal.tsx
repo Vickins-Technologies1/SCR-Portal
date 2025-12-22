@@ -1,6 +1,8 @@
 // src/app/property-owner-dashboard/components/ImpersonateModal.tsx
+"use client";
+
 import Modal from "../components/Modal";
-import { LogIn, AlertTriangle } from "lucide-react";
+import { LogIn, AlertTriangle, Shield, Eye } from "lucide-react";
 
 interface ImpersonateModalProps {
   isOpen: boolean;
@@ -22,50 +24,95 @@ export default function ImpersonateModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Impersonate Tenant">
+    <Modal isOpen={isOpen} onClose={onClose} title="Impersonate Tenant Account">
       <div className="space-y-6">
-        <div className="flex items-center gap-4 bg-amber-50 border border-amber-300 rounded-xl p-5">
-          <AlertTriangle className="h-10 w-10 text-amber-600 flex-shrink-0" />
-          <div>
-            <p className="text-lg font-semibold text-amber-900">Warning: Impersonation Mode</p>
-            <p className="text-sm text-amber-800 mt-1">
-              You will be logged in as <span className="font-bold">{tenantName}</span>.
+        {/* Warning Banner */}
+        <div className="flex items-start gap-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-2xl p-6 shadow-sm">
+          <AlertTriangle className="h-12 w-12 text-amber-600 flex-shrink-0 mt-1" />
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-amber-900 flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Impersonation Mode Activated
+            </h3>
+            <p className="mt-2 text-amber-800">
+              You are about to view the tenant dashboard as:
+            </p>
+            <p className="mt-2 text-lg font-bold text-amber-900">
+              {tenantName}
+            </p>
+            <p className="mt-2 text-sm text-amber-700">
+              This allows you to see exactly what the tenant sees in their portal.
             </p>
           </div>
         </div>
 
-        <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
-          <p className="text-slate-700">
-            This action will:
-          </p>
-          <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            <li className="flex items-center gap-2">
-              <span className="text-emerald-600">•</span> Switch your session to tenant dashboard
+        {/* What Happens Next */}
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-6 border border-emerald-200">
+          <h4 className="font-semibold text-emerald-900 mb-4 flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            What happens when you impersonate:
+          </h4>
+          <ul className="space-y-3 text-emerald-800">
+            <li className="flex items-start gap-3">
+              <span className="text-emerald-600 mt-1">✓</span>
+              <span>Your current session will switch to the tenant's dashboard</span>
             </li>
-            <li className="flex items-center gap-2">
-              <span className="text-emerald-600">•</span> Allow you to view their portal
+            <li className="flex items-start gap-3">
+              <span className="text-emerald-600 mt-1">✓</span>
+              <span>You'll see their exact view, payments, dues, and requests</span>
             </li>
-            <li className="flex items-center gap-2">
-              <span className="text-emerald-600">•</span> Automatically return you when you log out
+            <li className="flex items-start gap-3">
+              <span className="text-emerald-600 mt-1">✓</span>
+              <span>
+                A <strong>clear red banner</strong> will appear at the top showing you're in impersonation mode
+              </span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="text-emerald-600 mt-1">✓</span>
+              <span>
+                Click <strong>"Exit Impersonation"</strong> at any time to instantly return here
+              </span>
             </li>
           </ul>
         </div>
 
-        <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
+        {/* Security Note */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <p className="text-sm text-blue-800 flex items-start gap-2">
+            <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>
+              <strong>Secure & Temporary:</strong> This session is fully logged for audit purposes and will
+              automatically end if you log out.
+            </span>
+          </p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
           <button
             type="button"
             onClick={onClose}
-            className="px-8 py-3 bg-slate-200 text-slate-800 rounded-xl hover:bg-slate-300 transition font-medium"
+            disabled={isLoading}
+            className="px-8 py-3.5 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 transition font-medium disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={isLoading}
-            className="px-10 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl hover:from-amber-600 hover:to-orange-700 transition font-semibold shadow-lg disabled:opacity-60 flex items-center gap-3"
+            className="px-10 py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl hover:from-amber-600 hover:to-orange-700 transition font-bold shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3 min-w-[180px]"
           >
-            <LogIn className="h-5 w-5" />
-            {isLoading ? "Switching..." : "Impersonate Tenant"}
+            {isLoading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Switching to Tenant View...
+              </>
+            ) : (
+              <>
+                <LogIn className="h-5 w-5" />
+                Impersonate {tenantName}
+              </>
+            )}
           </button>
         </div>
       </div>

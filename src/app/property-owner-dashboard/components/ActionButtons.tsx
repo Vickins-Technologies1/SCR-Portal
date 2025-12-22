@@ -11,7 +11,6 @@ interface ActionButtonsProps {
 
 export default function ActionButtons({
   onRecordPayment,
-  onEdit,
   onImpersonate,
   onDelete,
 }: ActionButtonsProps) {
