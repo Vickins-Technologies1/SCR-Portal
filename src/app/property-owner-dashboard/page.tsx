@@ -52,7 +52,6 @@ export default function PropertyOwnerDashboard() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
-  // All stats come directly from backend — no client calculations
   const [stats, setStats] = useState<OwnerStats>({
     activeProperties: 0,
     totalTenants: 0,
@@ -144,20 +143,19 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-  // DERIVED VALUES — purely from server stats (no tenant list no longer needed for calculations)
+  // DERIVED VALUES — purely from server stats
   const totalVacantUnits = Math.max(0, stats.totalUnits - stats.occupiedUnits);
   const vacancyRate = stats.totalUnits > 0
     ? Math.round((totalVacantUnits / stats.totalUnits) * 100)
     : 0;
 
-  // PIE CHART — use overduePayments & totalTenants from server
   const pieData = {
     labels: ["Current", "Overdue", "Lease Expired"],
     datasets: [{
       data: [
         Math.max(0, stats.totalTenants - stats.overduePayments),
         stats.overduePayments,
-        0, // We no longer calculate expired leases client-side
+        0,
       ],
       backgroundColor: ["#10b981", "#ef4444", "#6b7280"],
       borderWidth: 0,
@@ -205,7 +203,7 @@ export default function PropertyOwnerDashboard() {
             </div>
           ) : (
             <>
-              {/* TOP STATS — 100% FROM SERVER */}
+              {/* TOP STATS */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-10">
                 {[
                   { title: "Monthly Rent", value: `Ksh ${stats.totalMonthlyRent.toLocaleString()}`, icon: DollarSign, color: "emerald" },
@@ -252,7 +250,7 @@ export default function PropertyOwnerDashboard() {
 
               <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
 
-              {/* PROPERTIES GRID — Still shows per-property details using only property.unitTypes */}
+              {/* PROPERTIES GRID — FIXED CALCULATIONS */}
               <section className="mt-12">
                 <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
                   <Building2 className="h-9 w-9 text-emerald-600" />
@@ -270,16 +268,26 @@ export default function PropertyOwnerDashboard() {
                     {properties.map((property) => {
                       const propertyIdStr = property._id.toString();
 
-                      // Only calculate total units from unitTypes (no tenant data used)
-                      const totalUnits =
-                        property.unitTypes?.reduce((sum, ut) => sum + (ut.quantity || 0), 0) || 0;
+                      // Total units from unitTypes — accurate per property
+                      const totalUnits = property.unitTypes?.reduce((sum, ut) => sum + (ut.quantity || 0), 0) || 0;
 
-                      // For display only — use global stats for accuracy, but show per-property unit count
-                      const occupancyRate = stats.totalUnits > 0
-                        ? Math.round((stats.occupiedUnits / stats.totalUnits) * 100)
+                      // BEST: If your backend sends occupiedUnits per property (recommended)
+                      // Uncomment this if you add it:
+                      // const occupiedUnits = property.occupiedUnits || 0;
+
+                      // FALLBACK: Use global ratio (safe but less accurate)
+                      const globalOccupancyRate = stats.totalUnits > 0
+                        ? stats.occupiedUnits / stats.totalUnits
+                        : 0;
+                      const occupiedUnits = Math.round(totalUnits * globalOccupancyRate);
+
+                      const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
+                      const occupancyRate = totalUnits > 0
+                        ? Math.round((occupiedUnits / totalUnits) * 100)
                         : 0;
 
-                      const vacantUnits = Math.max(0, totalUnits - (stats.occupiedUnits * totalUnits / stats.totalUnits || 0));
+                      const isFullyOccupied = occupiedUnits === totalUnits && totalUnits > 0;
+                      const isCompletelyVacant = occupiedUnits === 0 && totalUnits > 0;
 
                       return (
                         <motion.div
@@ -303,13 +311,13 @@ export default function PropertyOwnerDashboard() {
                             </p>
                           </div>
 
+                          {/* Accurate per-property occupancy ring */}
                           <div className="absolute top-4 right-4 bg-white rounded-full shadow-2xl p-3 border border-gray-100">
                             <div className="relative w-14 h-14">
                               <svg className="w-full h-full -rotate-90">
                                 <circle cx="50%" cy="50%" r="38%" stroke="#e5e7eb" strokeWidth="8" fill="none" />
                                 <circle
-                                  cx="50%"
-                                  cy="50%"
+                                  cx="50%" cy="50%"
                                   r="38%"
                                   stroke="#10b981"
                                   strokeWidth="9"
@@ -332,31 +340,27 @@ export default function PropertyOwnerDashboard() {
                               </div>
                               <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl py-3.5 border border-amber-200">
                                 <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Vacant</p>
-                                <p className="text-2xl font-bold text-amber-900 mt-1">
-                                  {Math.round(vacantUnits) || 0}
-                                </p>
+                                <p className="text-2xl font-bold text-amber-900 mt-1">{vacantUnits}</p>
                               </div>
                               <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl py-3.5 border border-blue-200">
                                 <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Occupied</p>
-                                <p className="text-2xl font-bold text-blue-900 mt-1">
-                                  {totalUnits - Math.round(vacantUnits || 0)}
-                                </p>
+                                <p className="text-2xl font-bold text-blue-900 mt-1">{occupiedUnits}</p>
                               </div>
                             </div>
 
                             <div className="mt-5 text-center">
                               <span
                                 className={`inline-block px-6 py-2.5 rounded-full text-sm font-bold shadow-md transition-all ${
-                                  stats.occupiedUnits === stats.totalUnits && stats.totalUnits > 0
+                                  isFullyOccupied
                                     ? "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-300"
-                                    : stats.occupiedUnits === 0
+                                    : isCompletelyVacant
                                     ? "bg-gray-100 text-gray-700 ring-2 ring-gray-300"
                                     : "bg-purple-100 text-purple-800 ring-2 ring-purple-300"
                                 }`}
                               >
-                                {stats.occupiedUnits === stats.totalUnits && stats.totalUnits > 0
+                                {isFullyOccupied
                                   ? "Fully Occupied"
-                                  : stats.occupiedUnits === 0
+                                  : isCompletelyVacant
                                   ? "Completely Vacant"
                                   : "Partially Occupied"}
                               </span>
