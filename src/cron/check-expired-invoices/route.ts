@@ -1,4 +1,4 @@
-// cron/check-expired-invoices.ts
+// cron/generate-monthly-invoices.ts
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
@@ -16,91 +16,112 @@ interface Invoice {
 }
 
 // Configuration
-const INVOICE_EXPIRY_DAYS = 30; // New invoice expires in 30 days
-const BATCH_SIZE = 50; // Process in batches for safety
+const INVOICE_EXPIRY_DAYS = 30; // Invoice valid for 30 days
+const BATCH_SIZE = 50;
 
-export default async function checkAndRenewExpiredInvoices() {
-  console.log("Starting expired invoice renewal job...", new Date().toISOString());
+export default async function generateMonthlyInvoices() {
+  console.log("Starting monthly invoice generation job...", new Date().toISOString());
 
   try {
     const { db } = await connectToDatabase();
     const invoicesCollection = db.collection<Invoice>("invoices");
 
     const now = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - INVOICE_EXPIRY_DAYS);
 
     let processed = 0;
-    let renewed = 0;
+    let created = 0;
 
-    const cursor = invoicesCollection.find({
+    // Find all pending invoices that were created more than 30 days ago (i.e., expired)
+    // This assumes you want to renew monthly recurring charges
+    const expiredPendingCursor = invoicesCollection.find({
       status: "pending",
-      expiresAt: { $lt: now },
+      createdAt: { $lt: thirtyDaysAgo }, // Older than 30 days
     });
 
-    let batch: Invoice[] = [];
+    // To avoid duplicates, we'll track (userId, propertyId) pairs we've already processed in this run
+    const processedKeys = new Set<string>();
 
-    while (await cursor.hasNext()) {
-      const invoice = await cursor.next();
-      if (!invoice) continue;
+    while (await expiredPendingCursor.hasNext()) {
+      const oldInvoice = await expiredPendingCursor.next();
+      if (!oldInvoice) continue;
 
-      batch.push(invoice);
+      const key = `${oldInvoice.userId}-${oldInvoice.propertyId}`;
 
-      if (batch.length >= BATCH_SIZE || !(await cursor.hasNext())) {
-        for (const oldInvoice of batch) {
-          try {
-            // Generate unique reference
-            const newReference = `INV-${Date.now()}-${Math.random()
-              .toString(36)
-              .substr(2, 9)
-              .toUpperCase()}`;
-
-            const newExpiresAt = new Date();
-            newExpiresAt.setDate(newExpiresAt.getDate() + INVOICE_EXPIRY_DAYS);
-
-            const newInvoice = {
-              userId: oldInvoice.userId,
-              propertyId: oldInvoice.propertyId,
-              amount: oldInvoice.amount,
-              status: "pending" as const,
-              reference: newReference,
-              description: oldInvoice.description || "Renewed invoice (auto-generated)",
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              expiresAt: newExpiresAt,
-            };
-
-            const result = await invoicesCollection.insertOne(newInvoice as any);
-
-            if (result.insertedId) {
-              console.log(`Renewed expired invoice`, {
-                oldId: oldInvoice._id.toString(),
-                newId: result.insertedId.toString(),
-                userId: oldInvoice.userId,
-                propertyId: oldInvoice.propertyId,
-                amount: oldInvoice.amount,
-                newExpiresAt: newExpiresAt.toISOString(),
-              });
-              renewed++;
-            }
-          } catch (err) {
-            console.error("Failed to renew one invoice", {
-              oldId: oldInvoice._id.toString(),
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        }
-
-        processed += batch.length;
-        batch = [];
+      // Skip if we already created a new invoice for this user/property in this batch
+      if (processedKeys.has(key)) {
+        continue;
       }
+
+      // Double-check: is there already a newer pending invoice for this user/property?
+      const existingNewerPending = await invoicesCollection.findOne({
+        userId: oldInvoice.userId,
+        propertyId: oldInvoice.propertyId,
+        status: "pending",
+        createdAt: { $gte: thirtyDaysAgo },
+      });
+
+      if (existingNewerPending) {
+        // There's already a recent pending invoice → no need to create another
+        processedKeys.add(key);
+        continue;
+      }
+
+      // Generate new invoice
+      const newReference = `INV-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)
+        .toUpperCase()}`;
+
+      const newExpiresAt = new Date();
+      newExpiresAt.setDate(newExpiresAt.getDate() + INVOICE_EXPIRY_DAYS);
+
+      const newInvoice = {
+        userId: oldInvoice.userId,
+        propertyId: oldInvoice.propertyId,
+        amount: oldInvoice.amount,
+        status: "pending" as const,
+        reference: newReference,
+        description: oldInvoice.description || "Monthly recurring invoice",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        expiresAt: newExpiresAt,
+      };
+
+      try {
+        const result = await invoicesCollection.insertOne(newInvoice as any);
+
+        if (result.insertedId) {
+          console.log(`Created new monthly invoice`, {
+            userId: oldInvoice.userId,
+            propertyId: oldInvoice.propertyId,
+            amount: oldInvoice.amount,
+            newReference,
+            newId: result.insertedId.toString(),
+            oldId: oldInvoice._id.toString(),
+          });
+          created++;
+          processedKeys.add(key); // Mark as processed
+        }
+      } catch (err) {
+        console.error("Failed to create new monthly invoice", {
+          userId: oldInvoice.userId,
+          propertyId: oldInvoice.propertyId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      processed++;
     }
 
-    await cursor.close();
+    await expiredPendingCursor.close();
 
     console.log(
-      `Expired invoice renewal job completed: Processed ${processed} expired invoices, created ${renewed} new ones.`
+      `Monthly invoice generation completed: Checked ${processed} expired pending invoices, created ${created} new monthly invoices.`
     );
   } catch (error) {
-    console.error("Critical error in renewal cron job", {
+    console.error("Critical error in monthly invoice generation", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
     });
@@ -109,5 +130,5 @@ export default async function checkAndRenewExpiredInvoices() {
 
 // Allow direct execution for local testing
 if (require.main === module) {
-  checkAndRenewExpiredInvoices().then(() => process.exit(0));
+  generateMonthlyInvoices().then(() => process.exit(0));
 }
