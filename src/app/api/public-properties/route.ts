@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
 
     const { db } = await connectToDatabase();
 
+    // Fetch active listings
     const listings = await db
       .collection("propertyListings")
       .find({ status: "Active" })
@@ -25,10 +26,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, properties: [] });
     }
 
-    // Use listing._id as propertyId
     const listingIds = listings.map(l => l._id.toString());
 
-    const tenantCounts = await db
+    // Fetch tenants and group by propertyId AND unitType
+    const tenantGroups = await db
       .collection("tenants")
       .aggregate([
         {
@@ -36,14 +37,25 @@ export async function GET(request: NextRequest) {
             propertyId: { $in: listingIds }
           }
         },
-        { $group: { _id: "$propertyId", count: { $sum: 1 } } }
+        {
+          $group: {
+            _id: { propertyId: "$propertyId", unitType: "$unitType" },
+            count: { $sum: 1 }
+          }
+        }
       ])
       .toArray();
 
-    const tenantMap = Object.fromEntries(
-      tenantCounts.map(t => [t._id, t.count])
-    );
+    // Build map: propertyId → unitType → occupied count
+    const occupiedMap = tenantGroups.reduce((acc: Record<string, Record<string, number>>, group: any) => {
+      const propId = group._id.propertyId;
+      const uType = group._id.unitType;
+      if (!acc[propId]) acc[propId] = {};
+      acc[propId][uType] = group.count;
+      return acc;
+    }, {});
 
+    // Fetch owners
     const ownerIds = [...new Set(listings.map(l => l.ownerId))].filter(Boolean);
     const owners = ownerIds.length > 0
       ? await db
@@ -59,11 +71,11 @@ export async function GET(request: NextRequest) {
     const enriched = listings
       .map(listing => {
         const listingId = listing._id.toString();
-        const occupied = tenantMap[listingId] || 0;
+        const occupiedByType = occupiedMap[listingId] || {};
 
         const unitTypes = (listing.unitTypes || []).map((u: any) => ({
           ...u,
-          vacant: Math.max(0, u.quantity - occupied)
+          vacant: Math.max(0, u.quantity - (occupiedByType[u.type] || 0)),
         }));
 
         const minPriceInListing = Math.min(...unitTypes.map((u: any) => u.price));

@@ -199,7 +199,7 @@ const PropertyModal: React.FC<PropertyModalProps> = ({ property, onClose }) => {
                   {property.unitTypes.map((unit, i) => (
                     <li key={i} className="flex justify-between">
                       <span>
-                        {unit.type} (x{unit.vacant ?? unit.quantity})
+                        {unit.type} (x{unit.vacant ?? 0})
                       </span>
                       <span className="font-medium">
                         Ksh {unit.price.toLocaleString()}/mo
@@ -353,7 +353,7 @@ export default function ListPropertiesPage() {
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
-  // Original properties
+  // Original properties (with accurate vacant counts)
   const [originalProperties, setOriginalProperties] = useState<Property[]>([]);
   const [loadingOriginal, setLoadingOriginal] = useState(false);
 
@@ -406,7 +406,7 @@ export default function ListPropertiesPage() {
     fetchCsrf();
   }, [router]);
 
-  // Fetch listings
+  // Fetch listings (public listed properties)
   const fetchProperties = useCallback(async () => {
     if (!userId) return;
     setIsLoading(true);
@@ -420,7 +420,7 @@ export default function ListPropertiesPage() {
           ...p,
           unitTypes: p.unitTypes.map((u: any) => ({
             ...u,
-            vacant: u.quantity,
+            vacant: u.vacant ?? u.quantity, // fallback if vacant not provided
           })),
         }));
         setProperties(props);
@@ -432,7 +432,7 @@ export default function ListPropertiesPage() {
     }
   }, [userId]);
 
-  // Fetch original properties
+  // Fetch original properties with accurate vacant calculation
   const fetchOriginalProperties = useCallback(async () => {
     if (!userId) return;
     setLoadingOriginal(true);
@@ -446,21 +446,49 @@ export default function ListPropertiesPage() {
         const withVacant = await Promise.all(
           props.map(async (prop: any) => {
             const tenantsRes = await fetch(
-              `/api/tenants?propertyId=${prop._id}`
+              `/api/tenants?propertyId=${prop._id}`,
+              { credentials: "include" }
             );
-            const tenants = await tenantsRes.json();
-            const occupied = tenants.tenants?.length || 0;
+            const tenantsData = await tenantsRes.json();
+            const activeTenants = (tenantsData.tenants || []).filter(
+              (t: any) => t.status === "active"
+            ).length;
+
+            // Distribute occupied units across types (simple: total occupied)
+            // For more accuracy, group by unitType if needed
+            const totalUnits = prop.unitTypes.reduce(
+              (sum: number, u: any) => sum + u.quantity,
+              0
+            );
+            const totalVacant = Math.max(0, totalUnits - activeTenants);
+
+            // Simple proportional distribution or set vacant per type if possible
+            // Here: update each type's vacant = quantity - estimated occupied
+            // For simplicity, we'll set vacant based on total, but better to count per type
+            // Assuming backend can be adjusted, but to make it accurate:
+            // Let's count tenants per unitType
+            const tenantsByType = (tenantsData.tenants || []).reduce(
+              (acc: Record<string, number>, t: any) => {
+                if (t.status === "active") {
+                  acc[t.unitType] = (acc[t.unitType] || 0) + 1;
+                }
+                return acc;
+              },
+              {}
+            );
+
             const unitTypes = prop.unitTypes.map((u: any) => ({
               ...u,
-              vacant: Math.max(0, u.quantity - (u.occupied || 0)),
+              vacant: Math.max(0, u.quantity - (tenantsByType[u.type] || 0)),
             }));
+
             return { ...prop, unitTypes };
           })
         );
         setOriginalProperties(withVacant);
       }
-    } catch {
-      console.error("Failed to load original properties");
+    } catch (err) {
+      console.error("Failed to load original properties", err);
     } finally {
       setLoadingOriginal(false);
     }
@@ -680,7 +708,7 @@ export default function ListPropertiesPage() {
 
   const getSortIcon = (key: SortConfig["key"]) => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-    return sortConfig.direction === "asc" ? " Up" : " Down";
+    return sortConfig.direction === "asc" ? " ↑" : " ↓";
   };
 
   return (
@@ -753,7 +781,7 @@ export default function ListPropertiesPage() {
                         </th>
                       ))}
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">
-                        Units
+                        Available Units
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">
                         Actions
@@ -788,7 +816,7 @@ export default function ListPropertiesPage() {
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-700">
                           {p.unitTypes
-                            .map((u) => `${u.type} (${u.vacant ?? u.quantity})`)
+                            .map((u) => `${u.type} (x${u.vacant ?? 0})`)
                             .join(", ")}
                         </td>
                         <td
@@ -863,7 +891,7 @@ export default function ListPropertiesPage() {
                                 key={idx}
                                 className="bg-blue-50 text-[#012a4a] px-2.5 py-1 rounded-md text-xs font-medium"
                               >
-                                {u.type} ({u.vacant ?? u.quantity})
+                                {u.type} (x{u.vacant ?? 0})
                               </span>
                             ))}
                           </div>
@@ -930,7 +958,7 @@ export default function ListPropertiesPage() {
                       <option key={prop._id} value={prop._id}>
                         {prop.name} – {prop.address} (
                         {prop.unitTypes
-                          .map((u) => `${u.type}: ${u.vacant ?? u.quantity}`)
+                          .map((u) => `${u.type}: x${u.vacant ?? u.quantity}`)
                           .join(", ")}
                         )
                       </option>
@@ -941,6 +969,9 @@ export default function ListPropertiesPage() {
                   )}
                 </div>
               )}
+
+              {/* Rest of the form remains unchanged... */}
+              {/* (Description, Facilities, Images, Advertise checkbox, buttons) */}
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
