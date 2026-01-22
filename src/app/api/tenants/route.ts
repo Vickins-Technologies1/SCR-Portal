@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create New Tenant — FIXED FOR BOTH OLD & NEW PROPERTIES
+// POST: Create New Tenant 
 export async function POST(request: NextRequest) {
   try {
     if (!(await validateCsrfToken(request))) {
@@ -144,11 +144,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Property not found or not owned by you" }, { status: 404 });
     }
 
-    // CRITICAL FIX: Handle properties with and without uniqueType
+    // Handle properties with and without uniqueType
     const unitConfigWithUnique = property.unitTypes
       .map((unit, index) => ({
         ...unit,
-        uniqueType: unit.uniqueType || `${unit.type}-${index}`, // fallback for old data
+        uniqueType: unit.uniqueType || `${unit.type}-${index}`,
       }))
       .find(u => u.uniqueType === body.unitIdentifier);
 
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check management fee (same as before)
+    // Management fee check after 3 tenants
     const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
     if (tenantCount >= 3) {
       const paidInvoice = await db.collection("invoices").findOne({
@@ -210,20 +210,66 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection<Tenant>("tenants").insertOne(tenantData);
 
-    // Decrement quantity using the real uniqueType (now guaranteed to exist)
+    // Decrement unit quantity
     await db.collection<Property>("properties").updateOne(
       { _id: new ObjectId(body.propertyId) },
       { $inc: { "unitTypes.$[elem].quantity": -1 } },
       { arrayFilters: [{ "elem.uniqueType": unitConfigWithUnique.uniqueType }] }
     );
 
-    // Send welcome messages
+    // ────────────────────────────────────────────────
+    //          Welcome notifications with password
+    // ────────────────────────────────────────────────
     const loginUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-    try { await sendWelcomeEmail({ to: body.email, name: body.name, email: body.email, password: body.password!, loginUrl, propertyName: property.name, houseNumber: body.houseNumber }); } catch (e) { logger.error("Email failed", e); }
-    try { await sendWelcomeSms({ phone: body.phone, message: `Welcome ${body.name}! Login: ${loginUrl}\nUnit: ${property.name} ${body.houseNumber}` }); } catch (e) { logger.error("SMS failed", e); }
-    try { await sendWhatsAppMessage({ phone: body.phone, message: `Welcome ${body.name}! You've been added to ${property.name}, Unit ${body.houseNumber}. Login: ${loginUrl}` }); } catch (e) { logger.error("WhatsApp failed", e); }
 
-    logger.info("Tenant created successfully", { tenantId: result.insertedId.toString(), unitIdentifier: body.unitIdentifier });
+    // Short version just for SMS (aim < 160 chars)
+    const smsMessage =
+      `Welcome ${body.name.trim()}! Added to ${property.name} ${body.houseNumber.trim()}\n` +
+      `Login: ${loginUrl}\n` +
+      `Pass: ${body.password!}\n` +
+      `Change it after 1st login!`;
+
+    // Longer version for Email + WhatsApp
+    const fullMessage =
+      `Welcome ${body.name.trim()}!\n\n` +
+      `You've been added as a tenant to ${property.name}, Unit ${body.houseNumber.trim()}.\n\n` +
+      `Login here: ${loginUrl}\n` +
+      `Email:    ${body.email.trim()}\n` +
+      `Password: ${body.password!}\n\n` +
+      `⚠️ IMPORTANT: Change your password immediately after first login!\n` +
+      `Go to account settings → Change Password.\n` +
+      `Never share this password.`;
+
+    try {
+      await sendWelcomeEmail({
+        to: body.email,
+        name: body.name,
+        email: body.email,
+        password: body.password!,
+        loginUrl,
+        propertyName: property.name,
+        houseNumber: body.houseNumber,
+      });
+    } catch (e) { logger.error("Welcome email failed", e); }
+
+    try {
+      await sendWelcomeSms({
+        phone: body.phone,
+        message: smsMessage,   // ← short version
+      });
+    } catch (e) { logger.error("Welcome SMS failed", e); }
+
+    try {
+      await sendWhatsAppMessage({
+        phone: body.phone,
+        message: fullMessage,  // ← longer is fine
+      });
+    } catch (e) { logger.error("Welcome WhatsApp failed", e); }
+
+    logger.info("Tenant created successfully", {
+      tenantId: result.insertedId.toString(),
+      unitIdentifier: body.unitIdentifier,
+    });
 
     return NextResponse.json({
       success: true,
