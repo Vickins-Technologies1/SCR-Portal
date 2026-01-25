@@ -45,6 +45,18 @@ interface ConfirmationEmailOptions {
   tenantName?: string; // Optional for owner emails
 }
 
+// ────────────────────────────────────────────────
+//  NEW INTERFACE for password reset/setup emails
+// ────────────────────────────────────────────────
+interface ResetEmailOptions {
+  to: string;
+  name: string;
+  resetLink: string;
+  propertyName?: string;     // optional – can be included if available
+  houseNumber?: string;      // optional
+}
+
+// Create reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT || "587"),
@@ -95,6 +107,61 @@ export async function sendWelcomeEmail({
   } catch (error) {
     console.error(`Error sending welcome email to ${to}:`, error);
     throw new Error("Failed to send welcome email");
+  }
+}
+
+// ────────────────────────────────────────────────
+//  NEW FUNCTION: Send password reset/setup link
+// ────────────────────────────────────────────────
+export async function sendPasswordResetEmail({
+  to,
+  name,
+  resetLink,
+  propertyName = "your property",
+  houseNumber = "",
+}: ResetEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const html = generateStyledTemplate({
+      name,
+      title: "Set / Reset Your Password",
+      intro: `A secure link has been generated so you can set up or reset your password for your tenant account.`,
+      details: `
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+          Click the button below to set your password:
+        </p>
+        <p style="text-align: center; margin: 32px 0;">
+          <a href="${resetLink}" class="button" style="padding: 14px 32px; font-size: 16px;">
+            Set / Reset Password
+          </a>
+        </p>
+        <p style="font-size: 14px; color: #dc2626; margin-top: 16px;">
+          This link will expire in 1 hour for your security.
+        </p>
+        <p style="font-size: 14px; margin-top: 24px;">
+          Property: <strong>${propertyName}</strong>  
+          ${houseNumber ? ` | Unit/House: <strong>${houseNumber}</strong>` : ""}
+        </p>
+        <p style="font-size: 14px; margin-top: 16px;">
+          If you did not request this link, please contact your property manager immediately.
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Set / Reset Your Tenant Password",
+      html,
+    });
+
+    console.log(`Password reset email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending password reset email to ${to}:`, error);
+    throw new Error("Failed to send password reset email");
   }
 }
 

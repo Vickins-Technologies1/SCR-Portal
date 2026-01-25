@@ -134,6 +134,56 @@ export async function POST(request: NextRequest) {
 
     const { db } = await connectToDatabase();
 
+    // ────────────────────────────────────────────────
+    //           PREVENT DUPLICATE TENANTS
+    // ────────────────────────────────────────────────
+
+    // 1. Email already in use (case-insensitive)
+    const duplicateEmail = await db.collection("tenants").findOne({
+      email: { $regex: new RegExp(`^${body.email.trim()}$`, "i") }
+    });
+    if (duplicateEmail) {
+      return NextResponse.json(
+        { success: false, message: "A tenant with this email already exists" },
+        { status: 409 }
+      );
+    }
+
+    // 2. Phone number already in use
+    const duplicatePhone = await db.collection("tenants").findOne({
+      phone: body.phone.trim()
+    });
+    if (duplicatePhone) {
+      return NextResponse.json(
+        { success: false, message: "A tenant with this phone number already exists" },
+        { status: 409 }
+      );
+    }
+
+    // 3. Unit already occupied (same property + houseNumber or unitIdentifier)
+    const duplicateUnit = await db.collection("tenants").findOne({
+      propertyId: body.propertyId,
+      $or: [
+        { houseNumber: body.houseNumber.trim() },
+        { unitIdentifier: body.unitIdentifier }
+      ],
+      status: { $nin: ["terminated", "inactive", "moved out"] } // allow reuse after tenant leaves
+    });
+
+    if (duplicateUnit) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `This unit (${body.houseNumber || body.unitIdentifier}) is already occupied`
+        },
+        { status: 409 }
+      );
+    }
+
+    // ────────────────────────────────────────────────
+    // Proceed only if no duplicates found
+    // ────────────────────────────────────────────────
+
     // Validate property ownership
     const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(body.propertyId),

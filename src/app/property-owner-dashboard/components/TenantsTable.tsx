@@ -1,10 +1,9 @@
-// src/components/TenantsTable.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { debounce } from "lodash";
-import { ArrowUpDown, Pencil, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowUpDown, Pencil, Trash2, ChevronDown, ChevronUp, Send } from "lucide-react";
 
 import { ResponseTenant } from "../../../types/tenant";
 
@@ -55,6 +54,7 @@ interface TenantsTableProps {
   csrfToken: string | null | undefined;
   onEdit: (tenant: ResponseTenant) => void;
   onDelete: (id: string) => void;
+  onResendWelcome: (tenant: ResponseTenant) => void;   // ← NEW prop
 }
 
 export default function TenantsTable({
@@ -72,6 +72,7 @@ export default function TenantsTable({
   csrfToken,
   onEdit,
   onDelete,
+  onResendWelcome,   // ← NEW
 }: TenantsTableProps) {
   const router = useRouter();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
@@ -396,12 +397,23 @@ export default function TenantsTable({
                           <button
                             onClick={() => onEdit(tenant)}
                             className="text-blue-600 hover:text-blue-800 transition"
+                            title="Edit tenant"
                           >
                             <Pencil className="h-5 w-5" />
                           </button>
+
+                          <button
+                            onClick={() => onResendWelcome(tenant)}
+                            className="text-green-600 hover:text-green-800 transition"
+                            title="Resend welcome notification"
+                          >
+                            <Send className="h-5 w-5" />
+                          </button>
+
                           <button
                             onClick={() => onDelete(tenant._id)}
                             className="text-red-600 hover:text-red-800 transition"
+                            title="Delete tenant"
                           >
                             <Trash2 className="h-5 w-5" />
                           </button>
@@ -463,22 +475,37 @@ export default function TenantsTable({
                           {tenant.status}
                         </span>
                       </p>
-                      <div className="flex gap-6 pt-3">
+
+                      <div className="flex gap-8 pt-3">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onEdit(tenant);
                           }}
-                          className="text-blue-600"
+                          className="text-blue-600 hover:text-blue-800"
+                          title="Edit tenant"
                         >
                           <Pencil className="h-5 w-5" />
                         </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onResendWelcome(tenant);
+                          }}
+                          className="text-green-600 hover:text-green-800"
+                          title="Resend welcome notification"
+                        >
+                          <Send className="h-5 w-5" />
+                        </button>
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onDelete(tenant._id);
                           }}
-                          className="text-red-600"
+                          className="text-red-600 hover:text-red-800"
+                          title="Delete tenant"
                         >
                           <Trash2 className="h-5 w-5" />
                         </button>

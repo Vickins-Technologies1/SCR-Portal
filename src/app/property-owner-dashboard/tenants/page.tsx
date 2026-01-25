@@ -1,4 +1,3 @@
-// src/app/property-owner-dashboard/tenants/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -59,6 +58,8 @@ export default function TenantsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPaymentPromptOpen, setIsPaymentPromptOpen] = useState(false);
+  const [isResendModalOpen, setIsResendModalOpen] = useState(false); // ← NEW
+  const [tenantToResend, setTenantToResend] = useState<ResponseTenant | null>(null); // ← NEW
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingTenant, setEditingTenant] = useState<ResponseTenant | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<string | null>(null);
@@ -67,6 +68,7 @@ export default function TenantsPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false); // ← NEW: loading for resend
 
   // Pagination & Filters
   const [page, setPage] = useState(1);
@@ -198,6 +200,52 @@ export default function TenantsPage() {
     }
   }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
 
+  // ────────────────────────────────────────────────
+  //  Resend Welcome Notification Handler (now opens modal)
+  // ────────────────────────────────────────────────
+  const handleResendWelcome = useCallback((tenant: ResponseTenant) => {
+    setTenantToResend(tenant);
+    setIsResendModalOpen(true);
+  }, []);
+
+  // Confirm and send resend request
+  const confirmResend = useCallback(async () => {
+    if (!tenantToResend || !csrfToken || !userId) return;
+
+    setIsResending(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch("/api/tenants/resend-welcome", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({ tenantId: tenantToResend._id }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSuccessMessage(`Welcome notification resent to ${tenantToResend.name}`);
+        // Optional: log delivery details
+        console.log("Delivery results:", data.delivery);
+      } else {
+        setError(data.message || "Failed to resend welcome notification");
+      }
+    } catch (err) {
+      console.error("Resend welcome failed:", err);
+      setError("Failed to connect to server. Please try again.");
+    } finally {
+      setIsResending(false);
+      setIsResendModalOpen(false);
+      setTenantToResend(null);
+    }
+  }, [tenantToResend, csrfToken, userId]);
+
   // Modal handlers
   const openAddModal = () => {
     setModalMode("add");
@@ -287,8 +335,7 @@ export default function TenantsPage() {
       <Navbar />
       <Sidebar />
 
-      {/* Main Content — matches Properties page exactly */}
-      <div className="sm:ml-64 mt-16"> {/* ← Critical fix: was pt-16 + wrong ml */}
+      <div className="sm:ml-64 mt-16">
         <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
           {/* Header */}
           <motion.div
@@ -374,6 +421,7 @@ export default function TenantsPage() {
                 setTenantToDelete(id);
                 setIsDeleteModalOpen(true);
               }}
+              onResendWelcome={handleResendWelcome}
             />
           )}
 
@@ -424,6 +472,50 @@ export default function TenantsPage() {
                     className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
                   >
                     {isLoading ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </Modal>
+            )}
+
+            {/* NEW: Resend Confirmation Modal */}
+            {isResendModalOpen && tenantToResend && (
+              <Modal
+                title="Resend Welcome Notification"
+                isOpen={isResendModalOpen}
+                onClose={() => {
+                  setIsResendModalOpen(false);
+                  setTenantToResend(null);
+                }}
+              >
+                <p className="mb-6 text-gray-700">
+                  Are you sure you want to resend the welcome notification to{" "}
+                  <strong>{tenantToResend.name}</strong> ({tenantToResend.email})?
+                </p>
+                <p className="mb-6 text-sm text-gray-600">
+                  This will generate a new password reset link and send it via email, SMS, and WhatsApp.
+                </p>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => {
+                      setIsResendModalOpen(false);
+                      setTenantToResend(null);
+                    }}
+                    className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                    disabled={isResending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmResend}
+                    disabled={isResending}
+                    className={`px-5 py-2 text-white rounded-lg transition ${
+                      isResending
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-700"
+                    }`}
+                  >
+                    {isResending ? "Resending..." : "Resend Notification"}
                   </button>
                 </div>
               </Modal>
