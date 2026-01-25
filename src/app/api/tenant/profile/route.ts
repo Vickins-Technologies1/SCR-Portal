@@ -19,10 +19,53 @@ interface Tenant {
   leaseStartDate: string;
   leaseEndDate: string;
   createdAt: Date;
-  updatedAt?: Date;
+  updatedAt?: Date | string;
   walletBalance: number;
-  status?: string; // Optional, to match frontend
-  paymentStatus?: string; // Optional, to match frontend
+  status?: string;
+  paymentStatus?: string;
+  totalRentPaid?: number;
+  totalUtilityPaid?: number;
+  totalDepositPaid?: number;
+}
+
+interface Payment {
+  tenantId: string;
+  type: string;
+  status: string;
+  amount: number;
+}
+
+async function calculateMonthsStayed(db: Db, tenant: Tenant, today: Date): Promise<number> {
+  if (!tenant.leaseStartDate) return 0;
+
+  try {
+    const result = await db.collection("tenants").aggregate([
+      { $match: { _id: tenant._id } },
+      {
+        $project: {
+          months: {
+            $floor: {
+              $add: [
+                {
+                  $dateDiff: {
+                    startDate: { $dateFromString: { dateString: "$leaseStartDate" } },
+                    endDate: today,
+                    unit: "month",
+                  },
+                },
+                1, // include current partial month
+              ],
+            },
+          },
+        },
+      },
+    ]).toArray();
+
+    return result[0]?.months ?? 0;
+  } catch (err) {
+    console.error("Months calculation failed", err);
+    return 0;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -32,82 +75,121 @@ export async function GET(request: NextRequest) {
     const role = cookieStore.get("role")?.value;
     const impersonatingTenantId = cookieStore.get("impersonatingTenantId")?.value;
     const isImpersonating = cookieStore.get("isImpersonating")?.value === "true";
-    console.log("GET /api/tenant/profile - Cookies - userId:", userId, "role:", role, "impersonating:", isImpersonating);
+
+    console.log("GET /api/tenant/profile", { userId, role, isImpersonating, impersonatingTenantId });
 
     if (!userId || !ObjectId.isValid(userId)) {
-      console.log("Unauthorized - userId:", userId, "role:", role);
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in." },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     const { db }: { db: Db } = await connectToDatabase();
-    console.log("GET /api/tenant/profile - Connected to database: rentaldb, collection: tenants");
 
     let targetTenantId = userId;
+    let shouldCalculateDues = false;
 
+    // ── Impersonation logic (owner viewing tenant) ───────────────
     if (isImpersonating && impersonatingTenantId && ObjectId.isValid(impersonatingTenantId) && role === "propertyOwner") {
-      // Verify tenant belongs to owner
       const tenantCheck = await db.collection("tenants").findOne({
         _id: new ObjectId(impersonatingTenantId),
         ownerId: userId,
       });
-      if (tenantCheck) {
-        targetTenantId = impersonatingTenantId;
-      } else {
-        return NextResponse.json(
-          { success: false, message: "Unauthorized to view this tenant" },
-          { status: 401 }
-        );
+
+      if (!tenantCheck) {
+        return NextResponse.json({ success: false, message: "Unauthorized to view this tenant" }, { status: 403 });
       }
-    } else if (role !== "tenant") {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized. Please log in as a tenant." },
-        { status: 401 }
-      );
+
+      targetTenantId = impersonatingTenantId;
+      // For impersonation → return raw data (keep check-dues separate)
+    } 
+    // ── Real tenant login ────────────────────────────────────────
+    else if (role === "tenant") {
+      targetTenantId = userId;
+      shouldCalculateDues = true;   // ← this is the key change
+    } 
+    else {
+      return NextResponse.json({ success: false, message: "Invalid role" }, { status: 403 });
     }
 
-    const tenant = await db.collection<Tenant>("tenants").findOne({
+    const tenantDoc = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(targetTenantId),
     });
 
-    if (!tenant) {
-      console.log("Tenant not found:", targetTenantId);
-      return NextResponse.json(
-        { success: false, message: "Tenant not found" },
-        { status: 404 }
-      );
+    if (!tenantDoc) {
+      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    // Convert updatedAt to Date if it’s a string, or handle undefined
-    const updatedAt = tenant.updatedAt
-      ? tenant.updatedAt instanceof Date
-        ? tenant.updatedAt
-        : new Date(tenant.updatedAt)
-      : undefined;
+    // Prepare base response tenant object
+    const tenant = {
+      ...tenantDoc,
+      _id: tenantDoc._id.toString(),
+      createdAt: tenantDoc.createdAt.toISOString(),
+      updatedAt: tenantDoc.updatedAt
+        ? (tenantDoc.updatedAt instanceof Date ? tenantDoc.updatedAt : new Date(tenantDoc.updatedAt)).toISOString()
+        : undefined,
+      wallet: tenantDoc.walletBalance ?? 0,
+      status: tenantDoc.status || "active",
+      paymentStatus: tenantDoc.paymentStatus || "unknown",
+      totalRentPaid: tenantDoc.totalRentPaid ?? 0,
+      totalUtilityPaid: tenantDoc.totalUtilityPaid ?? 0,
+      totalDepositPaid: tenantDoc.totalDepositPaid ?? 0,
+    };
 
-    console.log("Tenant fetched successfully:", { tenantId: targetTenantId });
-    return NextResponse.json(
-      {
-        success: true,
-        tenant: {
-          ...tenant,
-          _id: tenant._id.toString(),
-          createdAt: tenant.createdAt.toISOString(),
-          updatedAt: updatedAt ? updatedAt.toISOString() : undefined, // Only call toISOString if updatedAt exists
-          wallet: tenant.walletBalance ?? 0,
-          status: tenant.status || "active",
-          paymentStatus: tenant.paymentStatus || "N/A",
+    // Only calculate fresh dues/totals for real tenant login
+    if (shouldCalculateDues) {
+      const today = new Date();
+      const monthsStayed = await calculateMonthsStayed(db, tenantDoc, today);
+
+      const payments = await db.collection<Payment>("payments")
+        .find({ tenantId: targetTenantId, status: "completed" })
+        .toArray();
+
+      let rentPaid = 0, depositPaid = 0, utilityPaid = 0;
+      for (const p of payments) {
+        if (p.type === "Rent") rentPaid += p.amount;
+        else if (p.type === "Deposit") depositPaid += p.amount;
+        else if (p.type === "Utility") utilityPaid += p.amount;
+      }
+
+      const rentDue   = tenantDoc.price * monthsStayed;
+      const depositDue = tenantDoc.deposit || 0;
+      const totalDue   = rentDue + depositDue;
+      const totalPaid  = rentPaid + depositPaid + utilityPaid;
+
+      const remaining = Math.max(0, totalDue - totalPaid);
+      const paymentStatus = remaining > 0 ? "overdue" : "up-to-date";
+
+      // Optional: update database (recommended)
+      await db.collection("tenants").updateOne(
+        { _id: new ObjectId(targetTenantId) },
+        { $set: {
+            totalRentPaid: rentPaid,
+            totalUtilityPaid: utilityPaid,
+            totalDepositPaid: depositPaid,
+            paymentStatus,
+            updatedAt: today.toISOString(),
+          }
+        }
+      );
+
+      // Attach calculated values
+      Object.assign(tenant, {
+        monthsStayed,
+        totalRentPaid: rentPaid,
+        totalUtilityPaid: utilityPaid,
+        totalDepositPaid: depositPaid,
+        paymentStatus,
+        dues: {
+          rentDues: Math.max(0, rentDue - rentPaid),
+          utilityDues: 0,           // ← extend later if needed
+          depositDues: Math.max(0, depositDue - depositPaid),
+          totalRemainingDues: remaining,
         },
-      },
-      { status: 200 }
-    );
+      });
+    }
+
+    return NextResponse.json({ success: true, tenant }, { status: 200 });
   } catch (error: unknown) {
-    console.error("Error in GET /api/tenant/profile:", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error("Error in /api/tenant/profile:", error);
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 }
