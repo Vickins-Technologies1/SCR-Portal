@@ -23,16 +23,11 @@ export default function Navbar() {
           <Image
             src="/logo.png"
             alt="Smart Choice Rental"
-            width={40}
-            height={40}
-            className="h-10 w-10 rounded-lg object-contain drop-shadow-sm"
+            width={300}
+            height={200}
+            className="h-20 w-40 rounded-lg object-contain drop-shadow-sm"
           />
-          <div>
-            <h1 className="text-lg font-bold bg-gradient-to-r from-[#03a678] to-[#028a63] bg-clip-text text-transparent">
-              Smart Choice Rental
-            </h1>
-            <p className="hidden text-xs text-gray-500 sm:block">Management Dashboard</p>
-          </div>
+         
         </div>
 
         {/* Right: Logout Button */}

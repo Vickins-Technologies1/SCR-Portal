@@ -78,37 +78,29 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white/90 backdrop-blur-xl shadow-2xl border-r border-gray-100 transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "-translate-x-full"
-          } md:translate-x-0`}
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white/90 backdrop-blur-xl shadow-2xl border-r border-gray-100 transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 flex flex-col`}
       >
-        <div className="flex h-full flex-col"> {/* ← Removed pt-16 */}
-
-          {/* HEADER SECTION – Now starts from the very top */}
+        <div className="flex h-full flex-col">
+          {/* HEADER SECTION */}
           <div className="border-b border-gray-200/60 bg-gradient-to-b from-[#03a678]/5 to-transparent px-6 py-6">
             <div className="flex flex-col items-center text-center">
-              {/* Avatar */}
               <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
                 {initials}
               </div>
 
-              {/* Welcome Text */}
               <p className="text-xs tracking-widest uppercase text-gray-500">Welcome back</p>
-
-              {/* Name */}
               <h2 className="mt-1 text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
                 {name.split(" ")[0]}
               </h2>
 
-              {/* Role Badge */}
               <span className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-full bg-[#03a678]/10 text-[#03a678]">
                 <span className="h-2 w-2 rounded-full bg-[#03a678] animate-pulse"></span>
                 Property Owner
               </span>
             </div>
           </div>
-
-          {/* Optional: Extra subtle divider line for elegance */}
-          <div className="h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
 
           {/* Navigation Links */}
           <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-1.5">
@@ -119,10 +111,11 @@ export default function Sidebar() {
                   key={key}
                   href={href}
                   onClick={() => setIsOpen(false)}
-                  className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-sm font-medium transition-all duration-200 ${isActive
+                  className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-sm font-medium transition-all duration-200 ${
+                    isActive
                       ? "bg-[#03a678]/10 text-[#03a678] shadow-sm ring-1 ring-[#03a678]/20"
                       : "text-gray-600 hover:bg-[#03a678]/5 hover:text-[#03a678]"
-                    }`}
+                  }`}
                 >
                   <span className={isActive ? "text-[#03a678]" : "text-gray-500 group-hover:text-[#03a678]"}>
                     {icon}
@@ -132,6 +125,29 @@ export default function Sidebar() {
               );
             })}
           </nav>
+
+          {/* FOOTER – Very small company credit + developer line */}
+          <div className="mt-auto border-t border-gray-200/40 px-6 py-4 bg-gradient-to-t from-gray-50/60 to-transparent">
+            <div className="text-center space-y-1">
+              {/* Main brand copyright */}
+              <p className="text-[10px] text-gray-400/80 font-light tracking-wide">
+                © {new Date().getFullYear()} Sorana Property Managers Limited
+              </p>
+
+              {/* Developer credit – even smaller */}
+              <p className="text-[9px] text-gray-400/60 font-light">
+                Developed by{" "}
+                <a
+                  href="https://vickins-technologies.vercel.app/" // ← REPLACE WITH YOUR REAL URL (e.g., https://vickins.vercel.app or https://vickins.tech)
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400/80 hover:text-[#03a678] transition-colors duration-200 underline underline-offset-2 decoration-gray-300/50 hover:decoration-[#03a678]/60"
+                >
+                  Vickins Technologies
+                </a>
+              </p>
+            </div>
+          </div>
         </div>
       </aside>
 
