@@ -33,6 +33,7 @@ interface Payment {
   type: string;
   status: string;
   amount: number;
+  createdAt: Date;
 }
 
 async function calculateMonthsStayed(db: Db, tenant: Tenant, today: Date): Promise<number> {
@@ -66,6 +67,40 @@ async function calculateMonthsStayed(db: Db, tenant: Tenant, today: Date): Promi
     console.error("Months calculation failed", err);
     return 0;
   }
+}
+
+async function getMonthlyPayments(db: Db, targetTenantId: string, monthsStayed: number): Promise<Array<{ month: string; rent: number; utility: number; total: number; paid: boolean }>> {
+  const payments = await db.collection<Payment>("payments")
+    .find({ tenantId: targetTenantId, status: "completed" })
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  // Group payments by month (simplified: assume recent months, or generate last N months)
+  const monthlyMap: Record<string, { rent: number; utility: number; total: number }> = {};
+  payments.forEach(p => {
+    const month = p.createdAt.toISOString().slice(0, 7); // YYYY-MM
+    if (!monthlyMap[month]) monthlyMap[month] = { rent: 0, utility: 0, total: 0 };
+    if (p.type === "Rent") monthlyMap[month].rent += p.amount;
+    else if (p.type === "Utility") monthlyMap[month].utility += p.amount;
+    monthlyMap[month].total += p.amount;
+  });
+
+  // Generate last 12 months or based on monthsStayed
+  const monthlyPayments = [];
+  const today = new Date();
+  for (let i = 0; i < Math.min(12, monthsStayed); i++) {
+    const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const monthKey = date.toISOString().slice(0, 7);
+    const monthName = date.toLocaleString('default', { month: 'short' });
+    const data = monthlyMap[monthKey] || { rent: 0, utility: 0, total: 0 };
+    monthlyPayments.push({
+      month: monthName,
+      ...data,
+      paid: data.total > 0, // Simplified: paid if any payment in month
+    });
+  }
+
+  return monthlyPayments.reverse(); // Oldest to newest
 }
 
 export async function GET(request: NextRequest) {
@@ -134,6 +169,8 @@ export async function GET(request: NextRequest) {
       totalDepositPaid: tenantDoc.totalDepositPaid ?? 0,
     };
 
+    let analytics = null;
+
     // Only calculate fresh dues/totals for real tenant login
     if (shouldCalculateDues) {
       const today = new Date();
@@ -171,6 +208,9 @@ export async function GET(request: NextRequest) {
         }
       );
 
+      // Get monthly payments for analytics
+      const monthlyPayments = await getMonthlyPayments(db, targetTenantId, monthsStayed);
+
       // Attach calculated values
       Object.assign(tenant, {
         monthsStayed,
@@ -185,9 +225,18 @@ export async function GET(request: NextRequest) {
           totalRemainingDues: remaining,
         },
       });
+
+      analytics = {
+        monthlyPayments,
+        paymentBreakdown: [
+          { name: "Rent", value: rentPaid },
+          { name: "Utility", value: utilityPaid },
+          { name: "Deposit", value: depositPaid },
+        ]
+      };
     }
 
-    return NextResponse.json({ success: true, tenant }, { status: 200 });
+    return NextResponse.json({ success: true, tenant, analytics }, { status: 200 });
   } catch (error: unknown) {
     console.error("Error in /api/tenant/profile:", error);
     return NextResponse.json(

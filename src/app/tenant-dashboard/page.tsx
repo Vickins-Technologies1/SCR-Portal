@@ -12,7 +12,23 @@ import {
   LogOut,
   Loader2,
   Shield,
+  PieChart as PieChartIcon,
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import { Property } from "../../types/property";
 
 interface Tenant {
@@ -44,6 +60,22 @@ interface Tenant {
   monthsStayed?: number;
 }
 
+interface MonthlyPayment {
+  month: string;
+  rent: number;
+  utility: number;
+  total: number;
+  paid: boolean;
+}
+
+interface Analytics {
+  monthlyPayments: MonthlyPayment[];
+  paymentBreakdown: Array<{
+    name: string;
+    value: number;
+  }>;
+}
+
 /* -------------------------------------------------
    Skeleton Card
    ------------------------------------------------- */
@@ -65,6 +97,145 @@ function SkeletonCard() {
 }
 
 /* -------------------------------------------------
+   Info Card Component
+   ------------------------------------------------- */
+function InfoCard({
+  icon,
+  title,
+  children,
+  isLoading,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow">
+      <h3 className="flex items-center gap-3 text-xl font-bold text-gray-800 mb-4">
+        {icon}
+        {title}
+      </h3>
+      <div className="text-gray-700 space-y-2">
+        {isLoading ? <SkeletonCard /> : children}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------
+   Badge Component
+   ------------------------------------------------- */
+function Badge({ status, children }: { status?: string; children: React.ReactNode }) {
+  const styles: Record<string, string> = {
+    paid: "bg-green-100 text-green-800",
+    overdue: "bg-red-100 text-red-800",
+    pending: "bg-yellow-100 text-yellow-800",
+    Active: "bg-green-100 text-green-800",
+    Inactive: "bg-gray-100 text-gray-800",
+    Pending: "bg-yellow-100 text-yellow-800",
+  };
+
+  const base = "inline-flex px-3 py-1 text-xs font-semibold rounded-full";
+  const color = styles[status || ""] || "bg-gray-100 text-gray-800";
+
+  return <span className={`${base} ${color}`}>{children}</span>;
+}
+
+/* -------------------------------------------------
+   Shared currency formatter (safe for undefined/null values)
+   ------------------------------------------------- */
+const currencyFormatter = (value: number | string | undefined): string => {
+  if (value === undefined || value === null) return "—";
+  const num = Number(value);
+  return isNaN(num) ? "—" : `Ksh ${num.toLocaleString()}`;
+};
+
+/* -------------------------------------------------
+   Payment Trend Chart Component
+   ------------------------------------------------- */
+function PaymentTrendChart({ data }: { data: Array<{ month: string; paid: number; due: number }> }) {
+  if (!data || data.length === 0) {
+    return <p className="text-gray-500 text-center py-10">No payment trend data available.</p>;
+  }
+
+  return (
+    <InfoCard
+      icon={<DollarSign className="w-6 h-6 text-emerald-600" />}
+      title="Payment Trend (Last 12 Months)"
+      isLoading={false}
+    >
+      <div className="h-80">
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" />
+            <YAxis />
+            <Tooltip formatter={currencyFormatter} />
+            <Legend />
+            <Bar dataKey="due" name="Due" fill="#d1d5db" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="paid" name="Paid" fill="#10b981" radius={[4, 4, 0, 0]} />
+            <Line
+              type="monotone"
+              dataKey="paid"
+              stroke="#059669"
+              strokeWidth={3}
+              dot={{ r: 5 }}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </InfoCard>
+  );
+}
+
+/* -------------------------------------------------
+   Payment Breakdown Chart Component
+   ------------------------------------------------- */
+function PaymentBreakdownChart({
+  breakdown,
+}: {
+  breakdown: Array<{ name: string; value: number }>;
+}) {
+  const COLORS = ["#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
+
+  if (!breakdown || breakdown.every((b) => b.value === 0)) {
+    return <p className="text-gray-500 text-center py-10">No payment data yet.</p>;
+  }
+
+  return (
+    <InfoCard
+      icon={<PieChartIcon className="w-6 h-6 text-purple-600" />}
+      title="Payment Composition"
+      isLoading={false}
+    >
+      <div className="h-72">
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie
+              data={breakdown}
+              cx="50%"
+              cy="50%"
+              labelLine={false}
+              outerRadius={90}
+              fill="#8884d8"
+              dataKey="value"
+              label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+            >
+              {breakdown.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip formatter={currencyFormatter} />
+            <Legend verticalAlign="bottom" height={36} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </InfoCard>
+  );
+}
+
+/* -------------------------------------------------
    Main Page
    ------------------------------------------------- */
 export default function TenantDashboardPage() {
@@ -79,13 +250,16 @@ export default function TenantDashboardPage() {
   /* ---- data ---- */
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDuesLoading, setIsDuesLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   /* ---- CSRF ---- */
-  const [csrfToken, setCsrfToken] = useState<string | null>(Cookies.get("csrf-token") || null);
+  const [csrfToken, setCsrfToken] = useState<string | null>(
+    Cookies.get("csrf-token") || null
+  );
   const requestInProgress = useRef(false);
   const lastRequestTime = useRef(0);
   const rateLimitDelay = 1000;
@@ -95,7 +269,9 @@ export default function TenantDashboardPage() {
     requestInProgress.current = true;
     const now = Date.now();
     if (now - lastRequestTime.current < rateLimitDelay) {
-      await new Promise((r) => setTimeout(r, rateLimitDelay - (now - lastRequestTime.current)));
+      await new Promise((r) =>
+        setTimeout(r, rateLimitDelay - (now - lastRequestTime.current))
+      );
     }
     try {
       const res = await fetch("/api/csrf-token", { credentials: "include" });
@@ -104,7 +280,11 @@ export default function TenantDashboardPage() {
       if (data.success && data.csrfToken) {
         const token = data.csrfToken as string;
         setCsrfToken(token);
-        Cookies.set("csrf-token", token, { path: "/", secure: true, sameSite: "strict" });
+        Cookies.set("csrf-token", token, {
+          path: "/",
+          secure: true,
+          sameSite: "strict",
+        });
         return token;
       }
     } catch (e) {
@@ -169,9 +349,11 @@ export default function TenantDashboardPage() {
     const isImpersonating = Cookies.get("isImpersonating") === "true";
     const impersonatingTenantId = Cookies.get("impersonatingTenantId");
 
-    // For real tenants, role must be tenant
-    // For owners impersonating, role is still propertyOwner, but allow access if impersonating
-    if (!uid || (currentRole !== "tenant" && !(currentRole === "propertyOwner" && isImpersonating))) {
+    if (
+      !uid ||
+      (currentRole !== "tenant" &&
+        !(currentRole === "propertyOwner" && isImpersonating))
+    ) {
       router.replace("/");
       return;
     }
@@ -195,33 +377,37 @@ export default function TenantDashboardPage() {
         let token = csrfToken || (await fetchCsrfToken());
         if (!token) throw new Error("Failed to get CSRF token");
 
-        // Fetch tenant profile
         const tenantRes = await fetch("/api/tenant/profile", {
           headers: { "X-CSRF-Token": token },
           credentials: "include",
         });
         if (!tenantRes.ok) throw new Error("Failed to load profile");
         const tenantData = await tenantRes.json();
-        if (!tenantData.success) throw new Error(tenantData.message || "Profile error");
+        if (!tenantData.success)
+          throw new Error(tenantData.message || "Profile error");
 
         setTenant(tenantData.tenant);
+        setAnalytics(tenantData.analytics || null);
 
-        // Fetch property if linked
         if (tenantData.tenant.propertyId) {
-          const propRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
-            headers: { "X-CSRF-Token": token },
-            credentials: "include",
-          });
+          const propRes = await fetch(
+            `/api/properties/${tenantData.tenant.propertyId}`,
+            {
+              headers: { "X-CSRF-Token": token },
+              credentials: "include",
+            }
+          );
           if (propRes.ok) {
             const propData = await propRes.json();
             if (propData.success) setProperty(propData.property);
           }
         }
 
-        // Fetch dues
         await fetchDues(token);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load dashboard");
+        setError(
+          err instanceof Error ? err.message : "Failed to load dashboard"
+        );
       } finally {
         setIsLoading(false);
       }
@@ -248,7 +434,6 @@ export default function TenantDashboardPage() {
 
       if (data.success) {
         setSuccessMessage("Successfully reverted to Property Owner view");
-        // Clear impersonation cookies (optional, server does this)
         Cookies.remove("impersonatingTenantId", { path: "/" });
         Cookies.remove("isImpersonating", { path: "/" });
 
@@ -265,12 +450,24 @@ export default function TenantDashboardPage() {
     }
   };
 
+  // Prepare chart data
+  const paymentTrendData = analytics?.monthlyPayments.map((item) => ({
+    month: item.month,
+    paid: item.total,
+    due: item.rent + item.utility,
+  })) || [];
+
+  const paymentBreakdown = [
+    { name: "Rent", value: tenant?.totalRentPaid || 0 },
+    { name: "Utility", value: tenant?.totalUtilityPaid || 0 },
+    { name: "Deposit", value: tenant?.totalDepositPaid || 0 },
+  ];
+
   /* -------------------------------------------------
      UI
      ------------------------------------------------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      {/* Impersonation Banner - Fixed Top */}
       {isImpersonated && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white shadow-lg">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
@@ -279,7 +476,8 @@ export default function TenantDashboardPage() {
               <div>
                 <p className="font-bold">Impersonation Mode Active</p>
                 <p className="text-sm opacity-90">
-                  You are viewing this dashboard as <strong>{tenant?.name || "tenant"}</strong>
+                  You are viewing this dashboard as{" "}
+                  <strong>{tenant?.name || "tenant"}</strong>
                 </p>
               </div>
             </div>
@@ -304,9 +502,7 @@ export default function TenantDashboardPage() {
         </div>
       )}
 
-      {/* Main Content - Padding for fixed banner */}
       <div className={isImpersonated ? "pt-24" : "pt-16"}>
-        {/* Hero Section */}
         <section className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl mx-4 sm:mx-6 lg:mx-8 p-8 shadow-xl">
           <div className="absolute inset-0 bg-black/10"></div>
           <div className="relative z-10">
@@ -319,7 +515,6 @@ export default function TenantDashboardPage() {
           </div>
         </section>
 
-        {/* Messages */}
         <div className="mx-4 sm:mx-6 lg:mx-8 mt-6 space-y-3">
           {error && (
             <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200">
@@ -334,9 +529,7 @@ export default function TenantDashboardPage() {
           )}
         </div>
 
-        {/* Dashboard Cards */}
         <div className="mx-4 sm:mx-6 lg:mx-8 mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Property Card */}
           <InfoCard icon={<Home />} title="Leased Property" isLoading={isLoading}>
             {property && tenant ? (
               <>
@@ -345,35 +538,46 @@ export default function TenantDashboardPage() {
                 <p className="mt-3">
                   Unit: <strong>{tenant.houseNumber}</strong> ({tenant.unitType})
                 </p>
-                <p>Rent: <strong>Ksh {tenant.price.toLocaleString()}</strong>/month</p>
-                <p>Deposit: <strong>Ksh {tenant.deposit.toLocaleString()}</strong></p>
-                <p className="text-sm mt-2">
-                  Lease: {tenant.leaseStartDate ? fmt(tenant.leaseStartDate) : "—"} →{" "}
-                  {tenant.leaseEndDate ? fmt(tenant.leaseEndDate) : "—"}
+                <p>
+                  Rent: <strong>Ksh {tenant.price.toLocaleString()}</strong>
+                  /month
                 </p>
-                <p>Months stayed: <strong>{tenant.monthsStayed ?? "—"}</strong></p>
+                <p>
+                  Deposit: <strong>Ksh {tenant.deposit.toLocaleString()}</strong>
+                </p>
+                <p className="text-sm mt-2">
+                  Lease: {tenant.leaseStartDate ? fmt(tenant.leaseStartDate) : "—"}{" "}
+                  → {tenant.leaseEndDate ? fmt(tenant.leaseEndDate) : "—"}
+                </p>
+                <p>
+                  Months stayed: <strong>{tenant.monthsStayed ?? "—"}</strong>
+                </p>
               </>
             ) : (
               <p className="text-gray-500">No property assigned yet.</p>
             )}
           </InfoCard>
 
-          {/* Payment Summary */}
           <InfoCard icon={<DollarSign />} title="Payment Summary" isLoading={isLoading}>
             {tenant ? (
               <>
                 <p>
                   Status:{" "}
-                  <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "Unknown"}</Badge>
+                  <Badge status={tenant.paymentStatus}>
+                    {tenant.paymentStatus || "Unknown"}
+                  </Badge>
                 </p>
                 <p className="mt-3">
-                  Total Rent Paid: <strong>Ksh {(tenant.totalRentPaid || 0).toLocaleString()}</strong>
+                  Total Rent Paid:{" "}
+                  <strong>Ksh {(tenant.totalRentPaid || 0).toLocaleString()}</strong>
                 </p>
                 <p>
-                  Utility Paid: <strong>Ksh {(tenant.totalUtilityPaid || 0).toLocaleString()}</strong>
+                  Utility Paid:{" "}
+                  <strong>Ksh {(tenant.totalUtilityPaid || 0).toLocaleString()}</strong>
                 </p>
                 <p>
-                  Deposit Paid: <strong>Ksh {(tenant.totalDepositPaid || 0).toLocaleString()}</strong>
+                  Deposit Paid:{" "}
+                  <strong>Ksh {(tenant.totalDepositPaid || 0).toLocaleString()}</strong>
                 </p>
               </>
             ) : (
@@ -381,15 +585,34 @@ export default function TenantDashboardPage() {
             )}
           </InfoCard>
 
-          {/* Outstanding Dues */}
-          <InfoCard icon={<AlertCircle />} title="Outstanding Dues" isLoading={isDuesLoading}>
+          <InfoCard
+            icon={<AlertCircle />}
+            title="Outstanding Dues"
+            isLoading={isDuesLoading}
+          >
             {tenant?.dues ? (
               <>
-                <p>Rent Due: <strong className="text-red-600">Ksh {tenant.dues.rentDues.toLocaleString()}</strong></p>
-                <p>Utility Due: <strong className="text-orange-600">Ksh {tenant.dues.utilityDues.toLocaleString()}</strong></p>
-                <p>Deposit Due: <strong className="text-purple-600">Ksh {tenant.dues.depositDues.toLocaleString()}</strong></p>
+                <p>
+                  Rent Due:{" "}
+                  <strong className="text-red-600">
+                    Ksh {tenant.dues.rentDues.toLocaleString()}
+                  </strong>
+                </p>
+                <p>
+                  Utility Due:{" "}
+                  <strong className="text-orange-600">
+                    Ksh {tenant.dues.utilityDues.toLocaleString()}
+                  </strong>
+                </p>
+                <p>
+                  Deposit Due:{" "}
+                  <strong className="text-purple-600">
+                    Ksh {tenant.dues.depositDues.toLocaleString()}
+                  </strong>
+                </p>
                 <p className="mt-4 text-lg font-bold text-red-700">
-                  Total Remaining: Ksh {tenant.dues.totalRemainingDues.toLocaleString()}
+                  Total Remaining: Ksh{" "}
+                  {tenant.dues.totalRemainingDues.toLocaleString()}
                 </p>
               </>
             ) : (
@@ -397,7 +620,6 @@ export default function TenantDashboardPage() {
             )}
           </InfoCard>
 
-          {/* Profile */}
           <InfoCard icon={<User />} title="Your Profile" isLoading={isLoading}>
             {tenant ? (
               <>
@@ -414,56 +636,15 @@ export default function TenantDashboardPage() {
           </InfoCard>
         </div>
 
-        {/* Optional: Maintenance Section */}
-        {/* <div className="mx-4 sm:mx-6 lg:mx-8 mt-12">
-          <MaintenanceRequests tenantId={userId!} />
-        </div> */}
+        <section className="mx-4 sm:mx-6 lg:mx-8 mt-12 space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <PaymentTrendChart data={paymentTrendData} />
+            <PaymentBreakdownChart breakdown={paymentBreakdown} />
+          </div>
+        </section>
       </div>
     </div>
   );
-}
-
-/* -------------------------------------------------
-   Helper Components
-   ------------------------------------------------- */
-function InfoCard({
-  icon,
-  title,
-  children,
-  isLoading,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-  isLoading: boolean;
-}) {
-  return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow">
-      <h3 className="flex items-center gap-3 text-xl font-bold text-gray-800 mb-4">
-        {icon}
-        {title}
-      </h3>
-      <div className="text-gray-700 space-y-2">
-        {isLoading ? <SkeletonCard /> : children}
-      </div>
-    </div>
-  );
-}
-
-function Badge({ status, children }: { status?: string; children: React.ReactNode }) {
-  const styles: Record<string, string> = {
-    paid: "bg-green-100 text-green-800",
-    overdue: "bg-red-100 text-red-800",
-    pending: "bg-yellow-100 text-yellow-800",
-    Active: "bg-green-100 text-green-800",
-    Inactive: "bg-gray-100 text-gray-800",
-    Pending: "bg-yellow-100 text-yellow-800",
-  };
-
-  const base = "inline-flex px-3 py-1 text-xs font-semibold rounded-full";
-  const color = styles[status || ""] || "bg-gray-100 text-gray-800";
-
-  return <span className={`${base} ${color}`}>{children}</span>;
 }
 
 function fmt(date: string) {

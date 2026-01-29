@@ -55,26 +55,10 @@ export default function TenantDashboardLayout({
   const [error, setError] = useState<string | null>(null);
 
   const links = [
-    {
-      href: "/tenant-dashboard",
-      label: "Overview",
-      icon: <LayoutDashboard size={18} />,
-    },
-    {
-      href: "/tenant-dashboard/payments",
-      label: "Payments",
-      icon: <CreditCard size={18} />,
-    },
-    {
-      href: "/tenant-dashboard/maintenance",
-      label: "Maintenance",
-      icon: <Wrench size={18} />,
-    },
-    {
-      href: "/tenant-dashboard/settings",
-      label: "Settings",
-      icon: <Settings size={18} />,
-    },
+    { href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
+    { href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
+    { href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
+    { href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
   ];
 
   useEffect(() => {
@@ -87,24 +71,20 @@ export default function TenantDashboardLayout({
       setIsLoading(true);
       try {
         const response = await fetch(
-          `/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`
+          `/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`,
+          { credentials: "include" }
         );
-        const text = await response.text();
-        const data: UserResponse = JSON.parse(text);
-        if (response.ok && data.success && data.user?.name) {
-          setName(data.user.name);
-        } else {
-          setError(data.message || "Failed to fetch user");
-        }
+        const data: UserResponse = await response.json();
+        if (data.success && data.user?.name) setName(data.user.name);
       } catch {
-        setError("Failed to fetch user");
+        setError("Connection error");
       } finally {
         setIsLoading(false);
       }
     };
 
-    const debounce = setTimeout(() => fetchUserName(), 300);
-    return () => clearTimeout(debounce);
+    const timer = setTimeout(fetchUserName, 300);
+    return () => clearTimeout(timer);
   }, [userId, role]);
 
   const handleLogout = () => {
@@ -113,74 +93,73 @@ export default function TenantDashboardLayout({
     window.location.href = "/";
   };
 
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* Sleek Professional Navbar */}
-      <header className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
+      {/* ─── Navbar ─── */}
+      <header className="fixed top-0 left-0 right-0 z-20 bg-white/80 backdrop-blur-xl border-b border-white/30 shadow-sm">
+        <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
+          {/* Left side – logo + mobile toggle */}
           <div className="flex items-center gap-3">
             <button
-              className="lg:hidden text-gray-700 hover:text-[#03a678] transition-colors p-1.5 rounded-md hover:bg-gray-100"
+              className="lg:hidden p-2 rounded-xl hover:bg-slate-100/80 text-gray-700 transition-colors"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              aria-label="Toggle Sidebar"
+              aria-label="Toggle menu"
             >
               {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-[#03a678] rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">S</span>
-              </div>
-              <h1 className="text-lg font-bold text-gray-900 hidden sm:block">
-                Smart Choice
-              </h1>
-            </div>
+
+            
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 text-sm text-gray-600">
-              <div className="w-8 h-8 bg-gradient-to-br from-[#03a678] to-emerald-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
-                {isLoading ? "?" : error ? "T" : name.charAt(0).toUpperCase()}
-              </div>
-              <span className="font-medium">
-                {isLoading ? "Loading..." : error ? "Tenant" : name}
-              </span>
-            </div>
+          {/* Right side – logo image + user info + logout */}
+          <div className="flex items-center gap-5 sm:gap-7">
 
+            {/* Logout */}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#03a678] transition-colors px-3 py-1.5 rounded-md hover:bg-gray-50"
+              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#03a678] transition-colors px-3 py-2 rounded-xl hover:bg-slate-100/70"
             >
               <LogOut size={16} />
-              <span className="hidden sm:inline">Logout</span>
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Sidebar */}
+      {/* ─── Sidebar ─── */}
       <aside
-        className={`fixed top-16 left-0 z-30 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 shadow-lg transform transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:block`}
+        className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/85 backdrop-blur-2xl border-r border-white/30 shadow-2xl transform transition-transform duration-300 ease-out
+          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
       >
-        <div className="p-6">
-          <div className="flex justify-center mb-6">
-            <Image
-              src="/logo.png"
-              alt="Smart Choice Logo"
-              width={64}
-              height={64}
-              className="object-contain rounded-lg shadow-sm"
-            />
+        <div className="flex flex-col h-full">
+          <div className="p-6 border-b border-slate-100/80 bg-gradient-to-b from-[#03a678]/5 to-transparent">
+            <div className="flex justify-center mb-5">
+              <Image
+                src="/logo.png"
+                alt="Smart Choice Logo"
+                width={172}
+                height={72}
+                className="drop-shadow-md"
+                priority
+              />
+            </div>
+
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-widest text-gray-500 font-medium">Tenant Portal</p>
+              <p className="mt-1.5 text-lg font-semibold text-gray-900">
+                {isLoading ? "…" : error ? "Welcome" : name}
+              </p>
+            </div>
           </div>
 
-          <div className="text-center mb-8">
-            <p className="text-xs text-gray-500 uppercase tracking-wider">Welcome</p>
-            <p className="text-lg font-semibold text-gray-900 mt-1">
-              {isLoading ? "Loading..." : error ? "Tenant" : name}
-            </p>
-          </div>
-
-          <nav className="space-y-1">
+          <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
             {links.map(({ href, label, icon }) => {
               const isActive = pathname === href;
               return (
@@ -188,14 +167,13 @@ export default function TenantDashboardLayout({
                   key={href}
                   href={href}
                   onClick={() => setIsSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 group
-                  ${
-                    isActive
-                      ? "bg-[#03a678] text-white shadow-md"
+                  className={`group flex items-center gap-3 px-5 py-3 rounded-xl text-sm font-medium transition-all duration-200
+                    ${isActive
+                      ? "bg-[#03a678]/10 text-[#03a678] shadow-sm ring-1 ring-[#03a678]/20"
                       : "text-gray-700 hover:bg-[#03a678]/5 hover:text-[#03a678]"
-                  }`}
+                    }`}
                 >
-                  <span className={isActive ? "text-white" : "text-gray-500 group-hover:text-[#03a678]"}>
+                  <span className={isActive ? "text-[#03a678]" : "text-gray-500 group-hover:text-[#03a678]"}>
                     {icon}
                   </span>
                   <span>{label}</span>
@@ -203,39 +181,37 @@ export default function TenantDashboardLayout({
               );
             })}
           </nav>
+
+          <div className="mt-auto border-t border-slate-100/80 px-6 py-4 bg-gradient-to-t from-slate-50/60 to-transparent">
+            <p className="text-center text-[10px] text-gray-400/70 font-light tracking-wide">
+              © {new Date().getFullYear()} Smart Choice Rental Management
+            </p>
+            <p className="text-center text-[9px] text-gray-400/60 mt-1">
+              Built by{" "}
+              <a
+                href="https://vickins-technologies-lv2h.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-[#03a678] transition-colors underline underline-offset-2 decoration-gray-300/40 hover:decoration-[#03a678]/50"
+              >
+                Vickins Technologies
+              </a>
+            </p>
+          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 pt-16 lg:ml-64 p-4 sm:p-6 lg:p-8">
+      {/* ─── Main Content ─── */}
+      <main className="flex-1 pt-16 lg:ml-72 p-5 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">{children}</div>
       </main>
 
-      {/* Mobile Overlay */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-5 text-center text-xs text-gray-500 mt-auto">
-        <p>
-          <span className="text-[#03a678] font-semibold">Smart Choice Rental Management</span>
-          <br className="sm:hidden" />
-          {" "}© {new Date().getFullYear()} Created by{" "}
-          <a
-            href="https://vickins-technologies-lv2h.vercel.app/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#03a678] font-semibold hover:underline"
-          >
-            Vickins Technologies
-          </a>
-          . All rights reserved.
-        </p>
-      </footer>
     </div>
   );
 }
