@@ -1,4 +1,3 @@
-// src/app/api/tenant/profile/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
@@ -33,7 +32,7 @@ interface Payment {
   type: string;
   status: string;
   amount: number;
-  createdAt: Date;
+  createdAt: Date | string;
 }
 
 async function calculateMonthsStayed(db: Db, tenant: Tenant, today: Date): Promise<number> {
@@ -64,43 +63,101 @@ async function calculateMonthsStayed(db: Db, tenant: Tenant, today: Date): Promi
 
     return result[0]?.months ?? 0;
   } catch (err) {
-    console.error("Months calculation failed", err);
+    console.error("Months calculation failed:", err);
     return 0;
   }
 }
 
-async function getMonthlyPayments(db: Db, targetTenantId: string, monthsStayed: number): Promise<Array<{ month: string; rent: number; utility: number; total: number; paid: boolean }>> {
-  const payments = await db.collection<Payment>("payments")
+async function getMonthlyPayments(
+  db: Db,
+  targetTenantId: string,
+  monthsStayed: number
+): Promise<Array<{
+  month: string;
+  rent: number;
+  utility: number;
+  deposit: number;      // ← new field
+  total: number;
+  paid: boolean;
+}>> {
+  const payments = await db
+    .collection<Payment>("payments")
     .find({ tenantId: targetTenantId, status: "completed" })
     .sort({ createdAt: -1 })
     .toArray();
 
-  // Group payments by month (simplified: assume recent months, or generate last N months)
-  const monthlyMap: Record<string, { rent: number; utility: number; total: number }> = {};
-  payments.forEach(p => {
-    const month = p.createdAt.toISOString().slice(0, 7); // YYYY-MM
-    if (!monthlyMap[month]) monthlyMap[month] = { rent: 0, utility: 0, total: 0 };
-    if (p.type === "Rent") monthlyMap[month].rent += p.amount;
-    else if (p.type === "Utility") monthlyMap[month].utility += p.amount;
-    monthlyMap[month].total += p.amount;
+  const monthlyMap: Record<
+    string,
+    { rent: number; utility: number; deposit: number; total: number }
+  > = {};
+
+  payments.forEach((p) => {
+    let date: Date;
+
+    if (p.createdAt instanceof Date) {
+      date = p.createdAt;
+    } else if (typeof p.createdAt === "string") {
+      date = new Date(p.createdAt);
+      if (isNaN(date.getTime())) {
+        console.warn(`Invalid payment date: ${p.createdAt} for payment ${p._id}`);
+        return;
+      }
+    } else {
+      console.warn(`Invalid createdAt type: ${typeof p.createdAt}`);
+      return;
+    }
+
+    const monthKey = date.toISOString().slice(0, 7); // YYYY-MM
+
+    if (!monthlyMap[monthKey]) {
+      monthlyMap[monthKey] = { rent: 0, utility: 0, deposit: 0, total: 0 };
+    }
+
+    if (p.type === "Rent") {
+      monthlyMap[monthKey].rent += p.amount;
+    } else if (p.type === "Utility") {
+      monthlyMap[monthKey].utility += p.amount;
+    } else if (p.type === "Deposit") {
+      monthlyMap[monthKey].deposit += p.amount;
+    }
+
+    monthlyMap[monthKey].total += p.amount;
   });
 
-  // Generate last 12 months or based on monthsStayed
-  const monthlyPayments = [];
+  // ── Debug helper (uncomment when investigating zero values) ────────
+  // console.log("[DEBUG monthly payments map]", JSON.stringify(monthlyMap, null, 2));
+  // ───────────────────────────────────────────────────────────────────
+
+  const monthlyPayments: Array<{
+    month: string;
+    rent: number;
+    utility: number;
+    deposit: number;
+    total: number;
+    paid: boolean;
+  }> = [];
+
   const today = new Date();
-  for (let i = 0; i < Math.min(12, monthsStayed); i++) {
+
+  for (let i = 0; i < Math.min(12, monthsStayed || 12); i++) {
     const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
     const monthKey = date.toISOString().slice(0, 7);
-    const monthName = date.toLocaleString('default', { month: 'short' });
-    const data = monthlyMap[monthKey] || { rent: 0, utility: 0, total: 0 };
+    const monthName = date.toLocaleString("default", { month: "short", year: "2-digit" });
+
+    const data = monthlyMap[monthKey] || { rent: 0, utility: 0, deposit: 0, total: 0 };
+
     monthlyPayments.push({
       month: monthName,
-      ...data,
-      paid: data.total > 0, // Simplified: paid if any payment in month
+      rent: data.rent,
+      utility: data.utility,
+      deposit: data.deposit,     // now visible separately if you want
+      total: data.total,
+      paid: data.total > 0,
     });
   }
 
-  return monthlyPayments.reverse(); // Oldest to newest
+  // Oldest to newest (left → right on chart)
+  return monthlyPayments;
 }
 
 export async function GET(request: NextRequest) {
@@ -111,8 +168,6 @@ export async function GET(request: NextRequest) {
     const impersonatingTenantId = cookieStore.get("impersonatingTenantId")?.value;
     const isImpersonating = cookieStore.get("isImpersonating")?.value === "true";
 
-    console.log("GET /api/tenant/profile", { userId, role, isImpersonating, impersonatingTenantId });
-
     if (!userId || !ObjectId.isValid(userId)) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
@@ -122,26 +177,29 @@ export async function GET(request: NextRequest) {
     let targetTenantId = userId;
     let shouldCalculateDues = false;
 
-    // ── Impersonation logic (owner viewing tenant) ───────────────
-    if (isImpersonating && impersonatingTenantId && ObjectId.isValid(impersonatingTenantId) && role === "propertyOwner") {
+    if (
+      isImpersonating &&
+      impersonatingTenantId &&
+      ObjectId.isValid(impersonatingTenantId) &&
+      role === "propertyOwner"
+    ) {
       const tenantCheck = await db.collection("tenants").findOne({
         _id: new ObjectId(impersonatingTenantId),
         ownerId: userId,
       });
 
       if (!tenantCheck) {
-        return NextResponse.json({ success: false, message: "Unauthorized to view this tenant" }, { status: 403 });
+        return NextResponse.json(
+          { success: false, message: "Unauthorized to view this tenant" },
+          { status: 403 }
+        );
       }
 
       targetTenantId = impersonatingTenantId;
-      // For impersonation → return raw data (keep check-dues separate)
-    } 
-    // ── Real tenant login ────────────────────────────────────────
-    else if (role === "tenant") {
+    } else if (role === "tenant") {
       targetTenantId = userId;
-      shouldCalculateDues = true;   // ← this is the key change
-    } 
-    else {
+      shouldCalculateDues = true;
+    } else {
       return NextResponse.json({ success: false, message: "Invalid role" }, { status: 403 });
     }
 
@@ -153,13 +211,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    // Prepare base response tenant object
     const tenant = {
       ...tenantDoc,
       _id: tenantDoc._id.toString(),
       createdAt: tenantDoc.createdAt.toISOString(),
       updatedAt: tenantDoc.updatedAt
-        ? (tenantDoc.updatedAt instanceof Date ? tenantDoc.updatedAt : new Date(tenantDoc.updatedAt)).toISOString()
+        ? (tenantDoc.updatedAt instanceof Date
+            ? tenantDoc.updatedAt
+            : new Date(tenantDoc.updatedAt)
+          ).toISOString()
         : undefined,
       wallet: tenantDoc.walletBalance ?? 0,
       status: tenantDoc.status || "active",
@@ -171,47 +231,48 @@ export async function GET(request: NextRequest) {
 
     let analytics = null;
 
-    // Only calculate fresh dues/totals for real tenant login
     if (shouldCalculateDues) {
       const today = new Date();
       const monthsStayed = await calculateMonthsStayed(db, tenantDoc, today);
 
-      const payments = await db.collection<Payment>("payments")
+      const payments = await db
+        .collection<Payment>("payments")
         .find({ tenantId: targetTenantId, status: "completed" })
         .toArray();
 
-      let rentPaid = 0, depositPaid = 0, utilityPaid = 0;
+      let rentPaid = 0,
+        depositPaid = 0,
+        utilityPaid = 0;
+
       for (const p of payments) {
         if (p.type === "Rent") rentPaid += p.amount;
         else if (p.type === "Deposit") depositPaid += p.amount;
         else if (p.type === "Utility") utilityPaid += p.amount;
       }
 
-      const rentDue   = tenantDoc.price * monthsStayed;
+      const rentDue = tenantDoc.price * monthsStayed;
       const depositDue = tenantDoc.deposit || 0;
-      const totalDue   = rentDue + depositDue;
-      const totalPaid  = rentPaid + depositPaid + utilityPaid;
+      const totalDue = rentDue + depositDue;
+      const totalPaid = rentPaid + depositPaid + utilityPaid;
 
       const remaining = Math.max(0, totalDue - totalPaid);
       const paymentStatus = remaining > 0 ? "overdue" : "up-to-date";
 
-      // Optional: update database (recommended)
       await db.collection("tenants").updateOne(
         { _id: new ObjectId(targetTenantId) },
-        { $set: {
+        {
+          $set: {
             totalRentPaid: rentPaid,
             totalUtilityPaid: utilityPaid,
             totalDepositPaid: depositPaid,
             paymentStatus,
             updatedAt: today.toISOString(),
-          }
+          },
         }
       );
 
-      // Get monthly payments for analytics
       const monthlyPayments = await getMonthlyPayments(db, targetTenantId, monthsStayed);
 
-      // Attach calculated values
       Object.assign(tenant, {
         monthsStayed,
         totalRentPaid: rentPaid,
@@ -220,7 +281,7 @@ export async function GET(request: NextRequest) {
         paymentStatus,
         dues: {
           rentDues: Math.max(0, rentDue - rentPaid),
-          utilityDues: 0,           // ← extend later if needed
+          utilityDues: 0,
           depositDues: Math.max(0, depositDue - depositPaid),
           totalRemainingDues: remaining,
         },
@@ -232,7 +293,7 @@ export async function GET(request: NextRequest) {
           { name: "Rent", value: rentPaid },
           { name: "Utility", value: utilityPaid },
           { name: "Deposit", value: depositPaid },
-        ]
+        ],
       };
     }
 
