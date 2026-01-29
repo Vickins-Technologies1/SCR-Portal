@@ -195,12 +195,12 @@ export default function SignUp() {
           <Image
             src="/logo.png"
             alt="Logo"
-            width={120}
+            width={220}
             height={120}
             className="mx-auto drop-shadow-xl"
           />
           <h2 className="text-4xl font-black tracking-tight">
-            Smart Choice Rentals
+            Sorana Property Managers Ltd
           </h2>
           <p className="text-lg opacity-90">Manage properties. Rent smarter.</p>
           <a
