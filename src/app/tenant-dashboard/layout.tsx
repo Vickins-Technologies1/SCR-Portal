@@ -184,7 +184,7 @@ export default function TenantDashboardLayout({
 
           <div className="mt-auto border-t border-slate-100/80 px-6 py-4 bg-gradient-to-t from-slate-50/60 to-transparent">
             <p className="text-center text-[10px] text-gray-400/70 font-light tracking-wide">
-              © {new Date().getFullYear()} Smart Choice Rental Management
+              © {new Date().getFullYear()} Sorana Property Managers Limited
             </p>
             <p className="text-center text-[9px] text-gray-400/60 mt-1">
               Built by{" "}
