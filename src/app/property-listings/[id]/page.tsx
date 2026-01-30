@@ -49,7 +49,7 @@ const Footer: React.FC = () => {
           <div>
             <h3 className="text-xl font-semibold mb-4 tracking-tight">About Us</h3>
             <p className="text-sm text-gray-200 leading-relaxed">
-              Smart Choice Rentals connects property owners with tenants, offering premium rentals with unmatched quality.
+              Sorana Property Managers connects property owners with tenants, offering premium rentals with unmatched quality.
             </p>
           </div>
           <div>
@@ -62,15 +62,15 @@ const Footer: React.FC = () => {
           </div>
           <div>
             <h3 className="text-xl font-semibold mb-4 tracking-tight">Contact</h3>
-            <p className="text-sm text-gray-200">Email: support@smartchoicemanagement.com</p>
+            <p className="text-sm text-gray-200">Email: support@soranapropertymanagers.com</p>
             <p className="text-sm text-gray-200 mt-2">Phone: +254 117 649 850</p>
           </div>
         </div>
         <div className="mt-10 text-center text-sm text-gray-300">
-          © {new Date().getFullYear()} Smart Choice Rental Management Ltd.
+          © {new Date().getFullYear()} Sorana Property Managers Ltd.
         </div>
         <div className="mt-2 text-center text-xs text-gray-400">
-          Created by <a href="https://vickins-technologies.onrender.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
+          Created by <a href="https://vickins-technologies.vercel.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
         </div>
       </div>
     </footer>

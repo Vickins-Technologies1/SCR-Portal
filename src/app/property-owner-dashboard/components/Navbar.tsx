@@ -22,7 +22,7 @@ export default function Navbar() {
         <div className="flex items-center gap-4">
           <Image
             src="/logo.png"
-            alt="Smart Choice Rental"
+            alt="Sorana Property Managers Logo"
             width={300}
             height={200}
             className="h-20 w-40 rounded-lg object-contain drop-shadow-sm"

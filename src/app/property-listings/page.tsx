@@ -58,15 +58,15 @@ const Footer: React.FC = () => {
           </div>
           <div>
             <h3 className="text-lg font-semibold mb-4">Contact</h3>
-            <p className="text-sm text-gray-200">Email: support@smartchoicemanagement.com</p>
+            <p className="text-sm text-gray-200">Email: support@soranapropertymanagers.com</p>
             <p className="text-sm text-gray-200">Phone: +254 117 649 850</p>
           </div>
         </div>
         <div className="mt-8 text-center text-sm text-gray-200">
-          © {new Date().getFullYear()} Smart Choice Rental Management Ltd. All rights reserved.
+          © {new Date().getFullYear()} Sorana Property Managers Ltd. All rights reserved.
         </div>
         <div className="mt-2 text-center text-xs text-gray-400">
-          Developed by <a href="https://vickins-technologies-lv2h.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
+          Developed by <a href="https://vickins-technologies.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
         </div>
       </div>
     </footer>

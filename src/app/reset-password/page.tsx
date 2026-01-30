@@ -89,7 +89,7 @@ function ResetPasswordContent() {
             <p className="text-gray-600 text-sm sm:text-base mb-8 px-2">{message}</p>
 
             <Link
-              href="/login"
+              href="/"
               className="inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-2xl shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-teal-700 transition-all transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 text-sm sm:text-base"
             >
               Go to Login
