@@ -23,8 +23,8 @@ export default function Navbar() {
           <Image
             src="/logo.png"
             alt="Sorana Property Managers Logo"
-            width={300}
-            height={200}
+            width={250}
+            height={100}
             className="h-20 w-40 rounded-lg object-contain drop-shadow-sm"
           />
          
@@ -33,7 +33,7 @@ export default function Navbar() {
         {/* Right: Logout Button */}
         <button
           onClick={handleSignOut}
-          className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-[#03a678] to-[#029c6b] px-6 py-2.5 font-medium text-white shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-[#03a678]/30 hover:-translate-y-0.5"
+          className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-[#03a678] to-[#029c6b] px-4 py-2.5 font-medium text-white shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-[#03a678]/30 hover:-translate-y-0.5"
         >
           <span className="relative z-10 flex items-center gap-2">
             <span>Logout</span>

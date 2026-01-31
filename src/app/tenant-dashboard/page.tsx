@@ -68,24 +68,20 @@ interface MonthlyPayment {
 
 interface Analytics {
   monthlyPayments: MonthlyPayment[];
-  paymentBreakdown: Array<{
-    name: string;
-    value: number;
-  }>;
+  paymentBreakdown: Array<{ name: string; value: number }>;
 }
 
 function SkeletonCard() {
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 p-5 animate-pulse">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
-        <div className="h-5 w-32 bg-gray-200 rounded"></div>
+    <div className="bg-white/70 rounded-xl p-4 animate-pulse border border-gray-200">
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className="w-4 h-4 bg-gray-200 rounded-full"></div>
+        <div className="h-4 w-28 bg-gray-200 rounded"></div>
       </div>
       <div className="space-y-2">
-        <div className="h-4 w-full bg-gray-200 rounded"></div>
-        <div className="h-4 w-4/5 bg-gray-200 rounded"></div>
-        <div className="h-4 w-3/5 bg-gray-200 rounded"></div>
-        <div className="h-4 w-2/5 bg-gray-200 rounded"></div>
+        <div className="h-3.5 w-full bg-gray-200 rounded"></div>
+        <div className="h-3.5 w-5/6 bg-gray-200 rounded"></div>
+        <div className="h-3.5 w-2/3 bg-gray-200 rounded"></div>
       </div>
     </div>
   );
@@ -103,12 +99,12 @@ function InfoCard({
   isLoading: boolean;
 }) {
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow duration-300">
-      <h3 className="flex items-center gap-3 text-xl font-bold text-gray-800 mb-4">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200/70 p-4 sm:p-5 hover:shadow-md transition-shadow">
+      <h3 className="flex items-center gap-2.5 text-base sm:text-lg font-semibold text-gray-800 mb-3">
         {icon}
         {title}
       </h3>
-      <div className="text-gray-700 space-y-2.5">
+      <div className="text-gray-700 text-xs sm:text-sm space-y-1.5 leading-relaxed">
         {isLoading ? <SkeletonCard /> : children}
       </div>
     </div>
@@ -126,10 +122,12 @@ function Badge({ status, children }: { status?: string; children: React.ReactNod
     "up-to-date": "bg-green-100 text-green-800 border-green-200",
   };
 
-  const base = "inline-flex px-3 py-1 text-xs font-semibold rounded-full border";
   const color = styles[status || ""] || "bg-gray-100 text-gray-800 border-gray-200";
-
-  return <span className={`${base} ${color}`}>{children}</span>;
+  return (
+    <span className={`inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full border ${color}`}>
+      {children}
+    </span>
+  );
 }
 
 const formatCurrency = (value: unknown): string => {
@@ -139,85 +137,45 @@ const formatCurrency = (value: unknown): string => {
 };
 
 function PaymentTrendChart({ data }: { data: Array<{ month: string; paid: number; due: number }> }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="text-gray-400 text-center py-12 italic">
-        No payment history recorded yet.
-      </div>
-    );
+  if (!data?.length) {
+    return <div className="text-gray-400 text-center py-10 text-sm italic">No payment history yet</div>;
   }
 
   return (
-    <InfoCard
-      icon={<DollarSign className="w-6 h-6 text-emerald-600" />}
-      title="Payment Trend — Last 12 Months"
-      isLoading={false}
-    >
-      <div className="h-80 pt-2">
+    <InfoCard icon={<DollarSign className="w-5 h-5 text-emerald-600" />} title="Payment Trend" isLoading={false}>
+      <div className="h-64 sm:h-72 md:h-80 pt-2">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={data}
-            margin={{ top: 20, right: 30, left: -10, bottom: 20 }}
-            barCategoryGap="22%"
-          >
+          <BarChart data={data} margin={{ top: 12, right: 16, left: -12, bottom: 16 }}>
             <defs>
               <linearGradient id="paidGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.9} />
                 <stop offset="95%" stopColor="#059669" stopOpacity={0.5} />
               </linearGradient>
             </defs>
-
-            <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" vertical={false} />
-            <XAxis
-              dataKey="month"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#6b7280", fontSize: 13, fontWeight: 500 }}
-              dy={12}
-            />
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#6b7280", fontSize: 11 }} dy={8} />
             <YAxis
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "#6b7280", fontSize: 13 }}
-              tickFormatter={(v) => `Ksh ${(Number(v) / 1000).toFixed(0)}k`}
+              tick={{ fill: "#6b7280", fontSize: 11 }}
+              tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "rgba(17, 24, 39, 0.96)",
+                backgroundColor: "rgba(17,24,39,0.95)",
                 border: "none",
-                borderRadius: "12px",
+                borderRadius: "8px",
                 color: "white",
-                padding: "12px 16px",
-                boxShadow: "0 10px 25px -5px rgba(0,0,0,0.4)",
+                padding: "8px 12px",
+                fontSize: "0.8rem",
               }}
-              formatter={(value: number | string | undefined) => [
-                formatCurrency(value),
-                null,
-              ]}
-              labelStyle={{ color: "#e5e7eb", fontWeight: 600, marginBottom: 4 }}
+              formatter={(value: number | undefined) => [formatCurrency(value), null]}
+              labelStyle={{ color: "#e5e7eb", fontSize: "0.85rem", fontWeight: 500 }}
             />
-            <Legend
-              wrapperStyle={{ paddingTop: 10 }}
-              iconType="circle"
-              iconSize={12}
-            />
-
-            <Bar dataKey="due" name="Amount Due" fill="#e5e7eb" radius={[8, 8, 0, 0]} />
-            <Bar
-              dataKey="paid"
-              name="Amount Paid"
-              fill="url(#paidGradient)"
-              radius={[8, 8, 0, 0]}
-            />
-            <Line
-              type="monotone"
-              dataKey="paid"
-              name="Paid Trend"
-              stroke="#059669"
-              strokeWidth={3}
-              dot={{ r: 5, stroke: "#059669", strokeWidth: 2.5, fill: "white" }}
-              activeDot={{ r: 8, stroke: "#059669", strokeWidth: 3, fill: "white" }}
-            />
+            <Legend wrapperStyle={{ fontSize: "0.8rem", paddingTop: 4 }} iconSize={8} />
+            <Bar dataKey="due" name="Due" fill="#e5e7eb" radius={[5, 5, 0, 0]} />
+            <Bar dataKey="paid" name="Paid" fill="url(#paidGradient)" radius={[5, 5, 0, 0]} />
+            <Line type="monotone" dataKey="paid" stroke="#059669" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: "white" }} activeDot={{ r: 5 }} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -225,111 +183,59 @@ function PaymentTrendChart({ data }: { data: Array<{ month: string; paid: number
   );
 }
 
-function PaymentBreakdownChart({
-  breakdown,
-}: {
-  breakdown: Array<{ name: string; value: number }>;
-}) {
+function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string; value: number }> }) {
   const COLORS = ["#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#6366f1"];
-
   const total = breakdown.reduce((sum, item) => sum + item.value, 0);
+
   if (total === 0) {
-    return (
-      <div className="text-gray-400 text-center py-12 italic">
-        No payments recorded yet.
-      </div>
-    );
+    return <div className="text-gray-400 text-center py-10 text-sm italic">No payments recorded</div>;
   }
 
   return (
-    <InfoCard
-      icon={<PieChartIcon className="w-6 h-6 text-purple-600" />}
-      title="Payment Composition"
-      isLoading={false}
-    >
-      <div className="h-80 flex flex-col items-center justify-center">
-        <ResponsiveContainer width="100%" height={260}>
+    <InfoCard icon={<PieChartIcon className="w-5 h-5 text-purple-600" />} title="Breakdown" isLoading={false}>
+      <div className="h-64 sm:h-72 flex flex-col items-center justify-center">
+        <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <defs>
-              <filter id="shadow" x="-60%" y="-60%" width="220%" height="220%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feOffset dx="3" dy="5" />
-                <feComponentTransfer>
-                  <feFuncA type="linear" slope="0.35" />
-                </feComponentTransfer>
-                <feMerge>
-                  <feMergeNode />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
             <Pie
               data={breakdown}
               cx="50%"
               cy="50%"
-              innerRadius={75}
-              outerRadius={110}
-              paddingAngle={3}
+              innerRadius={50}
+              outerRadius={75}
+              paddingAngle={1}
               dataKey="value"
-              nameKey="name"
+              label={({ percent }) => (percent != null && percent > 0.09 ? `${Math.round(percent * 100)}%` : "")}
               labelLine={false}
-              label={({ name, percent = 0 }) =>
-                percent > 0.07 ? `${name} ${Math.round(percent * 100)}%` : ""
-              }
-              filter="url(#shadow)"
             >
-              {breakdown.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={COLORS[index % COLORS.length]}
-                  stroke="#ffffff"
-                  strokeWidth={1.5}
-                />
+              {breakdown.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="#fff" strokeWidth={1} />
               ))}
             </Pie>
-
             <Tooltip
-              formatter={(value, name) => [
-                formatCurrency(value),
-                name || "—",
-              ]}
+              formatter={(value, name) => [formatCurrency(value), name]}
               contentStyle={{
-                backgroundColor: "rgba(17, 24, 39, 0.96)",
+                backgroundColor: "rgba(17,24,39,0.95)",
                 border: "none",
-                borderRadius: "12px",
+                borderRadius: "8px",
                 color: "white",
-                boxShadow: "0 10px 25px -5px rgba(0,0,0,0.4)",
+                padding: "8px 12px",
+                fontSize: "0.8rem",
               }}
             />
-
-            <text
-              x="50%"
-              y="46%"
-              textAnchor="middle"
-              className="text-2xl font-bold fill-gray-800"
-            >
+            <text x="50%" y="45%" textAnchor="middle" className="text-base sm:text-lg font-bold fill-gray-800">
               {formatCurrency(total)}
             </text>
-            <text
-              x="50%"
-              y="54%"
-              textAnchor="middle"
-              className="text-sm fill-gray-500 font-medium"
-            >
+            <text x="50%" y="52%" textAnchor="middle" className="text-xs fill-gray-500">
               Total Paid
             </text>
           </PieChart>
         </ResponsiveContainer>
 
-        <div className="flex flex-wrap justify-center gap-5 mt-5">
+        <div className="flex flex-wrap justify-center gap-3 mt-3 text-xs">
           {breakdown.map((item, i) => (
-            <div key={i} className="flex items-center gap-2.5">
-              <div
-                className="w-3.5 h-3.5 rounded-full shadow-sm"
-                style={{ backgroundColor: COLORS[i % COLORS.length] }}
-              />
-              <span className="text-sm font-medium text-gray-700">{item.name}</span>
+            <div key={i} className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+              <span className="text-gray-700">{item.name}</span>
             </div>
           ))}
         </div>
@@ -371,7 +277,7 @@ export default function TenantDashboardPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.success && data.csrfToken) {
-        const token = data.csrfToken as string;
+        const token = data.csrfToken;
         setCsrfToken(token);
         Cookies.set("csrf-token", token, { path: "/", secure: true, sameSite: "strict" });
         return token;
@@ -436,8 +342,7 @@ export default function TenantDashboardPage() {
 
     if (
       !uid ||
-      (currentRole !== "tenant" &&
-        !(currentRole === "propertyOwner" && isImpersonating))
+      (currentRole !== "tenant" && !(currentRole === "propertyOwner" && isImpersonating))
     ) {
       router.replace("/");
       return;
@@ -498,36 +403,28 @@ export default function TenantDashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/revert-impersonation", {
-        method: "POST",
-        credentials: "include",
-      });
-
+      const res = await fetch("/api/revert-impersonation", { method: "POST", credentials: "include" });
       const data = await res.json();
 
       if (data.success) {
-        setSuccessMessage("Successfully reverted to Property Owner view");
+        setSuccessMessage("Reverted to owner view");
         Cookies.remove("impersonatingTenantId", { path: "/" });
         Cookies.remove("isImpersonating", { path: "/" });
-
-        setTimeout(() => {
-          router.push("/property-owner-dashboard");
-        }, 800);
+        setTimeout(() => router.push("/property-owner-dashboard"), 700);
       } else {
-        setError(data.message || "Failed to revert impersonation");
+        setError(data.message || "Revert failed");
       }
-    } catch (err) {
-      setError("Network error while reverting");
+    } catch {
+      setError("Network error");
     } finally {
       setIsReverting(false);
     }
   };
 
-  // ── Chart data preparation ───────────────────────────────────────────────
   const paymentTrendData = (analytics?.monthlyPayments ?? []).map((item) => ({
     month: item.month,
-    paid: item.total,           // ← total includes rent + utility + deposit
-    due: item.rent + item.utility, // deposit usually not monthly → not added to due
+    paid: item.total,
+    due: item.rent + item.utility,
   }));
 
   const paymentBreakdown = [
@@ -538,41 +435,35 @@ export default function TenantDashboardPage() {
 
   const fmt = (date?: string) =>
     date
-      ? new Date(date).toLocaleDateString("en-GB", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })
+      ? new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
       : "—";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 pb-12">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-6 sm:pb-10">
       {isImpersonated && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div className="fixed top-0 inset-x-0 z-50 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg">
+          <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between text-sm">
             <div className="flex items-center gap-3">
-              <Shield className="w-6 h-6" />
+              <Shield className="w-5 h-5" />
               <div>
-                <p className="font-bold">Impersonation Mode Active</p>
-                <p className="text-sm opacity-90">
-                  Viewing dashboard as <strong>{tenant?.name || "tenant"}</strong>
-                </p>
+                <p className="font-medium">Impersonating tenant</p>
+                <p className="text-xs opacity-90">{tenant?.name || "Tenant"}</p>
               </div>
             </div>
             <button
               onClick={handleRevertImpersonation}
               disabled={isReverting}
-              className="flex items-center gap-2 bg-white text-red-700 px-5 py-2.5 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-60 shadow-sm"
+              className="flex items-center gap-2 bg-white/95 text-red-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-white disabled:opacity-60 transition"
             >
               {isReverting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Reverting...
+                  Reverting…
                 </>
               ) : (
                 <>
                   <LogOut className="w-4 h-4" />
-                  Exit Impersonation
+                  Exit
                 </>
               )}
             </button>
@@ -580,126 +471,134 @@ export default function TenantDashboardPage() {
         </div>
       )}
 
-      <div className={isImpersonated ? "pt-24" : "pt-16"}>
-        <section className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-2xl mx-4 sm:mx-6 lg:mx-8 mt-6 p-8 shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative z-10">
-            <h1 className="text-3xl sm:text-4xl font-bold">
-              Welcome back, {tenant?.name?.split(" ")[0] || "Tenant"}!
-            </h1>
-            <p className="mt-3 text-lg opacity-90">
-              Your rental overview and account status — updated real-time.
-            </p>
-          </div>
+      <div
+        className={`
+          ${isImpersonated ? "pt-16 sm:pt-20" : "pt-10 sm:pt-14"}
+        `}
+      >
+        <section
+          className="
+            mx-4 sm:mx-6 lg:mx-8
+            mt-3 sm:mt-6
+            bg-gradient-to-r from-emerald-600 to-emerald-700
+            text-white
+            rounded-xl sm:rounded-2xl
+            p-5 sm:p-7 md:p-8
+            shadow-xl
+          "
+        >
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">
+            Welcome{tenant?.name ? `, ${tenant.name.split(" ")[0]}` : ""}
+          </h1>
+          <p className="mt-1.5 text-sm sm:text-base opacity-90">Rental overview – real-time</p>
         </section>
 
-        <div className="mx-4 sm:mx-6 lg:mx-8 mt-8 space-y-4">
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 sm:mt-5 space-y-3">
           {error && (
-            <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 shadow-sm">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span>{error}</span>
+            <div className="flex items-center gap-2.5 p-3 bg-red-50 text-red-800 rounded-lg border border-red-200 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
             </div>
           )}
           {successMessage && (
-            <div className="flex items-center gap-3 p-4 bg-green-50 text-green-700 rounded-xl border border-green-200 shadow-sm">
-              <span>{successMessage}</span>
+            <div className="p-3 bg-green-50 text-green-800 rounded-lg border border-green-200 text-sm">
+              {successMessage}
             </div>
           )}
         </div>
 
-        <div className="mx-4 sm:mx-6 lg:mx-8 mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <InfoCard icon={<Home className="text-blue-600" />} title="Leased Property" isLoading={isLoading}>
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-5 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+          <InfoCard icon={<Home className="w-5 h-5 text-blue-600" />} title="Property" isLoading={isLoading}>
             {property && tenant ? (
-              <>
-                <p className="font-semibold text-lg text-gray-900">{property.name}</p>
-                <p className="text-gray-600 mt-1">{property.address}</p>
-                <div className="mt-4 space-y-1.5 text-sm">
+              <div className="space-y-1 text-xs sm:text-sm">
+                <p className="font-medium text-gray-900">{property.name}</p>
+                <p className="text-gray-600 truncate">{property.address}</p>
+                <div className="mt-2 space-y-0.5">
                   <p>
                     Unit: <strong>{tenant.houseNumber}</strong> ({tenant.unitType})
                   </p>
                   <p>
-                    Rent: <strong>Ksh {tenant.price.toLocaleString("en-US")}</strong>/month
+                    Rent: <strong>Ksh {tenant.price.toLocaleString()}</strong>/mo
                   </p>
                   <p>
-                    Deposit: <strong>Ksh {tenant.deposit.toLocaleString("en-US")}</strong>
+                    Deposit: <strong>Ksh {tenant.deposit.toLocaleString()}</strong>
                   </p>
                   <p>
-                    Lease: <strong>{fmt(tenant.leaseStartDate)} → {fmt(tenant.leaseEndDate)}</strong>
+                    Lease:{" "}
+                    <strong className="whitespace-nowrap">
+                      {fmt(tenant.leaseStartDate)} – {fmt(tenant.leaseEndDate)}
+                    </strong>
                   </p>
                   <p>
-                    Months stayed: <strong>{tenant.monthsStayed ?? "—"}</strong>
+                    Months: <strong>{tenant.monthsStayed ?? "—"}</strong>
                   </p>
                 </div>
-              </>
+              </div>
             ) : (
-              <p className="text-gray-500">No property assigned yet.</p>
+              <p className="text-gray-500 text-sm">No property assigned</p>
             )}
           </InfoCard>
 
-          <InfoCard icon={<DollarSign className="text-emerald-600" />} title="Payment Summary" isLoading={isLoading}>
+          <InfoCard icon={<DollarSign className="w-5 h-5 text-emerald-600" />} title="Payments" isLoading={isLoading}>
             {tenant ? (
-              <div className="space-y-2.5 text-sm">
+              <div className="space-y-1.5 text-xs sm:text-sm">
                 <p>
-                  Status: <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "Unknown"}</Badge>
+                  Status: <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "?"}</Badge>
                 </p>
                 <p>
-                  Total Rent Paid: <strong>{formatCurrency(tenant.totalRentPaid)}</strong>
+                  Rent: <strong>{formatCurrency(tenant.totalRentPaid)}</strong>
                 </p>
                 <p>
-                  Utility Paid: <strong>{formatCurrency(tenant.totalUtilityPaid)}</strong>
+                  Utility: <strong>{formatCurrency(tenant.totalUtilityPaid)}</strong>
                 </p>
                 <p>
-                  Deposit Paid: <strong>{formatCurrency(tenant.totalDepositPaid)}</strong>
+                  Deposit: <strong>{formatCurrency(tenant.totalDepositPaid)}</strong>
                 </p>
               </div>
             ) : (
-              <p className="text-gray-500">No payment history available.</p>
+              <p className="text-gray-500 text-sm">No payment data</p>
             )}
           </InfoCard>
 
-          <InfoCard
-            icon={<AlertCircle className="text-red-600" />}
-            title="Outstanding Dues"
-            isLoading={isDuesLoading}
-          >
+          <InfoCard icon={<AlertCircle className="w-5 h-5 text-red-600" />} title="Dues" isLoading={isDuesLoading}>
             {tenant?.dues ? (
-              <div className="space-y-2 text-sm">
+              <div className="space-y-1 text-xs sm:text-sm">
                 <p>
-                  Rent Due: <strong className="text-red-700">{formatCurrency(tenant.dues.rentDues)}</strong>
+                  Rent: <strong className="text-red-700">{formatCurrency(tenant.dues.rentDues)}</strong>
                 </p>
                 <p>
-                  Utility Due: <strong className="text-orange-700">{formatCurrency(tenant.dues.utilityDues)}</strong>
+                  Utility: <strong className="text-orange-700">{formatCurrency(tenant.dues.utilityDues)}</strong>
                 </p>
                 <p>
-                  Deposit Due: <strong className="text-purple-700">{formatCurrency(tenant.dues.depositDues)}</strong>
+                  Deposit: <strong className="text-purple-700">{formatCurrency(tenant.dues.depositDues)}</strong>
                 </p>
-                <p className="mt-4 text-lg font-bold text-red-800 pt-2 border-t border-red-100">
-                  Total Remaining: {formatCurrency(tenant.dues.totalRemainingDues)}
+                <p className="mt-2 pt-2 border-t font-semibold text-red-800 text-sm sm:text-base">
+                  Total: {formatCurrency(tenant.dues.totalRemainingDues)}
                 </p>
               </div>
             ) : (
-              <p className="text-gray-500">Loading dues...</p>
+              <p className="text-gray-500 text-sm">Loading dues…</p>
             )}
           </InfoCard>
 
-          <InfoCard icon={<User className="text-indigo-600" />} title="Your Profile" isLoading={isLoading}>
+          <InfoCard icon={<User className="w-5 h-5 text-indigo-600" />} title="Profile" isLoading={isLoading}>
             {tenant ? (
-              <div className="space-y-2 text-sm">
-                <p className="font-semibold text-lg text-gray-900">{tenant.name}</p>
-                <p className="text-gray-600">{tenant.email}</p>
-                <p>{tenant.phone || "No phone number"}</p>
-                <p className="mt-3">
+              <div className="space-y-1 text-xs sm:text-sm">
+                <p className="font-medium text-gray-900">{tenant.name}</p>
+                <p className="text-gray-600 break-all">{tenant.email}</p>
+                <p>{tenant.phone || "—"}</p>
+                <p className="mt-1.5">
                   Status: <Badge status={tenant.status}>{tenant.status}</Badge>
                 </p>
               </div>
             ) : (
-              <p className="text-gray-500">Profile loading...</p>
+              <p className="text-gray-500 text-sm">Loading profile…</p>
             )}
           </InfoCard>
         </div>
 
-        <section className="mx-4 sm:mx-6 lg:mx-8 mt-12 space-y-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <section className="mx-4 sm:mx-6 lg:mx-8 mt-7 sm:mt-9 lg:mt-10 space-y-6 sm:space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
             <PaymentTrendChart data={paymentTrendData} />
             <PaymentBreakdownChart breakdown={paymentBreakdown} />
           </div>
