@@ -135,39 +135,41 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
 
     // ────────────────────────────────────────────────
-    //           PREVENT DUPLICATE TENANTS
+    //           PREVENT DUPLICATE TENANTS (scoped to owner)
     // ────────────────────────────────────────────────
 
-    // 1. Email already in use (case-insensitive)
+    // 1. Email already in use by this owner (case-insensitive)
     const duplicateEmail = await db.collection("tenants").findOne({
+      ownerId: userId,
       email: { $regex: new RegExp(`^${body.email.trim()}$`, "i") }
     });
     if (duplicateEmail) {
       return NextResponse.json(
-        { success: false, message: "A tenant with this email already exists" },
+        { success: false, message: "A tenant with this email already exists under your account" },
         { status: 409 }
       );
     }
 
-    // 2. Phone number already in use
+    // 2. Phone number already in use by this owner
     const duplicatePhone = await db.collection("tenants").findOne({
+      ownerId: userId,
       phone: body.phone.trim()
     });
     if (duplicatePhone) {
       return NextResponse.json(
-        { success: false, message: "A tenant with this phone number already exists" },
+        { success: false, message: "A tenant with this phone number already exists under your account" },
         { status: 409 }
       );
     }
 
-    // 3. Unit already occupied (same property + houseNumber or unitIdentifier)
+    // 3. Unit already occupied in this property
     const duplicateUnit = await db.collection("tenants").findOne({
-      propertyId: body.propertyId,
+      propertyId: new ObjectId(body.propertyId),
       $or: [
-        { houseNumber: body.houseNumber.trim() },
+        { houseNumber: body.houseNumber?.trim() },
         { unitIdentifier: body.unitIdentifier }
       ],
-      status: { $nin: ["terminated", "inactive", "moved out"] } // allow reuse after tenant leaves
+      status: { $nin: ["terminated", "inactive", "moved out"] }
     });
 
     if (duplicateUnit) {
@@ -305,14 +307,14 @@ export async function POST(request: NextRequest) {
     try {
       await sendWelcomeSms({
         phone: body.phone,
-        message: smsMessage,   // ← short version
+        message: smsMessage,
       });
     } catch (e) { logger.error("Welcome SMS failed", e); }
 
     try {
       await sendWhatsAppMessage({
         phone: body.phone,
-        message: fullMessage,  // ← longer is fine
+        message: fullMessage,
       });
     } catch (e) { logger.error("Welcome WhatsApp failed", e); }
 
