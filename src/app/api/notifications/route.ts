@@ -9,8 +9,8 @@ import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 import { generateStyledTemplate } from "../../../lib/email-template";
 import nodemailer from "nodemailer";
 import logger from "../../../lib/logger";
-import { Tenant, ResponseTenant } from "../../../types/tenant";
-import { calculateTenantDues, TenantDues, convertTenantToResponse } from "../../../lib/utils";
+import { Tenant } from "../../../types/tenant";
+import { calculateTenantDues, TenantDues } from "../../../lib/utils";
 
 interface Notification {
   _id: ObjectId;

@@ -46,7 +46,7 @@ export const generateStyledTemplate = ({ intro, details, title }: EmailTemplateO
     <body>
       <div class="container">
         <div class="header">
-          <img class="logo" src="https://app.smartchoicerentalmanagement.com/logo.png" alt="Smart Choice Rental Management Logo">
+          <img class="logo" src="https://app.soranapropertymanagers.com/logo.png" alt="Smart Choice Rental Management Logo">
           <h1 class="title">${title}</h1>
         </div>
         <div class="content">
@@ -56,10 +56,10 @@ export const generateStyledTemplate = ({ intro, details, title }: EmailTemplateO
           </div>
         </div>
         <div class="footer">
-          <p>If you have any questions, please <a href="mailto:support@smartchoicerentalmanagement.com">contact our support team</a>.</p>
-          <p>Thank you for choosing Smart Choice Rental Management.</p>
+          <p>If you have any questions, please <a href="mailto:support@soranapropertymanagers.com">contact our support team</a>.</p>
+          <p>Thank you for choosing Sorana Property Managers Ltd.</p>
           
-          <p>&mdash; Smart Choice Rental Management Team</p>
+          <p>&mdash; Sorana Property Managers Team</p>
         </div>
       </div>
     </body>
