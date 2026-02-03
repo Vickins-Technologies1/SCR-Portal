@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     y -= 50;
     page.drawText("Remarks / Payment Instructions:", { x: 50, y, size, font: bold });
     y -= line;
-    page.drawText("Make all checks payable to Smart Choice Rental Management", { x: 50, y, size, font });
+    page.drawText("Make all checks payable to Sorana Property Managers Ltd", { x: 50, y, size, font });
     y -= line;
     page.drawText("M-PESA Paybill: 522533 | Account: " + shortInvoiceNo, { x: 50, y, size, font });
     y -= line;

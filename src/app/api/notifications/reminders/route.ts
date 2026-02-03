@@ -309,7 +309,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               });
 
               await transporter.sendMail({
-                from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+                from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
                 to: tenant.email,
                 subject: emailTitle,
                 html,
