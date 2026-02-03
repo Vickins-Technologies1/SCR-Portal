@@ -189,7 +189,7 @@ export default function TenantDashboardLayout({
             <p className="text-center text-[9px] text-gray-400/60 mt-1">
               Built by{" "}
               <a
-                href="https://vickins-technologies-lv2h.vercel.app/"
+                href="https://vickins-technologies.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-[#03a678] transition-colors underline underline-offset-2 decoration-gray-300/40 hover:decoration-[#03a678]/50"
