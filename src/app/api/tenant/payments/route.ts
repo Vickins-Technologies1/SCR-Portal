@@ -248,11 +248,24 @@ export async function POST(request: NextRequest) {
     if (!phoneNumber) return NextResponse.json({ success: false, message: "Missing phone number" }, { status: 400 });
     if (!reference) return NextResponse.json({ success: false, message: "Missing transaction reference" }, { status: 400 });
 
-    // Validate phone number format
+    // Validate phone number format (supports both 07xxx and 01xxx prefixes)
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
-    if (!/^\+?2547\d{8}$/.test(normalizedPhone)) {
-      logger.error("Invalid phone number format", { phoneNumber: normalizedPhone.replace(/\d{4}$/, "****") });
-      return NextResponse.json({ success: false, message: "Invalid phone number format. Use +2547xxxxxxxx or 07xxxxxxxx" }, { status: 400 });
+
+    // Allow:
+    // +2547xxxxxxxx or +2541xxxxxxxx
+    // 07xxxxxxxx     or 01xxxxxxxx
+    // 7xxxxxxxx      or 1xxxxxxxx   
+    if (!/^\+?254[17]\d{8}$/.test(normalizedPhone)) {
+      logger.error("Invalid phone number format", {
+        phoneNumber: normalizedPhone.replace(/\d{4}$/, "****")
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid phone number format. Use +2547xxxxxxxx, +2541xxxxxxxx, 07xxxxxxxx, or 01xxxxxxxx"
+        },
+        { status: 400 }
+      );
     }
 
     const { db }: { db: Db } = await connectToDatabase();

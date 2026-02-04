@@ -3,23 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import {
-  FaEye,
-  FaEyeSlash,
-  FaGoogle,
-  FaArrowRight,
-  FaCheck,
-  FaTimes,
-  FaChevronDown,
-} from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaCheck, FaTimes, FaChevronDown } from "react-icons/fa";
 import Cookies from "js-cookie";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { countries } from "countries-list";
 
-/* -------------------------------------------------
-   Country data with emoji
-   ------------------------------------------------- */
 interface CountryData {
   name: string;
   native: string;
@@ -63,7 +52,6 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState("");
 
-  // Password strength
   const [criteria, setCriteria] = useState({
     length: false,
     upper: false,
@@ -84,7 +72,6 @@ export default function SignUp() {
   const barColor =
     score === 4 ? "bg-teal-500" : score >= 2 ? "bg-yellow-500" : "bg-red-500";
 
-  // CSRF
   useEffect(() => {
     fetch("/api/csrf-token", { credentials: "include" })
       .then((r) => r.json())
@@ -92,7 +79,6 @@ export default function SignUp() {
       .catch(() => setError("Security token missing"));
   }, []);
 
-  // Country dropdown
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -113,7 +99,6 @@ export default function SignUp() {
     return () => document.removeEventListener("mousedown", handle);
   }, []);
 
-  // Auto-redirect after success
   useEffect(() => {
     if (success) {
       const t = setTimeout(() => router.push("/"), 5000);
@@ -181,47 +166,37 @@ export default function SignUp() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-
-      {/* LEFT: Branding – same as login */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-8 xl:p-12 relative overflow-hidden">
-        {/* Animated bubbles */}
+      {/* LEFT: Branding – hidden on mobile */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-6 xl:p-12 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <motion.div
             className="absolute w-64 h-64 rounded-full bg-gradient-to-br from-teal-400/20 to-cyan-300/10 blur-3xl"
             initial={{ x: "-10%", y: "50%", scale: 1 }}
-            animate={{
-              x: ["-10%", "20%", "-5%"],
-              y: ["50%", "10%", "60%"],
-              scale: [1, 1.1, 1],
-            }}
+            animate={{ x: ["-10%", "20%", "-5%"], y: ["50%", "10%", "60%"], scale: [1, 1.1, 1] }}
             transition={{ duration: 20, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
           />
           <motion.div
             className="absolute w-80 h-80 rounded-full bg-gradient-to-br from-cyan-300/12 to-teal-200/6 blur-2xl"
             initial={{ x: "60%", y: "-20%", scale: 0.95 }}
-            animate={{
-              x: ["60%", "35%", "70%"],
-              y: ["-20%", "15%", "-35%"],
-              scale: [0.95, 1.05, 0.95],
-            }}
+            animate={{ x: ["60%", "35%", "70%"], y: ["-20%", "15%", "-35%"], scale: [0.95, 1.05, 0.95] }}
             transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 5 }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-indigo-950/20" />
         </div>
 
-        <div className="text-center space-y-6 xl:space-y-8 z-10 max-w-md">
+        <div className="text-center space-y-6 xl:space-y-9 z-10 max-w-lg">
           <motion.div
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1, ease: "easeOut" }}
-            className="bg-white/90 backdrop-blur-md rounded-2xl p-5 shadow-xl border border-white/25 inline-block"
+            className="bg-white/90 backdrop-blur-md rounded-2xl p-5 sm:p-6 shadow-2xl border border-white/25 inline-block"
           >
             <Image
               src="/logo.png"
-              alt="Sorana Logo"
+              alt="Sorana"
               width={300}
               height={110}
-              className="mx-auto drop-shadow-xl"
+              className="mx-auto drop-shadow-2xl max-w-[260px] sm:max-w-[300px]"
               priority
             />
           </motion.div>
@@ -229,53 +204,62 @@ export default function SignUp() {
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.7 }}
-            className="text-4xl xl:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-200 via-cyan-100 to-blue-200"
+            transition={{ delay: 0.25, duration: 0.8 }}
+            className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-200 via-cyan-100 to-blue-300"
           >
-            Sorana Property Managers
+            Build Your Future
           </motion.h2>
 
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.7 }}
-            className="text-lg xl:text-xl font-light opacity-90"
+            transition={{ delay: 0.45, duration: 0.8 }}
+            className="text-lg sm:text-xl xl:text-2xl font-light opacity-90 leading-relaxed px-2 sm:px-0"
           >
-            Manage properties. Rent smarter.
+            Create your account in minutes • Unlock powerful portfolio tools •  
+            Track performance, optimize returns, scale with confidence.
+          </motion.p>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.65, duration: 0.8 }}
+            className="text-base sm:text-lg font-medium text-teal-200/90 tracking-wide"
+          >
+            Your properties. Your data. Your advantage.
           </motion.p>
 
           <motion.a
             href="https://soranapropertymanagers.com"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.55 }}
-            className="inline-flex items-center gap-2 text-sm font-medium bg-white/10 backdrop-blur-md border border-white/20 px-5 py-2.5 rounded-full hover:bg-white/15 transition-all"
-            whileHover={{ scale: 1.04 }}
+            transition={{ delay: 0.8 }}
+            className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold bg-white/12 backdrop-blur-lg border border-white/30 px-6 py-3 rounded-full hover:bg-white/20 transition-all shadow-md"
+            whileHover={{ scale: 1.05, boxShadow: "0 10px 30px -10px rgba(45, 212, 191, 0.4)" }}
           >
-            Visit Homepage <FaArrowRight className="text-sm" />
+            See How It Works <FaArrowRight className="text-base sm:text-lg" />
           </motion.a>
         </div>
       </div>
 
-      {/* RIGHT: Form – matched styling with login */}
-      <div className="flex-1 flex items-center justify-center min-h-screen lg:min-h-0 p-5 sm:p-8 md:p-10 lg:p-12 bg-white/40 lg:bg-gradient-to-b lg:from-transparent lg:to-white/30">
+      {/* RIGHT: Form – responsive */}
+      <div className="flex-1 flex items-center justify-center min-h-screen lg:min-h-0 px-5 py-8 sm:px-8 md:px-10 lg:p-12 bg-white/40 lg:bg-gradient-to-b lg:from-transparent lg:to-white/30">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full max-w-[420px] bg-white/75 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-xl border border-white/30 overflow-hidden"
+          className="w-full max-w-md sm:max-w-lg bg-white/75 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-xl border border-white/30 overflow-hidden"
         >
-          {/* Mobile logo */}
-          <div className="flex justify-center lg:hidden pt-7 pb-4">
-            <Image src="/logo.png" alt="Sorana" width={100} height={40} className="drop-shadow-md" />
+          <div className="flex justify-center lg:hidden pt-6 pb-4">
+            <Image src="/logo.png" alt="Sorana" width={100} height={40} className="drop-shadow-md max-w-[200px] w-full" />
           </div>
 
-          <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
+          <div className="px-5 sm:px-8 pt-5 sm:pt-8 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
             <div className="text-center">
-              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-800 to-teal-700 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-800 to-teal-700 bg-clip-text text-transparent leading-tight">
                 Create Property Owner Account
               </h1>
-              <p className="text-gray-600 mt-1.5 text-sm sm:text-base font-medium">
+              <p className="text-gray-600 mt-2 text-sm sm:text-base font-medium">
                 Get started in minutes
               </p>
             </div>
@@ -306,12 +290,12 @@ export default function SignUp() {
               type="button"
               onClick={() => (window.location.href = "/api/auth/google")}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2.5 border border-slate-200 bg-white/85 backdrop-blur-sm text-slate-800 font-medium py-3 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 text-sm sm:text-base"
+              className="w-full flex items-center justify-center gap-2.5 border border-slate-200 bg-white/85 backdrop-blur-sm text-slate-800 font-medium py-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 text-sm sm:text-base min-h-[48px]"
             >
               <FaGoogle className="text-red-500 text-base" /> Continue with Google
             </motion.button>
 
-            <div className="flex items-center gap-3 text-xs text-gray-400">
+            <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-400 my-2">
               <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
               <span className="font-medium">or</span>
               <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
@@ -324,15 +308,14 @@ export default function SignUp() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all text-sm sm:text-base placeholder:text-gray-500 shadow-inner"
+                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
               />
 
-              {/* Phone + Country Selector */}
               <div className="relative" ref={dropdownRef}>
                 <button
                   type="button"
                   onClick={() => setOpen(!open)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-gray-600 z-10 pointer-events-auto"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-gray-600 z-10 pointer-events-auto px-2"
                 >
                   <span className="font-medium">{countryCode}</span>
                   <FaChevronDown className="text-xs" />
@@ -342,11 +325,9 @@ export default function SignUp() {
                   type="tel"
                   placeholder="712345678"
                   value={phone}
-                  onChange={(e) =>
-                    setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))
-                  }
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
                   required
-                  className="w-full pl-24 pr-4 py-3 bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all text-sm sm:text-base placeholder:text-gray-500 shadow-inner"
+                  className="w-full pl-24 pr-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
                 />
 
                 {open && (
@@ -386,7 +367,7 @@ export default function SignUp() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all text-sm sm:text-base placeholder:text-gray-500 shadow-inner"
+                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
               />
 
               <div className="relative">
@@ -396,14 +377,14 @@ export default function SignUp() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 pr-11 bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all text-sm sm:text-base placeholder:text-gray-500 shadow-inner"
+                  className="w-full px-4 py-3.5 pr-11 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600 transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600 transition-colors p-1"
                 >
-                  {showPassword ? <FaEyeSlash size={17} /> : <FaEye size={17} />}
+                  {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
                 </button>
               </div>
 
@@ -413,18 +394,15 @@ export default function SignUp() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all text-sm sm:text-base placeholder:text-gray-500 shadow-inner"
+                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
               />
 
-              {/* Password Strength */}
               <div className="space-y-2 pt-1">
                 <div className="flex gap-1.5">
                   {[...Array(4)].map((_, i) => (
                     <motion.div
                       key={i}
-                      className={`h-1.5 flex-1 rounded-full transition-all ${
-                        i < score ? barColor : "bg-slate-200/70"
-                      }`}
+                      className={`h-1.5 flex-1 rounded-full transition-all ${i < score ? barColor : "bg-slate-200/70"}`}
                       initial={false}
                       animate={{ scale: i < score ? 1.08 : 1 }}
                       transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -433,9 +411,7 @@ export default function SignUp() {
                 </div>
 
                 <div className="flex justify-between text-xs text-gray-600">
-                  <span>
-                    {score === 4 ? "Strong" : score >= 2 ? "Medium" : "Weak"} Password
-                  </span>
+                  <span>{score === 4 ? "Strong" : score >= 2 ? "Medium" : "Weak"} Password</span>
                   <span>{score}/4</span>
                 </div>
 
@@ -447,14 +423,8 @@ export default function SignUp() {
                     { label: "Special character", ok: criteria.special },
                   ].map((c) => (
                     <div key={c.label} className="flex items-center gap-1.5">
-                      {c.ok ? (
-                        <FaCheck className="text-teal-500" size={12} />
-                      ) : (
-                        <FaTimes className="text-gray-400" size={12} />
-                      )}
-                      <span className={c.ok ? "text-teal-700" : "text-gray-500"}>
-                        {c.label}
-                      </span>
+                      {c.ok ? <FaCheck className="text-teal-500" size={12} /> : <FaTimes className="text-gray-400" size={12} />}
+                      <span className={c.ok ? "text-teal-700" : "text-gray-500"}>{c.label}</span>
                     </div>
                   ))}
                 </div>
@@ -465,7 +435,7 @@ export default function SignUp() {
                 whileTap={{ scale: 0.985 }}
                 type="submit"
                 disabled={isLoading || !csrfToken || score < 4}
-                className="w-full bg-gradient-to-r from-blue-600 via-teal-500 to-teal-600 text-white font-semibold py-3 rounded-xl hover:brightness-110 hover:shadow-lg transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-md text-sm sm:text-base tracking-wide mt-2"
+                className="w-full bg-gradient-to-r from-blue-600 via-teal-500 to-teal-600 text-white font-semibold py-3.5 rounded-xl hover:brightness-110 hover:shadow-lg transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-md text-sm sm:text-base tracking-wide min-h-[52px] mt-2"
               >
                 {isLoading ? "Creating Account…" : "Create Account"}
               </motion.button>
@@ -473,28 +443,24 @@ export default function SignUp() {
 
             <p className="text-center text-sm text-gray-600 pt-2">
               Already have an account?{" "}
-              <Link
-                href="/"
-                className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors"
-              >
+              <Link href="/" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors">
                 Sign in
               </Link>
             </p>
           </div>
 
-          {/* Demo section – matched with login */}
-          <div className="px-6 sm:px-8 pb-7 pt-4 border-t border-slate-100 bg-slate-50/50">
+          <div className="px-5 sm:px-8 pb-6 pt-3 border-t border-slate-100 bg-slate-50/50">
             <p className="text-center text-xs text-gray-500 font-medium mb-3">Quick Demo</p>
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <a
                 href="/?demo=owner"
-                className="block text-center bg-gradient-to-r from-blue-600 to-blue-700 text-white py-2.5 sm:py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm"
+                className="block text-center bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
               >
                 Owner Demo
               </a>
               <a
-                href="/?demo=tenant"
-                className="block text-center bg-gradient-to-r from-teal-600 to-teal-700 text-white py-2.5 sm:py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm"
+                href="/tenant-login?demo=tenant"
+                className="block text-center bg-gradient-to-r from-teal-600 to-teal-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
               >
                 Tenant Demo
               </a>

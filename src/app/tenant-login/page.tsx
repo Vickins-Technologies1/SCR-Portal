@@ -8,7 +8,7 @@ import Cookies from "js-cookie";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
-export default function LoginPage() {
+export default function TenantLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,15 +20,15 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get("demo");
 
-    if (demo === "owner") {
-      setEmail("demo@admin.com");
-      setPassword("Demo@2025!");
+    if (demo === "tenant") {
+      setEmail("tenant@demo.com");
+      setPassword("Tenant@2025!");
       setTimeout(() => submitForm(), 400);
     }
   }, []);
 
   const submitForm = () => {
-    const form = document.getElementById("login-form") as HTMLFormElement;
+    const form = document.getElementById("tenant-login-form") as HTMLFormElement;
     form?.requestSubmit();
   };
 
@@ -37,7 +37,7 @@ export default function LoginPage() {
     setError(null);
     setIsLoading(true);
 
-    const payload = { email, password, role: "propertyOwner" };
+    const payload = { email, password, role: "tenant" };
 
     try {
       const res = await fetch("/api/signin", {
@@ -102,9 +102,9 @@ export default function LoginPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.8 }}
-            className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-200 via-cyan-100 to-teal-200"
+            className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-300 via-cyan-200 to-blue-200"
           >
-            Property Intelligence
+            Your Home Portal
           </motion.h2>
 
           <motion.p
@@ -113,17 +113,17 @@ export default function LoginPage() {
             transition={{ delay: 0.45, duration: 0.8 }}
             className="text-lg sm:text-xl xl:text-2xl font-light opacity-90 leading-relaxed px-2 sm:px-0"
           >
-            Real-time portfolio analytics • ROI & cashflow tracking •  
-            Vacancy alerts & predictive insights — built for serious investors.
+            Pay rent effortlessly • Submit maintenance requests •  
+            Stay connected with your property manager — anytime, anywhere.
           </motion.p>
 
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.65, duration: 0.8 }}
-            className="text-base sm:text-lg font-medium text-cyan-200/90 tracking-wide"
+            className="text-base sm:text-lg font-medium text-teal-200/90 tracking-wide"
           >
-            See clearer. Decide smarter. Earn more.
+            Living made simple. Peace of mind included.
           </motion.p>
 
           <motion.a
@@ -132,9 +132,9 @@ export default function LoginPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8 }}
             className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold bg-white/12 backdrop-blur-lg border border-white/30 px-6 py-3 rounded-full hover:bg-white/20 transition-all shadow-md"
-            whileHover={{ scale: 1.05, boxShadow: "0 10px 30px -10px rgba(34, 197, 94, 0.4)" }}
+            whileHover={{ scale: 1.05, boxShadow: "0 10px 30px -10px rgba(45, 212, 191, 0.4)" }}
           >
-            Explore Sorana <FaArrowRight className="text-base sm:text-lg" />
+            Discover Sorana <FaArrowRight className="text-base sm:text-lg" />
           </motion.a>
         </div>
       </div>
@@ -154,7 +154,7 @@ export default function LoginPage() {
           <div className="px-5 sm:px-8 pt-5 sm:pt-8 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
             <div className="text-center">
               <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-800 to-teal-700 bg-clip-text text-transparent">
-                Owner Dashboard
+                Tenant Portal
               </h1>
               <p className="text-gray-600 mt-2 text-sm sm:text-base font-medium">
                 Secure access • Anytime
@@ -171,31 +171,13 @@ export default function LoginPage() {
               </motion.div>
             )}
 
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-center"
-            >
-              <Link
-                href="/tenant-login"
-                className="inline-flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-600/10 to-teal-500/10 border border-teal-500/30 text-teal-700 font-semibold py-3.5 px-6 rounded-xl hover:bg-teal-50 hover:border-teal-400/50 hover:text-teal-800 transition-all duration-300 shadow-sm hover:shadow-md text-sm sm:text-base group min-h-[52px]"
-              >
-                <span>Access Tenant Portal</span>
-                <FaArrowRight className="text-teal-600 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <p className="text-xs sm:text-sm text-gray-500 mt-2">
-                For tenants renting properties
-              </p>
-            </motion.div>
-
             <motion.button
               whileHover={{ scale: 1.015 }}
               whileTap={{ scale: 0.985 }}
               type="button"
-              onClick={() => (window.location.href = "/api/auth/google")}
+              onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2.5 border border-slate-200 bg-white/85 backdrop-blur-sm text-slate-800 font-medium py-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 text-sm sm:text-base min-h-[48px] mt-2"
+              className="w-full flex items-center justify-center gap-2.5 border border-slate-200 bg-white/85 backdrop-blur-sm text-slate-800 font-medium py-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 text-sm sm:text-base min-h-[48px]"
             >
               <FaGoogle className="text-red-500 text-base" /> Continue with Google
             </motion.button>
@@ -206,7 +188,7 @@ export default function LoginPage() {
               <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
             </div>
 
-            <form id="login-form" onSubmit={handleSubmit} className="space-y-4">
+            <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-4">
               <input
                 type="email"
                 placeholder="Email"
@@ -241,31 +223,21 @@ export default function LoginPage() {
                 disabled={isLoading}
                 className="w-full bg-gradient-to-r from-blue-600 via-teal-500 to-teal-600 text-white font-semibold py-3.5 rounded-xl hover:brightness-110 hover:shadow-lg transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-md text-sm sm:text-base tracking-wide min-h-[52px]"
               >
-                {isLoading ? "Authenticating…" : "Access Dashboard"}
+                {isLoading ? "Authenticating…" : "Enter Tenant Portal"}
               </motion.button>
             </form>
-
-            <p className="text-center text-sm text-gray-600 pt-2">
-              New here?{" "}
-              <Link href="/sign-up" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors">
-                Create account
-              </Link>
-            </p>
           </div>
 
           <div className="px-5 sm:px-8 pb-6 pt-3 border-t border-slate-100 bg-slate-50/50">
             <p className="text-center text-xs text-gray-500 font-medium mb-3">Quick Demo</p>
             <div className="grid grid-cols-1 gap-3 max-w-xs mx-auto">
               <a
-                href="/?demo=owner"
-                className="block text-center bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
+                href="/tenant-login?demo=tenant"
+                className="block text-center bg-gradient-to-r from-teal-600 to-teal-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
               >
-                Owner Demo
+                Tenant Demo
               </a>
             </div>
-            <p className="text-center text-xs text-gray-500 mt-3">
-              Looking for tenant access? Use the button above.
-            </p>
           </div>
         </motion.div>
       </div>
