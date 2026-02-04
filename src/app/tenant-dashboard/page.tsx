@@ -62,6 +62,7 @@ interface MonthlyPayment {
   month: string;
   rent: number;
   utility: number;
+  deposit: number;
   total: number;
   paid: boolean;
 }
@@ -364,30 +365,53 @@ export default function TenantDashboardPage() {
         let token = csrfToken || (await fetchCsrfToken());
         if (!token) throw new Error("Failed to get CSRF token");
 
+        // ── 1. Get tenant profile (main source of truth) ────────────────
         const tenantRes = await fetch("/api/tenant/profile", {
           headers: { "X-CSRF-Token": token },
           credentials: "include",
         });
-        if (!tenantRes.ok) throw new Error("Failed to load profile");
-        const tenantData = await tenantRes.json();
-        if (!tenantData.success) throw new Error(tenantData.message || "Profile error");
 
-        setTenant(tenantData.tenant);
+        if (!tenantRes.ok) {
+          throw new Error(`Profile request failed: ${tenantRes.status}`);
+        }
+
+        const tenantData = await tenantRes.json();
+
+        if (!tenantData.success) {
+          throw new Error(tenantData.message || "Failed to load tenant profile");
+        }
+
+        const profileTenant = tenantData.tenant;
+        setTenant(profileTenant);
         setAnalytics(tenantData.analytics || null);
 
-        if (tenantData.tenant.propertyId) {
-          const propRes = await fetch(`/api/properties/${tenantData.tenant.propertyId}`, {
-            headers: { "X-CSRF-Token": token },
-            credentials: "include",
-          });
-          if (propRes.ok) {
-            const propData = await propRes.json();
-            if (propData.success) setProperty(propData.property);
+        // ── 2. Set property from profile response (preferred) ───────────
+        if (tenantData.property) {
+          setProperty(tenantData.property);
+        }
+        // ── 3. Fallback: try direct property endpoint if needed ─────────
+        else if (profileTenant?.propertyId) {
+          try {
+            const propRes = await fetch(`/api/properties/${profileTenant.propertyId}`, {
+              headers: { "X-CSRF-Token": token },
+              credentials: "include",
+            });
+
+            if (propRes.ok) {
+              const propData = await propRes.json();
+              if (propData.success && propData.property) {
+                setProperty(propData.property);
+              }
+            }
+            // silent fail – we already have profile fallback
+          } catch (propErr) {
+            console.warn("[Property fallback fetch failed]", propErr);
           }
         }
 
         await fetchDues(token);
       } catch (err) {
+        console.error("Dashboard load error:", err);
         setError(err instanceof Error ? err.message : "Failed to load dashboard");
       } finally {
         setIsLoading(false);
@@ -471,11 +495,7 @@ export default function TenantDashboardPage() {
         </div>
       )}
 
-      <div
-        className={`
-          ${isImpersonated ? "pt-16 sm:pt-20" : "pt-10 sm:pt-14"}
-        `}
-      >
+      <div className={`${isImpersonated ? "pt-16 sm:pt-20" : "pt-10 sm:pt-14"}`}>
         <section
           className="
             mx-4 sm:mx-6 lg:mx-8
@@ -530,12 +550,21 @@ export default function TenantDashboardPage() {
                     </strong>
                   </p>
                   <p>
-                    Months: <strong>{tenant.monthsStayed ?? "—"}</strong>
+                    Months stayed: <strong>{tenant.monthsStayed ?? "—"}</strong>
                   </p>
                 </div>
               </div>
+            ) : isLoading ? (
+              <div className="text-gray-500 text-sm">Loading property details...</div>
             ) : (
-              <p className="text-gray-500 text-sm">No property assigned</p>
+              <div className="text-amber-700 text-sm">
+                Property information not available
+                {tenant?.propertyId && (
+                  <div className="text-xs mt-1 opacity-80">
+                    (Property ID: {tenant.propertyId.slice(-8)}...)
+                  </div>
+                )}
+              </div>
             )}
           </InfoCard>
 
@@ -546,17 +575,17 @@ export default function TenantDashboardPage() {
                   Status: <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "?"}</Badge>
                 </p>
                 <p>
-                  Rent: <strong>{formatCurrency(tenant.totalRentPaid)}</strong>
+                  Rent paid: <strong>{formatCurrency(tenant.totalRentPaid)}</strong>
                 </p>
                 <p>
-                  Utility: <strong>{formatCurrency(tenant.totalUtilityPaid)}</strong>
+                  Utility paid: <strong>{formatCurrency(tenant.totalUtilityPaid)}</strong>
                 </p>
                 <p>
-                  Deposit: <strong>{formatCurrency(tenant.totalDepositPaid)}</strong>
+                  Deposit paid: <strong>{formatCurrency(tenant.totalDepositPaid)}</strong>
                 </p>
               </div>
             ) : (
-              <p className="text-gray-500 text-sm">No payment data</p>
+              <p className="text-gray-500 text-sm">No payment data available</p>
             )}
           </InfoCard>
 
@@ -564,16 +593,16 @@ export default function TenantDashboardPage() {
             {tenant?.dues ? (
               <div className="space-y-1 text-xs sm:text-sm">
                 <p>
-                  Rent: <strong className="text-red-700">{formatCurrency(tenant.dues.rentDues)}</strong>
+                  Rent due: <strong className="text-red-700">{formatCurrency(tenant.dues.rentDues)}</strong>
                 </p>
                 <p>
-                  Utility: <strong className="text-orange-700">{formatCurrency(tenant.dues.utilityDues)}</strong>
+                  Utility due: <strong className="text-orange-700">{formatCurrency(tenant.dues.utilityDues)}</strong>
                 </p>
                 <p>
-                  Deposit: <strong className="text-purple-700">{formatCurrency(tenant.dues.depositDues)}</strong>
+                  Deposit due: <strong className="text-purple-700">{formatCurrency(tenant.dues.depositDues)}</strong>
                 </p>
                 <p className="mt-2 pt-2 border-t font-semibold text-red-800 text-sm sm:text-base">
-                  Total: {formatCurrency(tenant.dues.totalRemainingDues)}
+                  Total remaining: {formatCurrency(tenant.dues.totalRemainingDues)}
                 </p>
               </div>
             ) : (
@@ -602,6 +631,7 @@ export default function TenantDashboardPage() {
             <PaymentTrendChart data={paymentTrendData} />
             <PaymentBreakdownChart breakdown={paymentBreakdown} />
           </div>
+          
         </section>
       </div>
     </div>

@@ -1,244 +1,309 @@
+// app/tenant-login/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaGoogle } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { motion } from "framer-motion";
-import Link from "next/link";
 
 export default function TenantLoginPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [propertyId, setPropertyId] = useState("");
+  const [properties, setProperties] = useState<
+    { id: string; name: string; address?: string }[]
+  >([]);
+  const [loadingProperties, setLoadingProperties] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const router = useRouter();
 
+  // Fetch available properties
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const demo = params.get("demo");
+    let mounted = true;
 
-    if (demo === "tenant") {
-      setEmail("tenant@demo.com");
-      setPassword("Tenant@2025!");
-      setTimeout(() => submitForm(), 400);
+    async function loadProperties() {
+      try {
+        const res = await fetch("/api/public/properties", {
+          cache: "no-store", // important for fresh list during development
+        });
+
+        if (!res.ok) throw new Error("Failed to load properties");
+
+        const data = await res.json();
+
+        if (data.success && mounted) {
+          setProperties(data.properties || []);
+        } else if (mounted) {
+          setError("Unable to load property list. Please try again.");
+        }
+      } catch (err) {
+        if (mounted) {
+          setError("Connection issue. Please check your internet.");
+        }
+      } finally {
+        if (mounted) setLoadingProperties(false);
+      }
     }
+
+    loadProperties();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const submitForm = () => {
-    const form = document.getElementById("tenant-login-form") as HTMLFormElement;
-    form?.requestSubmit();
-  };
+  // Auto-fill demo credentials
+  useEffect(() => {
+    const demo = searchParams.get("demo");
+    if (demo === "tenant" && properties.length > 0) {
+      setEmail("tenant@demo.com");
+      setPassword("Tenant@2025!");
+      // For demo: pick first property (in real app you might use a known demo property ID)
+      setPropertyId(properties[0]?.id || "");
+    }
+  }, [searchParams, properties]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsLoading(true);
 
-    const payload = { email, password, role: "tenant" };
+    if (!propertyId) {
+      setError("Please select your property");
+      return;
+    }
+
+    if (!email.trim()) {
+      setError("Email is required");
+      return;
+    }
+
+    if (!password) {
+      setError("Password is required");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const payload = {
+      email: email.trim(),
+      password,
+      role: "tenant",
+      propertyId,
+    };
 
     try {
-      const res = await fetch("/api/signin", {
+      const response = await fetch("/api/signin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(payload),
         credentials: "include",
       });
 
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message || "Login failed");
+      const result = await response.json();
 
-      Cookies.set("userId", data.userId, { secure: true, sameSite: "Strict", expires: 7 });
-      Cookies.set("role", data.role, { secure: true, sameSite: "Strict", expires: 7 });
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message ||
+            "Login failed. Please check your credentials and selected property."
+        );
+      }
 
-      router.push(data.redirect || "/dashboard");
+      // Store tokens / session info
+      Cookies.set("userId", result.userId, {
+        expires: 7,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+      });
+
+      Cookies.set("role", result.role, {
+        expires: 7,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+      });
+
+      // Redirect to tenant dashboard
+      router.push(result.redirect || "/tenant-dashboard");
     } catch (err: any) {
-      setError(err.message || "Something went wrong");
+      setError(err.message || "An error occurred. Please try again.");
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-      {/* LEFT: Branding – hidden on mobile */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-6 xl:p-12 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <motion.div
-            className="absolute w-64 h-64 rounded-full bg-gradient-to-br from-teal-400/20 to-cyan-300/10 blur-3xl"
-            initial={{ x: "-10%", y: "50%", scale: 1 }}
-            animate={{ x: ["-10%", "20%", "-5%"], y: ["50%", "10%", "60%"], scale: [1, 1.1, 1] }}
-            transition={{ duration: 20, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* Left side - Branding / Illustration */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-8 xl:p-16 relative overflow-hidden">
+        <div className="absolute inset-0 bg-black/30" />
+        <div className="relative z-10 text-center max-w-xl space-y-8">
+          <Image
+            src="/logo.png"
+            alt="Sorana Property Managers"
+            width={360}
+            height={130}
+            className="mx-auto drop-shadow-2xl"
+            priority
           />
-          <motion.div
-            className="absolute w-80 h-80 rounded-full bg-gradient-to-br from-cyan-300/12 to-teal-200/6 blur-2xl"
-            initial={{ x: "60%", y: "-20%", scale: 0.95 }}
-            animate={{ x: ["60%", "35%", "70%"], y: ["-20%", "15%", "-35%"], scale: [0.95, 1.05, 0.95] }}
-            transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 5 }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-indigo-950/20" />
-        </div>
-
-        <div className="text-center space-y-6 xl:space-y-9 z-10 max-w-lg">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, ease: "easeOut" }}
-            className="bg-white/90 backdrop-blur-md rounded-2xl p-5 sm:p-6 shadow-2xl border border-white/25 inline-block"
-          >
-            <Image
-              src="/logo.png"
-              alt="Sorana"
-              width={300}
-              height={110}
-              className="mx-auto drop-shadow-2xl max-w-[260px] sm:max-w-[300px]"
-              priority
-            />
-          </motion.div>
-
-          <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.8 }}
-            className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-300 via-cyan-200 to-blue-200"
-          >
-            Your Home Portal
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.45, duration: 0.8 }}
-            className="text-lg sm:text-xl xl:text-2xl font-light opacity-90 leading-relaxed px-2 sm:px-0"
-          >
-            Pay rent effortlessly • Submit maintenance requests •  
-            Stay connected with your property manager — anytime, anywhere.
-          </motion.p>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.65, duration: 0.8 }}
-            className="text-base sm:text-lg font-medium text-teal-200/90 tracking-wide"
-          >
-            Living made simple. Peace of mind included.
-          </motion.p>
-
-          <motion.a
-            href="https://soranapropertymanagers.com"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold bg-white/12 backdrop-blur-lg border border-white/30 px-6 py-3 rounded-full hover:bg-white/20 transition-all shadow-md"
-            whileHover={{ scale: 1.05, boxShadow: "0 10px 30px -10px rgba(45, 212, 191, 0.4)" }}
-          >
-            Discover Sorana <FaArrowRight className="text-base sm:text-lg" />
-          </motion.a>
+          <h1 className="text-5xl xl:text-6xl font-black tracking-tight bg-gradient-to-r from-teal-300 via-cyan-200 to-blue-200 bg-clip-text text-transparent">
+            Tenant Portal
+          </h1>
+          <p className="text-xl xl:text-2xl font-light opacity-90">
+            Pay rent • Report issues • View statements • Communicate with your landlord
+          </p>
+          <p className="text-lg font-medium text-teal-200/90 pt-4">
+            Simple. Secure. Always up to date.
+          </p>
         </div>
       </div>
 
-      {/* RIGHT: Form – responsive */}
-      <div className="flex-1 flex items-center justify-center min-h-screen lg:min-h-0 px-5 py-8 sm:px-8 md:px-10 lg:p-12 bg-white/40 lg:bg-gradient-to-b lg:from-transparent lg:to-white/30">
+      {/* Right side - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-gray-50/60">
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full max-w-md sm:max-w-lg bg-white/75 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-xl border border-white/30 overflow-hidden"
+          transition={{ duration: 0.6 }}
+          className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
         >
-          <div className="flex justify-center lg:hidden pt-6 pb-4">
-            <Image src="/logo.png" alt="Sorana" width={100} height={40} className="drop-shadow-md max-w-[200px] w-full" />
-          </div>
-
-          <div className="px-5 sm:px-8 pt-5 sm:pt-8 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
-            <div className="text-center">
-              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-800 to-teal-700 bg-clip-text text-transparent">
-                Tenant Portal
-              </h1>
-              <p className="text-gray-600 mt-2 text-sm sm:text-base font-medium">
-                Secure access • Anytime
-              </p>
+          <div className="p-8 sm:p-10">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-800">Welcome back</h2>
+              <p className="text-gray-600 mt-2">Sign in to access your tenant portal</p>
             </div>
 
             {error && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="p-3 bg-red-50/80 backdrop-blur-sm text-red-700 text-sm rounded-xl border border-red-200/60 text-center"
-              >
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-center text-sm">
                 {error}
-              </motion.div>
+              </div>
             )}
 
-            <motion.button
-              whileHover={{ scale: 1.015 }}
-              whileTap={{ scale: 0.985 }}
-              type="button"
-              onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2.5 border border-slate-200 bg-white/85 backdrop-blur-sm text-slate-800 font-medium py-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 text-sm sm:text-base min-h-[48px]"
-            >
-              <FaGoogle className="text-red-500 text-base" /> Continue with Google
-            </motion.button>
-
-            <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-400 my-2">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
-              <span className="font-medium">or</span>
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
-            </div>
-
-            <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-4">
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
-              />
-
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3.5 pr-11 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600 transition-colors p-1"
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Property selection */}
+              <div>
+                <label
+                  htmlFor="property"
+                  className="block text-sm font-medium text-gray-700 mb-1.5"
                 >
-                  {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
-                </button>
+                  Your Property
+                </label>
+                {loadingProperties ? (
+                  <div className="w-full px-4 py-3.5 bg-gray-100 text-gray-500 rounded-xl border border-gray-200">
+                    Loading properties...
+                  </div>
+                ) : properties.length === 0 ? (
+                  <div className="w-full px-4 py-3.5 bg-yellow-50 text-yellow-800 rounded-xl border border-yellow-200 text-sm">
+                    No properties available. Please contact support.
+                  </div>
+                ) : (
+                  <select
+                    id="property"
+                    value={propertyId}
+                    onChange={(e) => setPropertyId(e.target.value)}
+                    required
+                    disabled={isSubmitting || loadingProperties}
+                    className="w-full px-4 py-3.5 bg-white border border-gray-300 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60 disabled:bg-gray-100"
+                  >
+                    <option value="">Select your property</option>
+                    {properties.map((prop) => (
+                      <option key={prop.id} value={prop.id}>
+                        {prop.name}
+                        {prop.address && ` — ${prop.address}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.015 }}
-                whileTap={{ scale: 0.985 }}
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-600 via-teal-500 to-teal-600 text-white font-semibold py-3.5 rounded-xl hover:brightness-110 hover:shadow-lg transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-md text-sm sm:text-base tracking-wide min-h-[52px]"
-              >
-                {isLoading ? "Authenticating…" : "Enter Tenant Portal"}
-              </motion.button>
-            </form>
-          </div>
+              {/* Email */}
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-gray-700 mb-1.5"
+                >
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={isSubmitting}
+                  className="w-full px-4 py-3.5 bg-white border border-gray-300 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60"
+                />
+              </div>
 
-          <div className="px-5 sm:px-8 pb-6 pt-3 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-center text-xs text-gray-500 font-medium mb-3">Quick Demo</p>
-            <div className="grid grid-cols-1 gap-3 max-w-xs mx-auto">
-              <a
-                href="/tenant-login?demo=tenant"
-                className="block text-center bg-gradient-to-r from-teal-600 to-teal-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
+              {/* Password */}
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-gray-700 mb-1.5"
+                >
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-3.5 pr-12 bg-white border border-gray-300 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    disabled={isSubmitting}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600 disabled:opacity-50"
+                  >
+                    {showPassword ? <FaEyeSlash size={20} /> : <FaEye size={20} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || loadingProperties || !propertyId}
+                className="w-full mt-3 bg-gradient-to-r from-teal-600 to-teal-700 text-white font-semibold py-3.5 rounded-xl hover:brightness-105 hover:shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
               >
-                Tenant Demo
-              </a>
+                {isSubmitting ? "Signing in..." : "Sign In"}
+              </button>
+            </form>
+
+            <div className="mt-8 text-center text-sm text-gray-500">
+              <p>
+                Don't know which property to select?{" "}
+                <span className="text-teal-600 font-medium">
+                  Consult your landlord or property manager
+                </span>
+              </p>
             </div>
           </div>
+
+          {/* Optional Google login - if implemented */}
+          {/* <div className="px-8 sm:px-10 py-5 bg-gray-50 border-t border-gray-100 text-center">
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
+              className="w-full flex items-center justify-center gap-3 border border-gray-300 bg-white py-3 rounded-xl hover:bg-gray-50 transition disabled:opacity-60"
+            >
+              <FaGoogle className="text-red-500" />
+              Continue with Google
+            </button>
+          </div> */}
         </motion.div>
       </div>
     </div>

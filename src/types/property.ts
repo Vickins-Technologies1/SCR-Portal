@@ -29,5 +29,16 @@ export interface Property {
   rentPaymentDate?: number;
   createdAt: Date;
   updatedAt?: Date;
-  tenants?: Tenant[];
+
+  // ───────────────────────────────────────────────────────────────
+  //           NEW: per-property occupied units count
+  //           (recommended — populate this in /api/properties)
+  // ───────────────────────────────────────────────────────────────
+  occupiedUnits?: number;
+
+  // Optional: you can also include these if you want richer frontend display
+  // without extra queries
+  tenants?: Tenant[];                 // already present — good for small lists
+  totalTenants?: number;              // optional summary count
+  vacantUnits?: number;               // optional — can be derived, but useful
 }

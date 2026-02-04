@@ -112,7 +112,6 @@ export async function GET(request: NextRequest) {
   try {
     logger.debug('Handling GET request to /api/properties', { path: request.nextUrl.pathname });
     const { searchParams } = new URL(request.url);
-    // Check for userId, tenantId, or ownerId in query parameters
     const userId = searchParams.get('userId') || searchParams.get('tenantId') || searchParams.get('ownerId');
     const cookieStore = await cookies();
     const role = cookieStore.get('role')?.value;
@@ -152,25 +151,50 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // ────────────────────────────────────────────────────────────────
+    //           PROPERTY OWNER – enriched with occupiedUnits
+    // ────────────────────────────────────────────────────────────────
     if (role === 'propertyOwner') {
       const properties = await db
         .collection<Property>('properties')
         .find({ ownerId: userId })
         .toArray();
+
+      // Enrich each property with occupied units count
+      const enrichedProperties = await Promise.all(
+        properties.map(async (prop) => {
+          const occupiedCount = await db.collection<Tenant>('tenants').countDocuments({
+            propertyId: prop._id.toString(),               // ← adjust field name if different!
+            status: { $in: ['active', 'inactive'] }, // ← adjust statuses to match your Tenant model
+          });
+
+          return {
+            ...prop,
+            _id: prop._id.toString(),
+            createdAt: toISOStringSafe(prop.createdAt, 'property.createdAt'),
+            updatedAt: toISOStringSafe(prop.updatedAt, 'property.updatedAt'),
+            occupiedUnits: occupiedCount,                    // ← the important new field
+          };
+        })
+      );
+
+      logger.info(`Returning ${enrichedProperties.length} properties with occupancy info`, {
+        ownerId: userId,
+        count: enrichedProperties.length,
+      });
+
       return NextResponse.json(
         {
           success: true,
-          properties: properties.map((p) => ({
-            ...p,
-            _id: p._id.toString(),
-            createdAt: toISOStringSafe(p.createdAt, 'property.createdAt'),
-            updatedAt: toISOStringSafe(p.updatedAt, 'property.updatedAt'),
-          })),
+          properties: enrichedProperties,
         },
         { status: 200 }
       );
     }
 
+    // ────────────────────────────────────────────────────────────────
+    //           TENANT – single property (unchanged)
+    // ────────────────────────────────────────────────────────────────
     if (role === 'tenant') {
       const tenant = await db.collection<Tenant>('tenants').findOne({
         _id: new ObjectId(userId),
