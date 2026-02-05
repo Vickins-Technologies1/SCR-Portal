@@ -102,7 +102,7 @@ export default function PaymentsPage() {
     setRole(userRole || null);
     if (!uid || userRole !== "propertyOwner") {
       setError("Unauthorized. Please log in as a property owner.");
-      router.push("/login");
+      router.push("/");
     }
   }, [router]);
 
