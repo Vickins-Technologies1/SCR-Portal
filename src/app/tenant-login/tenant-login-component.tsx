@@ -4,9 +4,10 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash, FaGoogle } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 export default function TenantLoginPage() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function TenantLoginPage() {
     async function loadProperties() {
       try {
         const res = await fetch("/api/public/properties", {
-          cache: "no-store", // important for fresh list during development
+          cache: "no-store",
         });
 
         if (!res.ok) throw new Error("Failed to load properties");
@@ -64,8 +65,11 @@ export default function TenantLoginPage() {
     if (demo === "tenant" && properties.length > 0) {
       setEmail("tenant@demo.com");
       setPassword("Tenant@2025!");
-      // For demo: pick first property (in real app you might use a known demo property ID)
       setPropertyId(properties[0]?.id || "");
+      setTimeout(() => {
+        const form = document.getElementById("tenant-login-form") as HTMLFormElement;
+        form?.requestSubmit();
+      }, 600);
     }
   }, [searchParams, properties]);
 
@@ -100,9 +104,7 @@ export default function TenantLoginPage() {
     try {
       const response = await fetch("/api/signin", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         credentials: "include",
       });
@@ -116,7 +118,6 @@ export default function TenantLoginPage() {
         );
       }
 
-      // Store tokens / session info
       Cookies.set("userId", result.userId, {
         expires: 7,
         secure: process.env.NODE_ENV === "production",
@@ -129,7 +130,6 @@ export default function TenantLoginPage() {
         sameSite: "strict",
       });
 
-      // Redirect to tenant dashboard
       router.push(result.redirect || "/tenant-dashboard");
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
@@ -139,74 +139,221 @@ export default function TenantLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left side - Branding / Illustration */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-8 xl:p-16 relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/30" />
-       <div className="relative z-10 max-w-xl text-center space-y-8">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
+      {/* LEFT: Branding – hidden on mobile – bright with floating bubbles */}
+      <div
+        className="
+          hidden lg:flex lg:w-1/2 
+          bg-gradient-to-br from-white via-slate-50/70 to-white 
+          text-gray-900 items-center justify-center 
+          p-6 xl:p-12 relative overflow-hidden
+          shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
+          lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
+        "
+      >
+        {/* Floating bubbles to fill the section */}
+        <div className="absolute inset-0 pointer-events-none">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1 }}
-            className="bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-white/30 inline-block"
-          >
+            className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-teal-400/12 border border-teal-300/15 backdrop-blur-md"
+            animate={{
+              y: ["0%", "-35%", "15%", "-20%", "0%"],
+              x: ["0%", "12%", "-8%", "5%", "0%"],
+              scale: [1, 1.12, 0.95, 1.08, 1],
+              opacity: [0.7, 0.9, 0.6, 0.85, 0.7],
+            }}
+            transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-blue-400/15 border border-blue-300/20 backdrop-blur-sm"
+            animate={{
+              y: ["0%", "30%", "-25%", "10%", "0%"],
+              x: ["0%", "-10%", "15%", "-5%", "0%"],
+              scale: [1, 1.18, 1, 1.1, 1],
+            }}
+            transition={{ duration: 19, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 3 }}
+          />
+          <motion.div
+            className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-emerald-300/10"
+            animate={{
+              y: ["0%", "-45%", "0%", "-30%", "0%"],
+              x: ["0%", "8%", "-12%", "0%", "0%"],
+              scale: [1, 1.25, 0.9, 1.15, 1],
+            }}
+            transition={{ duration: 26, repeat: Infinity, repeatType: "reverse", delay: 1.5 }}
+          />
+          <motion.div
+            className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-teal-500/12 backdrop-blur-sm"
+            animate={{
+              y: ["0%", "40%", "-15%", "25%", "0%"],
+              scale: [1, 1.2, 1, 1.1, 1],
+            }}
+            transition={{ duration: 17, repeat: Infinity, repeatType: "reverse", delay: 6 }}
+          />
+          <motion.div
+            className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-blue-500/10"
+            animate={{
+              y: ["0%", "-50%", "10%", "-35%", "0%"],
+              x: ["0%", "-15%", "10%", "0%", "0%"],
+            }}
+            transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", delay: 8 }}
+          />
+          <motion.div
+            className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-emerald-400/8 border border-emerald-200/10 backdrop-blur-lg"
+            animate={{
+              y: ["0%", "20%", "-40%", "5%", "0%"],
+              scale: [1, 1.15, 0.95, 1.05, 1],
+            }}
+            transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", delay: 4.5 }}
+          />
+
+          {/* Smaller filler bubbles */}
+          <motion.div className="absolute inset-0 opacity-40">
+            <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-teal-400/20" />
+            <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-blue-400/25" />
+            <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-emerald-300/15" />
+            <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-teal-300/18" />
+            <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-blue-300/12" />
+          </motion.div>
+        </div>
+
+        <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
             <Image
               src="/logo.png"
-              alt="Sorana logo"
-              width={360}
-              height={120}
-              className="mx-auto max-w-[260px] xl:max-w-[320px]"
+              alt="Sorana Property Managers Limited"
+              width={400}
+              height={140}
+              className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
               priority
             />
           </motion.div>
-          <h1 className="text-5xl xl:text-6xl font-black tracking-tight bg-gradient-to-r from-teal-300 via-cyan-200 to-blue-200 bg-clip-text text-transparent">
+
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.9 }}
+            className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-700 via-teal-600 to-blue-600 bg-clip-text text-transparent"
+          >
             Tenant Portal
-          </h1>
-          <p className="text-xl xl:text-2xl font-light opacity-90">
-            Pay rent • Report issues • View statements • Communicate with your landlord
-          </p>
-          <p className="text-lg font-medium text-teal-200/90 pt-4">
-            Simple. Secure. Always up to date.
-          </p>
+          </motion.h2>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.9 }}
+            className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+          >
+            Pay rent • Report issues • View statements • Communicate securely
+          </motion.p>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.55 }}
+            className="text-sm sm:text-base xl:text-lg font-medium text-teal-700 tracking-wide"
+          >
+            Simple. Secure. Always connected.
+          </motion.p>
         </div>
       </div>
 
-      {/* Right side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-gray-50/60">
+      {/* RIGHT: Form – compact & consistent with owner */}
+      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+          transition={{ duration: 0.9, ease: "easeOut" }}
+          className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
         >
-          <div className="p-8 sm:p-10">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800">Welcome back Tenant</h2>
-              <p className="text-gray-600 mt-2">Sign in to access your tenant portal</p>
+          {/* Mobile logo */}
+          <div className="lg:hidden flex justify-center pt-6 pb-4">
+            <Image
+              src="/logo.png"
+              alt="Sorana"
+              width={240}
+              height={80}
+              className="drop-shadow-lg max-w-[180px] xs:max-w-[200px]"
+              priority
+            />
+          </div>
+
+          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
+            <div className="text-center space-y-1">
+              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-teal-700 to-blue-600 bg-clip-text text-transparent">
+                Tenant Portal
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-600 font-medium">
+                Secure access to your rental dashboard
+              </p>
             </div>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-center text-sm">
+              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Property selection */}
+            {/* Owner Portal Link with tooltip */}
+            <div className="relative group">
+              <Link
+                href="/"
+                className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-400 text-blue-800 font-semibold py-3 xs:py-3.5 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-sm xs:text-base"
+              >
+                <FaUserTie className="text-blue-600 text-lg" />
+                <span>I'm a Property Owner</span>
+                <FaArrowRight className="text-blue-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </Link>
+
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                <div className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help">
+                  <FaInfoCircle className="text-blue-600/70 hover:text-blue-700 text-base xs:text-lg transition-colors" />
+                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10">
+                    <div className="bg-slate-800 text-white text-xs rounded-lg py-1.5 px-2.5 min-w-[160px] shadow-lg leading-snug">
+                      For property owners & managers
+                      <br />
+                      <span className="text-teal-300">Manage properties, tenants & finances</span>
+                    </div>
+                    <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-slate-800" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative my-1 sm:my-2">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white/80 px-3 xs:px-4 text-slate-500 font-medium">or</span>
+              </div>
+            </div>
+
+            {/* Google Sign-In (placeholder) */}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="button"
+              onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
+              disabled={isSubmitting}
+              className="w-full flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-medium py-3 xs:py-3.5 rounded-xl transition-all shadow-sm disabled:opacity-60 text-sm xs:text-base"
+            >
+              <FaGoogle className="text-red-500 text-lg" />
+              Continue with Google
+            </motion.button>
+
+            <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
+              {/* Property Selection */}
               <div>
-                <label
-                  htmlFor="property"
-                  className="block text-sm font-medium text-gray-700 mb-1.5"
-                >
+                <label htmlFor="property" className="block text-sm font-medium text-slate-700 mb-1.5">
                   Your Property
                 </label>
                 {loadingProperties ? (
-                  <div className="w-full px-4 py-3.5 bg-gray-100 text-gray-500 rounded-xl border border-gray-200">
+                  <div className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl text-slate-500 text-sm">
                     Loading properties...
                   </div>
                 ) : properties.length === 0 ? (
-                  <div className="w-full px-4 py-3.5 bg-yellow-50 text-yellow-800 rounded-xl border border-yellow-200 text-sm">
-                    No properties available. Please contact support.
+                  <div className="w-full px-3.5 xs:px-4 py-3 bg-yellow-50/70 border border-yellow-200 rounded-xl text-yellow-800 text-sm">
+                    No properties available. Contact support.
                   </div>
                 ) : (
                   <select
@@ -215,7 +362,7 @@ export default function TenantLoginPage() {
                     onChange={(e) => setPropertyId(e.target.value)}
                     required
                     disabled={isSubmitting || loadingProperties}
-                    className="w-full px-4 py-3.5 bg-white border border-gray-300 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60 disabled:bg-gray-100"
+                    className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60 text-sm xs:text-base shadow-inner"
                   >
                     <option value="">Select your property</option>
                     {properties.map((prop) => (
@@ -229,88 +376,68 @@ export default function TenantLoginPage() {
               </div>
 
               {/* Email */}
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-gray-700 mb-1.5"
-                >
-                  Email address
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isSubmitting}
-                  className="w-full px-4 py-3.5 bg-white border border-gray-300 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60"
-                />
-              </div>
+              <input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                disabled={isSubmitting}
+                className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+              />
 
               {/* Password */}
-              <div>
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700 mb-1.5"
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  disabled={isSubmitting}
+                  className="w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
+                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-teal-600 transition-colors"
                 >
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    disabled={isSubmitting}
-                    className="w-full px-4 py-3.5 pr-12 bg-white border border-gray-300 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isSubmitting}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600 disabled:opacity-50"
-                  >
-                    {showPassword ? <FaEyeSlash size={20} /> : <FaEye size={20} />}
-                  </button>
-                </div>
+                  {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                </button>
               </div>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isSubmitting || loadingProperties || !propertyId}
-                className="w-full mt-3 bg-gradient-to-r from-teal-600 to-teal-700 text-white font-semibold py-3.5 rounded-xl hover:brightness-105 hover:shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-md"
+                className="w-full bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white font-semibold py-3 xs:py-3.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide"
               >
-                {isSubmitting ? "Signing in..." : "Sign In"}
-              </button>
+                {isSubmitting ? "Authenticating..." : "Sign In"}
+              </motion.button>
             </form>
 
-            <div className="mt-8 text-center text-sm text-gray-500">
-              <p>
-                Don't know which property to select?{" "}
-                <span className="text-teal-600 font-medium">
-                  Consult your property manager
-                </span>
-              </p>
-            </div>
+            <p className="text-center text-xs sm:text-sm text-slate-600 pt-1">
+              New tenant?{" "}
+              <Link href="/sign-up?role=tenant" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline">
+                Contact your manager
+              </Link>
+            </p>
           </div>
 
-          {/* Optional Google login - if implemented */}
-          {/* <div className="px-8 sm:px-10 py-5 bg-gray-50 border-t border-gray-100 text-center">
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
-              className="w-full flex items-center justify-center gap-3 border border-gray-300 bg-white py-3 rounded-xl hover:bg-gray-50 transition disabled:opacity-60"
+          {/* Quick Demo */}
+          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
+            <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
+            <a
+              href="/tenant-login?demo=tenant"
+              className="block w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold py-3 rounded-xl text-center transition-all shadow-md text-sm xs:text-base"
             >
-              <FaGoogle className="text-red-500" />
-              Continue with Google
-            </button>
-          </div> */}
+              Launch Tenant Demo
+            </a>
+          </div>
         </motion.div>
       </div>
     </div>

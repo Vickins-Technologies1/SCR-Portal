@@ -61,152 +61,223 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
-   {/* LEFT: Branding – hidden on mobile */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950/95 text-white items-center justify-center p-8 xl:p-16 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <motion.div
-            className="absolute -left-20 top-1/4 w-96 h-96 rounded-full bg-teal-400/10 blur-3xl"
-            animate={{ x: [0, 80, 0], y: [0, -40, 0], scale: [1, 1.15, 1] }}
-            transition={{ duration: 18, repeat: Infinity, repeatType: "reverse" }}
-          />
-          <motion.div
-            className="absolute -right-20 bottom-1/4 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl"
-            animate={{ x: [0, -60, 0], y: [0, 50, 0], scale: [1, 1.1, 1] }}
-            transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", delay: 4 }}
-          />
-        </div>
+{/* LEFT: Branding – hidden on mobile – bright bg filled with floating bubbles + subtle elements + right shadow */}
+<div 
+  className="
+    hidden lg:flex lg:w-1/2 
+    bg-gradient-to-br from-white via-slate-50/70 to-white 
+    text-gray-900 items-center justify-center 
+    p-6 xl:p-12 relative overflow-hidden
+    shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
+    lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
+  "
+>
+  {/* Full-section bubble & particle layers – more bubbles to fill the space */}
+  <div className="absolute inset-0 pointer-events-none">
+    {/* Multiple floating bubbles – spread out, different sizes, overlapping paths */}
+    <motion.div
+      className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/12 border border-blue-300/15 backdrop-blur-md"
+      animate={{
+        y: ["0%", "-35%", "15%", "-20%", "0%"],
+        x: ["0%", "12%", "-8%", "5%", "0%"],
+        scale: [1, 1.12, 0.95, 1.08, 1],
+        opacity: [0.7, 0.9, 0.6, 0.85, 0.7],
+      }}
+      transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+    />
+    <motion.div
+      className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-emerald-400/15 border border-emerald-300/20 backdrop-blur-sm"
+      animate={{
+        y: ["0%", "30%", "-25%", "10%", "0%"],
+        x: ["0%", "-10%", "15%", "-5%", "0%"],
+        scale: [1, 1.18, 1, 1.1, 1],
+      }}
+      transition={{ duration: 19, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 3 }}
+    />
+    <motion.div
+      className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-300/10"
+      animate={{
+        y: ["0%", "-45%", "0%", "-30%", "0%"],
+        x: ["0%", "8%", "-12%", "0%", "0%"],
+        scale: [1, 1.25, 0.9, 1.15, 1],
+      }}
+      transition={{ duration: 26, repeat: Infinity, repeatType: "reverse", delay: 1.5 }}
+    />
+    <motion.div
+      className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-blue-500/12 backdrop-blur-sm"
+      animate={{
+        y: ["0%", "40%", "-15%", "25%", "0%"],
+        scale: [1, 1.2, 1, 1.1, 1],
+      }}
+      transition={{ duration: 17, repeat: Infinity, repeatType: "reverse", delay: 6 }}
+    />
+    <motion.div
+      className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-emerald-500/10"
+      animate={{
+        y: ["0%", "-50%", "10%", "-35%", "0%"],
+        x: ["0%", "-15%", "10%", "0%", "0%"],
+      }}
+      transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", delay: 8 }}
+    />
+    <motion.div
+      className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-teal-400/8 border border-teal-200/10 backdrop-blur-lg"
+      animate={{
+        y: ["0%", "20%", "-40%", "5%", "0%"],
+        scale: [1, 1.15, 0.95, 1.05, 1],
+      }}
+      transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", delay: 4.5 }}
+    />
 
-        <div className="relative z-10 max-w-xl text-center space-y-8">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
-            <Image
-              src="/logo.png"
-              alt="Sorana"
-              width={360}
-              height={120}
-              className="mx-auto drop-shadow-2xl max-w-[260px] xl:max-w-[340px]"
-              priority
-            />
-          </motion.div>
+    {/* Additional smaller bubbles to fill gaps and add density */}
+    <motion.div className="absolute inset-0 opacity-40">
+      <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-blue-400/20" />
+      <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-emerald-400/25" />
+      <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-teal-300/15" />
+      <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-blue-300/18" />
+      <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-emerald-300/12" />
+    </motion.div>
 
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.9 }}
-            className="text-4xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-100 via-teal-200 to-blue-200 bg-clip-text text-transparent"
-          >
-            Property Intelligence
-          </motion.h2>
+    {/* Keep subtle flowing lines if desired (optional – comment out if too much now with more bubbles) */}
+    {/* <motion.div className="absolute inset-0 opacity-15">
+      <motion.div
+        className="absolute top-1/4 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-400/30 to-transparent"
+        animate={{ scaleX: [0.5, 1.1, 0.5], x: ["-25%", "25%", "-25%"] }}
+        transition={{ duration: 18, repeat: Infinity, repeatType: "reverse" }}
+      />
+      <motion.div
+        className="absolute bottom-1/4 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent"
+        animate={{ scaleX: [0.7, 1.2, 0.7], x: ["25%", "-25%", "25%"] }}
+        transition={{ duration: 23, repeat: Infinity, repeatType: "reverse", delay: 7 }}
+      />
+    </motion.div> */}
+  </div>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.9 }}
-            className="text-lg xl:text-2xl font-light text-cyan-100/90 leading-relaxed max-w-lg mx-auto"
-          >
-            Real-time analytics • ROI tracking • Predictive vacancy insights
-          </motion.p>
+  <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
+      <Image
+        src="/logo.png"
+        alt="Sorana Property Managers Limited"
+        width={400}
+        height={140}
+        className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
+        priority
+      />
+    </motion.div>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.55 }}
-            className="text-base xl:text-lg font-medium text-teal-200/90 tracking-wide"
-          >
-            See clearer. Decide smarter. Earn more.
-          </motion.p>
-        </div>
-      </div>
+    <motion.h2
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2, duration: 0.9 }}
+      className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-blue-700 via-blue-600 to-emerald-600 bg-clip-text text-transparent"
+    >
+      Property Intelligence
+    </motion.h2>
 
-      {/* RIGHT: Form */}
-      <div className="flex-1 flex items-center justify-center px-5 py-8 sm:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
+    <motion.p
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.4, duration: 0.9 }}
+      className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+    >
+      Real-time analytics • ROI tracking • Predictive vacancy insights
+    </motion.p>
+
+    <motion.p
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.55 }}
+      className="text-sm sm:text-base xl:text-lg font-medium text-emerald-700 tracking-wide"
+    >
+      See clearer. Decide smarter. Earn more.
+    </motion.p>
+  </div>
+</div>
+
+      {/* RIGHT: Form – more compact on small screens */}
+      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: "easeOut" }}
-          className="w-full max-w-md bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
+          className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
         >
-          {/* Mobile logo */}
-          <div className="lg:hidden flex justify-center pt-7 pb-5">
+          {/* Mobile logo – slightly smaller */}
+          <div className="lg:hidden flex justify-center pt-6 pb-4">
             <Image
               src="/logo.png"
               alt="Sorana"
               width={240}
               height={80}
-              className="drop-shadow-lg max-w-[200px] xs:max-w-[220px]"
+              className="drop-shadow-lg max-w-[180px] xs:max-w-[200px]"
               priority
             />
           </div>
 
-          <div className="px-5 xs:px-6 sm:px-10 pt-5 sm:pt-6 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
-            <div className="text-center space-y-1.5">
-              <h1 className="text-2xl xs:text-2.5xl sm:text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-700 to-teal-600 bg-clip-text text-transparent">
+          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
+            <div className="text-center space-y-1">
+              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-700 to-teal-600 bg-clip-text text-transparent">
                 Owner Portal
               </h1>
-              <p className="text-xs xs:text-sm sm:text-base text-slate-600 font-medium">
+              <p className="text-xs sm:text-sm text-slate-600 font-medium">
                 Secure access for property owners
               </p>
             </div>
 
             {error && (
-              <div className="p-3 xs:p-4 bg-red-50 border border-red-200 text-red-700 text-xs xs:text-sm rounded-xl text-center">
+              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
                 {error}
               </div>
             )}
 
-            {/* Tenant Portal Button with Info Tooltip */}
+            {/* Tenant Portal Button */}
             <div className="relative group">
               <Link
                 href="/tenant-login"
-                className="group flex items-center justify-center gap-2.5 xs:gap-3 w-full bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 hover:border-teal-400 text-teal-800 font-semibold py-3.5 xs:py-4 px-5 xs:px-6 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:bg-teal-100/60 active:scale-[0.98] text-sm xs:text-base"
+                className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 hover:border-teal-400 text-teal-800 font-semibold py-3 xs:py-3.5 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-sm xs:text-base"
               >
-                <FaUserTie className="text-teal-600 text-lg xs:text-xl group-hover:scale-110 transition-transform" />
+                <FaUserTie className="text-teal-600 text-lg" />
                 <span>I'm a Tenant</span>
-                <FaArrowRight className="text-teal-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all text-sm xs:text-base" />
+                <FaArrowRight className="text-teal-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </Link>
 
-              {/* Info Icon + Tooltip */}
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <div className="relative flex items-center justify-center w-6 h-6 cursor-help">
-                  <FaInfoCircle className="text-teal-600/70 hover:text-teal-700 text-lg transition-colors" />
-                  
-                  {/* Tooltip */}
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                <div className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help">
+                  <FaInfoCircle className="text-teal-600/70 hover:text-teal-700 text-base xs:text-lg transition-colors" />
                   <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10">
-                    <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[180px] shadow-lg leading-relaxed">
+                    <div className="bg-slate-800 text-white text-xs rounded-lg py-1.5 px-2.5 min-w-[160px] shadow-lg leading-snug">
                       For tenants currently renting a property
                       <br />
                       <span className="text-teal-300">View lease, payments & maintenance requests</span>
                     </div>
-                    {/* Small arrow */}
-                    <div className="absolute bottom-[-6px] right-4 w-0 h-0 border-l-6 border-l-transparent border-r-6 border-r-transparent border-t-6 border-t-slate-800" />
+                    <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-slate-800" />
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="relative my-1.5 sm:my-2">
+            <div className="relative my-1 sm:my-2">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-slate-200" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-white/80 px-4 text-slate-500 font-medium">or</span>
+                <span className="bg-white/80 px-3 xs:px-4 text-slate-500 font-medium">or</span>
               </div>
             </div>
 
-            {/* Google Sign-In */}
+            {/* Google */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="button"
               onClick={() => (window.location.href = "/api/auth/google")}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2.5 xs:gap-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-medium py-3.5 xs:py-4 rounded-xl transition-all shadow-sm disabled:opacity-60 text-sm xs:text-base"
+              className="w-full flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-medium py-3 xs:py-3.5 rounded-xl transition-all shadow-sm disabled:opacity-60 text-sm xs:text-base"
             >
-              <FaGoogle className="text-red-500 text-lg xs:text-xl" />
+              <FaGoogle className="text-red-500 text-lg" />
               Continue with Google
             </motion.button>
 
-            <form id="login-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 pt-1 sm:pt-2">
-              {/* ... rest of the form remains unchanged ... */}
+            <form id="login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
               <input
                 type="email"
                 placeholder="Email address"
@@ -214,7 +285,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="w-full px-4 xs:px-5 py-3.5 xs:py-4 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
               />
 
               <div className="relative">
@@ -225,12 +296,12 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="w-full px-4 xs:px-5 py-3.5 xs:py-4 pr-10 xs:pr-12 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                  className="w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 xs:right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-teal-600 transition-colors"
+                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-teal-600 transition-colors"
                 >
                   {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
                 </button>
@@ -241,13 +312,13 @@ export default function LoginPage() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white font-semibold py-3.5 xs:py-4 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide"
+                className="w-full bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white font-semibold py-3 xs:py-3.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide"
               >
                 {isLoading ? "Authenticating..." : "Sign In"}
               </motion.button>
             </form>
 
-            <p className="text-center text-xs xs:text-sm text-slate-600 pt-2">
+            <p className="text-center text-xs sm:text-sm text-slate-600 pt-1">
               New to Sorana?{" "}
               <Link href="/sign-up" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline">
                 Create account
@@ -255,12 +326,12 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Quick Demo */}
-          <div className="px-5 xs:px-6 sm:px-10 py-5 sm:py-6 border-t border-slate-100 bg-slate-50/70">
-            <p className="text-center text-xs text-slate-500 font-medium mb-3 sm:mb-4">Quick Demo Access</p>
+          {/* Quick Demo – slimmer */}
+          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
+            <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
             <a
               href="/?demo=owner"
-              className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3.5 xs:py-4 rounded-xl text-center transition-all shadow-md text-sm xs:text-base"
+              className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-xl text-center transition-all shadow-md text-sm xs:text-base"
             >
               Launch Owner Demo
             </a>
