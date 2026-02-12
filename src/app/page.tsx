@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -23,7 +23,7 @@ export default function LoginPage() {
     if (demo === "owner") {
       setEmail("demo@admin.com");
       setPassword("Demo@2025!");
-      setTimeout(() => submitForm(), 400);
+      setTimeout(() => submitForm(), 600);
     }
   }, []);
 
@@ -37,13 +37,11 @@ export default function LoginPage() {
     setError(null);
     setIsLoading(true);
 
-    const payload = { email, password, role: "propertyOwner" };
-
     try {
       const res = await fetch("/api/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ email, password, role: "propertyOwner" }),
         credentials: "include",
       });
 
@@ -55,54 +53,46 @@ export default function LoginPage() {
 
       router.push(data.redirect || "/dashboard");
     } catch (err: any) {
-      setError(err.message || "Something went wrong");
+      setError(err.message || "Authentication failed");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-      {/* LEFT: Branding – hidden on mobile */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-6 xl:p-12 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
+   {/* LEFT: Branding – hidden on mobile */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950/95 text-white items-center justify-center p-8 xl:p-16 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
           <motion.div
-            className="absolute w-64 h-64 rounded-full bg-gradient-to-br from-teal-400/20 to-cyan-300/10 blur-3xl"
-            initial={{ x: "-10%", y: "50%", scale: 1 }}
-            animate={{ x: ["-10%", "20%", "-5%"], y: ["50%", "10%", "60%"], scale: [1, 1.1, 1] }}
-            transition={{ duration: 20, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+            className="absolute -left-20 top-1/4 w-96 h-96 rounded-full bg-teal-400/10 blur-3xl"
+            animate={{ x: [0, 80, 0], y: [0, -40, 0], scale: [1, 1.15, 1] }}
+            transition={{ duration: 18, repeat: Infinity, repeatType: "reverse" }}
           />
           <motion.div
-            className="absolute w-80 h-80 rounded-full bg-gradient-to-br from-cyan-300/12 to-teal-200/6 blur-2xl"
-            initial={{ x: "60%", y: "-20%", scale: 0.95 }}
-            animate={{ x: ["60%", "35%", "70%"], y: ["-20%", "15%", "-35%"], scale: [0.95, 1.05, 0.95] }}
-            transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 5 }}
+            className="absolute -right-20 bottom-1/4 w-96 h-96 rounded-full bg-cyan-400/10 blur-3xl"
+            animate={{ x: [0, -60, 0], y: [0, 50, 0], scale: [1, 1.1, 1] }}
+            transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", delay: 4 }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-indigo-950/20" />
         </div>
 
-        <div className="text-center space-y-6 xl:space-y-9 z-10 max-w-lg">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, ease: "easeOut" }}
-            className="bg-white/90 backdrop-blur-md rounded-2xl p-5 sm:p-6 shadow-2xl border border-white/25 inline-block"
-          >
+        <div className="relative z-10 max-w-xl text-center space-y-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
             <Image
               src="/logo.png"
               alt="Sorana"
-              width={300}
-              height={110}
-              className="mx-auto drop-shadow-2xl max-w-[260px] sm:max-w-[300px]"
+              width={360}
+              height={120}
+              className="mx-auto drop-shadow-2xl max-w-[260px] xl:max-w-[340px]"
               priority
             />
           </motion.div>
 
           <motion.h2
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.8 }}
-            className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-200 via-cyan-100 to-teal-200"
+            transition={{ delay: 0.2, duration: 0.9 }}
+            className="text-4xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-100 via-teal-200 to-blue-200 bg-clip-text text-transparent"
           >
             Property Intelligence
           </motion.h2>
@@ -110,110 +100,121 @@ export default function LoginPage() {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.45, duration: 0.8 }}
-            className="text-lg sm:text-xl xl:text-2xl font-light opacity-90 leading-relaxed px-2 sm:px-0"
+            transition={{ delay: 0.4, duration: 0.9 }}
+            className="text-lg xl:text-2xl font-light text-cyan-100/90 leading-relaxed max-w-lg mx-auto"
           >
-            Real-time portfolio analytics • ROI & cashflow tracking •  
-            Vacancy alerts & predictive insights — built for serious investors.
+            Real-time analytics • ROI tracking • Predictive vacancy insights
           </motion.p>
 
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.65, duration: 0.8 }}
-            className="text-base sm:text-lg font-medium text-cyan-200/90 tracking-wide"
+            transition={{ delay: 0.55 }}
+            className="text-base xl:text-lg font-medium text-teal-200/90 tracking-wide"
           >
             See clearer. Decide smarter. Earn more.
           </motion.p>
-
-          <motion.a
-            href="https://soranapropertymanagers.com"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold bg-white/12 backdrop-blur-lg border border-white/30 px-6 py-3 rounded-full hover:bg-white/20 transition-all shadow-md"
-            whileHover={{ scale: 1.05, boxShadow: "0 10px 30px -10px rgba(34, 197, 94, 0.4)" }}
-          >
-            Explore Sorana <FaArrowRight className="text-base sm:text-lg" />
-          </motion.a>
         </div>
       </div>
 
-      {/* RIGHT: Form – responsive */}
-      <div className="flex-1 flex items-center justify-center min-h-screen lg:min-h-0 px-5 py-8 sm:px-8 md:px-10 lg:p-12 bg-white/40 lg:bg-gradient-to-b lg:from-transparent lg:to-white/30">
+      {/* RIGHT: Form */}
+      <div className="flex-1 flex items-center justify-center px-5 py-8 sm:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full max-w-md sm:max-w-lg bg-white/75 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-xl border border-white/30 overflow-hidden"
+          transition={{ duration: 0.9, ease: "easeOut" }}
+          className="w-full max-w-md bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
         >
-          <div className="flex justify-center lg:hidden pt-6 pb-4">
-            <Image src="/logo.png" alt="Sorana" width={100} height={40} className="drop-shadow-md max-w-[200px] w-full" />
+          {/* Mobile logo */}
+          <div className="lg:hidden flex justify-center pt-7 pb-5">
+            <Image
+              src="/logo.png"
+              alt="Sorana"
+              width={240}
+              height={80}
+              className="drop-shadow-lg max-w-[200px] xs:max-w-[220px]"
+              priority
+            />
           </div>
 
-          <div className="px-5 sm:px-8 pt-5 sm:pt-8 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
-            <div className="text-center">
-              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-800 to-teal-700 bg-clip-text text-transparent">
-                Owner Dashboard
+          <div className="px-5 xs:px-6 sm:px-10 pt-5 sm:pt-6 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
+            <div className="text-center space-y-1.5">
+              <h1 className="text-2xl xs:text-2.5xl sm:text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-700 to-teal-600 bg-clip-text text-transparent">
+                Owner Portal
               </h1>
-              <p className="text-gray-600 mt-2 text-sm sm:text-base font-medium">
-                Secure access • Anytime
+              <p className="text-xs xs:text-sm sm:text-base text-slate-600 font-medium">
+                Secure access for property owners
               </p>
             </div>
 
             {error && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="p-3 bg-red-50/80 backdrop-blur-sm text-red-700 text-sm rounded-xl border border-red-200/60 text-center"
-              >
+              <div className="p-3 xs:p-4 bg-red-50 border border-red-200 text-red-700 text-xs xs:text-sm rounded-xl text-center">
                 {error}
-              </motion.div>
+              </div>
             )}
 
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-center"
-            >
+            {/* Tenant Portal Button with Info Tooltip */}
+            <div className="relative group">
               <Link
                 href="/tenant-login"
-                className="inline-flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-600/10 to-teal-500/10 border border-teal-500/30 text-teal-700 font-semibold py-3.5 px-6 rounded-xl hover:bg-teal-50 hover:border-teal-400/50 hover:text-teal-800 transition-all duration-300 shadow-sm hover:shadow-md text-sm sm:text-base group min-h-[52px]"
+                className="group flex items-center justify-center gap-2.5 xs:gap-3 w-full bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 hover:border-teal-400 text-teal-800 font-semibold py-3.5 xs:py-4 px-5 xs:px-6 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:bg-teal-100/60 active:scale-[0.98] text-sm xs:text-base"
               >
-                <span>Access Tenant Portal</span>
-                <FaArrowRight className="text-teal-600 group-hover:translate-x-1 transition-transform" />
+                <FaUserTie className="text-teal-600 text-lg xs:text-xl group-hover:scale-110 transition-transform" />
+                <span>I'm a Tenant</span>
+                <FaArrowRight className="text-teal-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all text-sm xs:text-base" />
               </Link>
-              <p className="text-xs sm:text-sm text-gray-500 mt-2">
-                For tenants renting properties
-              </p>
-            </motion.div>
 
+              {/* Info Icon + Tooltip */}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="relative flex items-center justify-center w-6 h-6 cursor-help">
+                  <FaInfoCircle className="text-teal-600/70 hover:text-teal-700 text-lg transition-colors" />
+                  
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10">
+                    <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[180px] shadow-lg leading-relaxed">
+                      For tenants currently renting a property
+                      <br />
+                      <span className="text-teal-300">View lease, payments & maintenance requests</span>
+                    </div>
+                    {/* Small arrow */}
+                    <div className="absolute bottom-[-6px] right-4 w-0 h-0 border-l-6 border-l-transparent border-r-6 border-r-transparent border-t-6 border-t-slate-800" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative my-1.5 sm:my-2">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white/80 px-4 text-slate-500 font-medium">or</span>
+              </div>
+            </div>
+
+            {/* Google Sign-In */}
             <motion.button
-              whileHover={{ scale: 1.015 }}
-              whileTap={{ scale: 0.985 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               type="button"
               onClick={() => (window.location.href = "/api/auth/google")}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2.5 border border-slate-200 bg-white/85 backdrop-blur-sm text-slate-800 font-medium py-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 text-sm sm:text-base min-h-[48px] mt-2"
+              className="w-full flex items-center justify-center gap-2.5 xs:gap-3 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-medium py-3.5 xs:py-4 rounded-xl transition-all shadow-sm disabled:opacity-60 text-sm xs:text-base"
             >
-              <FaGoogle className="text-red-500 text-base" /> Continue with Google
+              <FaGoogle className="text-red-500 text-lg xs:text-xl" />
+              Continue with Google
             </motion.button>
 
-            <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-400 my-2">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
-              <span className="font-medium">or</span>
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
-            </div>
-
-            <form id="login-form" onSubmit={handleSubmit} className="space-y-4">
+            <form id="login-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 pt-1 sm:pt-2">
+              {/* ... rest of the form remains unchanged ... */}
               <input
                 type="email"
-                placeholder="Email"
+                placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
+                autoComplete="email"
+                className="w-full px-4 xs:px-5 py-3.5 xs:py-4 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
               />
 
               <div className="relative">
@@ -223,49 +224,46 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3.5 pr-11 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
+                  autoComplete="current-password"
+                  className="w-full px-4 xs:px-5 py-3.5 xs:py-4 pr-10 xs:pr-12 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600 transition-colors p-1"
+                  className="absolute right-3 xs:right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-teal-600 transition-colors"
                 >
                   {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
                 </button>
               </div>
 
               <motion.button
-                whileHover={{ scale: 1.015 }}
-                whileTap={{ scale: 0.985 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-600 via-teal-500 to-teal-600 text-white font-semibold py-3.5 rounded-xl hover:brightness-110 hover:shadow-lg transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-md text-sm sm:text-base tracking-wide min-h-[52px]"
+                className="w-full bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white font-semibold py-3.5 xs:py-4 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide"
               >
-                {isLoading ? "Authenticating…" : "Access Dashboard"}
+                {isLoading ? "Authenticating..." : "Sign In"}
               </motion.button>
             </form>
 
-            <p className="text-center text-sm text-gray-600 pt-2">
-              New here?{" "}
-              <Link href="/sign-up" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors">
+            <p className="text-center text-xs xs:text-sm text-slate-600 pt-2">
+              New to Sorana?{" "}
+              <Link href="/sign-up" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline">
                 Create account
               </Link>
             </p>
           </div>
 
-          <div className="px-5 sm:px-8 pb-6 pt-3 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-center text-xs text-gray-500 font-medium mb-3">Quick Demo</p>
-            <div className="grid grid-cols-1 gap-3 max-w-xs mx-auto">
-              <a
-                href="/?demo=owner"
-                className="block text-center bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
-              >
-                Owner Demo
-              </a>
-            </div>
-            <p className="text-center text-xs text-gray-500 mt-3">
-              Looking for tenant access? Use the button above.
-            </p>
+          {/* Quick Demo */}
+          <div className="px-5 xs:px-6 sm:px-10 py-5 sm:py-6 border-t border-slate-100 bg-slate-50/70">
+            <p className="text-center text-xs text-slate-500 font-medium mb-3 sm:mb-4">Quick Demo Access</p>
+            <a
+              href="/?demo=owner"
+              className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3.5 xs:py-4 rounded-xl text-center transition-all shadow-md text-sm xs:text-base"
+            >
+              Launch Owner Demo
+            </a>
           </div>
         </motion.div>
       </div>

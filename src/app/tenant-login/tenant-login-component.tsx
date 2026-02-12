@@ -143,15 +143,22 @@ export default function TenantLoginPage() {
       {/* Left side - Branding / Illustration */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-8 xl:p-16 relative overflow-hidden">
         <div className="absolute inset-0 bg-black/30" />
-        <div className="relative z-10 text-center max-w-xl space-y-8">
-          <Image
-            src="/logo.png"
-            alt="Sorana Property Managers"
-            width={360}
-            height={130}
-            className="mx-auto drop-shadow-2xl"
-            priority
-          />
+       <div className="relative z-10 max-w-xl text-center space-y-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1 }}
+            className="bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-white/30 inline-block"
+          >
+            <Image
+              src="/logo.png"
+              alt="Sorana logo"
+              width={360}
+              height={120}
+              className="mx-auto max-w-[260px] xl:max-w-[320px]"
+              priority
+            />
+          </motion.div>
           <h1 className="text-5xl xl:text-6xl font-black tracking-tight bg-gradient-to-r from-teal-300 via-cyan-200 to-blue-200 bg-clip-text text-transparent">
             Tenant Portal
           </h1>
@@ -174,7 +181,7 @@ export default function TenantLoginPage() {
         >
           <div className="p-8 sm:p-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-800">Welcome back</h2>
+              <h2 className="text-3xl font-bold text-gray-800">Welcome back Tenant</h2>
               <p className="text-gray-600 mt-2">Sign in to access your tenant portal</p>
             </div>
 
