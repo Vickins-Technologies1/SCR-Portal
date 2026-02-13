@@ -2,18 +2,19 @@
 import { ObjectId } from "mongodb";
 
 export interface TeamMember {
-  _id?: string;
-  ownerId: string | ObjectId;   // ← allow both           // ← links to the property owner who created them
+  _id: string | ObjectId;
+  ownerId: string | ObjectId;
   name: string;
-  email: string;                // unique per owner
+  email: string;
   phone?: string;
-  role: "Co-Owner" | "Manager" | "Accountant" | "Assistant" | "Viewer";
+  role: string;
+  teamRole: string;          
   permissions: string[];
-  password: string;             // hashed!
+  password?: string;         
   active: boolean;
-  lastActive?: Date;
   createdAt: Date;
   updatedAt: Date;
+  lastActive?: string;
 }
 
 export interface Expense {

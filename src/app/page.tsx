@@ -41,19 +41,40 @@ export default function LoginPage() {
       const res = await fetch("/api/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, role: "propertyOwner" }),
+        body: JSON.stringify({ email, password }), // Removed role from payload
         credentials: "include",
       });
 
       const data = await res.json();
-      if (!data.success) throw new Error(data.message || "Login failed");
 
-      Cookies.set("userId", data.userId, { secure: true, sameSite: "Strict", expires: 7 });
-      Cookies.set("role", data.role, { secure: true, sameSite: "Strict", expires: 7 });
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Login failed");
+      }
 
-      router.push(data.redirect || "/dashboard");
+      Cookies.set("userId", data.userId, {
+        secure: true,
+        sameSite: "Strict",
+        expires: 7,
+      });
+
+      Cookies.set("role", data.role, {
+        secure: true,
+        sameSite: "Strict",
+        expires: 7,
+      });
+
+      // Optional: store permissions if your backend returns them
+      if (data.permissions) {
+        Cookies.set("permissions", JSON.stringify(data.permissions), {
+          secure: true,
+          sameSite: "Strict",
+          expires: 7,
+        });
+      }
+
+      router.push(data.redirect || "/property-owner-dashboard");
     } catch (err: any) {
-      setError(err.message || "Authentication failed");
+      setError(err.message || "Authentication failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
     }
@@ -61,139 +82,124 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
-{/* LEFT: Branding – hidden on mobile – bright bg filled with floating bubbles + subtle elements + right shadow */}
-<div 
-  className="
-    hidden lg:flex lg:w-1/2 
-    bg-gradient-to-br from-white via-slate-50/70 to-white 
-    text-gray-900 items-center justify-center 
-    p-6 xl:p-12 relative overflow-hidden
-    shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
-    lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
-  "
->
-  {/* Full-section bubble & particle layers – more bubbles to fill the space */}
-  <div className="absolute inset-0 pointer-events-none">
-    {/* Multiple floating bubbles – spread out, different sizes, overlapping paths */}
-    <motion.div
-      className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/12 border border-blue-300/15 backdrop-blur-md"
-      animate={{
-        y: ["0%", "-35%", "15%", "-20%", "0%"],
-        x: ["0%", "12%", "-8%", "5%", "0%"],
-        scale: [1, 1.12, 0.95, 1.08, 1],
-        opacity: [0.7, 0.9, 0.6, 0.85, 0.7],
-      }}
-      transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
-    />
-    <motion.div
-      className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-emerald-400/15 border border-emerald-300/20 backdrop-blur-sm"
-      animate={{
-        y: ["0%", "30%", "-25%", "10%", "0%"],
-        x: ["0%", "-10%", "15%", "-5%", "0%"],
-        scale: [1, 1.18, 1, 1.1, 1],
-      }}
-      transition={{ duration: 19, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 3 }}
-    />
-    <motion.div
-      className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-300/10"
-      animate={{
-        y: ["0%", "-45%", "0%", "-30%", "0%"],
-        x: ["0%", "8%", "-12%", "0%", "0%"],
-        scale: [1, 1.25, 0.9, 1.15, 1],
-      }}
-      transition={{ duration: 26, repeat: Infinity, repeatType: "reverse", delay: 1.5 }}
-    />
-    <motion.div
-      className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-blue-500/12 backdrop-blur-sm"
-      animate={{
-        y: ["0%", "40%", "-15%", "25%", "0%"],
-        scale: [1, 1.2, 1, 1.1, 1],
-      }}
-      transition={{ duration: 17, repeat: Infinity, repeatType: "reverse", delay: 6 }}
-    />
-    <motion.div
-      className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-emerald-500/10"
-      animate={{
-        y: ["0%", "-50%", "10%", "-35%", "0%"],
-        x: ["0%", "-15%", "10%", "0%", "0%"],
-      }}
-      transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", delay: 8 }}
-    />
-    <motion.div
-      className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-teal-400/8 border border-teal-200/10 backdrop-blur-lg"
-      animate={{
-        y: ["0%", "20%", "-40%", "5%", "0%"],
-        scale: [1, 1.15, 0.95, 1.05, 1],
-      }}
-      transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", delay: 4.5 }}
-    />
+      {/* LEFT: Branding – hidden on mobile */}
+      <div
+        className="
+          hidden lg:flex lg:w-1/2 
+          bg-gradient-to-br from-white via-slate-50/70 to-white 
+          text-gray-900 items-center justify-center 
+          p-6 xl:p-12 relative overflow-hidden
+          shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
+          lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
+        "
+      >
+        {/* Floating bubbles */}
+        <div className="absolute inset-0 pointer-events-none">
+          <motion.div
+            className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/12 border border-blue-300/15 backdrop-blur-md"
+            animate={{
+              y: ["0%", "-35%", "15%", "-20%", "0%"],
+              x: ["0%", "12%", "-8%", "5%", "0%"],
+              scale: [1, 1.12, 0.95, 1.08, 1],
+              opacity: [0.7, 0.9, 0.6, 0.85, 0.7],
+            }}
+            transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-emerald-400/15 border border-emerald-300/20 backdrop-blur-sm"
+            animate={{
+              y: ["0%", "30%", "-25%", "10%", "0%"],
+              x: ["0%", "-10%", "15%", "-5%", "0%"],
+              scale: [1, 1.18, 1, 1.1, 1],
+            }}
+            transition={{ duration: 19, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 3 }}
+          />
+          <motion.div
+            className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-300/10"
+            animate={{
+              y: ["0%", "-45%", "0%", "-30%", "0%"],
+              x: ["0%", "8%", "-12%", "0%", "0%"],
+              scale: [1, 1.25, 0.9, 1.15, 1],
+            }}
+            transition={{ duration: 26, repeat: Infinity, repeatType: "reverse", delay: 1.5 }}
+          />
+          <motion.div
+            className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-blue-500/12 backdrop-blur-sm"
+            animate={{
+              y: ["0%", "40%", "-15%", "25%", "0%"],
+              scale: [1, 1.2, 1, 1.1, 1],
+            }}
+            transition={{ duration: 17, repeat: Infinity, repeatType: "reverse", delay: 6 }}
+          />
+          <motion.div
+            className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-emerald-500/10"
+            animate={{
+              y: ["0%", "-50%", "10%", "-35%", "0%"],
+              x: ["0%", "-15%", "10%", "0%", "0%"],
+            }}
+            transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", delay: 8 }}
+          />
+          <motion.div
+            className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-teal-400/8 border border-teal-200/10 backdrop-blur-lg"
+            animate={{
+              y: ["0%", "20%", "-40%", "5%", "0%"],
+              scale: [1, 1.15, 0.95, 1.05, 1],
+            }}
+            transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", delay: 4.5 }}
+          />
 
-    {/* Additional smaller bubbles to fill gaps and add density */}
-    <motion.div className="absolute inset-0 opacity-40">
-      <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-blue-400/20" />
-      <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-emerald-400/25" />
-      <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-teal-300/15" />
-      <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-blue-300/18" />
-      <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-emerald-300/12" />
-    </motion.div>
+          {/* Smaller decorative bubbles */}
+          <motion.div className="absolute inset-0 opacity-40">
+            <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-blue-400/20" />
+            <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-emerald-400/25" />
+            <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-teal-300/15" />
+            <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-blue-300/18" />
+            <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-emerald-300/12" />
+          </motion.div>
+        </div>
 
-    {/* Keep subtle flowing lines if desired (optional – comment out if too much now with more bubbles) */}
-    {/* <motion.div className="absolute inset-0 opacity-15">
-      <motion.div
-        className="absolute top-1/4 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-400/30 to-transparent"
-        animate={{ scaleX: [0.5, 1.1, 0.5], x: ["-25%", "25%", "-25%"] }}
-        transition={{ duration: 18, repeat: Infinity, repeatType: "reverse" }}
-      />
-      <motion.div
-        className="absolute bottom-1/4 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent"
-        animate={{ scaleX: [0.7, 1.2, 0.7], x: ["25%", "-25%", "25%"] }}
-        transition={{ duration: 23, repeat: Infinity, repeatType: "reverse", delay: 7 }}
-      />
-    </motion.div> */}
-  </div>
+        <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
+            <Image
+              src="/logo.png"
+              alt="Sorana Property Managers Limited"
+              width={400}
+              height={140}
+              className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
+              priority
+            />
+          </motion.div>
 
-  <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
-      <Image
-        src="/logo.png"
-        alt="Sorana Property Managers Limited"
-        width={400}
-        height={140}
-        className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
-        priority
-      />
-    </motion.div>
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.9 }}
+            className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-blue-700 via-blue-600 to-emerald-600 bg-clip-text text-transparent"
+          >
+            Property Intelligence
+          </motion.h2>
 
-    <motion.h2
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2, duration: 0.9 }}
-      className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-blue-700 via-blue-600 to-emerald-600 bg-clip-text text-transparent"
-    >
-      Property Intelligence
-    </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.9 }}
+            className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+          >
+            Real-time analytics • ROI tracking • Predictive vacancy insights
+          </motion.p>
 
-    <motion.p
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.4, duration: 0.9 }}
-      className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
-    >
-      Real-time analytics • ROI tracking • Predictive vacancy insights
-    </motion.p>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.55 }}
+            className="text-sm sm:text-base xl:text-lg font-medium text-emerald-700 tracking-wide"
+          >
+            See clearer. Decide smarter. Earn more.
+          </motion.p>
+        </div>
+      </div>
 
-    <motion.p
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.55 }}
-      className="text-sm sm:text-base xl:text-lg font-medium text-emerald-700 tracking-wide"
-    >
-      See clearer. Decide smarter. Earn more.
-    </motion.p>
-  </div>
-</div>
-
-      {/* RIGHT: Form – more compact on small screens */}
+      {/* RIGHT: Form */}
       <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -201,7 +207,7 @@ export default function LoginPage() {
           transition={{ duration: 0.9, ease: "easeOut" }}
           className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
         >
-          {/* Mobile logo – slightly smaller */}
+          {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
             <Image
               src="/logo.png"
@@ -264,7 +270,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Google */}
+            {/* Google Sign In */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -326,7 +332,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Quick Demo – slimmer */}
+          {/* Quick Demo */}
           <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
             <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
             <a

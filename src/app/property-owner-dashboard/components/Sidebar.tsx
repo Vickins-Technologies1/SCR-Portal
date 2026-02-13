@@ -44,7 +44,7 @@ export default function Sidebar() {
   const [name, setName] = useState("User");
   const [mounted, setMounted] = useState(false);
 
-  // Prevent hydration mismatch by only rendering dynamic content after mount
+  // Prevent hydration mismatch - only render after client mount
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -64,11 +64,13 @@ export default function Sidebar() {
     { key: "list-property", href: "/property-owner-dashboard/list-properties", label: "List Property", icon: <PlusCircle size={20} />, requiredPermission: "properties:list_new" },
   ];
 
-  // Filter links – owner sees all, others see only permitted ones
-  const visibleLinks = allLinks.filter((link) => {
-    if (isOwner) return true;
-    return permissions.includes(link.requiredPermission!);
-  });
+  // Only compute filtered links AFTER mount → safe for hydration
+  const visibleLinks = mounted
+    ? allLinks.filter((link) => {
+        if (isOwner) return true;
+        return permissions.includes(link.requiredPermission ?? "");
+      })
+    : []; // empty during SSR → no mismatch
 
   useEffect(() => {
     if (!userId || role !== "propertyOwner") return;
@@ -79,7 +81,7 @@ export default function Sidebar() {
         const data = await res.json();
         if (data.success && data.user?.name) setName(data.user.name);
       } catch (err) {
-        console.error("Failed to fetch user");
+        console.error("Failed to fetch user name:", err);
       }
     };
 
@@ -94,7 +96,7 @@ export default function Sidebar() {
     .toUpperCase()
     .slice(0, 2);
 
-  // Dynamic role label – only render after mount to avoid hydration mismatch
+  // Dynamic role label – only render after mount
   const roleLabel = mounted
     ? (isOwner ? "Property Owner" : role ? role.charAt(0).toUpperCase() + role.slice(1) : "Team Member")
     : "Account";
@@ -135,7 +137,7 @@ export default function Sidebar() {
             </div>
           </div>
 
-          {/* Navigation Links – filtered by permissions */}
+          {/* Navigation Links – only rendered after mount */}
           <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-1.5">
             {visibleLinks.map(({ key, href, label, icon }) => {
               const isActive = pathname === href;

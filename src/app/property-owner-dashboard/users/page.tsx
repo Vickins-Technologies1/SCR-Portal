@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import { Eye, EyeOff } from "lucide-react";
 import {
   Users,
   UserPlus,
@@ -28,29 +29,29 @@ interface TeamMember {
   name: string;
   email: string;
   phone?: string;
-  role: "Co-Owner" | "Manager" | "Accountant" | "Assistant" | "Viewer";
+  teamRole: "Co-Owner" | "Manager" | "Accountant" | "Assistant" | "Viewer";
   permissions: string[];
   active: boolean;
   lastActive?: string;
 }
 
 const AVAILABLE_PERMISSIONS = [
-  { id: "dashboard:view",      label: "Overview (Dashboard)" },
-  { id: "properties:view",     label: "View Properties" },
-  { id: "properties:edit",     label: "Edit Properties" },
+  { id: "dashboard:view", label: "Overview (Dashboard)" },
+  { id: "properties:view", label: "View Properties" },
+  { id: "properties:edit", label: "Edit Properties" },
   { id: "properties:list_new", label: "List New Property" },
-  { id: "tenants:view",        label: "View Tenants" },
-  { id: "tenants:edit",        label: "Manage Tenants" },
-  { id: "payments:view",       label: "View Payments" },
-  { id: "payments:record",     label: "Record Payments" },
-  { id: "expenses:view",       label: "View Expenses" },
-  { id: "expenses:create",     label: "Create Expenses" },
-  { id: "expenses:approve",    label: "Approve Expenses" },
-  { id: "reports:view",        label: "View Reports" },
-  { id: "reports:export",      label: "Export Reports" },
-  { id: "users:view",          label: "View Team Members" },
-  { id: "users:manage",        label: "Manage Team Members" },
-  { id: "settings:view",       label: "Settings" },
+  { id: "tenants:view", label: "View Tenants" },
+  { id: "tenants:edit", label: "Manage Tenants" },
+  { id: "payments:view", label: "View Payments" },
+  { id: "payments:record", label: "Record Payments" },
+  { id: "expenses:view", label: "View Expenses" },
+  { id: "expenses:create", label: "Create Expenses" },
+  { id: "expenses:approve", label: "Approve Expenses" },
+  { id: "reports:view", label: "View Reports" },
+  { id: "reports:export", label: "Export Reports" },
+  { id: "users:view", label: "View Team Members" },
+  { id: "users:manage", label: "Manage Team Members" },
+  { id: "settings:view", label: "Settings" },
 ];
 
 export default function UsersPage() {
@@ -67,11 +68,15 @@ export default function UsersPage() {
     name: "",
     email: "",
     phone: "",
-    role: "Assistant" as TeamMember["role"],
+    teamRole: "Assistant" as TeamMember["teamRole"],
     permissions: [] as string[],
+    password: "",
+    confirmPassword: "",
   });
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Edit modal
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -136,13 +141,13 @@ export default function UsersPage() {
     if (userId && csrfToken) fetchUsers();
   }, [userId, csrfToken, fetchUsers]);
 
-  // Auto-select permissions based on role (for ADD modal)
-  const applyRolePreset = (role: TeamMember["role"]) => {
+  // Auto-select permissions based on teamRole (for ADD modal)
+  const applyRolePreset = (teamRole: TeamMember["teamRole"]) => {
     let preset: string[] = [];
 
-    if (role === "Co-Owner") {
-      preset = AVAILABLE_PERMISSIONS.map((p) => p.id); // full access
-    } else if (role === "Manager") {
+    if (teamRole === "Co-Owner") {
+      preset = AVAILABLE_PERMISSIONS.map((p) => p.id);
+    } else if (teamRole === "Manager") {
       preset = [
         "dashboard:view",
         "properties:view", "properties:edit", "properties:list_new",
@@ -153,14 +158,14 @@ export default function UsersPage() {
         "settings:view",
         "users:view",
       ];
-    } else if (role === "Accountant") {
+    } else if (teamRole === "Accountant") {
       preset = [
         "dashboard:view",
         "payments:view", "payments:record",
         "expenses:view", "expenses:create", "expenses:approve",
         "reports:view", "reports:export",
       ];
-    } else if (role === "Assistant") {
+    } else if (teamRole === "Assistant") {
       preset = [
         "dashboard:view",
         "properties:view",
@@ -169,7 +174,7 @@ export default function UsersPage() {
         "expenses:view",
         "reports:view",
       ];
-    } else if (role === "Viewer") {
+    } else if (teamRole === "Viewer") {
       preset = [
         "dashboard:view",
         "properties:view",
@@ -183,13 +188,25 @@ export default function UsersPage() {
     setAddForm((prev) => ({ ...prev, permissions: preset }));
   };
 
-  // ─── Add Member ────────────────────────────────────────────────────────
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
+
+    if (addForm.password !== addForm.confirmPassword) {
+      setAddError("Passwords do not match");
+      return;
+    }
+
+    if (addForm.password.length < 8) {
+      setAddError("Password must be at least 8 characters long");
+      return;
+    }
+
     setAddSubmitting(true);
 
     try {
+      const { confirmPassword, ...payload } = addForm;
+
       const res = await fetch("/api/team-members", {
         method: "POST",
         headers: {
@@ -199,7 +216,7 @@ export default function UsersPage() {
         credentials: "include",
         body: JSON.stringify({
           ownerId: userId,
-          ...addForm,
+          ...payload,
         }),
       });
 
@@ -208,7 +225,15 @@ export default function UsersPage() {
 
       setMembers((prev) => [...prev, data.member]);
       setIsAddModalOpen(false);
-      setAddForm({ name: "", email: "", phone: "", role: "Assistant", permissions: [] });
+      setAddForm({
+        name: "",
+        email: "",
+        phone: "",
+        teamRole: "Assistant",
+        permissions: [],
+        password: "",
+        confirmPassword: "",
+      });
     } catch (err: any) {
       setAddError(err.message || "Something went wrong");
     } finally {
@@ -216,14 +241,13 @@ export default function UsersPage() {
     }
   };
 
-  // ─── Edit Member ───────────────────────────────────────────────────────
   const openEditModal = (member: TeamMember) => {
     setEditMember(member);
     setEditForm({
       name: member.name,
       email: member.email,
       phone: member.phone || "",
-      role: member.role,
+      teamRole: member.teamRole,
       permissions: [...member.permissions],
       active: member.active,
     });
@@ -266,7 +290,6 @@ export default function UsersPage() {
     }
   };
 
-  // ─── Delete Member ─────────────────────────────────────────────────────
   const handleDeleteMember = async () => {
     if (!deleteConfirmId) return;
 
@@ -287,7 +310,7 @@ export default function UsersPage() {
     }
   };
 
-  const getRoleBadge = (role: string) => {
+  const getRoleBadge = (teamRole: string) => {
     const colors: Record<string, string> = {
       "Co-Owner": "bg-emerald-100 text-emerald-800",
       Manager: "bg-blue-100 text-blue-800",
@@ -296,8 +319,8 @@ export default function UsersPage() {
       Viewer: "bg-gray-100 text-gray-700",
     };
     return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${colors[role] || "bg-gray-100 text-gray-800"}`}>
-        {role}
+      <span className={`px-3 py-1 rounded-full text-xs font-medium ${colors[teamRole] || "bg-gray-100 text-gray-800"}`}>
+        {teamRole}
       </span>
     );
   };
@@ -317,7 +340,15 @@ export default function UsersPage() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => {
-                setAddForm({ name: "", email: "", phone: "", role: "Assistant", permissions: [] });
+                setAddForm({
+                  name: "",
+                  email: "",
+                  phone: "",
+                  teamRole: "Assistant",
+                  permissions: [],
+                  password: "",
+                  confirmPassword: "",
+                });
                 setIsAddModalOpen(true);
               }}
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-lg transition-all"
@@ -377,7 +408,7 @@ export default function UsersPage() {
                       )}
                     </div>
 
-                    <div className="mt-4">{getRoleBadge(member.role)}</div>
+                    <div className="mt-4">{getRoleBadge(member.teamRole)}</div>
 
                     {member.permissions.length > 0 && (
                       <div className="mt-3">
@@ -419,7 +450,7 @@ export default function UsersPage() {
         </main>
       </div>
 
-      {/* ─── ADD MODAL ──────────────────────────────────────────────────────── */}
+      {/* ADD MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <motion.div
@@ -442,7 +473,6 @@ export default function UsersPage() {
                 </div>
               )}
 
-              {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name *</label>
                 <input
@@ -455,7 +485,6 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address *</label>
                 <input
@@ -468,7 +497,6 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone (optional)</label>
                 <input
@@ -480,15 +508,57 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Role */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Login Password *</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={addForm.password}
+                    onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+                    required
+                    minLength={8}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none pr-10"
+                    placeholder="At least 8 characters"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password *</label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={addForm.confirmPassword}
+                    onChange={(e) => setAddForm({ ...addForm, confirmPassword: e.target.value })}
+                    required
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none pr-10"
+                    placeholder="Re-enter password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                  >
+                    {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Primary Role</label>
                 <select
-                  value={addForm.role}
+                  value={addForm.teamRole}
                   onChange={(e) => {
-                    const newRole = e.target.value as TeamMember["role"];
-                    setAddForm({ ...addForm, role: newRole });
-                    applyRolePreset(newRole);
+                    const newTeamRole = e.target.value as TeamMember["teamRole"];
+                    setAddForm({ ...addForm, teamRole: newTeamRole });
+                    applyRolePreset(newTeamRole);
                   }}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
                 >
@@ -500,7 +570,6 @@ export default function UsersPage() {
                 </select>
               </div>
 
-              {/* Permissions */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Granular Permissions</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6">
@@ -551,7 +620,7 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* ─── EDIT MODAL ─────────────────────────────────────────────────────── */}
+      {/* EDIT MODAL */}
       {isEditModalOpen && editMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <motion.div
@@ -574,7 +643,6 @@ export default function UsersPage() {
                 </div>
               )}
 
-              {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name</label>
                 <input
@@ -586,7 +654,6 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
                 <input
@@ -598,7 +665,6 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone (optional)</label>
                 <input
@@ -609,16 +675,13 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Role</label>
                 <select
-                  value={editForm.role || "Assistant"}
+                  value={editForm.teamRole || "Assistant"}
                   onChange={(e) => {
-                    const newRole = e.target.value as TeamMember["role"];
-                    setEditForm({ ...editForm, role: newRole });
-                    // Optional: apply preset for edit modal too
-                    // applyEditRolePreset(newRole);
+                    const newTeamRole = e.target.value as TeamMember["teamRole"];
+                    setEditForm({ ...editForm, teamRole: newTeamRole });
                   }}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
                 >
@@ -630,7 +693,6 @@ export default function UsersPage() {
                 </select>
               </div>
 
-              {/* Permissions */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Permissions</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6">
@@ -681,7 +743,7 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* ─── DELETE CONFIRMATION ────────────────────────────────────────────── */}
+      {/* DELETE CONFIRMATION */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <motion.div
