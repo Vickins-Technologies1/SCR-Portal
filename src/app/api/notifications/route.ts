@@ -122,9 +122,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!["payment", "maintenance", "tenant", "other"].includes(type)) {
       return NextResponse.json({ success: false, message: "Invalid type" }, { status: 400 });
     }
+    
     if (!["app", "sms", "email", "whatsapp", "both"].includes(deliveryMethod)) {
       return NextResponse.json({ success: false, message: "Invalid deliveryMethod" }, { status: 400 });
     }
+
     if (!message && type !== "payment") {
       return NextResponse.json({ success: false, message: "message is required" }, { status: 400 });
     }
@@ -204,7 +206,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           });
 
           await transporter.sendMail({
-            from: `"Smart Choice" <${process.env.SMTP_USER}>`,
+            from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
             to: tenant.email,
             subject: title,
             html,

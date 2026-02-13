@@ -67,7 +67,7 @@ export default function PropertyOwnerDashboard() {
 
   const [chartData, setChartData] = useState<ChartData | null>(null);
 
-  // AUTH & CSRF
+  // ─── AUTH & CSRF ────────────────────────────────────────────────────────────
   useEffect(() => {
     const uid = Cookies.get("userId");
     const role = Cookies.get("role");
@@ -96,7 +96,7 @@ export default function PropertyOwnerDashboard() {
     fetchCsrf();
   }, [router]);
 
-  // FETCH DATA
+  // ─── DATA FETCHING ──────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     if (!userId || !csrfToken) return;
     setIsLoading(true);
@@ -143,7 +143,7 @@ export default function PropertyOwnerDashboard() {
     if (userId && csrfToken) fetchData();
   }, [userId, csrfToken, fetchData]);
 
-  // DERIVED VALUES — purely from server stats
+  // Derived global values
   const totalVacantUnits = Math.max(0, stats.totalUnits - stats.occupiedUnits);
   const vacancyRate = stats.totalUnits > 0
     ? Math.round((totalVacantUnits / stats.totalUnits) * 100)
@@ -240,17 +240,21 @@ export default function PropertyOwnerDashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
                 <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
                   <h2 className="text-lg font-semibold mb-4 text-gray-800">Payment Trends</h2>
-                  <div className="h-80"><Line data={lineData} options={{ responsive: true, maintainAspectRatio: false }} /></div>
+                  <div className="h-80">
+                    <Line data={lineData} options={{ responsive: true, maintainAspectRatio: false }} />
+                  </div>
                 </div>
                 <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
                   <h2 className="text-lg font-semibold mb-4 text-gray-800">Tenant Payment Status</h2>
-                  <div className="h-80"><Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} /></div>
+                  <div className="h-80">
+                    <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} />
+                  </div>
                 </div>
               </div>
 
               <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
 
-              {/* PROPERTIES GRID — FIXED CALCULATIONS */}
+              {/* PROPERTIES GRID ──────────────────────────────────────────────── */}
               <section className="mt-12">
                 <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
                   <Building2 className="h-9 w-9 text-emerald-600" />
@@ -268,18 +272,21 @@ export default function PropertyOwnerDashboard() {
                     {properties.map((property) => {
                       const propertyIdStr = property._id.toString();
 
-                      // Total units from unitTypes — accurate per property
+                      // Total number of units (from unitTypes – this part is correct)
                       const totalUnits = property.unitTypes?.reduce((sum, ut) => sum + (ut.quantity || 0), 0) || 0;
 
-                      // BEST: If your backend sends occupiedUnits per property (recommended)
-                      // Uncomment this if you add it:
-                      // const occupiedUnits = property.occupiedUnits || 0;
+                      // ───────────────────────────────────────────────────────────────
+                      //           PREFERRED: use per-property value from backend
+                      // ───────────────────────────────────────────────────────────────
+                      let occupiedUnits = property.occupiedUnits ?? null;
 
-                      // FALLBACK: Use global ratio (safe but less accurate)
-                      const globalOccupancyRate = stats.totalUnits > 0
-                        ? stats.occupiedUnits / stats.totalUnits
-                        : 0;
-                      const occupiedUnits = Math.round(totalUnits * globalOccupancyRate);
+                      // Temporary fallback using global average (remove once backend is updated)
+                      if (occupiedUnits === null || occupiedUnits === undefined) {
+                        const globalOccupancyRate = stats.totalUnits > 0
+                          ? stats.occupiedUnits / stats.totalUnits
+                          : 0;
+                        occupiedUnits = Math.round(totalUnits * globalOccupancyRate);
+                      }
 
                       const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
                       const occupancyRate = totalUnits > 0
@@ -311,7 +318,7 @@ export default function PropertyOwnerDashboard() {
                             </p>
                           </div>
 
-                          {/* Accurate per-property occupancy ring */}
+                          {/* Occupancy ring */}
                           <div className="absolute top-4 right-4 bg-white rounded-full shadow-2xl p-3 border border-gray-100">
                             <div className="relative w-14 h-14">
                               <svg className="w-full h-full -rotate-90">

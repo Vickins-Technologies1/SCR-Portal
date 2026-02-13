@@ -14,33 +14,61 @@ import {
   Bell,
   BarChart,
   PlusCircle,
+  Receipt,
 } from "lucide-react";
 import Cookies from "js-cookie";
 
 const useAuth = () => {
-  if (typeof window === "undefined") return { userId: null, role: null };
+  if (typeof window === "undefined") return { userId: null, role: null, permissions: [] as string[] };
   return {
     userId: Cookies.get("userId") ?? null,
     role: Cookies.get("role") ?? null,
+    permissions: Cookies.get("permissions")
+      ? JSON.parse(Cookies.get("permissions")!)
+      : [],
   };
+};
+
+type NavLink = {
+  key: string;
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  requiredPermission?: string;
 };
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const { userId, role } = useAuth();
+  const { userId, role, permissions } = useAuth();
   const [name, setName] = useState("User");
+  const [mounted, setMounted] = useState(false);
 
-  const links = [
-    { key: "dashboard", href: "/property-owner-dashboard", label: "Overview", icon: <LayoutDashboard size={20} /> },
-    { key: "properties", href: "/property-owner-dashboard/properties", label: "Properties", icon: <Building2 size={20} /> },
-    { key: "tenants", href: "/property-owner-dashboard/tenants", label: "Tenants", icon: <Users size={20} /> },
-    { key: "payments", href: "/property-owner-dashboard/payments", label: "Payments", icon: <CreditCard size={20} /> },
-    { key: "notifications", href: "/property-owner-dashboard/notifications", label: "Notifications", icon: <Bell size={20} /> },
-    { key: "reports", href: "/property-owner-dashboard/reports", label: "Reports & Invoices", icon: <BarChart size={20} /> },
-    { key: "settings", href: "/property-owner-dashboard/settings", label: "Settings", icon: <Settings size={20} /> },
-    { key: "list-property", href: "/property-owner-dashboard/list-properties", label: "List Property", icon: <PlusCircle size={20} /> },
+  // Prevent hydration mismatch by only rendering dynamic content after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isOwner = role === "propertyOwner";
+
+  const allLinks: NavLink[] = [
+    { key: "dashboard", href: "/property-owner-dashboard", label: "Overview", icon: <LayoutDashboard size={20} />, requiredPermission: "dashboard:view" },
+    { key: "properties", href: "/property-owner-dashboard/properties", label: "Properties", icon: <Building2 size={20} />, requiredPermission: "properties:view" },
+    { key: "tenants", href: "/property-owner-dashboard/tenants", label: "Tenants", icon: <Users size={20} />, requiredPermission: "tenants:view" },
+    { key: "users", href: "/property-owner-dashboard/users", label: "Users", icon: <Users size={20} />, requiredPermission: "users:view" },
+    { key: "payments", href: "/property-owner-dashboard/payments", label: "Payments", icon: <CreditCard size={20} />, requiredPermission: "payments:view" },
+    { key: "expenses", href: "/property-owner-dashboard/expenses", label: "Expenses", icon: <Receipt size={20} />, requiredPermission: "expenses:view" },
+    { key: "notifications", href: "/property-owner-dashboard/notifications", label: "Notifications", icon: <Bell size={20} />, requiredPermission: "notifications:view" },
+    { key: "reports", href: "/property-owner-dashboard/reports", label: "Reports & Invoices", icon: <BarChart size={20} />, requiredPermission: "reports:view" },
+    { key: "settings", href: "/property-owner-dashboard/settings", label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
+    { key: "list-property", href: "/property-owner-dashboard/list-properties", label: "List Property", icon: <PlusCircle size={20} />, requiredPermission: "properties:list_new" },
   ];
+
+  // Filter links – owner sees all, others see only permitted ones
+  const visibleLinks = allLinks.filter((link) => {
+    if (isOwner) return true;
+    return permissions.includes(link.requiredPermission!);
+  });
 
   useEffect(() => {
     if (!userId || role !== "propertyOwner") return;
@@ -65,6 +93,11 @@ export default function Sidebar() {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  // Dynamic role label – only render after mount to avoid hydration mismatch
+  const roleLabel = mounted
+    ? (isOwner ? "Property Owner" : role ? role.charAt(0).toUpperCase() + role.slice(1) : "Team Member")
+    : "Account";
 
   return (
     <>
@@ -97,14 +130,14 @@ export default function Sidebar() {
 
               <span className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-full bg-[#03a678]/10 text-[#03a678]">
                 <span className="h-2 w-2 rounded-full bg-[#03a678] animate-pulse"></span>
-                Property Owner
+                {roleLabel}
               </span>
             </div>
           </div>
 
-          {/* Navigation Links */}
+          {/* Navigation Links – filtered by permissions */}
           <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-1.5">
-            {links.map(({ key, href, label, icon }) => {
+            {visibleLinks.map(({ key, href, label, icon }) => {
               const isActive = pathname === href;
               return (
                 <Link
@@ -124,21 +157,26 @@ export default function Sidebar() {
                 </Link>
               );
             })}
+
+            {visibleLinks.length === 0 && mounted && !isOwner && (
+              <div className="px-5 py-8 text-center text-sm text-gray-500">
+                Your account has limited access.<br />
+                Contact the property owner.
+              </div>
+            )}
           </nav>
 
-          {/* FOOTER – Very small company credit + developer line */}
+          {/* FOOTER */}
           <div className="mt-auto border-t border-gray-200/40 px-6 py-4 bg-gradient-to-t from-gray-50/60 to-transparent">
             <div className="text-center space-y-1">
-              {/* Main brand copyright */}
               <p className="text-[10px] text-gray-400/80 font-light tracking-wide">
                 © {new Date().getFullYear()} Sorana Property Managers Limited
               </p>
 
-              {/* Developer credit – even smaller */}
               <p className="text-[9px] text-gray-400/60 font-light">
                 Developed by{" "}
                 <a
-                  href="https://vickins-technologies.vercel.app/" // ← REPLACE WITH YOUR REAL URL (e.g., https://vickins.vercel.app or https://vickins.tech)
+                  href="https://vickins-technologies.vercel.app/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-400/80 hover:text-[#03a678] transition-colors duration-200 underline underline-offset-2 decoration-gray-300/50 hover:decoration-[#03a678]/60"

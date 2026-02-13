@@ -272,7 +272,8 @@ export async function POST(request: NextRequest) {
     // ────────────────────────────────────────────────
     //          Welcome notifications with password
     // ────────────────────────────────────────────────
-    const loginUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const loginUrl = `${baseUrl}/tenant-login`;
 
     // Short version just for SMS (aim < 160 chars)
     const smsMessage =

@@ -1,9 +1,11 @@
+// src/app/api/signup/route.ts
 import { NextResponse, NextRequest } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import validator from "validator";
 import sanitizeHtml from "sanitize-html";
 import { validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
+import bcrypt from "bcrypt";
 
 // ──────────────────────────────────────────────────────────────
 // In-memory rate limiter (IP-based, 5 attempts / 15 min)
@@ -35,7 +37,7 @@ function customRateLimiter(ip: string): { success: boolean; remaining: number } 
 }
 
 // ──────────────────────────────────────────────────────────────
-// Request body interface (exactly what the front-end sends)
+// Request body interface
 // ──────────────────────────────────────────────────────────────
 interface SignupRequestBody {
   name: string;
@@ -117,8 +119,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ---------- 8. Phone validation (already includes country code) ----------
-    // Accepts: +2547xxxxxxxx or 7xxxxxxxx (Kenyan) – but also any +[code] followed by 6-15 digits
+    // ---------- 8. Phone validation ----------
     if (!/^(\+?\d{1,4})?\d{6,15}$/.test(sanitizedPhone)) {
       logger.warn("Invalid phone", { phone: sanitizedPhone });
       return NextResponse.json(
@@ -162,11 +163,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ---------- 12. Insert new owner ----------
+    // ---------- 12. Hash password ----------
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // ---------- 13. Insert new owner ----------
     const newUser = {
       name: sanitizedName,
       email: sanitizedEmail.toLowerCase(),
-      password: password, // TODO: hash in production!
+      password: hashedPassword, // now securely hashed
       phone: sanitizedPhone,
       role: "propertyOwner",
       createdAt: new Date().toISOString(),
@@ -175,7 +180,7 @@ export async function POST(request: NextRequest) {
     const result = await db.collection("propertyOwners").insertOne(newUser);
     const userId = result.insertedId.toString();
 
-    // ---------- 13. Audit log (success) ----------
+    // ---------- 14. Audit log (success) ----------
     await db.collection("auditLogs").insertOne({
       action: "signup",
       userId,
@@ -187,7 +192,7 @@ export async function POST(request: NextRequest) {
 
     logger.info("Property owner created", { userId, email: sanitizedEmail });
 
-    // ---------- 14. Response with security headers ----------
+    // ---------- 15. Response with security headers ----------
     const response = NextResponse.json(
       {
         success: true,
