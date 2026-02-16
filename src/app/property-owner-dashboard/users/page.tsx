@@ -40,6 +40,15 @@ const AVAILABLE_PERMISSIONS = [
   { id: "properties:view", label: "View Properties" },
   { id: "properties:edit", label: "Edit Properties" },
   { id: "properties:list_new", label: "List New Property" },
+  
+  // Notifications & Communications
+  { id: "notifications:view", label: "View Notifications" },
+  { id: "notifications:send", label: "Send Notifications" },
+  { id: "notifications:manage", label: "Manage/Delete Notifications" },
+  { id: "reminders:view", label: "View Upcoming Reminders" },
+  { id: "reminders:trigger", label: "Trigger/Send Reminders" },
+  { id: "communications:access", label: "Access Communication Tools" },
+  
   { id: "tenants:view", label: "View Tenants" },
   { id: "tenants:edit", label: "Manage Tenants" },
   { id: "payments:view", label: "View Payments" },
@@ -49,9 +58,16 @@ const AVAILABLE_PERMISSIONS = [
   { id: "expenses:approve", label: "Approve Expenses" },
   { id: "reports:view", label: "View Reports" },
   { id: "reports:export", label: "Export Reports" },
+  
+  // Team & Access Management
   { id: "users:view", label: "View Team Members" },
-  { id: "users:manage", label: "Manage Team Members" },
-  { id: "settings:view", label: "Settings" },
+  { id: "users:manage", label: "Manage Team Members (add/edit/delete)" },
+  { id: "roles:manage", label: "Manage Roles & Permissions" },
+  
+  // Settings & Security
+  { id: "settings:view", label: "View Settings" },
+  { id: "settings:edit", label: "Edit Settings" },
+  { id: "security:manage", label: "Manage Security & Access" },
 ];
 
 export default function UsersPage() {
@@ -151,11 +167,13 @@ export default function UsersPage() {
       preset = [
         "dashboard:view",
         "properties:view", "properties:edit", "properties:list_new",
+        "notifications:view", "notifications:send", "notifications:manage",
+        "reminders:view", "reminders:trigger",
         "tenants:view", "tenants:edit",
         "payments:view", "payments:record",
         "expenses:view", "expenses:create", "expenses:approve",
         "reports:view", "reports:export",
-        "settings:view",
+        "settings:view", "settings:edit",
         "users:view",
       ];
     } else if (teamRole === "Accountant") {
@@ -173,6 +191,8 @@ export default function UsersPage() {
         "payments:view",
         "expenses:view",
         "reports:view",
+        "notifications:view",
+        "reminders:view",
       ];
     } else if (teamRole === "Viewer") {
       preset = [
@@ -182,6 +202,8 @@ export default function UsersPage() {
         "payments:view",
         "expenses:view",
         "reports:view",
+        "notifications:view",
+        "reminders:view",
       ];
     }
 

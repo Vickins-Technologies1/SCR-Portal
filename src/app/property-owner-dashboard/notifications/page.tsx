@@ -215,11 +215,16 @@ export default function NotificationsPage() {
 
     if (!ownerIdToUse) {
       setError("Could not determine property owner. Please log in again.");
+      router.push("/login");
       return;
     }
 
     setEffectiveOwnerId(ownerIdToUse);
-  }, [router]);
+
+    const storedCsrfToken = Cookies.get("csrfToken") ?? null;
+    setCsrfToken(storedCsrfToken);
+    if (!storedCsrfToken) fetchCsrfToken();
+  }, [router, fetchCsrfToken]);
 
   const fetchTenantsAndPayments = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
@@ -489,28 +494,11 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => {
-    const uid = Cookies.get("userId") ?? null;
-    const role = Cookies.get("role");
-    const originalRole = Cookies.get("originalRole");
-    const originalUserId = Cookies.get("originalUserId");
-    const storedCsrfToken = Cookies.get("csrfToken") ?? null;
-
-    if (!uid || !role || (role !== "propertyOwner" && !(originalRole === "propertyOwner" && originalUserId))) {
-      setError("Please log in as a property owner.");
-      return;
-    }
-
-    setUserId(uid);
-    setCsrfToken(storedCsrfToken);
-    if (!storedCsrfToken) fetchCsrfToken();
-  }, [fetchCsrfToken]);
-
-  useEffect(() => {
     if (effectiveOwnerId && csrfToken) {
       fetchTenantsAndPayments();
       fetchNotifications();
     }
-  }, [effectiveOwnerId, csrfToken, fetchTenantsAndPayments, fetchNotifications]);
+  }, [effectiveOwnerId, csrfToken]);
 
   const openNotificationDetails = useCallback((notification: Notification) => {
     setSelectedNotification(notification);
