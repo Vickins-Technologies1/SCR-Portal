@@ -1,4 +1,3 @@
-// src/app/property-owner-dashboard/page.tsx
 "use client";
 
 import { Inter } from "next/font/google";
@@ -46,7 +45,12 @@ interface ChartData {
 
 export default function PropertyOwnerDashboard() {
   const router = useRouter();
-  const [userId, setUserId] = useState<string | null>(null);
+
+  // Read cookies directly (stable values – no need for state if they don't change)
+  const loggedInUserId = Cookies.get("userId") ?? null;
+  const role = Cookies.get("role") ?? null;
+  const ownerIdFromCookie = Cookies.get("ownerId") ?? null;
+
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -67,17 +71,39 @@ export default function PropertyOwnerDashboard() {
 
   const [chartData, setChartData] = useState<ChartData | null>(null);
 
-  // ─── AUTH & CSRF ────────────────────────────────────────────────────────────
+  // ─── AUTH CHECK & CSRF + determine correct ownerId ───────────────────────────
   useEffect(() => {
-    const uid = Cookies.get("userId");
-    const role = Cookies.get("role");
-    if (!uid || role !== "propertyOwner") {
+    if (!loggedInUserId) {
+      router.replace("/login"); // or "/" – your choice
+      return;
+    }
+
+    // Only allow property owners and team members
+    if (!["propertyOwner", "teamMember"].includes(role ?? "")) {
       router.replace("/login");
       return;
     }
-    setUserId(uid);
 
-    const fetchCsrf = async () => {
+    // Determine which owner's data to show
+    // ──────────────────────────────────────────────────────────────
+    // CHANGE HERE: team members → always prefer ownerIdFromCookie if it exists
+    //              (this is the key fix — use the real owner's ID)
+    // ──────────────────────────────────────────────────────────────
+    const effectiveOwnerId =
+      role === "propertyOwner"
+        ? loggedInUserId
+        : ownerIdFromCookie || loggedInUserId; // fallback only if no ownerId cookie
+
+    if (!effectiveOwnerId) {
+      console.warn("No valid ownerId found for dashboard data");
+      setError("Session error: Cannot determine property owner. Please log in again.");
+      return;
+    }
+
+    // Store effective ownerId for data fetching
+    // We use state here only if you need reactivity (optional)
+    // You could also just use a ref or direct variable if preferred
+    const fetchCsrfAndData = async () => {
       let token = Cookies.get("csrf-token");
       if (!token) {
         try {
@@ -92,34 +118,47 @@ export default function PropertyOwnerDashboard() {
         }
       }
       setCsrfToken(token || null);
+
+      // Now that we have ownerId and csrfToken, we can fetch data
+      // (fetchData will be called in next useEffect)
     };
-    fetchCsrf();
-  }, [router]);
+
+    fetchCsrfAndData();
+  }, [loggedInUserId, role, ownerIdFromCookie, router]);
 
   // ─── DATA FETCHING ──────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    // We need both ownerId and csrfToken
+    const effectiveOwnerId =
+      role === "propertyOwner"
+        ? loggedInUserId
+        : ownerIdFromCookie || loggedInUserId; // ← same logic here for consistency
+
+    if (!effectiveOwnerId || !csrfToken) return;
+
     setIsLoading(true);
     setError(null);
 
     try {
+      const headers = { "x-csrf-token": csrfToken };
+
       const [propsRes, statsRes, chartsRes] = await Promise.all([
-        fetch(`/api/properties?userId=${userId}`, {
-          headers: { "x-csrf-token": csrfToken },
+        fetch(`/api/properties?userId=${effectiveOwnerId}`, {
+          headers,
           credentials: "include",
         }),
-        fetch(`/api/ownerstats?userId=${userId}`, {
-          headers: { "x-csrf-token": csrfToken },
+        fetch(`/api/ownerstats?userId=${effectiveOwnerId}`, {
+          headers,
           credentials: "include",
         }),
-        fetch(`/api/ownercharts?propertyOwnerId=${userId}`, {
-          headers: { "x-csrf-token": csrfToken },
+        fetch(`/api/ownercharts?propertyOwnerId=${effectiveOwnerId}`, {
+          headers,
           credentials: "include",
         }),
       ]);
 
       if (!propsRes.ok || !statsRes.ok || !chartsRes.ok) {
-        throw new Error("Failed to fetch data");
+        throw new Error("One or more dashboard API calls failed");
       }
 
       const [propsData, statsData, chartsData] = await Promise.all([
@@ -132,50 +171,82 @@ export default function PropertyOwnerDashboard() {
       setStats(statsData.success ? statsData.stats : stats);
       setChartData(chartsData.success ? chartsData.chartData : null);
     } catch (err) {
-      setError("Failed to load dashboard data.");
-      console.error(err);
+      console.error("Dashboard fetch error:", err);
+      setError("Failed to load dashboard data. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  }, [userId, csrfToken]);
+  }, [loggedInUserId, role, ownerIdFromCookie, csrfToken]);
 
+  // Trigger data fetch when we have ownerId & csrfToken
   useEffect(() => {
-    if (userId && csrfToken) fetchData();
-  }, [userId, csrfToken, fetchData]);
+    const effectiveOwnerId =
+      role === "propertyOwner"
+        ? loggedInUserId
+        : ownerIdFromCookie || loggedInUserId;
 
-  // Derived global values
+    if (effectiveOwnerId && csrfToken) {
+      fetchData();
+    }
+  }, [loggedInUserId, role, ownerIdFromCookie, csrfToken, fetchData]);
+
+  // Derived values
   const totalVacantUnits = Math.max(0, stats.totalUnits - stats.occupiedUnits);
-  const vacancyRate = stats.totalUnits > 0
-    ? Math.round((totalVacantUnits / stats.totalUnits) * 100)
-    : 0;
+  const vacancyRate =
+    stats.totalUnits > 0 ? Math.round((totalVacantUnits / stats.totalUnits) * 100) : 0;
 
   const pieData = {
     labels: ["Current", "Overdue", "Lease Expired"],
-    datasets: [{
-      data: [
-        Math.max(0, stats.totalTenants - stats.overduePayments),
-        stats.overduePayments,
-        0,
-      ],
-      backgroundColor: ["#10b981", "#ef4444", "#6b7280"],
-      borderWidth: 0,
-      hoverOffset: 16,
-    }],
+    datasets: [
+      {
+        data: [
+          Math.max(0, stats.totalTenants - stats.overduePayments),
+          stats.overduePayments,
+          0,
+        ],
+        backgroundColor: ["#10b981", "#ef4444", "#6b7280"],
+        borderWidth: 0,
+        hoverOffset: 16,
+      },
+    ],
   };
 
   const lineData = {
     labels: chartData?.months || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
     datasets: [
-      { label: "Rent", data: chartData?.rentPayments || [], borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,0.1)", fill: true, tension: 0.4 },
-      { label: "Utility", data: chartData?.utilityPayments || [], borderColor: "#ec4899", backgroundColor: "rgba(236,72,153,0.1)", fill: true, tension: 0.4 },
-      { label: "Deposit", data: chartData?.depositPayments || [], borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.1)", fill: true, tension: 0.4 },
+      {
+        label: "Rent",
+        data: chartData?.rentPayments || [],
+        borderColor: "#2563eb",
+        backgroundColor: "rgba(37,99,235,0.1)",
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: "Utility",
+        data: chartData?.utilityPayments || [],
+        borderColor: "#ec4899",
+        backgroundColor: "rgba(236,72,153,0.1)",
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: "Deposit",
+        data: chartData?.depositPayments || [],
+        borderColor: "#10b981",
+        backgroundColor: "rgba(16,185,129,0.1)",
+        fill: true,
+        tension: 0.4,
+      },
     ],
   };
 
+  // ─── RENDER ─────────────────────────────────────────────────────────────────
   return (
     <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
       <Navbar />
       <Sidebar />
+
       <div className="md:ml-72 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
         <main className="max-w-7xl mx-auto">
           <div className="flex items-center gap-1 mb-8 mt-6">
@@ -252,9 +323,14 @@ export default function PropertyOwnerDashboard() {
                 </div>
               </div>
 
-              <MaintenanceRequests userId={userId!} csrfToken={csrfToken!} properties={properties} />
+              {/* MAINTENANCE REQUESTS */}
+              <MaintenanceRequests
+                userId={ownerIdFromCookie || loggedInUserId!}
+                csrfToken={csrfToken!}
+                properties={properties}
+              />
 
-              {/* PROPERTIES GRID ──────────────────────────────────────────────── */}
+              {/* PROPERTIES GRID */}
               <section className="mt-12">
                 <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
                   <Building2 className="h-9 w-9 text-emerald-600" />
@@ -265,22 +341,21 @@ export default function PropertyOwnerDashboard() {
                   <div className="text-center py-32 bg-white/70 backdrop-blur-sm rounded-3xl shadow-inner border border-white/20">
                     <div className="w-32 h-32 mx-auto bg-gray-200 border-2 border-dashed rounded-xl mb-8" />
                     <p className="text-2xl font-semibold text-gray-700">No properties yet</p>
-                    <p className="text-gray-500 mt-3 text-lg">Add your first property to get started</p>
+                    <p className="text-gray-500 mt-3 text-lg">
+                      {role === "propertyOwner"
+                        ? "Add your first property to get started"
+                        : "Ask the property owner to grant you access to properties"}
+                    </p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-7">
                     {properties.map((property) => {
                       const propertyIdStr = property._id.toString();
 
-                      // Total number of units (from unitTypes – this part is correct)
                       const totalUnits = property.unitTypes?.reduce((sum, ut) => sum + (ut.quantity || 0), 0) || 0;
 
-                      // ───────────────────────────────────────────────────────────────
-                      //           PREFERRED: use per-property value from backend
-                      // ───────────────────────────────────────────────────────────────
                       let occupiedUnits = property.occupiedUnits ?? null;
 
-                      // Temporary fallback using global average (remove once backend is updated)
                       if (occupiedUnits === null || occupiedUnits === undefined) {
                         const globalOccupancyRate = stats.totalUnits > 0
                           ? stats.occupiedUnits / stats.totalUnits
@@ -324,7 +399,8 @@ export default function PropertyOwnerDashboard() {
                               <svg className="w-full h-full -rotate-90">
                                 <circle cx="50%" cy="50%" r="38%" stroke="#e5e7eb" strokeWidth="8" fill="none" />
                                 <circle
-                                  cx="50%" cy="50%"
+                                  cx="50%"
+                                  cy="50%"
                                   r="38%"
                                   stroke="#10b981"
                                   strokeWidth="9"

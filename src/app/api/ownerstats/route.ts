@@ -1,5 +1,3 @@
-// src/app/api/ownerstats/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
@@ -31,18 +29,53 @@ interface Stats {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
+  const requestedOwnerId = searchParams.get("userId");
 
-  if (!userId) {
+  if (!requestedOwnerId) {
     return NextResponse.json({ success: false, message: "userId is required" }, { status: 400 });
   }
 
-  if (!ObjectId.isValid(userId)) {
+  if (!ObjectId.isValid(requestedOwnerId)) {
     return NextResponse.json({ success: false, message: "Invalid userId format" }, { status: 400 });
   }
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+  }
+
+  const cookies = request.cookies;
+  const role = cookies.get("role")?.value;
+  const loggedInUserId = cookies.get("userId")?.value;
+
+  let authorized = false;
+  let effectiveOwnerId = requestedOwnerId;
+
+  if (role === "propertyOwner") {
+    if (loggedInUserId === requestedOwnerId) {
+      authorized = true;
+    }
+  } else if (role === "teamMember") {
+    if (!loggedInUserId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const { db } = await connectToDatabase();
+    const teamMember = await db.collection("teamMembers").findOne({
+      _id: new ObjectId(loggedInUserId),
+      ownerId: new ObjectId(requestedOwnerId),
+      active: true,
+    });
+
+    if (teamMember) {
+      authorized = true;
+    }
+  }
+
+  if (!authorized) {
+    return NextResponse.json(
+      { success: false, message: "Unauthorized: You do not have access to this owner's data" },
+      { status: 403 }
+    );
   }
 
   try {
@@ -51,7 +84,7 @@ export async function GET(request: NextRequest) {
     // Fetch properties for the owner
     const properties = await db
       .collection("properties")
-      .find<WithId<Property>>({ ownerId: userId })
+      .find<WithId<Property>>({ ownerId: effectiveOwnerId })
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
 
@@ -78,7 +111,7 @@ export async function GET(request: NextRequest) {
     const totalUnitsResult = await db
       .collection("properties")
       .aggregate<{ totalUnits: number }>([
-        { $match: { ownerId: userId } },
+        { $match: { ownerId: effectiveOwnerId } },
         { $unwind: "$unitTypes" },
         {
           $group: {
@@ -220,7 +253,7 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalUtilityPaid = utilityPaymentsResult[0]?.totalUtilityPaid || 0;
 
-    // === Overdue Logic (unchanged — your existing correct logic) ===
+    // === Overdue Logic ===
     const tenantDuesResult = await db
       .collection("tenants")
       .aggregate<{
@@ -298,7 +331,7 @@ export async function GET(request: NextRequest) {
       await db.collection("tenants").bulkWrite(bulkOps);
     }
 
-    // Final stats — now 100% accurate
+    // Final stats
     const stats: Stats = {
       activeProperties: properties.length,
       totalTenants,

@@ -12,18 +12,53 @@ interface ChartData {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const propertyOwnerId = searchParams.get("propertyOwnerId");
+  const requestedOwnerId = searchParams.get("propertyOwnerId");
 
-  if (!propertyOwnerId) {
+  if (!requestedOwnerId) {
     return NextResponse.json({ success: false, message: "propertyOwnerId is required" }, { status: 400 });
   }
 
-  if (!ObjectId.isValid(propertyOwnerId)) {
+  if (!ObjectId.isValid(requestedOwnerId)) {
     return NextResponse.json({ success: false, message: "Invalid propertyOwnerId format" }, { status: 400 });
   }
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+  }
+
+  const cookies = request.cookies;
+  const role = cookies.get("role")?.value;
+  const loggedInUserId = cookies.get("userId")?.value;
+
+  let authorized = false;
+  let effectiveOwnerId = requestedOwnerId;
+
+  if (role === "propertyOwner") {
+    if (loggedInUserId === requestedOwnerId) {
+      authorized = true;
+    }
+  } else if (role === "teamMember") {
+    if (!loggedInUserId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const { db } = await connectToDatabase();
+    const teamMember = await db.collection("teamMembers").findOne({
+      _id: new ObjectId(loggedInUserId),
+      ownerId: new ObjectId(requestedOwnerId),
+      active: true,
+    });
+
+    if (teamMember) {
+      authorized = true;
+    }
+  }
+
+  if (!authorized) {
+    return NextResponse.json(
+      { success: false, message: "Unauthorized: You do not have access to this owner's data" },
+      { status: 403 }
+    );
   }
 
   try {
@@ -32,7 +67,7 @@ export async function GET(request: NextRequest) {
     // Fetch properties for the owner
     const properties = await db
       .collection("properties")
-      .find<WithId<{ _id: string }>>({ ownerId: propertyOwnerId })
+      .find<WithId<{ _id: string }>>({ ownerId: effectiveOwnerId })
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
 

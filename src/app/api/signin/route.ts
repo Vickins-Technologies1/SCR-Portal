@@ -5,6 +5,48 @@ import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
 
+// Default permissions per role (fallback when no stored permissions exist)
+const getDefaultPermissions = (role: string, isTeamMember: boolean = false): string[] => {
+  const common = [
+    "dashboard:view",
+    "properties:view",
+    "tenants:view",
+    "payments:view",
+    "expenses:view",
+    "notifications:view",
+    "reports:view",
+    "settings:view",
+  ];
+
+  if (role === "propertyOwner") {
+    return [
+      ...common,
+      "users:view",
+      "properties:list_new",
+    ];
+  }
+
+  if (isTeamMember) {
+    // Team members usually get broad access — adjust as needed
+    return [
+      ...common,
+      "users:view",
+      "properties:list_new", // remove if team members shouldn't list properties
+    ];
+  }
+
+  if (role === "tenant") {
+    return [
+      "dashboard:view",
+      "properties:view",     // maybe restrict to own properties later
+      "payments:view",
+      "notifications:view",
+    ];
+  }
+
+  return [];
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -66,6 +108,20 @@ export async function POST(request: NextRequest) {
       }
 
       if (user) {
+        // Determine permissions — prefer stored ones for team members
+        let finalPermissions: string[] = [];
+
+        if (finalRole === "propertyOwner") {
+          finalPermissions = getDefaultPermissions("propertyOwner");
+        } else if (isTeamMember) {
+          // Use stored permissions if they exist and are non-empty
+          finalPermissions = Array.isArray(user.permissions) && user.permissions.length > 0
+            ? user.permissions
+            : getDefaultPermissions(finalRole, true);
+        } else if (finalRole === "tenant") {
+          finalPermissions = getDefaultPermissions("tenant");
+        }
+
         const response = new NextResponse(
           JSON.stringify({
             success: true,
@@ -92,6 +148,23 @@ export async function POST(request: NextRequest) {
           path: "/",
         });
 
+        response.cookies.set("permissions", JSON.stringify(finalPermissions), {
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          maxAge: 7 * 24 * 60 * 60,
+          path: "/",
+        });
+
+        // Set ownerId cookie for team members
+        if (isTeamMember && user.ownerId) {
+          response.cookies.set("ownerId", user.ownerId.toString(), {
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60,
+            path: "/",
+          });
+        }
+
         response.cookies.set("csrf-token", uuidv4(), {
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
@@ -99,7 +172,12 @@ export async function POST(request: NextRequest) {
           path: "/",
         });
 
-        console.log("Cookies set:", { userId: user._id.toString(), role: finalRole });
+        console.log("Cookies set:", { 
+          userId: user._id.toString(), 
+          role: finalRole,
+          permissions: finalPermissions,
+          ownerId: isTeamMember ? user.ownerId?.toString() : undefined
+        });
         return response;
       }
 
@@ -174,6 +252,20 @@ export async function POST(request: NextRequest) {
       }
 
       if (isPasswordValid) {
+        // Determine permissions — prefer stored ones for team members
+        let finalPermissions: string[] = [];
+
+        if (finalRole === "propertyOwner") {
+          finalPermissions = getDefaultPermissions("propertyOwner");
+        } else if (isTeamMember) {
+          // Use stored permissions if they exist and are non-empty
+          finalPermissions = Array.isArray(user.permissions) && user.permissions.length > 0
+            ? user.permissions
+            : getDefaultPermissions(finalRole, true);
+        } else if (finalRole === "tenant") {
+          finalPermissions = getDefaultPermissions("tenant");
+        }
+
         const response = new NextResponse(
           JSON.stringify({
             success: true,
@@ -200,6 +292,23 @@ export async function POST(request: NextRequest) {
           path: "/",
         });
 
+        response.cookies.set("permissions", JSON.stringify(finalPermissions), {
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          maxAge: 7 * 24 * 60 * 60,
+          path: "/",
+        });
+
+        // Set ownerId cookie for team members
+        if (isTeamMember && user.ownerId) {
+          response.cookies.set("ownerId", user.ownerId.toString(), {
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60,
+            path: "/",
+          });
+        }
+
         response.cookies.set("csrf-token", uuidv4(), {
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
@@ -207,7 +316,12 @@ export async function POST(request: NextRequest) {
           path: "/",
         });
 
-        console.log("Cookies set:", { userId: user._id.toString(), role: finalRole });
+        console.log("Cookies set:", { 
+          userId: user._id.toString(), 
+          role: finalRole,
+          permissions: finalPermissions,
+          ownerId: isTeamMember ? user.ownerId?.toString() : undefined
+        });
         return response;
       }
 

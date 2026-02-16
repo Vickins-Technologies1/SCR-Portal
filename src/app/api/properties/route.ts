@@ -112,9 +112,10 @@ export async function GET(request: NextRequest) {
   try {
     logger.debug('Handling GET request to /api/properties', { path: request.nextUrl.pathname });
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId') || searchParams.get('tenantId') || searchParams.get('ownerId');
+    const requestedUserId = searchParams.get('userId') || searchParams.get('tenantId') || searchParams.get('ownerId');
     const cookieStore = await cookies();
     const role = cookieStore.get('role')?.value;
+    const loggedInUserId = cookieStore.get('userId')?.value;
 
     const { db } = await connectToDatabase();
     logger.debug('Connected to MongoDB database: rentaldb');
@@ -135,37 +136,80 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!userId || !ObjectId.isValid(userId)) {
-      logger.warn('Invalid or missing user ID', { userId });
+    if (!requestedUserId || !ObjectId.isValid(requestedUserId)) {
+      logger.warn('Invalid or missing user ID', { requestedUserId });
       return NextResponse.json(
         { success: false, message: 'Valid user ID is required' },
         { status: 400 }
       );
     }
 
-    if (!role || (role !== 'propertyOwner' && role !== 'tenant')) {
-      logger.warn('Unauthorized: Invalid role', { role });
+    // ────────────────────────────────────────────────────────────────
+    //   Authorization: propertyOwner or authorized teamMember
+    // ────────────────────────────────────────────────────────────────
+    let authorized = false;
+    let effectiveOwnerId = requestedUserId;
+
+    if (role === 'propertyOwner') {
+      if (loggedInUserId === requestedUserId) {
+        authorized = true;
+      }
+    } else if (role === 'teamMember') {
+      if (!loggedInUserId) {
+        logger.warn('Team member missing loggedInUserId', { requestedUserId });
+      } else {
+        const teamMember = await db.collection('teamMembers').findOne({
+          _id: new ObjectId(loggedInUserId),
+          ownerId: new ObjectId(requestedUserId),
+          active: true,
+        });
+
+        if (teamMember) {
+          authorized = true;
+          logger.info('Team member authorized for owner data', {
+            teamMemberId: loggedInUserId,
+            ownerId: requestedUserId,
+          });
+        } else {
+          logger.warn('Team member not authorized for this owner', {
+            teamMemberId: loggedInUserId,
+            requestedOwnerId: requestedUserId,
+          });
+        }
+      }
+    } else if (role === 'tenant') {
+      // Tenant logic remains unchanged (single property)
+      authorized = true; // will be checked later in tenant block
+    } else {
+      logger.warn('Unauthorized: Invalid role', { role, requestedUserId });
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Invalid role' },
         { status: 401 }
       );
     }
 
+    if (!authorized && role !== 'tenant') {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized: Not authorized for this owner' },
+        { status: 403 }
+      );
+    }
+
     // ────────────────────────────────────────────────────────────────
-    //           PROPERTY OWNER – enriched with occupiedUnits
+    //           PROPERTY OWNER / TEAM MEMBER – enriched with occupiedUnits
     // ────────────────────────────────────────────────────────────────
-    if (role === 'propertyOwner') {
+    if (role === 'propertyOwner' || role === 'teamMember') {
       const properties = await db
         .collection<Property>('properties')
-        .find({ ownerId: userId })
+        .find({ ownerId: effectiveOwnerId })
         .toArray();
 
       // Enrich each property with occupied units count
       const enrichedProperties = await Promise.all(
         properties.map(async (prop) => {
           const occupiedCount = await db.collection<Tenant>('tenants').countDocuments({
-            propertyId: prop._id.toString(),               // ← adjust field name if different!
-            status: { $in: ['active', 'inactive'] }, // ← adjust statuses to match your Tenant model
+            propertyId: prop._id.toString(),
+            status: { $in: ['active', 'inactive'] },
           });
 
           return {
@@ -173,14 +217,15 @@ export async function GET(request: NextRequest) {
             _id: prop._id.toString(),
             createdAt: toISOStringSafe(prop.createdAt, 'property.createdAt'),
             updatedAt: toISOStringSafe(prop.updatedAt, 'property.updatedAt'),
-            occupiedUnits: occupiedCount,                    // ← the important new field
+            occupiedUnits: occupiedCount,
           };
         })
       );
 
       logger.info(`Returning ${enrichedProperties.length} properties with occupancy info`, {
-        ownerId: userId,
+        ownerId: effectiveOwnerId,
         count: enrichedProperties.length,
+        accessedBy: role === 'teamMember' ? 'teamMember' : 'owner',
       });
 
       return NextResponse.json(
@@ -197,11 +242,11 @@ export async function GET(request: NextRequest) {
     // ────────────────────────────────────────────────────────────────
     if (role === 'tenant') {
       const tenant = await db.collection<Tenant>('tenants').findOne({
-        _id: new ObjectId(userId),
+        _id: new ObjectId(requestedUserId),
       });
 
       if (!tenant) {
-        logger.warn('Tenant not found for userId', { userId });
+        logger.warn('Tenant not found for userId', { requestedUserId });
         return NextResponse.json(
           { success: false, message: 'Tenant not found' },
           { status: 404 }
@@ -324,8 +369,8 @@ export async function POST(request: NextRequest) {
 
     // Calculate management fee based on total units
     const managementFee = getManagementFee({
-      type: validatedUnitTypes[0].type, // Use first unit type for pricing tier lookup
-      managementType: validatedUnitTypes[0].managementType, // Use first management type
+      type: validatedUnitTypes[0].type,
+      managementType: validatedUnitTypes[0].managementType,
       quantity: totalUnits,
     });
 
@@ -382,7 +427,7 @@ export async function POST(request: NextRequest) {
       } else {
         // Send WhatsApp message to owner
         try {
-          const maxPropertyNameLength = 50; // Lenient for WhatsApp's 4096-char limit
+          const maxPropertyNameLength = 50;
           const truncatedPropertyName = name.length > maxPropertyNameLength
             ? `${name.substring(0, maxPropertyNameLength)}...`
             : name;
@@ -412,7 +457,6 @@ export async function POST(request: NextRequest) {
             phone: owner.phone,
             error: whatsAppError instanceof Error ? whatsAppError.message : 'Unknown error',
           });
-          // Continue even if WhatsApp message fails
         }
       }
     } else {

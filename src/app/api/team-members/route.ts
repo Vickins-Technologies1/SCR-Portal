@@ -9,7 +9,7 @@ import validator from "validator";
 import sanitizeHtml from "sanitize-html";
 import { validateCsrfToken } from "@/lib/csrf";
 
-// Rate limiter
+// Rate limiter (unchanged)
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX = 10;
@@ -58,12 +58,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body: CreateTeamMemberBody = await req.json();
+    const { ownerId: requestedOwnerId, name, email, phone, teamRole, permissions, password } = body;
 
-    const { ownerId, name, email, phone, teamRole, permissions, password } = body;
-
-    if (!ownerId || !name || !email || !teamRole || !password) {
+    if (!requestedOwnerId || !name || !email || !teamRole || !password) {
       return NextResponse.json(
-        { success: false, message: "Missing required fields (ownerId, name, email, teamRole, password)" },
+        { success: false, message: "Missing required fields" },
         { status: 400 }
       );
     }
@@ -76,9 +75,35 @@ export async function POST(req: NextRequest) {
     }
 
     const sessionUserId = req.cookies.get("userId")?.value;
-    if (!sessionUserId || sessionUserId !== ownerId) {
-      logger.warn("Unauthorized team member creation attempt", { sessionUserId, requestedOwner: ownerId, ip });
+    const sessionRole = req.cookies.get("role")?.value || "";
+    const sessionOwnerId = req.cookies.get("ownerId")?.value || sessionUserId;
+
+    if (!sessionUserId || sessionOwnerId !== requestedOwnerId) {
+      logger.warn("Unauthorized team member creation attempt (owner mismatch)", {
+        sessionUserId,
+        sessionRole,
+        requestedOwner: requestedOwnerId,
+        ip,
+      });
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    // Team members must have "users:manage" permission
+    if (sessionRole === "teamMember") {
+      const { db } = await connectToDatabase();
+      const member = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(sessionUserId),
+        ownerId: new ObjectId(requestedOwnerId),
+        active: true,
+      });
+
+      if (!member || !member.permissions?.includes("users:manage")) {
+        logger.warn("Team member lacks manage permission", { sessionUserId });
+        return NextResponse.json(
+          { success: false, message: "Insufficient permissions to manage team members" },
+          { status: 403 }
+        );
+      }
     }
 
     const sanitizedName = sanitizeHtml(name.trim(), { allowedTags: [] });
@@ -90,19 +115,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (password.length < 8) {
-      return NextResponse.json(
-        { success: false, message: "Password must be at least 8 characters long" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: "Password must be at least 8 characters" }, { status: 400 });
     }
 
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     if (!passwordRegex.test(password)) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Password must contain uppercase, lowercase, number, and special character",
-        },
+        { success: false, message: "Password must contain uppercase, lowercase, number, and special character" },
         { status: 400 }
       );
     }
@@ -110,28 +129,27 @@ export async function POST(req: NextRequest) {
     const { db } = await connectToDatabase();
 
     const existing = await db.collection("teamMembers").findOne({
-      ownerId: new ObjectId(ownerId),
+      ownerId: new ObjectId(requestedOwnerId),
       email: sanitizedEmail,
     });
 
     if (existing) {
       return NextResponse.json(
-        { success: false, message: "A team member with this email already exists under your account" },
+        { success: false, message: "A team member with this email already exists" },
         { status: 409 }
       );
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-
     const now = new Date();
 
     const newMember = {
-      ownerId: new ObjectId(ownerId),
+      ownerId: new ObjectId(requestedOwnerId),
       name: sanitizedName,
       email: sanitizedEmail,
       phone: sanitizedPhone,
-      role: "teamMember",                        // ← Required for sign-in logic
-      teamRole,                                  // ← Specific title (Manager, Assistant, etc.)
+      role: "teamMember",
+      teamRole,
       permissions: Array.isArray(permissions) ? permissions : [],
       password: hashedPassword,
       active: true,
@@ -143,7 +161,7 @@ export async function POST(req: NextRequest) {
 
     const createdMember = {
       _id: result.insertedId.toString(),
-      ownerId: ownerId,
+      ownerId: requestedOwnerId,
       name: sanitizedName,
       email: sanitizedEmail,
       phone: sanitizedPhone,
@@ -157,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     await db.collection("auditLogs").insertOne({
       action: "team_member_created",
-      ownerId,
+      ownerId: requestedOwnerId,
       memberId: result.insertedId.toString(),
       email: sanitizedEmail,
       ip,
@@ -166,61 +184,55 @@ export async function POST(req: NextRequest) {
     });
 
     logger.info("Team member created successfully", {
-      ownerId,
+      ownerId: requestedOwnerId,
       memberId: result.insertedId.toString(),
       email: sanitizedEmail,
       teamRole,
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        member: createdMember,
-      },
-      { status: 201 }
-    );
+    return NextResponse.json({ success: true, member: createdMember }, { status: 201 });
   } catch (error) {
-    logger.error("POST /api/team-members failed", {
-      error: error instanceof Error ? error.message : String(error),
-      ip,
-    });
-
-    // Safer audit log (avoid re-awaiting body)
-    try {
-      const { db } = await connectToDatabase();
-      await db.collection("auditLogs").insertOne({
-        action: "team_member_creation_failed",
-        ownerId: "unknown",
-        email: "unknown",
-        ip,
-        timestamp: new Date().toISOString(),
-        status: "failed",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    } catch (logErr) {
-      logger.error("Failed to write audit log for failed creation", { error: logErr });
-    }
-
+    logger.error("POST /api/team-members failed", { error: String(error), ip });
     return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const { db } = await connectToDatabase();
-
     const ownerIdParam = req.nextUrl.searchParams.get("ownerId");
     if (!ownerIdParam) {
-      return NextResponse.json(
-        { success: false, message: "ownerId query parameter is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: "ownerId is required" }, { status: 400 });
     }
 
     const sessionUserId = req.cookies.get("userId")?.value;
-    if (!sessionUserId || sessionUserId !== ownerIdParam) {
-      logger.warn("Unauthorized team members access attempt", { requestedOwner: ownerIdParam });
+    const sessionRole = req.cookies.get("role")?.value || "";
+    const sessionOwnerId = req.cookies.get("ownerId")?.value || sessionUserId;
+
+    if (!sessionUserId || sessionOwnerId !== ownerIdParam) {
+      logger.warn("Unauthorized team members access attempt", {
+        requestedOwner: ownerIdParam,
+        sessionUserId,
+        sessionRole,
+      });
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    const { db } = await connectToDatabase();
+
+    // Team members must have "users:view" permission
+    if (sessionRole === "teamMember") {
+      const member = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(sessionUserId),
+        ownerId: new ObjectId(ownerIdParam),
+        active: true,
+      });
+
+      if (!member || !member.permissions?.includes("users:view")) {
+        return NextResponse.json(
+          { success: false, message: "Insufficient permissions" },
+          { status: 403 }
+        );
+      }
     }
 
     const collection = db.collection<TeamMember>("teamMembers");
@@ -236,7 +248,7 @@ export async function GET(req: NextRequest) {
       name: m.name,
       email: m.email,
       phone: m.phone,
-      role: m.role || "teamMember",               // fallback for old docs
+      role: m.role || "teamMember",
       teamRole: m.teamRole || "Team Member",
       permissions: m.permissions || [],
       active: m.active,
@@ -245,14 +257,9 @@ export async function GET(req: NextRequest) {
       lastActive: m.lastActive,
     }));
 
-    return NextResponse.json({
-      success: true,
-      members: serialized,
-    });
+    return NextResponse.json({ success: true, members: serialized });
   } catch (error) {
-    logger.error("GET /api/team-members failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logger.error("GET /api/team-members failed", { error: String(error) });
     return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,11 +1,9 @@
-// src/app/api/property-owners/maintenance/route.ts
-
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { Db, MongoClient, ObjectId } from "mongodb";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DB Document Types – These match exactly what’s stored in MongoDB
+// DB Document Types
 // ─────────────────────────────────────────────────────────────────────────────
 interface TenantDocument {
   _id: ObjectId;
@@ -46,7 +44,7 @@ interface MaintenanceRequestDocument {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Response type sent to frontend
+// Response type
 // ─────────────────────────────────────────────────────────────────────────────
 interface MaintenanceRequestResponse {
   _id: string;
@@ -79,13 +77,36 @@ const connectToDatabase = async (): Promise<Db> => {
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const userId = cookieStore.get("userId")?.value;
+    const loggedInUserId = cookieStore.get("userId")?.value;
     const role = cookieStore.get("role")?.value;
 
-    if (!userId || role !== "propertyOwner") {
+    if (!loggedInUserId) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        { success: false, message: "Unauthorized - missing user ID" },
         { status: 401 }
+      );
+    }
+
+    let effectiveOwnerId: string | null = null;
+
+    if (role === "propertyOwner") {
+      effectiveOwnerId = loggedInUserId;
+    } else if (role === "teamMember") {
+      const db = await connectToDatabase();
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(loggedInUserId),
+        active: true,
+      });
+
+      if (teamMember && teamMember.ownerId) {
+        effectiveOwnerId = teamMember.ownerId.toString();
+      }
+    }
+
+    if (!effectiveOwnerId) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized - insufficient permissions" },
+        { status: 403 }
       );
     }
 
@@ -94,7 +115,7 @@ export async function GET() {
     // 1. Get all property IDs owned by this owner
     const properties = await db
       .collection("properties")
-      .find({ ownerId: userId })
+      .find({ ownerId: effectiveOwnerId })
       .toArray();
 
     const propertyIds = properties.map((p) => p._id as ObjectId);
@@ -119,7 +140,7 @@ export async function GET() {
 
         if (req.tenantId) {
           const tenant = await tenantColl.findOne(
-            { _id: req.tenantId }, // ObjectId matches ObjectId → TypeScript happy!
+            { _id: req.tenantId },
             { projection: { name: 1, email: 1 } }
           );
 
