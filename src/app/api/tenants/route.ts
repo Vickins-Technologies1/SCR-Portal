@@ -29,13 +29,35 @@ const validateCsrfToken = async (request: NextRequest): Promise<boolean> => {
 
 const toISO = (date?: Date | string): string | undefined => date ? new Date(date).toISOString() : undefined;
 
-// GET: List Tenants (with pagination & filters)
+// GET: List Tenants (with pagination & filters) — now supports team members
 export async function GET(request: NextRequest) {
   try {
-    const userId = (await cookies()).get("userId")?.value;
-    const role = (await cookies()).get("role")?.value;
+    const cookieStore = await cookies();
+    const loggedInUserId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
 
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
+    if (!loggedInUserId || !ObjectId.isValid(loggedInUserId)) {
+      return NextResponse.json({ success: false, message: "Unauthorized - missing or invalid user ID" }, { status: 401 });
+    }
+
+    let effectiveOwnerId: string | null = null;
+
+    if (role === "propertyOwner") {
+      effectiveOwnerId = loggedInUserId;
+    } else if (role === "teamMember") {
+      const { db } = await connectToDatabase();
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(loggedInUserId),
+        active: true,
+      });
+
+      if (teamMember && teamMember.ownerId) {
+        effectiveOwnerId = teamMember.ownerId.toString();
+      }
+    }
+
+    if (!effectiveOwnerId) {
+      logger.warn("Unauthorized access attempt to tenants list", { loggedInUserId, role });
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
@@ -44,7 +66,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "10")));
     const skip = (page - 1) * limit;
 
-    const filters: any = { ownerId: userId };
+    const filters: any = { ownerId: effectiveOwnerId };
     if (searchParams.get("name")) filters.name = { $regex: searchParams.get("name")!, $options: "i" };
     if (searchParams.get("email")) filters.email = { $regex: searchParams.get("email")!, $options: "i" };
     if (searchParams.get("propertyId")) filters.propertyId = searchParams.get("propertyId");
@@ -57,6 +79,14 @@ export async function GET(request: NextRequest) {
       .skip(skip)
       .limit(limit)
       .toArray();
+
+    logger.info(`Returning ${tenants.length} tenants`, {
+      ownerId: effectiveOwnerId,
+      page,
+      limit,
+      total,
+      accessedBy: role,
+    });
 
     return NextResponse.json({
       success: true,
@@ -95,17 +125,39 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create New Tenant 
+// POST: Create New Tenant — now supports team members
 export async function POST(request: NextRequest) {
   try {
     if (!(await validateCsrfToken(request))) {
       return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
     }
 
-    const userId = (await cookies()).get("userId")?.value;
-    const role = (await cookies()).get("role")?.value;
+    const cookieStore = await cookies();
+    const loggedInUserId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
 
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
+    if (!loggedInUserId || !ObjectId.isValid(loggedInUserId)) {
+      return NextResponse.json({ success: false, message: "Unauthorized - missing or invalid user ID" }, { status: 401 });
+    }
+
+    let effectiveOwnerId: string | null = null;
+
+    if (role === "propertyOwner") {
+      effectiveOwnerId = loggedInUserId;
+    } else if (role === "teamMember") {
+      const { db } = await connectToDatabase();
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(loggedInUserId),
+        active: true,
+      });
+
+      if (teamMember && teamMember.ownerId) {
+        effectiveOwnerId = teamMember.ownerId.toString();
+      }
+    }
+
+    if (!effectiveOwnerId) {
+      logger.warn("Unauthorized POST to /api/tenants", { loggedInUserId, role });
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
@@ -140,24 +192,24 @@ export async function POST(request: NextRequest) {
 
     // 1. Email already in use by this owner (case-insensitive)
     const duplicateEmail = await db.collection("tenants").findOne({
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
       email: { $regex: new RegExp(`^${body.email.trim()}$`, "i") }
     });
     if (duplicateEmail) {
       return NextResponse.json(
-        { success: false, message: "A tenant with this email already exists under your account" },
+        { success: false, message: "A tenant with this email already exists under this account" },
         { status: 409 }
       );
     }
 
     // 2. Phone number already in use by this owner
     const duplicatePhone = await db.collection("tenants").findOne({
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
       phone: body.phone.trim()
     });
     if (duplicatePhone) {
       return NextResponse.json(
-        { success: false, message: "A tenant with this phone number already exists under your account" },
+        { success: false, message: "A tenant with this phone number already exists under this account" },
         { status: 409 }
       );
     }
@@ -183,17 +235,15 @@ export async function POST(request: NextRequest) {
     }
 
     // ────────────────────────────────────────────────
-    // Proceed only if no duplicates found
+    // Validate property belongs to the effective owner
     // ────────────────────────────────────────────────
-
-    // Validate property ownership
     const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(body.propertyId),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
     });
 
     if (!property) {
-      return NextResponse.json({ success: false, message: "Property not found or not owned by you" }, { status: 404 });
+      return NextResponse.json({ success: false, message: "Property not found or not accessible" }, { status: 404 });
     }
 
     // Handle properties with and without uniqueType
@@ -215,11 +265,11 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Management fee check after 3 tenants
-    const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
+    // Management fee check after 3 tenants (scoped to owner)
+    const tenantCount = await db.collection("tenants").countDocuments({ ownerId: effectiveOwnerId });
     if (tenantCount >= 3) {
       const paidInvoice = await db.collection("invoices").findOne({
-        userId,
+        userId: effectiveOwnerId,
         propertyId: body.propertyId,
         unitType: "All Units",
         status: "completed",
@@ -235,7 +285,7 @@ export async function POST(request: NextRequest) {
     // Create tenant
     const tenantData: Tenant = {
       _id: new ObjectId(),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
       name: body.name.trim(),
       email: body.email.trim(),
       phone: body.phone.trim(),
@@ -322,6 +372,8 @@ export async function POST(request: NextRequest) {
     logger.info("Tenant created successfully", {
       tenantId: result.insertedId.toString(),
       unitIdentifier: body.unitIdentifier,
+      ownerId: effectiveOwnerId,
+      createdBy: role,
     });
 
     return NextResponse.json({

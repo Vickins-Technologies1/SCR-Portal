@@ -52,14 +52,16 @@ export default function TenantsPage() {
   const [properties, setProperties] = useState<ClientProperty[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
+  const [ownerName, setOwnerName] = useState<string>(""); // For team members to show context
   const [paymentStatus, setPaymentStatus] = useState<"active" | "inactive" | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [pendingInvoices, setPendingInvoices] = useState<number>(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPaymentPromptOpen, setIsPaymentPromptOpen] = useState(false);
-  const [isResendModalOpen, setIsResendModalOpen] = useState(false); // ← NEW
-  const [tenantToResend, setTenantToResend] = useState<ResponseTenant | null>(null); // ← NEW
+  const [isResendModalOpen, setIsResendModalOpen] = useState(false);
+  const [tenantToResend, setTenantToResend] = useState<ResponseTenant | null>(null);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingTenant, setEditingTenant] = useState<ResponseTenant | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export default function TenantsPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isResending, setIsResending] = useState(false); // ← NEW: loading for resend
+  const [isResending, setIsResending] = useState(false);
 
   // Pagination & Filters
   const [page, setPage] = useState(1);
@@ -85,9 +87,7 @@ export default function TenantsPage() {
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        const res = await fetch("/api/csrf-token", {
-          credentials: "include",
-        });
+        const res = await fetch("/api/csrf-token", { credentials: "include" });
         const data = await res.json();
         if (data.success && data.csrfToken) {
           setCsrfToken(data.csrfToken);
@@ -99,41 +99,64 @@ export default function TenantsPage() {
     fetchCsrfToken();
   }, []);
 
-  // Auth check
+  // Auth check + determine effective owner
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
+    const ownerIdFromCookie = Cookies.get("ownerId");
+
     setUserId(uid || null);
     setRole(userRole || null);
 
-    if (!uid || userRole !== "propertyOwner") {
-      router.push("/");
+    let ownerIdToUse: string | null = null;
+
+    if (userRole === "propertyOwner") {
+      ownerIdToUse = uid || null;
+    } else if (userRole === "teamMember") {
+      // Prefer cookie first (set during login)
+      ownerIdToUse = ownerIdFromCookie || uid || null;
     }
+
+    if (!uid || !["propertyOwner", "teamMember"].includes(userRole || "")) {
+      router.push("/");
+      return;
+    }
+
+    if (!ownerIdToUse) {
+      setError("Could not determine property owner. Please log in again.");
+      return;
+    }
+
+    setEffectiveOwnerId(ownerIdToUse);
   }, [router]);
 
-  // Fetch user data
+  // Fetch user/owner name (especially useful for team members)
   const fetchUserData = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!userId || !csrfToken || !effectiveOwnerId) return;
+
     try {
-      const res = await fetch(`/api/user?userId=${userId}&role=${role}`, {
+      const res = await fetch(`/api/user?userId=${effectiveOwnerId}&role=propertyOwner`, {
         headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.user) {
+        setOwnerName(data.user.name || "Property Owner");
         setPaymentStatus(data.user.paymentStatus || "inactive");
         setWalletBalance(data.user.walletBalance || 0);
       }
-    } catch {}
-  }, [userId, role, csrfToken]);
+    } catch (err) {
+      console.error("Failed to fetch owner info:", err);
+    }
+  }, [userId, csrfToken, effectiveOwnerId]);
 
-  // Fetch tenants
+  // Fetch tenants (using effectiveOwnerId)
   const fetchTenants = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
       const query = new URLSearchParams({
-        userId,
+        userId: effectiveOwnerId,
         page: page.toString(),
         limit: limit.toString(),
         ...(filters.tenantName && { name: filters.tenantName }),
@@ -158,13 +181,13 @@ export default function TenantsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, csrfToken, page, limit, filters]);
+  }, [effectiveOwnerId, csrfToken, page, limit, filters]);
 
-  // Fetch properties
+  // Fetch properties (using effectiveOwnerId)
   const fetchProperties = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     try {
-      const res = await fetch(`/api/properties?userId=${userId}`, {
+      const res = await fetch(`/api/properties?userId=${effectiveOwnerId}`, {
         headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
@@ -172,25 +195,27 @@ export default function TenantsPage() {
       if (data.success) {
         setProperties(data.properties || []);
       }
-    } catch {}
-  }, [userId, csrfToken]);
+    } catch (err) {
+      console.error("Failed to fetch properties:", err);
+    }
+  }, [effectiveOwnerId, csrfToken]);
 
-  // Fetch pending invoices
+  // Fetch pending invoices (scoped to effective owner)
   const fetchPendingInvoices = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     try {
-      const res = await fetch("/api/invoices", {
+      const res = await fetch(`/api/invoices?userId=${effectiveOwnerId}`, {
         headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) setPendingInvoices(data.pendingInvoices || 0);
     } catch {}
-  }, [userId, csrfToken]);
+  }, [effectiveOwnerId, csrfToken]);
 
-  // Load all data
+  // Load all data when effectiveOwnerId & csrfToken are ready
   useEffect(() => {
-    if (userId && role === "propertyOwner" && csrfToken) {
+    if (effectiveOwnerId && csrfToken) {
       Promise.all([
         fetchUserData(),
         fetchTenants(),
@@ -198,19 +223,28 @@ export default function TenantsPage() {
         fetchPendingInvoices(),
       ]).catch(() => setError("Failed to load initial data."));
     }
-  }, [userId, role, csrfToken, fetchUserData, fetchTenants, fetchProperties, fetchPendingInvoices]);
+  }, [
+    effectiveOwnerId,
+    csrfToken,
+    page,
+    limit,
+    filters,
+    fetchUserData,
+    fetchTenants,
+    fetchProperties,
+    fetchPendingInvoices,
+  ]);
 
   // ────────────────────────────────────────────────
-  //  Resend Welcome Notification Handler (now opens modal)
+  //  Resend Welcome Notification Handler
   // ────────────────────────────────────────────────
   const handleResendWelcome = useCallback((tenant: ResponseTenant) => {
     setTenantToResend(tenant);
     setIsResendModalOpen(true);
   }, []);
 
-  // Confirm and send resend request
   const confirmResend = useCallback(async () => {
-    if (!tenantToResend || !csrfToken || !userId) return;
+    if (!tenantToResend || !csrfToken || !effectiveOwnerId) return;
 
     setIsResending(true);
     setError(null);
@@ -231,8 +265,6 @@ export default function TenantsPage() {
 
       if (res.ok && data.success) {
         setSuccessMessage(`Welcome notification resent to ${tenantToResend.name}`);
-        // Optional: log delivery details
-        console.log("Delivery results:", data.delivery);
       } else {
         setError(data.message || "Failed to resend welcome notification");
       }
@@ -244,7 +276,7 @@ export default function TenantsPage() {
       setIsResendModalOpen(false);
       setTenantToResend(null);
     }
-  }, [tenantToResend, csrfToken, userId]);
+  }, [tenantToResend, csrfToken, effectiveOwnerId]);
 
   // Modal handlers
   const openAddModal = () => {
@@ -260,9 +292,9 @@ export default function TenantsPage() {
     setIsModalOpen(true);
   };
 
-  // Handle tenant submit
+  // Handle tenant submit (add/edit)
   const handleTenantSubmit = async (data: any) => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
 
     setIsLoading(true);
     setError(null);
@@ -279,7 +311,7 @@ export default function TenantsPage() {
           "x-csrf-token": csrfToken,
         },
         credentials: "include",
-        body: JSON.stringify({ ...data, ownerId: userId }),
+        body: JSON.stringify({ ...data, ownerId: effectiveOwnerId }),
       });
 
       const result = await res.json();
@@ -330,6 +362,9 @@ export default function TenantsPage() {
     }
   };
 
+  // Determine if user can add tenants (simple check — you can tie to permissions later)
+  const canAddTenants = role === "propertyOwner" || (role === "teamMember" && true); // adjust based on permissions
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -344,22 +379,32 @@ export default function TenantsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
-              <Users className="text-[#012a4a]" />
-              Manage Tenants
-            </h1>
-            <button
-              onClick={openAddModal}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${
-                isLoading || !csrfToken
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-[#012a4a] hover:bg-[#014a7a]"
-              }`}
-              disabled={isLoading || !csrfToken}
-            >
-              <Plus className="h-5 w-5" />
-              Add Tenant
-            </button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
+                <Users className="text-[#012a4a]" />
+                Manage Tenants
+              </h1>
+              {role === "teamMember" && ownerName && (
+                <p className="text-sm text-gray-600 mt-1">
+                  for {ownerName}
+                </p>
+              )}
+            </div>
+
+            {canAddTenants && (
+              <button
+                onClick={openAddModal}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${
+                  isLoading || !csrfToken || !effectiveOwnerId
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#012a4a] hover:bg-[#014a7a]"
+                }`}
+                disabled={isLoading || !csrfToken || !effectiveOwnerId}
+              >
+                <Plus className="h-5 w-5" />
+                Add Tenant
+              </button>
+            )}
           </motion.div>
 
           {/* Alerts */}
@@ -402,7 +447,7 @@ export default function TenantsPage() {
               <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#012a4a]"></div>
               <p className="mt-4 text-gray-600">Loading tenants...</p>
             </div>
-          ) : (
+          ) : effectiveOwnerId ? (
             <TenantsTable
               tenants={tenants}
               properties={properties}
@@ -414,7 +459,7 @@ export default function TenantsPage() {
               setLimit={setLimit}
               totalTenants={totalTenants}
               isLoading={isLoading}
-              userId={userId}
+              userId={effectiveOwnerId} // ← changed to effective
               csrfToken={csrfToken}
               onEdit={openEditModal}
               onDelete={(id) => {
@@ -423,6 +468,10 @@ export default function TenantsPage() {
               }}
               onResendWelcome={handleResendWelcome}
             />
+          ) : (
+            <div className="text-center py-12 text-gray-600">
+              Loading account information...
+            </div>
           )}
 
           {/* Modals */}
@@ -477,7 +526,6 @@ export default function TenantsPage() {
               </Modal>
             )}
 
-            {/* NEW: Resend Confirmation Modal */}
             {isResendModalOpen && tenantToResend && (
               <Modal
                 title="Resend Welcome Notification"
@@ -526,7 +574,7 @@ export default function TenantsPage() {
                 isOpen={isPaymentPromptOpen}
                 onClose={() => {
                   setIsPaymentPromptOpen(false);
-                  setIsModalOpen(true); // re-open form on cancel
+                  setIsModalOpen(true);
                 }}
                 onSuccess={() => {
                   setSuccessMessage("Payment successful! Tenant added.");
@@ -540,7 +588,7 @@ export default function TenantsPage() {
                 properties={properties}
                 initialPropertyId={pendingTenantData.propertyId || ""}
                 initialPhone={pendingTenantData.phone || ""}
-                userId={userId || ""}
+                userId={effectiveOwnerId || ""}
               />
             )}
           </AnimatePresence>
