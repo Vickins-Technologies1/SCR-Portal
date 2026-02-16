@@ -139,7 +139,7 @@ export default function ListPropertiesPage() {
   const sortedListings = useMemo(() => {
     const sorted = [...listings];
     sorted.sort((a, b) => {
-      const key = sortConfig.key;
+      const {key} = sortConfig;
       const dir = sortConfig.direction === "asc" ? 1 : -1;
       if (key === "createdAt") {
         return dir * (new Date(a[key]!).getTime() - new Date(b[key]!).getTime());

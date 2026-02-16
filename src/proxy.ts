@@ -155,8 +155,7 @@ const ADMIN_API_PATHS = [
 export async function proxy(request: NextRequest) {
   const fullPath = request.nextUrl.pathname;
   const path = fullPath.split("?")[0];
-  const method = request.method;
-
+  const {method} = request;
   // Skip static assets & Next.js internals
   if (path.startsWith("/_next/") || path === "/favicon.ico") {
     return NextResponse.next();
@@ -177,7 +176,7 @@ export async function proxy(request: NextRequest) {
   logger.debug("Proxy request", { path, method });
 
   try {
-    const cookies = request.cookies;
+    const {cookies} = request;
     const role = cookies.get("role")?.value as Role;
     const userId = cookies.get("userId")?.value;
     const isImpersonating = cookies.get("isImpersonating")?.value === "true";

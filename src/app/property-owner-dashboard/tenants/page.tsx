@@ -363,8 +363,7 @@ export default function TenantsPage() {
   };
 
   // Determine if user can add tenants (simple check — you can tie to permissions later)
-  const canAddTenants = role === "propertyOwner" || (role === "teamMember" && true); // adjust based on permissions
-
+  const canAddTenants = role === "propertyOwner" || (role === "teamMember"); // adjust based on permissions
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
