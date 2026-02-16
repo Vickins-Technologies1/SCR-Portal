@@ -1,6 +1,8 @@
 "use client";
+
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
+import { useRouter } from "next/navigation";
 import { Bell, Plus, Send, Trash2, ChevronLeft, ChevronRight, Eye, RefreshCw, ChevronDown } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -109,11 +111,14 @@ interface ApiResponse<T = any> {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<"sent" | "upcoming">("sent");
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<UpcomingReminder[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -185,12 +190,43 @@ export default function NotificationsPage() {
     [csrfToken, fetchCsrfToken]
   );
 
+  // Auth check + determine effective ownerId
+  useEffect(() => {
+    const uid = Cookies.get("userId");
+    const userRole = Cookies.get("role");
+    const ownerIdFromCookie = Cookies.get("ownerId");
+
+    setUserId(uid || null);
+    setRole(userRole || null);
+
+    let ownerIdToUse: string | null = null;
+
+    if (userRole === "propertyOwner") {
+      ownerIdToUse = uid || null;
+    } else if (userRole === "teamMember") {
+      ownerIdToUse = ownerIdFromCookie || uid || null;
+    }
+
+    if (!uid || !["propertyOwner", "teamMember"].includes(userRole || "")) {
+      setError("Please log in as a property owner or team member.");
+      router.push("/login");
+      return;
+    }
+
+    if (!ownerIdToUse) {
+      setError("Could not determine property owner. Please log in again.");
+      return;
+    }
+
+    setEffectiveOwnerId(ownerIdToUse);
+  }, [router]);
+
   const fetchTenantsAndPayments = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
       const propertiesRes = await makeAuthenticatedRequest(
-        `/api/properties?ownerId=${encodeURIComponent(userId)}`,
+        `/api/properties?userId=${encodeURIComponent(effectiveOwnerId)}`,
         { method: "GET" }
       );
       const propertiesData: ApiResponse<Property[]> = await propertiesRes.json();
@@ -202,7 +238,7 @@ export default function NotificationsPage() {
       const fetchedProperties = propertiesData.properties;
 
       const tenantsRes = await makeAuthenticatedRequest(
-        `/api/tenants?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
+        `/api/tenants?userId=${encodeURIComponent(effectiveOwnerId)}&page=1&limit=100`,
         { method: "GET" }
       );
       const tenantsData: ApiResponse<Tenant[]> = await tenantsRes.json();
@@ -219,7 +255,7 @@ export default function NotificationsPage() {
       }));
 
       const paymentsRes = await makeAuthenticatedRequest(
-        `/api/payments?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
+        `/api/payments?userId=${encodeURIComponent(effectiveOwnerId)}&page=1&limit=100`,
         { method: "GET" }
       );
       const paymentsData: ApiResponse<Payment[]> = await paymentsRes.json();
@@ -298,13 +334,13 @@ export default function NotificationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, csrfToken, makeAuthenticatedRequest]);
+  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest]);
 
   const fetchNotifications = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     try {
       const response = await makeAuthenticatedRequest(
-        `/api/notifications?ownerId=${encodeURIComponent(userId)}&page=1&limit=100`,
+        `/api/notifications?ownerId=${encodeURIComponent(effectiveOwnerId)}&page=1&limit=100`,
         { method: "GET" }
       );
       const data: ApiResponse<Notification[]> = await response.json();
@@ -316,10 +352,10 @@ export default function NotificationsPage() {
     } catch (err) {
       setError("Failed to fetch notifications.");
     }
-  }, [userId, csrfToken, makeAuthenticatedRequest]);
+  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest]);
 
   const triggerReminders = async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest("/api/notifications/reminders", {
@@ -341,7 +377,7 @@ export default function NotificationsPage() {
   };
 
   const deleteNotification = useCallback(async (notificationId: string) => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest(
@@ -361,10 +397,10 @@ export default function NotificationsPage() {
       setIsDeleteModalOpen(false);
       setNotificationToDelete(null);
     }
-  }, [userId, csrfToken, makeAuthenticatedRequest]);
+  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest]);
 
   const markAsRead = async (notificationId: string) => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest("/api/notifications/reminders/mark-read", {
@@ -385,7 +421,7 @@ export default function NotificationsPage() {
   };
 
   const retryNotification = async (notificationId: string) => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
       const notification = notifications.find((n) => n._id === notificationId);
@@ -412,7 +448,7 @@ export default function NotificationsPage() {
   };
 
   const createNotification = async () => {
-    if (!userId || !csrfToken || newNotification.tenantIds.length === 0) return;
+    if (!effectiveOwnerId || !csrfToken || newNotification.tenantIds.length === 0) return;
     setIsLoading(true);
     try {
       const tenantIds = newNotification.tenantIds.includes("all")
@@ -470,11 +506,11 @@ export default function NotificationsPage() {
   }, [fetchCsrfToken]);
 
   useEffect(() => {
-    if (userId && csrfToken) {
+    if (effectiveOwnerId && csrfToken) {
       fetchTenantsAndPayments();
       fetchNotifications();
     }
-  }, [userId, csrfToken, fetchTenantsAndPayments, fetchNotifications]);
+  }, [effectiveOwnerId, csrfToken, fetchTenantsAndPayments, fetchNotifications]);
 
   const openNotificationDetails = useCallback((notification: Notification) => {
     setSelectedNotification(notification);

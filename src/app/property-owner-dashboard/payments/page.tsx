@@ -43,6 +43,7 @@ export default function PaymentsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -94,23 +95,42 @@ export default function PaymentsPage() {
     fetchCsrfToken();
   }, [fetchCsrfToken]);
 
-  // Check cookies and redirect if unauthorized
+  // Check cookies and determine effective ownerId
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
+    const ownerIdFromCookie = Cookies.get("ownerId");
+
     setUserId(uid || null);
     setRole(userRole || null);
-    if (!uid || userRole !== "propertyOwner") {
-      setError("Unauthorized. Please log in as a property owner.");
-      router.push("/");
+
+    let ownerIdToUse: string | null = null;
+
+    if (userRole === "propertyOwner") {
+      ownerIdToUse = uid || null;
+    } else if (userRole === "teamMember") {
+      ownerIdToUse = ownerIdFromCookie || uid || null;
     }
+
+    if (!uid || !["propertyOwner", "teamMember"].includes(userRole || "")) {
+      setError("Unauthorized. Please log in as a property owner or team member.");
+      router.push("/");
+      return;
+    }
+
+    if (!ownerIdToUse) {
+      setError("Could not determine property owner. Please log in again.");
+      return;
+    }
+
+    setEffectiveOwnerId(ownerIdToUse);
   }, [router]);
 
   // Fetch properties with CSRF retry
   const fetchProperties = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     try {
-      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
+      const res = await fetch(`/api/properties?userId=${encodeURIComponent(effectiveOwnerId)}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -123,7 +143,7 @@ export default function PaymentsPage() {
           console.warn("CSRF token invalid, attempting to refetch");
           const newToken = await fetchCsrfToken();
           if (newToken) {
-            const retryRes = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
+            const retryRes = await fetch(`/api/properties?userId=${encodeURIComponent(effectiveOwnerId)}`, {
               method: "GET",
               headers: {
                 "Content-Type": "application/json",
@@ -171,11 +191,11 @@ export default function PaymentsPage() {
       setError(errorMessage);
       console.error("Error fetching properties:", errorMessage, { error });
     }
-  }, [userId, csrfToken, fetchCsrfToken]);
+  }, [effectiveOwnerId, csrfToken, fetchCsrfToken]);
 
   // Fetch payments with pagination, filters, and CSRF retry
   const fetchPayments = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -189,7 +209,7 @@ export default function PaymentsPage() {
         ...(filters.status && { status: filters.status }),
         ...(filters.unitType && { unitType: filters.unitType }),
       });
-      const res = await fetch(`/api/payments?${queryParams}`, {
+      const res = await fetch(`/api/payments?userId=${encodeURIComponent(effectiveOwnerId)}&${queryParams}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -202,7 +222,7 @@ export default function PaymentsPage() {
           console.warn("CSRF token invalid, attempting to refetch");
           const newToken = await fetchCsrfToken();
           if (newToken) {
-            const retryRes = await fetch(`/api/payments?${queryParams}`, {
+            const retryRes = await fetch(`/api/payments?userId=${encodeURIComponent(effectiveOwnerId)}&${queryParams}`, {
               method: "GET",
               headers: {
                 "Content-Type": "application/json",
@@ -263,15 +283,15 @@ export default function PaymentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedPropertyId, currentPage, itemsPerPage, csrfToken, filters, fetchCsrfToken]);
+  }, [effectiveOwnerId, selectedPropertyId, currentPage, itemsPerPage, csrfToken, filters, fetchCsrfToken]);
 
   // Fetch data when dependencies change
   useEffect(() => {
-    if (userId && role === "propertyOwner" && csrfToken) {
+    if (effectiveOwnerId && csrfToken) {
       fetchProperties();
       fetchPayments();
     }
-  }, [userId, role, selectedPropertyId, currentPage, filters, fetchProperties, fetchPayments, csrfToken]);
+  }, [effectiveOwnerId, csrfToken, selectedPropertyId, currentPage, filters, fetchProperties, fetchPayments]);
 
   // Handle property selection
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

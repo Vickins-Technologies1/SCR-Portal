@@ -70,7 +70,7 @@ interface ApiResponse<T> {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Payment[]>>> {
-  const userId = request.cookies.get("userId")?.value;
+  const loggedInUserId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
   const { searchParams } = new URL(request.url);
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   const sort = searchParams.get("sort") || "-paymentDate";
 
   logger.debug("GET /api/payments request", {
-    userId,
+    loggedInUserId,
     role,
     csrfToken,
     tenantId,
@@ -100,19 +100,41 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   });
 
   // Validate user and role
-  if (!userId || !role || !["admin", "propertyOwner", "tenant"].includes(role)) {
-    logger.error("Unauthorized access attempt", { userId, role });
+  if (!loggedInUserId || !role || !["admin", "propertyOwner", "tenant", "teamMember"].includes(role)) {
+    logger.error("Unauthorized access attempt", { loggedInUserId, role });
     return NextResponse.json({ success: false, message: "Unauthorized: Invalid user or role" }, { status: 401 });
+  }
+
+  // Determine effective owner for propertyOwner and teamMember
+  let effectiveOwnerId = loggedInUserId;
+
+  if (role === "teamMember") {
+    const { db }: { db: Db } = await connectToDatabase();
+
+    const teamMember = await db.collection("teamMembers").findOne({
+      _id: new ObjectId(loggedInUserId),
+      active: true,
+    });
+
+    if (!teamMember || !teamMember.ownerId) {
+      logger.error("Team member has no assigned owner", { loggedInUserId });
+      return NextResponse.json(
+        { success: false, message: "Unauthorized: No property owner assigned" },
+        { status: 403 }
+      );
+    }
+
+    effectiveOwnerId = teamMember.ownerId.toString();
   }
 
   // Validate CSRF token
   try {
     if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
-      logger.error("Invalid or missing CSRF token", { userId, csrfToken });
+      logger.error("Invalid or missing CSRF token", { loggedInUserId, csrfToken });
       return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
     }
   } catch (error) {
-    logger.error("CSRF validation error", { userId, error: error instanceof Error ? error.message : String(error) });
+    logger.error("CSRF validation error", { loggedInUserId, error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ success: false, message: "CSRF validation failed" }, { status: 403 });
   }
 
@@ -121,12 +143,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
     const query: Filter<PaymentDb> = {};
 
-    if (role === "propertyOwner") {
+    if (role === "propertyOwner" || role === "teamMember") {
       const properties = await db
         .collection<Property>("properties")
         .find(
           {
-            $or: [{ ownerId: userId }, { ownerId: new ObjectId(userId) }],
+            $or: [{ ownerId: effectiveOwnerId }, { ownerId: new ObjectId(effectiveOwnerId) }],
           },
           { projection: { _id: 1 } }
         )
@@ -134,17 +156,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       const propertyIds = properties.map((p) => p._id.toString());
 
       if (!propertyIds.length) {
-        logger.debug("No properties found for propertyOwner", { userId });
+        logger.debug("No properties found for owner", { effectiveOwnerId });
         return NextResponse.json(
           { success: true, payments: [], total: 0, page, limit, totalPages: 0 },
           { status: 200 }
         );
       }
 
-      logger.debug("Properties found", { userId, propertyIds });
+      logger.debug("Properties found", { effectiveOwnerId, propertyIds });
 
       if (propertyId && propertyId !== "all" && !propertyIds.includes(propertyId)) {
-        logger.error("Unauthorized property access", { userId, propertyId });
+        logger.error("Unauthorized property access", { effectiveOwnerId, propertyId });
         return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
       }
 
@@ -174,7 +196,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           .find(tenantQuery, { projection: { _id: 1 } })
           .toArray();
         const tenantIds = tenants.map((t) => t._id.toString());
-        logger.debug("Tenants found", { userId, tenantIds, unitType });
+        logger.debug("Tenants found", { effectiveOwnerId, tenantIds, unitType });
 
         query.$or = [
           ...(tenantIds.length ? [{ tenantId: { $in: tenantIds } }] : []),
@@ -183,8 +205,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         ];
       }
     } else if (role === "tenant") {
-      if (!tenantId || tenantId !== userId) {
-        logger.error("Unauthorized tenant access", { userId, tenantId });
+      if (!tenantId || tenantId !== loggedInUserId) {
+        logger.error("Unauthorized tenant access", { loggedInUserId, tenantId });
         return NextResponse.json({ success: false, message: "Unauthorized: Tenant ID mismatch" }, { status: 403 });
       }
       query.tenantId = tenantId;
@@ -284,7 +306,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
     if (total === 0) {
       logger.info("No payments found for query", {
-        userId,
+        loggedInUserId,
         role,
         tenantId,
         propertyId,
@@ -296,7 +318,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     logger.info("Payments fetched successfully", {
-      userId,
+      loggedInUserId,
       role,
       tenantId,
       propertyId,
@@ -321,7 +343,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   } catch (error: unknown) {
     logger.error("GET Payments Error", {
       message: error instanceof Error ? error.message : String(error),
-      userId,
+      loggedInUserId,
       role,
     });
     return NextResponse.json({ success: false, message: "Server error while fetching payments" }, { status: 500 });

@@ -1,3 +1,4 @@
+// src/app/api/notifications/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Db, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
@@ -37,43 +38,71 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const authenticatePropertyOwner = async (req: NextRequest) => {
+const authenticateUser = async (req: NextRequest): Promise<{ isValid: boolean; userId: string | null; effectiveOwnerId: string | null; error?: string }> => {
   const cookieStore = await cookies();
-  const userId = cookieStore.get("userId")?.value;
+  const loggedInUserId = cookieStore.get("userId")?.value;
   const role = cookieStore.get("role")?.value;
   const csrfToken = req.headers.get("X-CSRF-Token");
 
-  if (!userId || role !== "propertyOwner") {
-    logger.warn("Unauthorized access attempt", { userId, role });
-    return { isValid: false, error: "Unauthorized: Property owner access required", userId: null };
+  if (!loggedInUserId || !ObjectId.isValid(loggedInUserId)) {
+    logger.warn("Invalid or missing user ID", { loggedInUserId });
+    return { isValid: false, userId: null, effectiveOwnerId: null, error: "Invalid user ID" };
   }
+
+  if (!["propertyOwner", "teamMember"].includes(role || "")) {
+    logger.warn("Unauthorized role", { loggedInUserId, role });
+    return { isValid: false, userId: null, effectiveOwnerId: null, error: "Unauthorized: Invalid role" };
+  }
+
   if (!csrfToken || !(await validateCsrfToken(req, csrfToken))) {
-    logger.warn("Invalid or missing CSRF token", { userId });
-    return { isValid: false, error: "Invalid CSRF token", userId };
+    logger.warn("Invalid or missing CSRF token", { loggedInUserId });
+    return { isValid: false, userId: null, effectiveOwnerId: null, error: "Invalid CSRF token" };
   }
-  return { isValid: true, userId };
+
+  let effectiveOwnerId = loggedInUserId;
+
+  if (role === "teamMember") {
+    const { db } = await connectToDatabase();
+    const teamMember = await db.collection("teamMembers").findOne({
+      _id: new ObjectId(loggedInUserId),
+      active: true,
+    });
+
+    if (!teamMember || !teamMember.ownerId) {
+      logger.error("Team member has no assigned owner", { loggedInUserId });
+      return { isValid: false, userId: loggedInUserId, effectiveOwnerId: null, error: "Unauthorized: No property owner assigned" };
+    }
+
+    effectiveOwnerId = teamMember.ownerId.toString();
+  }
+
+  return { isValid: true, userId: loggedInUserId, effectiveOwnerId };
 };
 
-const validateTenantOwnership = async (db: Db, tenantId: string, ownerId: string): Promise<boolean> => {
+const validateTenantOwnership = async (db: Db, tenantId: string, effectiveOwnerId: string): Promise<boolean> => {
   if (tenantId === "all") return true;
   const tenant = await db.collection<Tenant>("tenants").findOne({
     _id: new ObjectId(tenantId),
-    ownerId,
+    ownerId: effectiveOwnerId,
   });
   return !!tenant;
 };
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const { isValid, userId, error } = await authenticatePropertyOwner(req);
-    if (!isValid || !userId) return NextResponse.json({ success: false, message: error }, { status: 401 });
+    const auth = await authenticateUser(req);
+    if (!auth.isValid || !auth.effectiveOwnerId) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.error?.includes("CSRF") ? 403 : 401 });
+    }
+
+    const { effectiveOwnerId } = auth;
 
     const { searchParams } = new URL(req.url);
-    const ownerId = searchParams.get("ownerId");
+    const ownerIdParam = searchParams.get("ownerId");
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
 
-    if (ownerId !== userId) {
+    if (ownerIdParam && ownerIdParam !== effectiveOwnerId) {
       return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
     }
 
@@ -82,12 +111,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const [notifications, total] = await Promise.all([
       db.collection<Notification>("notifications")
-        .find({ ownerId })
+        .find({ ownerId: effectiveOwnerId })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .toArray(),
-      db.collection<Notification>("notifications").countDocuments({ ownerId }),
+      db.collection<Notification>("notifications").countDocuments({ ownerId: effectiveOwnerId }),
     ]);
 
     const formatted = notifications.map(n => ({
@@ -105,14 +134,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   let db: Db;
-  let userId: string;
+  let effectiveOwnerId: string;
 
   try {
-    const auth = await authenticatePropertyOwner(req);
-    if (!auth.isValid || !auth.userId) {
-      return NextResponse.json({ success: false, message: auth.error }, { status: 401 });
+    const auth = await authenticateUser(req);
+    if (!auth.isValid || !auth.effectiveOwnerId) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.error?.includes("CSRF") ? 403 : 401 });
     }
-    userId = auth.userId;
+    effectiveOwnerId = auth.effectiveOwnerId;
 
     const body = await req.json();
     const { message, tenantId, type = "other", deliveryMethod = "app" } = body;
@@ -122,7 +151,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!["payment", "maintenance", "tenant", "other"].includes(type)) {
       return NextResponse.json({ success: false, message: "Invalid type" }, { status: 400 });
     }
-    
+
     if (!["app", "sms", "email", "whatsapp", "both"].includes(deliveryMethod)) {
       return NextResponse.json({ success: false, message: "Invalid deliveryMethod" }, { status: 400 });
     }
@@ -133,14 +162,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     ({ db } = await connectToDatabase());
 
-    if (!(await validateTenantOwnership(db, tenantId, userId))) {
+    if (!(await validateTenantOwnership(db, tenantId, effectiveOwnerId))) {
       return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
     }
 
     // === FETCH TENANTS ===
     let tenants: Tenant[] = [];
     if (tenantId === "all") {
-      tenants = await db.collection<Tenant>("tenants").find({ ownerId: userId }).toArray();
+      tenants = await db.collection<Tenant>("tenants").find({ ownerId: effectiveOwnerId }).toArray();
     } else {
       const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
       if (!tenant) return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
@@ -263,7 +292,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         status: "unread",
         tenantId: tenantId === "all" ? tenant._id.toString() : tenantId,
         tenantName: tenant.name,
-        ownerId: userId,
+        ownerId: effectiveOwnerId,
         deliveryMethod: effectiveMethod,
         deliveryStatus: effectiveMethod === "app" ? "success" : deliveryStatus,
         errorDetails,
@@ -303,8 +332,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
   try {
-    const auth = await authenticatePropertyOwner(req);
-    if (!auth.isValid) return NextResponse.json({ success: false, message: auth.error }, { status: 401 });
+    const auth = await authenticateUser(req);
+    if (!auth.isValid || !auth.effectiveOwnerId) {
+      return NextResponse.json({ success: false, message: auth.error }, { status: auth.error?.includes("CSRF") ? 403 : 401 });
+    }
+
+    const { effectiveOwnerId } = auth;
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("notificationId");
@@ -313,7 +346,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     const { db } = await connectToDatabase();
     const result = await db.collection("notifications").deleteOne({
       _id: new ObjectId(id),
-      ownerId: auth.userId,
+      ownerId: effectiveOwnerId,
     });
 
     if (result.deletedCount === 0) {
