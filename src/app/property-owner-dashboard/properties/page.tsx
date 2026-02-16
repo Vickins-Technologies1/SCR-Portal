@@ -1,4 +1,3 @@
-// src/app/property-owner-dashboard/properties/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -117,6 +116,7 @@ export default function PropertiesPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -157,21 +157,44 @@ export default function PropertiesPage() {
     fetchCsrfToken();
   }, []);
 
+  // Auth check + determine effective owner
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
+    const ownerIdFromCookie = Cookies.get("ownerId");
+
     setUserId(uid || null);
     setRole(userRole || null);
-    if (!uid || userRole !== "propertyOwner") {
-      setError("Unauthorized. Please log in as a property owner.");
-      router.push("/");
+
+    let ownerIdToUse: string | null = null;
+
+    if (userRole === "propertyOwner") {
+      ownerIdToUse = uid || null;
+    } else if (userRole === "teamMember") {
+      // Use ownerId cookie set during login (preferred)
+      ownerIdToUse = ownerIdFromCookie || uid || null;
     }
+
+    if (!uid || !["propertyOwner", "teamMember"].includes(userRole || "")) {
+      setError("Unauthorized. Please log in as a property owner or team member.");
+      router.push("/");
+      return;
+    }
+
+    if (!ownerIdToUse) {
+      setError("Could not determine property owner. Please log in again.");
+      return;
+    }
+
+    setEffectiveOwnerId(ownerIdToUse);
   }, [router]);
 
   const fetchProperties = useCallback(async () => {
+    if (!effectiveOwnerId || !csrfToken) return;
+
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId!)}`, {
+      const res = await fetch(`/api/properties?userId=${encodeURIComponent(effectiveOwnerId)}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -190,13 +213,13 @@ export default function PropertiesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, csrfToken]);
+  }, [effectiveOwnerId, csrfToken]);
 
   useEffect(() => {
-    if (userId && role === "propertyOwner" && csrfToken) {
+    if (effectiveOwnerId && csrfToken) {
       fetchProperties();
     }
-  }, [userId, role, csrfToken, fetchProperties]);
+  }, [effectiveOwnerId, csrfToken, fetchProperties]);
 
   const resetForm = useCallback(() => {
     setPropertyName("");

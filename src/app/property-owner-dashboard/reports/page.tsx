@@ -68,11 +68,14 @@ export default function ReportsAndInvoicesPage() {
   const [paymentType, setPaymentType] = useState<string>("all");
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
+  const [ownerName, setOwnerName] = useState<string>(""); // For team member context
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [csrfToken, setCsrfToken] = useState<string>("");
   const [reportSortConfig, setReportSortConfig] = useState<SortConfig<Report>>({ key: "date", direction: "desc" });
   const [invoiceSortConfig, setInvoiceSortConfig] = useState<SortConfig<Invoice>>({ key: "createdAt", direction: "desc" });
 
@@ -104,50 +107,98 @@ export default function ReportsAndInvoicesPage() {
     return months;
   };
 
-  // Auth check
+  // Auth check + determine effective owner
   useEffect(() => {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
+    const ownerIdFromCookie = Cookies.get("ownerId");
+
     setUserId(uid || null);
     setRole(userRole || null);
-    if (!uid || userRole !== "propertyOwner") {
-      setError("Unauthorized. Please log in as a property owner.");
-      router.push("/login");
+
+    let ownerIdToUse: string | null = null;
+
+    if (userRole === "propertyOwner") {
+      ownerIdToUse = uid || null;
+    } else if (userRole === "teamMember") {
+      ownerIdToUse = ownerIdFromCookie || uid || null;
     }
+
+    if (!uid || !["propertyOwner", "teamMember"].includes(userRole || "")) {
+      setError("Unauthorized. Please log in as a property owner or team member.");
+      router.push("/login");
+      return;
+    }
+
+    if (!ownerIdToUse) {
+      setError("Could not determine property owner. Please log in again.");
+      return;
+    }
+
+    setEffectiveOwnerId(ownerIdToUse);
   }, [router]);
 
-  // Fetch user wallet
-  const fetchUserData = useCallback(async () => {
-    if (!userId || !role) return;
+  // Fetch CSRF token
+  useEffect(() => {
+    const fetchCsrf = async () => {
+      try {
+        const res = await fetch("/api/csrf-token", { credentials: "include" });
+        const data = await res.json();
+        if (data.success && data.csrfToken) {
+          setCsrfToken(data.csrfToken);
+        }
+      } catch {
+        setError("Failed to fetch CSRF token.");
+      }
+    };
+    fetchCsrf();
+  }, []);
+
+  // Fetch owner name (for context)
+  const fetchOwnerInfo = useCallback(async () => {
+    if (!effectiveOwnerId || !csrfToken) return;
+
     try {
-      const res = await fetch(`/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`, {
+      const res = await fetch(`/api/user?userId=${effectiveOwnerId}&role=propertyOwner`, {
+        headers: { "x-csrf-token": csrfToken },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        setOwnerName(data.user.name || "Property Owner");
+      }
+    } catch (err) {
+      console.error("Failed to fetch owner name:", err);
+    }
+  }, [effectiveOwnerId, csrfToken]);
+
+  // Fetch user wallet (scoped to effective owner)
+  const fetchUserData = useCallback(async () => {
+    if (!effectiveOwnerId || !csrfToken) return;
+    try {
+      const res = await fetch(`/api/user?userId=${encodeURIComponent(effectiveOwnerId)}&role=propertyOwner`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
         setWalletBalance(data.user.walletBalance || 0);
-      } else if (res.status === 404) {
-        setError("User not found. Please log in again.");
-        Cookies.remove("userId");
-        Cookies.remove("role");
-        router.push("/login");
       } else {
         setError(data.message || "Failed to fetch user data.");
       }
     } catch {
       setError("Failed to connect to server.");
     }
-  }, [userId, role, router]);
+  }, [effectiveOwnerId, csrfToken]);
 
-  // Fetch properties
+  // Fetch properties (scoped to effective owner)
   const fetchProperties = useCallback(async () => {
-    if (!userId) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     try {
-      const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}`, {
+      const res = await fetch(`/api/properties?userId=${encodeURIComponent(effectiveOwnerId)}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -159,15 +210,16 @@ export default function ReportsAndInvoicesPage() {
     } catch {
       setError("Failed to connect to server.");
     }
-  }, [userId]);
+  }, [effectiveOwnerId, csrfToken]);
 
-  // Fetch reports
+  // Fetch reports (scoped to effective owner)
   const fetchReports = useCallback(async () => {
-    if (!userId) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     setError(null);
     try {
       const queryParams = new URLSearchParams();
+      queryParams.append("userId", effectiveOwnerId);
       if (selectedPropertyId !== "all") queryParams.append("propertyId", selectedPropertyId);
       if (startDate && isValidDate(startDate)) queryParams.append("startDate", startDate);
       if (endDate && isValidDate(endDate)) queryParams.append("endDate", endDate);
@@ -176,7 +228,7 @@ export default function ReportsAndInvoicesPage() {
       const query = queryParams.toString() ? `?${queryParams}` : "";
       const res = await fetch(`/api/reports${query}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -190,17 +242,17 @@ export default function ReportsAndInvoicesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedPropertyId, startDate, endDate, paymentType]);
+  }, [effectiveOwnerId, csrfToken, selectedPropertyId, startDate, endDate, paymentType]);
 
-  // Fetch invoices
+  // Fetch invoices (scoped to effective owner)
   const fetchInvoices = useCallback(async () => {
-    if (!userId) return;
+    if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/invoices`, {
+      const res = await fetch(`/api/invoices?userId=${encodeURIComponent(effectiveOwnerId)}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });
       const data = await res.json();
@@ -214,20 +266,32 @@ export default function ReportsAndInvoicesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [effectiveOwnerId, csrfToken]);
 
-  // Load data
+  // Load data when effectiveOwnerId is ready
   useEffect(() => {
-    if (userId && role === "propertyOwner") {
-      fetchProperties();
-      if (activeTab === "reports") {
-        fetchReports();
-      } else {
-        fetchInvoices();
-        fetchUserData();
-      }
+    if (effectiveOwnerId && csrfToken) {
+      Promise.all([
+        fetchOwnerInfo(),
+        fetchProperties(),
+        fetchUserData(),
+        activeTab === "reports" ? fetchReports() : fetchInvoices(),
+      ]).catch(() => setError("Failed to load initial data."));
     }
-  }, [userId, role, activeTab, selectedPropertyId, startDate, endDate, paymentType, fetchProperties, fetchReports, fetchInvoices, fetchUserData]);
+  }, [
+    effectiveOwnerId,
+    csrfToken,
+    activeTab,
+    selectedPropertyId,
+    startDate,
+    endDate,
+    paymentType,
+    fetchOwnerInfo,
+    fetchProperties,
+    fetchUserData,
+    fetchReports,
+    fetchInvoices,
+  ]);
 
   // Tab switch
   const handleTabSwitch = (tab: "reports" | "invoices") => {
@@ -266,7 +330,7 @@ export default function ReportsAndInvoicesPage() {
     setError(null);
   };
 
-  // Sorting
+  // Sorting (unchanged)
   const handleReportSort = useCallback((key: keyof Report) => {
     setReportSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
@@ -322,7 +386,7 @@ export default function ReportsAndInvoicesPage() {
     return sum;
   }, 0);
 
-  // Export to Excel
+  // Export to Excel (unchanged)
   const exportToExcel = useCallback(async () => {
     if (reports.length === 0) {
       setError("No data to export.");
@@ -352,7 +416,6 @@ export default function ReportsAndInvoicesPage() {
       const data = await response.json();
 
       if (data.success && data.excel) {
-        // Decode base64
         const binaryString = atob(data.excel);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);
@@ -360,7 +423,6 @@ export default function ReportsAndInvoicesPage() {
           bytes[i] = binaryString.charCodeAt(i);
         }
 
-        // Create blob and trigger download
         const blob = new Blob([bytes], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         });
@@ -385,7 +447,7 @@ export default function ReportsAndInvoicesPage() {
     }
   }, [reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties]);
 
-  // Chart data
+  // Chart data (unchanged)
   const chartLabels = getAllMonths(startDate, endDate);
   const chartDataMap = chartLabels.reduce((acc, month) => {
     acc[month] = reports
@@ -431,14 +493,21 @@ export default function ReportsAndInvoicesPage() {
       <div className="sm:ml-64 mt-16">
         <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
-              {activeTab === "reports" ? (
-                <BarChart2 className="text-[#012a4a]" />
-              ) : (
-                <FileText className="text-[#012a4a]" />
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
+                {activeTab === "reports" ? (
+                  <BarChart2 className="text-[#012a4a]" />
+                ) : (
+                  <FileText className="text-[#012a4a]" />
+                )}
+                {activeTab === "reports" ? "Financial Reports" : "Invoices"}
+              </h1>
+              {role === "teamMember" && ownerName && (
+                <p className="text-sm text-gray-600 mt-1">
+                  for {ownerName}
+                </p>
               )}
-              {activeTab === "reports" ? "Financial Reports" : "Invoices"}
-            </h1>
+            </div>
           </div>
 
           {/* Tabs */}

@@ -1,3 +1,4 @@
+// src/app/api/reports/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Db, MongoClient, ObjectId } from "mongodb";
 import logger from "../../../lib/logger";
@@ -67,20 +68,38 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   const startTime = Date.now();
   try {
     // Read cookies from client request
-    const userId = request.cookies.get("userId")?.value;
+    const loggedInUserId = request.cookies.get("userId")?.value;
     const role = request.cookies.get("role")?.value;
-    logger.debug("GET /api/reports - Cookies", { userId, role });
+    logger.debug("GET /api/reports - Cookies", { loggedInUserId, role });
 
-    if (!userId || !ObjectId.isValid(userId)) {
-      logger.error("Invalid user ID", { userId });
+    if (!loggedInUserId || !ObjectId.isValid(loggedInUserId)) {
+      logger.error("Invalid user ID", { loggedInUserId });
       return NextResponse.json(
         { success: false, message: "Valid user ID is required" },
         { status: 400 }
       );
     }
 
-    if (role !== "propertyOwner") {
-      logger.error("Unauthorized access attempt", { userId, role });
+    let effectiveOwnerId = loggedInUserId;
+
+    if (role === "teamMember") {
+      const db = await connectToDatabase();
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(loggedInUserId),
+        active: true,
+      });
+
+      if (!teamMember || !teamMember.ownerId) {
+        logger.error("Team member has no assigned owner", { loggedInUserId });
+        return NextResponse.json(
+          { success: false, message: "Unauthorized: No property owner assigned" },
+          { status: 403 }
+        );
+      }
+
+      effectiveOwnerId = teamMember.ownerId.toString();
+    } else if (role !== "propertyOwner") {
+      logger.error("Unauthorized access attempt", { loggedInUserId, role });
       return NextResponse.json(
         { success: false, message: "Unauthorized: Please log in as a property owner." },
         { status: 401 }
@@ -131,12 +150,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     // DB Connection
     const db = await connectToDatabase();
 
-    // Fetch properties owned by the user
+    // Fetch properties owned by the effective owner
     const properties = await db
       .collection<Property>("properties")
       .find(
         {
-          $or: [{ ownerId: userId }, { ownerId: new ObjectId(userId) }],
+          $or: [{ ownerId: effectiveOwnerId }, { ownerId: new ObjectId(effectiveOwnerId) }],
         },
         { projection: { _id: 1, name: 1 } }
       )
@@ -144,7 +163,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const propertyIds = properties.map((p) => p._id.toString());
 
     if (!propertyIds.length) {
-      logger.debug("No properties found for propertyOwner", { userId });
+      logger.debug("No properties found for propertyOwner", { effectiveOwnerId });
       return NextResponse.json({ success: true, data: [] }, { status: 200 });
     }
 
@@ -227,7 +246,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
               ],
             },
             status: "$status",
-            ownerId: userId,
+            ownerId: effectiveOwnerId,
             tenantPaymentStatus: { $ifNull: ["$tenant.paymentStatus", "Unknown"] },
             unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },
             type: { $ifNull: ["$type", "Unknown"] },
@@ -251,7 +270,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     logger.info("Reports fetched successfully", {
-      userId,
+      userId: loggedInUserId,
       propertyId: propertyId || "all",
       startDate,
       endDate,
