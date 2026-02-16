@@ -9,6 +9,7 @@ export interface UnitType {
   managementType: "RentCollection" | "FullManagement";
   quantity: number;
   managementFee?: number;
+  vacant?: number; // Optional field to track vacancies in real-time
 }
 
 export interface Tenant {
@@ -18,6 +19,9 @@ export interface Tenant {
   phone?: string;
 }
 
+// ────────────────────────────────────────────────
+// Core/internal Property (what you store/manage)
+// ────────────────────────────────────────────────
 export interface Property {
   _id: ObjectId | string;
   ownerId: string;
@@ -30,15 +34,38 @@ export interface Property {
   createdAt: Date;
   updatedAt?: Date;
 
-  // ───────────────────────────────────────────────────────────────
-  //           NEW: per-property occupied units count
-  //           (recommended — populate this in /api/properties)
-  // ───────────────────────────────────────────────────────────────
+  // Recommended runtime-calculated or aggregated fields
   occupiedUnits?: number;
+  tenants?: Tenant[];
+  totalTenants?: number;
+  vacantUnits?: number;
+}
 
-  // Optional: you can also include these if you want richer frontend display
-  // without extra queries
-  tenants?: Tenant[];                 // already present — good for small lists
-  totalTenants?: number;              // optional summary count
-  vacantUnits?: number;               // optional — can be derived, but useful
+// ────────────────────────────────────────────────
+// Listing (public-facing advertised property)
+// Separate from core Property for clean separation of concerns
+// ────────────────────────────────────────────────
+export interface Listing {
+  _id: string;
+  originalPropertyId: string; // reference to the core Property
+  ownerId: string;
+
+  // Denormalized snapshot from Property at time of listing
+  name: string;
+  address: string;
+  unitTypes: UnitType[];
+
+  // Marketing-specific fields
+  description?: string;
+  facilities?: string[];
+  images: string[]; // Independent from any core property images
+
+  // Advertisement controls
+  isAdvertised: boolean;
+  adExpiration?: string; // ISO string
+
+  // Status & timestamps
+  status: "Active" | "Inactive" | "Expired";
+  createdAt: string;
+  updatedAt?: string;
 }

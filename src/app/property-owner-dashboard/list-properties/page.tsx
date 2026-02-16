@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Home, Plus } from "lucide-react";
+import { Home, Plus, CheckCircle, Building2 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -13,30 +13,8 @@ import PropertyTableRow from "./PropertyTableRow";
 import PropertyModal from "./PropertyModal";
 import ListingFormModal from "./ListingFormModal";
 import DeleteConfirmationModal from "./DeleteConfirmationModal";
-import { CheckCircle, Building2 } from "lucide-react";
-interface UnitType {
-  type: string;
-  price: number;
-  deposit: number;
-  quantity: number;
-  vacant?: number;
-}
 
-export interface Property {
-  _id: string;
-  name: string;
-  address: string;
-  unitTypes: UnitType[];
-  status: "Active" | "Inactive";
-  createdAt: string;
-  updatedAt: string;
-  images: string[];
-  isAdvertised: boolean;
-  adExpiration?: string;
-  ownerId: string;
-  description?: string;
-  facilities?: string[];
-}
+import { Property, Listing } from "@/types/property";  // ← Updated imports
 
 interface SortConfig {
   key: "name" | "address" | "createdAt" | "status";
@@ -46,7 +24,7 @@ interface SortConfig {
 export default function ListPropertiesPage() {
   const router = useRouter();
 
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]); // ← Renamed for clarity: these are advertised listings
   const [originalProperties, setOriginalProperties] = useState<Property[]>([]);
   const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
@@ -55,7 +33,7 @@ export default function ListPropertiesPage() {
   const [modalMode, setModalMode] = useState<"list" | "edit">("list");
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [selectedProperty, setSelectedProperty] = useState<Listing | null>(null); // ← Now Listing
 
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -114,17 +92,17 @@ export default function ListPropertiesPage() {
     fetchCsrf();
   }, []);
 
-  const fetchProperties = useCallback(async () => {
+  const fetchListings = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
       const res = await fetch(`/api/list-properties?userId=${effectiveOwnerId}`, {
         credentials: "include",
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "X-CSRF-Token": csrfToken || "" },
       });
       const data = await res.json();
       if (data.success) {
-        setProperties(data.properties || []);
+        setListings(data.properties || []);
       } else {
         setError(data.message || "Failed to load listings");
       }
@@ -140,7 +118,7 @@ export default function ListPropertiesPage() {
     try {
       const res = await fetch(`/api/properties?userId=${effectiveOwnerId}`, {
         credentials: "include",
-        headers: { "X-CSRF-Token": csrfToken },
+        headers: { "X-CSRF-Token": csrfToken || "" },
       });
       const data = await res.json();
       if (data.success) {
@@ -153,22 +131,23 @@ export default function ListPropertiesPage() {
 
   useEffect(() => {
     if (effectiveOwnerId && csrfToken) {
-      fetchProperties();
+      fetchListings();
       fetchOriginalProperties();
     }
-  }, [effectiveOwnerId, csrfToken, fetchProperties, fetchOriginalProperties]);
+  }, [effectiveOwnerId, csrfToken, fetchListings, fetchOriginalProperties]);
 
-  const sortedProperties = useMemo(() => {
-    const sorted = [...properties];
+  const sortedListings = useMemo(() => {
+    const sorted = [...listings];
     sorted.sort((a, b) => {
       const key = sortConfig.key;
       const dir = sortConfig.direction === "asc" ? 1 : -1;
-      if (key === "createdAt")
-        return dir * (new Date(a[key]).getTime() - new Date(b[key]).getTime());
-      return dir * a[key].localeCompare(b[key]);
+      if (key === "createdAt") {
+        return dir * (new Date(a[key]!).getTime() - new Date(b[key]!).getTime());
+      }
+      return dir * (a[key] as string).localeCompare(b[key] as string);
     });
     return sorted;
-  }, [properties, sortConfig]);
+  }, [listings, sortConfig]);
 
   const handleSort = (key: SortConfig["key"]) => {
     setSortConfig((c) => ({
@@ -182,7 +161,7 @@ export default function ListPropertiesPage() {
     setIsFormModalOpen(true);
   };
 
-  const openEditModal = (property: Property) => {
+  const openEditModal = (property: Listing) => { // ← Now Listing
     setModalMode("edit");
     setEditingPropertyId(property._id);
     setIsFormModalOpen(true);
@@ -233,7 +212,7 @@ export default function ListPropertiesPage() {
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-[#012a4a]"></div>
             </div>
-          ) : sortedProperties.length === 0 ? (
+          ) : sortedListings.length === 0 ? (
             <motion.div className="text-center py-20 text-slate-500">
               <Building2 className="h-16 w-16 mx-auto mb-4 text-slate-300" />
               <p className="text-lg">No listings yet. Start by listing a property!</p>
@@ -263,7 +242,7 @@ export default function ListPropertiesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {sortedProperties.map((p) => (
+                    {sortedListings.map((p) => (
                       <PropertyTableRow
                         key={p._id}
                         property={p}
@@ -278,7 +257,7 @@ export default function ListPropertiesPage() {
 
               {/* Mobile Cards */}
               <div className="lg:hidden space-y-4">
-                {sortedProperties.map((p) => (
+                {sortedListings.map((p) => (
                   <PropertyCard
                     key={p._id}
                     property={p}
@@ -305,9 +284,11 @@ export default function ListPropertiesPage() {
         csrfToken={csrfToken}
         onSuccess={() => {
           setSuccessMessage(modalMode === "list" ? "Property listed!" : "Listing updated!");
-          fetchProperties();
+          fetchListings();
+          fetchOriginalProperties(); // optional: refresh both
         }}
         originalProperties={originalProperties}
+        existingListings={listings} // ← NEW: For filtering
       />
 
       <DeleteConfirmationModal
@@ -318,13 +299,13 @@ export default function ListPropertiesPage() {
           try {
             const res = await fetch(`/api/list-properties?id=${propertyToDelete}`, {
               method: "DELETE",
-              headers: { "X-CSRF-Token": csrfToken },
+              headers: { "X-CSRF-Token": csrfToken || "" },
               credentials: "include",
             });
             const data = await res.json();
             if (data.success) {
               setSuccessMessage("Listing removed successfully.");
-              fetchProperties();
+              fetchListings();
             }
           } catch {
             setError("Failed to delete.");

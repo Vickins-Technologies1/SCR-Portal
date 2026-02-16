@@ -3,10 +3,10 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Maximize2, X, Star, MapPin, DollarSign } from "lucide-react";
-import { Property } from "./page";
+import { Listing } from "@/types/property";   // ← Updated to Listing
 
 interface PropertyModalProps {
-  property: Property | null;
+  property: Listing | null; // ← Updated
   onClose: () => void;
 }
 

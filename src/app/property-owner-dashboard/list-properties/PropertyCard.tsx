@@ -2,10 +2,10 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { MapPin, DollarSign, Pencil, Trash2 } from "lucide-react";
-import { Property } from "./page";
+import { Listing } from "@/types/property";   // ← Updated to Listing
 
 interface PropertyCardProps {
-  property: Property;
+  property: Listing; // ← Updated
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;

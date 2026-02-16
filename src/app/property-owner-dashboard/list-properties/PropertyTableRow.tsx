@@ -1,10 +1,10 @@
 // src/app/property-owner-dashboard/list-properties/PropertyTableRow.tsx
 import React from "react";
 import { Pencil, Trash2 } from "lucide-react";
-import { Property } from "./page";
+import { Listing } from "@/types/property";   // ← Updated to Listing
 
 interface PropertyTableRowProps {
-  property: Property;
+  property: Listing; // ← Updated
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;

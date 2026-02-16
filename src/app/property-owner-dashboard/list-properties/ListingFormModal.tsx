@@ -1,11 +1,24 @@
-// src/app/property-owner-dashboard/list-properties/ListingFormModal.tsx
-import React, { useState, useEffect, useCallback } from "react";
-import Modal from "../components/Modal";
-import { Property } from "./page";
+// src/app/property-owner-dashboard/list-properties/components/ListingFormModal.tsx
+"use client";
+
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
+import { X, Upload, Trash2, AlertCircle } from "lucide-react";
+import Modal from "../components/Modal"; // Adjust path if needed
+
+import { Property, Listing } from "@/types/property";
 
 const FACILITIES = [
-  "Wi-Fi", "Parking", "Gym", "Swimming Pool", "Security",
-  "Elevator", "Air Conditioning", "Heating", "Balcony", "Garden",
+  "Wi-Fi",
+  "Parking",
+  "Gym",
+  "Swimming Pool",
+  "Security",
+  "Elevator",
+  "Air Conditioning",
+  "Heating",
+  "Balcony",
+  "Garden",
 ];
 
 interface ListingFormModalProps {
@@ -15,7 +28,8 @@ interface ListingFormModalProps {
   editingPropertyId?: string | null;
   csrfToken: string | null;
   onSuccess: () => void;
-  originalProperties: Property[];
+  originalProperties: Property[]; // Core properties for selection in "list" mode
+  existingListings: Listing[]; // For filtering already-listed properties
 }
 
 export default function ListingFormModal({
@@ -26,49 +40,90 @@ export default function ListingFormModal({
   csrfToken,
   onSuccess,
   originalProperties,
+  existingListings,
 }: ListingFormModalProps) {
-  const [selectedPropertyId, setSelectedPropertyId] = useState("");
-  const [isAdvertised, setIsAdvertised] = useState(false);
-  const [description, setDescription] = useState("");
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [isAdvertised, setIsAdvertised] = useState<boolean>(false);
+  const [description, setDescription] = useState<string>("");
   const [facilities, setFacilities] = useState<string[]>([]);
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  // Compute available properties (exclude already listed ones)
+  const availableProperties = useMemo(() => {
+    return originalProperties.filter(
+      (prop) =>
+        !existingListings.some(
+          (listing) => listing.originalPropertyId === prop._id
+        )
+    );
+  }, [originalProperties, existingListings]);
+
+  // Reset / populate form when modal opens or mode changes
   useEffect(() => {
+    if (!isOpen) {
+      resetForm();
+      return;
+    }
+
     if (mode === "edit" && editingPropertyId) {
-      // Load existing data (you can expand this)
-      const prop = originalProperties.find(p => p._id === editingPropertyId);
+      const prop = existingListings.find(
+        (p) => p._id === editingPropertyId
+      ) as Listing | undefined;
       if (prop) {
         setSelectedPropertyId(prop._id);
-        setIsAdvertised(prop.isAdvertised);
+        setIsAdvertised(prop.isAdvertised ?? false);
         setDescription(prop.description || "");
         setFacilities(prop.facilities || []);
         setImagePreviews(prop.images || []);
       }
     } else {
-      // Reset for "list" mode
-      setSelectedPropertyId("");
-      setIsAdvertised(false);
-      setDescription("");
-      setFacilities([]);
-      setImages([]);
-      setImagePreviews([]);
-      setImageUploadError(null);
-      setFormErrors({});
+      resetForm();
     }
-  }, [mode, editingPropertyId, originalProperties]);
+  }, [isOpen, mode, editingPropertyId, existingListings]);
 
-  // Validation effect
+  const resetForm = useCallback(() => {
+    setSelectedPropertyId("");
+    setIsAdvertised(false);
+    setDescription("");
+    setFacilities([]);
+    setImages([]);
+    setImagePreviews([]);
+    setImageUploadError(null);
+    setFormErrors({});
+    setSubmitError(null);
+    setIsSubmitting(false);
+    setIsUploading(false);
+  }, []);
+
+  // Real-time form validation
   useEffect(() => {
     const errors: Record<string, string> = {};
-    if (mode === "list" && !selectedPropertyId) errors.property = "Please select a property";
-    if (description.length > 500) errors.description = "Description cannot exceed 500 characters";
-    if (facilities.length > 10) errors.facilities = "Maximum 10 facilities allowed";
-    if (mode === "list" && imagePreviews.length === 0) errors.images = "At least one image is required";
-    if (imagePreviews.length > 10) errors.images = "Maximum 10 images allowed";
+
+    if (mode === "list" && !selectedPropertyId.trim()) {
+      errors.property = "Please select a property to list";
+    }
+
+    if (description.length > 500) {
+      errors.description = "Description cannot exceed 500 characters";
+    }
+
+    if (facilities.length > 10) {
+      errors.facilities = "Maximum 10 facilities allowed";
+    }
+
+    if (mode === "list" && imagePreviews.length === 0) {
+      errors.images = "At least one image is required for new listings";
+    }
+
+    if (imagePreviews.length > 10) {
+      errors.images = "Maximum 10 images allowed";
+    }
 
     setFormErrors(errors);
   }, [mode, selectedPropertyId, description, facilities, imagePreviews]);
@@ -76,65 +131,169 @@ export default function ListingFormModal({
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const valid: File[] = [];
-    const err: string[] = [];
+    const errors: string[] = [];
 
-    files.forEach((f) => {
-      if (!["image/jpeg", "image/png"].includes(f.type))
-        err.push(`${f.name}: JPEG/PNG only`);
-      else if (f.size > 5 * 1024 * 1024)
-        err.push(`${f.name}: Max 5MB`);
-      else valid.push(f);
+    files.forEach((file) => {
+      if (!["image/jpeg", "image/png"].includes(file.type)) {
+        errors.push(`${file.name}: Only JPEG or PNG allowed`);
+      } else if (file.size > 5 * 1024 * 1024) {
+        errors.push(`${file.name}: Maximum 5MB per image`);
+      } else {
+        valid.push(file);
+      }
     });
 
-    const total = valid.length + imagePreviews.length;
-    if (total > 10) {
-      err.push("Max 10 images");
+    const totalAfter = valid.length + imagePreviews.length;
+    if (totalAfter > 10) {
+      errors.push(`Maximum 10 images allowed (${totalAfter - 10} too many)`);
       valid.splice(10 - imagePreviews.length);
     }
 
-    setImages((p) => [...p, ...valid]);
-    setImagePreviews((p) => [
-      ...p,
-      ...valid.map((f) => URL.createObjectURL(f)),
+    if (errors.length > 0) {
+      setImageUploadError(errors.join("; "));
+    } else {
+      setImageUploadError(null);
+    }
+
+    setImages((prev) => [...prev, ...valid]);
+    setImagePreviews((prev) => [
+      ...prev,
+      ...valid.map((file) => URL.createObjectURL(file)),
     ]);
-    setImageUploadError(err.join("; ") || null);
   };
 
-  const removeImage = (idx: number) => {
-    setImages((p) => p.filter((_, i) => i !== idx - (imagePreviews.length - p.length)));
-    setImagePreviews((p) => p.filter((_, i) => i !== idx));
+  const removeImage = (index: number) => {
+    if (index < imagePreviews.length) {
+      URL.revokeObjectURL(imagePreviews[index]);
+    }
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImages = async (files: File[]): Promise<string[]> => {
+    if (!csrfToken || files.length === 0) return [];
+
+    const formData = new FormData();
+    files.forEach((file) => formData.append("images", file));
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+      headers: {
+        "X-CSRF-Token": csrfToken,
+      },
+      credentials: "include",
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Image upload failed");
+    }
+
+    return data.urls || [];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (Object.keys(formErrors).length > 0) return;
 
-    // Submit logic here (same as before)
-    // Use csrfToken, mode, etc.
-    // Call onSuccess() on success
+    if (Object.keys(formErrors).length > 0) {
+      setSubmitError("Please correct the errors in the form.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      // NEW: Always compute final URLs from current state
+      // - Kept existing URLs (non-blob) + new uploads
+      let finalImageUrls: string[] = imagePreviews.filter(
+        (url) => !url.startsWith("blob:")
+      );
+
+      if (images.length > 0) {
+        setIsUploading(true);
+        const uploadedUrls = await uploadImages(images);
+        setIsUploading(false);
+        finalImageUrls = [...finalImageUrls, ...uploadedUrls];
+      }
+
+      const payload: Partial<Listing> = {
+        isAdvertised,
+        description: description.trim() || undefined,
+        facilities: facilities.length > 0 ? facilities : undefined,
+        images: finalImageUrls, // Always send the full current set (can be [] in edit mode)
+      };
+
+      let url = "/api/list-properties";
+      let method: "POST" | "PUT" = "POST";
+
+      if (mode === "edit" && editingPropertyId) {
+        url += `/${editingPropertyId}`;
+        method = "PUT";
+        payload._id = editingPropertyId;
+      } else {
+        payload.originalPropertyId = selectedPropertyId;
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken || "",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to save listing");
+      }
+
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setSubmitError(err.message || "An error occurred while saving the listing.");
+    } finally {
+      setIsSubmitting(false);
+      setIsUploading(false);
+    }
   };
 
   return (
     <Modal
-      title={mode === "list" ? "List Property" : "Edit Listing"}
+      title={mode === "list" ? "List Property for Rent" : "Edit Property Listing"}
       isOpen={isOpen}
       onClose={onClose}
     >
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Global submit error */}
+        {submitError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <span>{submitError}</span>
+          </div>
+        )}
+
+        {/* Property Selection - only shown in "list" mode */}
         {mode === "list" && (
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Select Property to List
+              Select Property to List *
             </label>
             <select
               value={selectedPropertyId}
               onChange={(e) => setSelectedPropertyId(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#012a4a]"
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition bg-white disabled:opacity-60"
               required
+              disabled={isSubmitting || isUploading}
             >
-              <option value="">Choose a property...</option>
-              {originalProperties.map((prop) => (
-                <option key={prop._id} value={prop._id}>
+              <option value="">-- Choose a property --</option>
+              {availableProperties.map((prop) => (
+                <option key={prop._id.toString()} value={prop._id.toString()}>
                   {prop.name} – {prop.address}
                 </option>
               ))}
@@ -142,26 +301,194 @@ export default function ListingFormModal({
             {formErrors.property && (
               <p className="text-red-500 text-xs mt-1">{formErrors.property}</p>
             )}
+            {availableProperties.length === 0 && (
+              <p className="text-amber-600 text-xs mt-1">
+                All your properties are already listed.
+              </p>
+            )}
           </div>
         )}
 
-        {/* Description, Facilities, Images, Checkbox, Buttons */}
-        {/* ... paste your form content here ... */}
+        {/* Description */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Description (optional - max 500 characters)
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Highlight key features, location benefits, nearby amenities..."
+            maxLength={500}
+            rows={5}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition resize-none disabled:opacity-60"
+            disabled={isSubmitting || isUploading}
+          />
+          <p className="text-xs text-slate-500 mt-1 text-right">
+            {description.length}/500
+          </p>
+          {formErrors.description && (
+            <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>
+          )}
+        </div>
 
-        <div className="flex justify-end gap-3 pt-4">
+        {/* Facilities */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Facilities (select multiple, max 10)
+          </label>
+          <select
+            multiple
+            value={facilities}
+            onChange={(e) =>
+              setFacilities(
+                Array.from(e.target.selectedOptions, (option) => option.value)
+              )
+            }
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#012a4a] h-40 bg-white disabled:opacity-60"
+            disabled={isSubmitting || isUploading}
+          >
+            {FACILITIES.map((facility) => (
+              <option key={facility} value={facility}>
+                {facility}
+              </option>
+            ))}
+          </select>
+
+          {facilities.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {facilities.map((f) => (
+                <span
+                  key={f}
+                  className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-800 px-3 py-1 rounded-full text-sm"
+                >
+                  {f}
+                  <button
+                    type="button"
+                    onClick={() => setFacilities((prev) => prev.filter((x) => x !== f))}
+                    className="text-red-600 hover:text-red-800 focus:outline-none"
+                    disabled={isSubmitting || isUploading}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {formErrors.facilities && (
+            <p className="text-red-500 text-xs mt-1">{formErrors.facilities}</p>
+          )}
+        </div>
+
+        {/* Images */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            {mode === "list" ? "Images (required)" : "Images (optional - can be empty)"}
+          </label>
+
+          <div className="flex items-center justify-center w-full">
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition disabled:opacity-50 disabled:cursor-not-allowed">
+              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                <Upload className="w-8 h-8 mb-2 text-slate-500" />
+                <p className="text-sm text-slate-600">
+                  <span className="font-semibold">Click to upload</span> or drag & drop
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  JPEG/PNG • Max 5MB per image • Max 10 total
+                </p>
+              </div>
+              <input
+                type="file"
+                multiple
+                accept="image/jpeg,image/png"
+                className="hidden"
+                onChange={handleImageChange}
+                disabled={isSubmitting || isUploading}
+              />
+            </label>
+          </div>
+
+          {imageUploadError && (
+            <p className="text-red-500 text-xs mt-2">{imageUploadError}</p>
+          )}
+
+          {imagePreviews.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-4">
+              {imagePreviews.map((preview, index) => (
+                <div
+                  key={index}
+                  className="relative group rounded-lg overflow-hidden shadow-sm border border-slate-200"
+                >
+                  <Image
+                    src={preview}
+                    alt={`Preview ${index + 1}`}
+                    width={120}
+                    height={120}
+                    className="object-cover w-full h-24 sm:h-28"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-1 right-1 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-md disabled:opacity-50"
+                    disabled={isSubmitting || isUploading}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {formErrors.images && (
+            <p className="text-red-500 text-xs mt-2">{formErrors.images}</p>
+          )}
+        </div>
+
+        {/* Advertise Checkbox */}
+        <div className="flex items-start">
+          <input
+            id="advertise"
+            type="checkbox"
+            checked={isAdvertised}
+            onChange={(e) => setIsAdvertised(e.target.checked)}
+            className="h-5 w-5 mt-0.5 text-[#012a4a] border-slate-300 rounded focus:ring-[#012a4a] disabled:opacity-50"
+            disabled={isSubmitting || isUploading}
+          />
+          <label htmlFor="advertise" className="ml-3 text-sm font-medium text-slate-700">
+            Feature this listing (30-day advertisement on public marketplace)
+          </label>
+        </div>
+
+        {/* Buttons */}
+        <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300"
+            className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition font-medium disabled:opacity-50"
+            disabled={isSubmitting || isUploading}
           >
             Cancel
           </button>
+
           <button
             type="submit"
-            disabled={isUploading || Object.keys(formErrors).length > 0}
-            className="px-6 py-3 bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white rounded-xl disabled:opacity-50"
+            disabled={isSubmitting || isUploading || Object.keys(formErrors).length > 0}
+            className={`min-w-[140px] flex items-center justify-center gap-2 px-6 py-3 text-white rounded-xl shadow-md transition-all font-medium ${
+              isSubmitting || isUploading || Object.keys(formErrors).length > 0
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-gradient-to-r from-[#012a4a] to-[#014a7a] hover:shadow-lg active:scale-95"
+            }`}
           >
-            {mode === "list" ? "List Property" : "Update Listing"}
+            {isSubmitting || isUploading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
+                {isUploading ? "Uploading images..." : "Saving..."}
+              </>
+            ) : mode === "list" ? (
+              "List Property"
+            ) : (
+              "Update Listing"
+            )}
           </button>
         </div>
       </form>
