@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
-  const cookies = request.cookies;
+  const {cookies} = request;
   const role = cookies.get("role")?.value;
   const loggedInUserId = cookies.get("userId")?.value;
 

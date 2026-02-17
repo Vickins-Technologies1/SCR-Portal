@@ -1,7 +1,10 @@
+// src/app/admin/components/Navbar.tsx
 "use client";
 
 import React from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { LogOut } from "lucide-react";
 import Cookies from "js-cookie";
 
 export default function Navbar() {
@@ -10,26 +13,34 @@ export default function Navbar() {
   const handleSignOut = () => {
     Cookies.remove("userId");
     Cookies.remove("role");
+    // Add other cookies if needed: permissions, ownerId, etc.
     router.push("/admin/login");
   };
 
   return (
-    <header className="sm:ml-64 fixed top-0 left-0 right-0 z-10 bg-white border-b border-gray-200 shadow-sm h-16 flex items-center px-4 sm:px-8 font-sans">
-      <div className="flex justify-between items-center w-full">
-        <div className="hidden sm:block">
-          <h1 className="text-lg font-semibold text-[#012a4a] tracking-wide">
-            Admin Dashboard
-          </h1>
+    <header className="fixed top-0 z-40 h-16 w-full border-b border-gray-100 bg-white/90 backdrop-blur-md shadow-sm md:pl-64 lg:pl-72">
+      <div className="flex h-full items-center justify-between px-5 sm:px-6 lg:px-10">
+        {/* Left: Logo */}
+        <div className="flex items-center">
+          <Image
+            src="/logo.png"
+            alt="Sorana Property Managers Logo"
+            width={220}
+            height={80}
+            className="h-14 w-36 sm:h-16 sm:w-40 object-contain drop-shadow-sm rounded-lg"
+            priority
+          />
         </div>
 
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleSignOut}
-            className="text-sm font-medium bg-[#012a4a] text-white px-4 py-1.5 rounded-lg shadow-sm hover:bg-[#014a7a] transition"
-          >
-            Logout
-          </button>
-        </div>
+        {/* Right: Logout */}
+        <button
+          onClick={handleSignOut}
+          className="group flex items-center gap-2.5 rounded-full border border-gray-200 px-5 py-2 text-sm font-medium text-gray-700 transition-all hover:border-[#03a678]/60 hover:text-[#03a678] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#03a678]/30 active:scale-95"
+          title="Sign out"
+        >
+          <LogOut size={18} className="transition-transform group-hover:rotate-6" />
+          <span className="hidden sm:inline">Logout</span>
+        </button>
       </div>
     </header>
   );

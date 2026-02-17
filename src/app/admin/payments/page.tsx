@@ -9,6 +9,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -77,7 +78,7 @@ export default function PaymentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // ── 1. Session check (replaces cookie reading + CSRF fetch) ────────────────
+  // ── Session check ───────────────────────────────────────────────────────────
   const checkSession = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/session", {
@@ -106,7 +107,7 @@ export default function PaymentsPage() {
     checkSession();
   }, [checkSession]);
 
-  // ── 2. Fetch all data when authenticated ───────────────────────────────────
+  // ── Fetch data ─────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     if (status !== "authenticated") return;
 
@@ -122,9 +123,11 @@ export default function PaymentsPage() {
         fetch("/api/admin/properties", { credentials: "include" }),
       ]);
 
-      if (pRes.status === 401 || pRes.status === 403 ||
-          oRes.status === 401 || oRes.status === 403 ||
-          prRes.status === 401 || prRes.status === 403) {
+      if (
+        pRes.status === 401 || pRes.status === 403 ||
+        oRes.status === 401 || oRes.status === 403 ||
+        prRes.status === 401 || prRes.status === 403
+      ) {
         showToast("Session expired. Please log in again.", "error");
         router.replace("/admin/login?session=expired");
         return;
@@ -161,7 +164,7 @@ export default function PaymentsPage() {
     }
   }, [status, fetchData]);
 
-  // ── Filtering logic ────────────────────────────────────────────────────────
+  // ── Filtering logic (unchanged) ────────────────────────────────────────────
   useEffect(() => {
     let filtered = [...payments];
 
@@ -195,7 +198,7 @@ export default function PaymentsPage() {
     setCurrentPage(1);
   }, [filters, payments, propertyOwners, properties]);
 
-  // ── Export Excel for selected owner ────────────────────────────────────────
+  // ── Export Excel ───────────────────────────────────────────────────────────
   const generateExcel = async (ownerId: string) => {
     if (!ownerId) return;
 
@@ -244,13 +247,13 @@ export default function PaymentsPage() {
     currentPage * itemsPerPage
   );
 
-  // ── Render logic ───────────────────────────────────────────────────────────
+  // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex items-center gap-3 text-lg text-gray-600">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-          Verifying session...
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#03a678]"></div>
+          <p className="text-lg font-medium text-gray-700">Verifying admin session...</p>
         </div>
       </div>
     );
@@ -259,58 +262,84 @@ export default function PaymentsPage() {
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gray-50">
       <Navbar />
       <Sidebar />
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 max-w-sm">
-          <div
-            className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl text-white font-medium animate-slide-in ${
-              toast.type === "error"
-                ? "bg-red-600"
-                : toast.type === "success"
-                ? "bg-green-600"
-                : "bg-blue-600"
-            }`}
-          >
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span className="flex-1">{toast.message}</span>
-            <button onClick={() => setToast(null)} className="text-white/80 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
+      <div className="md:ml-72 pt-16 pb-16 px-5 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-10 mt-8">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
+              <CreditCard size={28} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Payments</h1>
+              <p className="text-gray-600 mt-1">View, filter and export payment records</p>
+            </div>
           </div>
-        </div>
-      )}
 
-      <div className="sm:ml-64 pt-16">
-        <main className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-800 flex items-center gap-3 mb-2">
-            <CreditCard className="text-[#012a4a] w-8 h-8" />
-            Payments Dashboard
-          </h1>
-          <p className="text-gray-600 mb-8">View, filter and export owner payments</p>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
-              {error}
+          {/* Toast */}
+          {toast && (
+            <div className="fixed top-6 right-6 z-50 max-w-md">
+              <motion.div
+                initial={{ opacity: 0, x: 100 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 100 }}
+                className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl text-white font-medium ${
+                  toast.type === "error"
+                    ? "bg-red-600"
+                    : toast.type === "success"
+                    ? "bg-green-600"
+                    : "bg-[#03a678]"
+                }`}
+              >
+                <AlertCircle className="w-6 h-6 flex-shrink-0" />
+                <span className="flex-1">{toast.message}</span>
+                <button onClick={() => setToast(null)} className="text-white/90 hover:text-white">
+                  <X className="w-6 h-6" />
+                </button>
+              </motion.div>
             </div>
           )}
 
-          {/* Export Section */}
-          <div className="bg-white rounded-2xl shadow-xl p-6 lg:p-8 mb-8 border border-gray-100">
-            <h3 className="text-xl lg:text-2xl font-bold mb-5 flex items-center gap-3">
-              <Download className="text-[#012a4a] w-6 h-6" />
+          {/* Error */}
+          {error && (
+            <div className="mb-10 bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl flex items-start gap-4">
+              <AlertCircle className="h-6 w-6 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium">{error}</p>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    fetchData();
+                  }}
+                  className="mt-3 inline-flex items-center gap-2 text-sm text-red-700 hover:text-red-800 transition-colors"
+                >
+                  <RefreshCw size={16} />
+                  Try again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Export Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-100 p-6 lg:p-8 mb-10"
+          >
+            <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+              <Download className="text-[#03a678] h-7 w-7" />
               Export Reports
             </h3>
 
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
               <select
                 value={selectedOwnerId}
                 onChange={(e) => setSelectedOwnerId(e.target.value)}
                 disabled={isExporting || isLoading}
-                className="w-full sm:w-80 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#012a4a]/30 focus:border-[#012a4a] transition"
+                className="w-full sm:w-96 px-5 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition text-gray-700"
               >
                 <option value="">Select Property Owner...</option>
                 {propertyOwners.map((o) => (
@@ -324,24 +353,39 @@ export default function PaymentsPage() {
                 <button
                   onClick={() => generateExcel(selectedOwnerId)}
                   disabled={isExporting || isLoading}
-                  className={`flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md font-medium min-w-[180px] ${
+                  className={`inline-flex items-center justify-center gap-3 px-8 py-4 bg-[#03a678] text-white font-medium rounded-xl hover:bg-[#027a55] transition-all shadow-md min-w-[220px] ${
                     isExporting ? "opacity-70 cursor-wait" : ""
                   }`}
                 >
-                  {isExporting ? "Exporting..." : "Export Selected Owner"}
+                  {isExporting ? (
+                    <>
+                      <RefreshCw className="h-5 w-5 animate-spin" />
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={20} />
+                      Export Selected Owner
+                    </>
+                  )}
                 </button>
               )}
             </div>
-          </div>
+          </motion.div>
 
-          {/* Filters */}
-          <div className="bg-white rounded-2xl shadow-xl p-6 lg:p-8 mb-8">
-            <h3 className="text-xl lg:text-2xl font-bold mb-5">Filters</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Filters Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-100 p-6 lg:p-8 mb-10"
+          >
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">Filters</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               <select
                 value={filters.ownerEmail}
                 onChange={(e) => setFilters({ ...filters, ownerEmail: e.target.value })}
-                className="p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#012a4a]/30"
+                className="px-5 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
               >
                 <option value="">All Owners</option>
                 {propertyOwners.map((o) => (
@@ -356,13 +400,13 @@ export default function PaymentsPage() {
                 placeholder="Search property name..."
                 value={filters.propertyName}
                 onChange={(e) => setFilters({ ...filters, propertyName: e.target.value })}
-                className="p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#012a4a]/30"
+                className="px-5 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
               />
 
               <select
                 value={filters.type}
                 onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-                className="p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#012a4a]/30"
+                className="px-5 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
               >
                 <option value="">All Types</option>
                 <option value="Rent">Rent</option>
@@ -372,7 +416,7 @@ export default function PaymentsPage() {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#012a4a]/30"
+                className="px-5 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
               >
                 <option value="">All Status</option>
                 <option value="completed">Completed</option>
@@ -380,73 +424,101 @@ export default function PaymentsPage() {
                 <option value="failed">Failed</option>
               </select>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Loading / Empty / Table */}
+          {/* Table / Loading / Empty */}
           {isLoading ? (
-            <div className="grid gap-5">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="bg-white rounded-xl shadow p-6 animate-pulse h-28" />
+            <div className="grid gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div
+                  key={i}
+                  className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-28 animate-pulse"
+                />
               ))}
             </div>
           ) : filteredPayments.length === 0 ? (
-            <div className="bg-white rounded-2xl shadow-2xl p-10 lg:p-16 text-center">
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-100 p-12 text-center">
               <AlertCircle className="w-20 h-20 text-orange-500 mx-auto mb-6" />
-              <h3 className="text-2xl lg:text-3xl font-bold text-gray-800 mb-3">
-                No Payments Match Your Filters
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                No Payments Found
               </h3>
               <p className="text-gray-600 mb-8 max-w-md mx-auto">
-                Try changing filters or refresh the data.
+                No payments match the selected filters or no data is available yet.
               </p>
               <button
                 onClick={fetchData}
-                className="inline-flex items-center gap-3 px-8 py-4 bg-[#012a4a] text-white rounded-xl hover:bg-[#013a6a] transition text-lg font-medium shadow-md"
+                className="inline-flex items-center gap-3 px-8 py-4 bg-[#03a678] text-white rounded-xl hover:bg-[#027a55] transition shadow-md font-medium"
               >
-                <RefreshCw className="w-5 h-5" />
+                <RefreshCw size={20} />
                 Refresh Data
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+            >
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px]">
-                  <thead className="bg-gradient-to-r from-[#012a4a] to-[#024a7a] text-white">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Transaction</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Tenant</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Property</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Type</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Amount</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Date</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Transaction
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Tenant
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Property
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Type
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Amount
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Date
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Status
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-gray-100">
                     {paginated.map((p) => {
                       const prop = properties.find((pr) => pr._id === p.propertyId);
                       return (
-                        <tr key={p._id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 font-mono text-sm whitespace-nowrap">{p.transactionId}</td>
-                          <td className="px-6 py-4 font-medium">{p.tenantName || "—"}</td>
-                          <td className="px-6 py-4">{prop?.name || "—"}</td>
+                        <tr key={p._id} className="hover:bg-gray-50/70 transition-colors">
+                          <td className="px-6 py-4 text-sm font-mono text-gray-700">
+                            {p.transactionId}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                            {p.tenantName || "—"}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {prop?.name || "—"}
+                          </td>
                           <td className="px-6 py-4">
-                            <span className="inline-block px-3 py-1 bg-gray-100 rounded-full text-xs font-medium">
+                            <span className="inline-flex px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
                               {p.type || "N/A"}
                             </span>
                           </td>
-                          <td className="px-6 py-4 font-bold text-green-700">
+                          <td className="px-6 py-4 text-sm font-bold text-emerald-700">
                             Ksh {p.amount.toLocaleString("en-KE")}
                           </td>
-                          <td className="px-6 py-4 text-sm">
+                          <td className="px-6 py-4 text-sm text-gray-600">
                             {new Date(p.paymentDate).toLocaleDateString("en-KE")}
                           </td>
                           <td className="px-6 py-4">
                             <span
-                              className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
+                              className={`inline-flex px-3 py-1 text-xs font-bold rounded-full ${
                                 p.status === "completed"
-                                  ? "bg-green-100 text-green-800"
+                                  ? "bg-emerald-100 text-emerald-800"
                                   : p.status === "pending"
-                                  ? "bg-yellow-100 text-yellow-800"
+                                  ? "bg-amber-100 text-amber-800"
                                   : "bg-red-100 text-red-800"
                               }`}
                             >
@@ -461,7 +533,7 @@ export default function PaymentsPage() {
               </div>
 
               {/* Pagination */}
-              <div className="px-6 py-5 bg-gray-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="px-6 py-5 bg-gray-50 border-t flex flex-col sm:flex-row justify-between items-center gap-5">
                 <div className="text-sm text-gray-600">
                   Showing {(currentPage - 1) * itemsPerPage + 1}–
                   {Math.min(currentPage * itemsPerPage, filteredPayments.length)} of{" "}
@@ -472,38 +544,28 @@ export default function PaymentsPage() {
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="px-5 py-2 border border-gray-300 rounded-lg disabled:opacity-50 hover:bg-gray-100 transition"
+                    className="px-6 py-3 border border-gray-300 rounded-xl disabled:opacity-50 hover:bg-gray-100 transition font-medium"
                   >
                     Previous
                   </button>
 
-                  <span className="px-4 py-2 font-medium">
+                  <span className="px-5 py-3 font-medium bg-white rounded-xl border border-gray-200 shadow-sm">
                     Page {currentPage} of {totalPages || 1}
                   </span>
 
                   <button
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage >= totalPages}
-                    className="px-5 py-2 border border-gray-300 rounded-lg disabled:opacity-50 hover:bg-gray-100 transition"
+                    className="px-6 py-3 border border-gray-300 rounded-xl disabled:opacity-50 hover:bg-gray-100 transition font-medium"
                   >
                     Next
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
         </main>
       </div>
-
-      <style jsx>{`
-        @keyframes slide-in {
-          from { transform: translateX(120%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
-        }
-        .animate-slide-in {
-          animation: slide-in 0.4s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

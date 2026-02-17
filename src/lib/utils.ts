@@ -131,3 +131,14 @@ export const convertTenantToResponse = (tenant: Tenant & { unitIdentifier?: stri
   walletBalance: tenant.walletBalance ?? 0,
   deliveryMethod: tenant.deliveryMethod || "both",
 });
+
+/**
+ * Merges class names conditionally (like clsx + tailwind-merge)
+ * Usage: cn("px-4", isActive && "bg-blue-500", "text-sm")
+ */
+export function cn(...inputs: (string | undefined | null | false | 0 | "")[]): string {
+  return inputs
+    .filter(Boolean)                    // remove falsy values
+    .join(" ")
+    .trim();
+}

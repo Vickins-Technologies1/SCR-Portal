@@ -3,7 +3,17 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, ArrowUpDown, Edit, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Building2,
+  ArrowUpDown,
+  Edit,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
+import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -45,7 +55,7 @@ export default function PropertiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // ── 1. Verify session (httpOnly cookies) ───────────────────────────────────
+  // ── Session check ───────────────────────────────────────────────────────────
   const checkSession = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/session", {
@@ -57,10 +67,7 @@ export default function PropertiesPage() {
       if (!res.ok) throw new Error("Session invalid");
 
       const data = await res.json();
-
-      if (!data.authenticated) {
-        throw new Error("Not authenticated");
-      }
+      if (!data.authenticated) throw new Error("Not authenticated");
 
       setStatus("authenticated");
     } catch {
@@ -74,7 +81,7 @@ export default function PropertiesPage() {
     checkSession();
   }, [checkSession]);
 
-  // ── 2. Fetch properties when authenticated ────────────────────────────────
+  // ── Fetch properties ───────────────────────────────────────────────────────
   const fetchProperties = useCallback(async () => {
     if (status !== "authenticated") return;
 
@@ -93,9 +100,7 @@ export default function PropertiesPage() {
         throw new Error("Session expired");
       }
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data: ApiResponse = await res.json();
 
@@ -144,20 +149,20 @@ export default function PropertiesPage() {
   );
 
   const getSortIcon = (key: keyof Property | "ownerEmail") => {
-    if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4 text-white" />;
+    if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
-      <ChevronUp className="inline ml-1 h-4 w-4 text-white" />
+      <ChevronUp className="inline ml-1 h-4 w-4" />
     ) : (
-      <ChevronDown className="inline ml-1 h-4 w-4 text-white" />
+      <ChevronDown className="inline ml-1 h-4 w-4" />
     );
   };
 
-  // ── Expand / Collapse unit types ───────────────────────────────────────────
+  // ── Expand / Collapse ──────────────────────────────────────────────────────
   const toggleExpand = (id: string) => {
-    setExpanded((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  // ── Delete property ────────────────────────────────────────────────────────
+  // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this property? This cannot be undone.")) return;
 
@@ -184,7 +189,7 @@ export default function PropertiesPage() {
     }
   };
 
-  // ── Edit property ──────────────────────────────────────────────────────────
+  // ── Edit ───────────────────────────────────────────────────────────────────
   const handleEdit = (property: Property) => {
     setEditProperty(property);
     setShowEditModal(true);
@@ -199,10 +204,7 @@ export default function PropertiesPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          name: editProperty.name,
-          // ownerId: editProperty.ownerId,  // usually not changeable from here
-        }),
+        body: JSON.stringify({ name: editProperty.name }),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -228,187 +230,222 @@ export default function PropertiesPage() {
     }
   };
 
-  // ── Rendering ──────────────────────────────────────────────────────────────
+  // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex items-center gap-3 text-lg text-gray-600">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-          Verifying session...
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#03a678]"></div>
+          <p className="text-lg font-medium text-gray-700">Verifying admin session...</p>
         </div>
       </div>
     );
   }
 
-  if (status === "unauthenticated") return null; // redirect already handled
+  if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen bg-gray-50">
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800 mb-6">
-            <Building2 className="text-[#012a4a] h-6 w-6" />
-            Properties
-          </h1>
 
+      <div className="md:ml-72 pt-16 pb-16 px-5 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-10 mt-8">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
+              <Building2 size={28} />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900">Properties</h1>
+          </div>
+
+          {/* Error Message */}
           {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-6 rounded-lg shadow">
-              {error}
+            <div className="mb-10 bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl flex items-start gap-4">
+              <AlertCircle className="h-6 w-6 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium">{error}</p>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    fetchProperties();
+                  }}
+                  className="mt-3 inline-flex items-center gap-2 text-sm text-red-700 hover:text-red-800 transition-colors"
+                >
+                  <RefreshCw size={16} />
+                  Try again
+                </button>
+              </div>
             </div>
           )}
 
           {isLoading ? (
-            <div className="text-center py-10 text-gray-600">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <span className="ml-2">Loading properties...</span>
+            <div className="grid grid-cols-1 gap-6">
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-24 animate-pulse" />
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-24 animate-pulse" />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-md">
-                <thead className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white">
-                  <tr>
-                    <th
-                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
-                      onClick={() => handleSort("name")}
-                    >
-                      Property Name {getSortIcon("name")}
-                    </th>
-                    <th
-                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
-                      onClick={() => handleSort("ownerEmail")}
-                    >
-                      Owner Email {getSortIcon("ownerEmail")}
-                    </th>
-                    <th className="py-3 px-4 text-left text-sm font-semibold">Unit Types</th>
-                    <th className="py-3 px-4 text-left text-sm font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {properties.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+            >
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-gray-600">
-                        No properties found.
-                      </td>
+                      <th
+                        className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        onClick={() => handleSort("name")}
+                      >
+                        Property Name {getSortIcon("name")}
+                      </th>
+                      <th
+                        className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        onClick={() => handleSort("ownerEmail")}
+                      >
+                        Owner Email {getSortIcon("ownerEmail")}
+                      </th>
+                      <th className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Unit Types
+                      </th>
+                      <th className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Actions
+                      </th>
                     </tr>
-                  ) : (
-                    properties.map((p, index) => (
-                      <React.Fragment key={p._id}>
-                        <tr
-                          className="border-b border-gray-200 hover:bg-gray-50"
-                          style={{ animationDelay: `${index * 80}ms` }}
-                        >
-                          <td className="py-3 px-4 text-sm text-gray-800">{p.name}</td>
-                          <td className="py-3 px-4 text-sm text-gray-600">{p.ownerEmail || "N/A"}</td>
-                          <td className="py-3 px-4 text-sm text-gray-600">
-                            {p.unitTypes.length > 0 ? (
-                              <button
-                                className="text-white hover:text-gray-200"
-                                onClick={() => toggleExpand(p._id)}
-                              >
-                                {expanded.includes(p._id) ? (
-                                  <ChevronUp className="h-5 w-5" />
-                                ) : (
-                                  <ChevronDown className="h-5 w-5" />
-                                )}
-                              </button>
-                            ) : (
-                              "No units"
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            <div className="flex gap-3">
-                              <button
-                                onClick={() => handleEdit(p)}
-                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                                aria-label={`Edit ${p.name}`}
-                              >
-                                <Edit className="h-5 w-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(p._id)}
-                                className="text-red-600 hover:text-red-800 transition-colors"
-                                aria-label={`Delete ${p.name}`}
-                              >
-                                <Trash2 className="h-5 w-5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {expanded.includes(p._id) && (
-                          <tr className="bg-gray-50">
-                            <td colSpan={4} className="py-4 px-6">
-                              <h4 className="text-sm font-semibold text-gray-800 mb-2">Unit Types</h4>
-                              {p.unitTypes.length === 0 ? (
-                                <p className="text-sm text-gray-600">No unit types defined</p>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {properties.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-12 text-center text-gray-500">
+                          No properties found.
+                        </td>
+                      </tr>
+                    ) : (
+                      properties.map((p, i) => (
+                        <React.Fragment key={p._id}>
+                          <tr className="hover:bg-gray-50/70 transition-colors">
+                            <td className="py-4 px-6 text-sm font-medium text-gray-900">{p.name}</td>
+                            <td className="py-4 px-6 text-sm text-gray-600">{p.ownerEmail || "N/A"}</td>
+                            <td className="py-4 px-6 text-sm text-gray-600">
+                              {p.unitTypes.length > 0 ? (
+                                <button
+                                  onClick={() => toggleExpand(p._id)}
+                                  className="text-[#03a678] hover:text-[#027a55] transition-colors"
+                                  title="View unit types"
+                                >
+                                  {expanded.includes(p._id) ? (
+                                    <ChevronUp size={20} />
+                                  ) : (
+                                    <ChevronDown size={20} />
+                                  )}
+                                </button>
                               ) : (
-                                <ul className="list-disc pl-6 text-sm text-gray-700 space-y-1">
-                                  {p.unitTypes.map((u, i) => (
-                                    <li key={`${p._id}-${i}`}>
-                                      <span className="font-medium">{u.type}</span>
-                                      {u.price != null && ` • Price: Ksh ${u.price.toLocaleString()}`}
-                                      {u.deposit != null && ` • Deposit: Ksh ${u.deposit.toLocaleString()}`}
-                                      {u.managementFee != null && ` • Fee: Ksh ${u.managementFee.toLocaleString()}`}
-                                      {u.managementType && ` (${u.managementType})`}
-                                    </li>
-                                  ))}
-                                </ul>
+                                "No units"
                               )}
                             </td>
+                            <td className="py-4 px-6 text-sm">
+                              <div className="flex items-center gap-4">
+                                <button
+                                  onClick={() => handleEdit(p)}
+                                  className="text-[#03a678] hover:text-[#027a55] transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit size={20} />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(p._id)}
+                                  className="text-red-600 hover:text-red-800 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={20} />
+                                </button>
+                              </div>
+                            </td>
                           </tr>
-                        )}
-                      </React.Fragment>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+
+                          {expanded.includes(p._id) && (
+                            <tr>
+                              <td colSpan={4} className="bg-gray-50/70 px-6 py-5">
+                                <h4 className="text-sm font-semibold text-gray-800 mb-3">Unit Types</h4>
+                                {p.unitTypes.length === 0 ? (
+                                  <p className="text-sm text-gray-600">No unit types defined</p>
+                                ) : (
+                                  <ul className="space-y-2 text-sm text-gray-700">
+                                    {p.unitTypes.map((u, i) => (
+                                      <li key={i} className="flex flex-wrap gap-x-4">
+                                        <span className="font-medium">{u.type}</span>
+                                        {u.price != null && (
+                                          <span>Price: Ksh {u.price.toLocaleString()}</span>
+                                        )}
+                                        {u.deposit != null && (
+                                          <span>Deposit: Ksh {u.deposit.toLocaleString()}</span>
+                                        )}
+                                        {u.managementFee != null && (
+                                          <span>Fee: Ksh {u.managementFee.toLocaleString()}</span>
+                                        )}
+                                        {u.managementType && (
+                                          <span className="text-gray-500">({u.managementType})</span>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
           )}
 
           {/* Edit Modal */}
           {showEditModal && editProperty && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-5">Edit Property</h2>
-                <form onSubmit={handleUpdate}>
-                  <div className="mb-5">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Property</h2>
+
+                <form onSubmit={handleUpdate} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Property Name
                     </label>
                     <input
                       type="text"
                       value={editProperty.name}
                       onChange={(e) => setEditProperty({ ...editProperty, name: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
+                      className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
                     />
                   </div>
 
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Owner Email
                     </label>
                     <input
                       type="text"
                       value={editProperty.ownerEmail || "N/A"}
                       disabled
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                      className="w-full p-4 border border-gray-300 rounded-xl bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
                   </div>
 
-                  <div className="flex justify-end gap-3">
+                  <div className="flex justify-end gap-4 mt-8">
                     <button
                       type="button"
                       onClick={() => setShowEditModal(false)}
-                      className="px-5 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
+                      className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-medium"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                      className="px-6 py-3 bg-[#03a678] text-white rounded-xl hover:bg-[#027a55] transition font-medium shadow-md"
                     >
                       Save Changes
                     </button>
