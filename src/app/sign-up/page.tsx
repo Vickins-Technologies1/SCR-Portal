@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaCheck, FaTimes, FaChevronDown } from "react-icons/fa";
-import Cookies from "js-cookie";
+import { FaEye, FaEyeSlash, FaGoogle, FaCheck, FaTimes, FaChevronDown } from "react-icons/fa";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { countries } from "countries-list";
@@ -55,6 +54,7 @@ export default function SignUp() {
   const [criteria, setCriteria] = useState({
     length: false,
     upper: false,
+    lower: false,
     number: false,
     special: false,
   });
@@ -62,15 +62,16 @@ export default function SignUp() {
   useEffect(() => {
     const length = password.length >= 8;
     const upper = /[A-Z]/.test(password);
+    const lower = /[a-z]/.test(password);
     const number = /\d/.test(password);
-    const special = /[@$!%*?&]/.test(password);
+    const special = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password);
 
-    setCriteria({ length, upper, number, special });
+    setCriteria({ length, upper, lower, number, special });
   }, [password]);
 
   const score = Object.values(criteria).filter(Boolean).length;
   const barColor =
-    score === 4 ? "bg-teal-500" : score >= 2 ? "bg-yellow-500" : "bg-red-500";
+    score === 5 ? "bg-teal-500" : score >= 3 ? "bg-yellow-500" : "bg-red-500";
 
   useEffect(() => {
     fetch("/api/csrf-token", { credentials: "include" })
@@ -101,7 +102,7 @@ export default function SignUp() {
 
   useEffect(() => {
     if (success) {
-      const t = setTimeout(() => router.push("/"), 5000);
+      const t = setTimeout(() => router.push("/"), 6000);
       return () => clearTimeout(t);
     }
   }, [success, router]);
@@ -111,18 +112,23 @@ export default function SignUp() {
     setError(null);
     setIsLoading(true);
 
+    const fullPhone = countryCode + phone;
+
+    // Client-side validations
     if (password !== confirmPassword) {
       setError("Passwords do not match");
       setIsLoading(false);
       return;
     }
-    if (score < 4) {
-      setError("Password must meet all criteria");
+
+    if (score < 5) {
+      setError("Password must meet all the requirements shown below");
       setIsLoading(false);
       return;
     }
-    if (!/^\d{6,15}$/.test(phone)) {
-      setError("Phone must be 6–15 digits");
+
+    if (!/^\+\d{8,15}$/.test(fullPhone)) {
+      setError("Phone number must start with + and contain 8–15 digits total");
       setIsLoading(false);
       return;
     }
@@ -135,10 +141,10 @@ export default function SignUp() {
           "X-CSRF-Token": csrfToken,
         },
         body: JSON.stringify({
-          name,
-          email,
+          name: name.trim(),
+          email: email.trim(),
           password,
-          phone: countryCode + phone,
+          phone: fullPhone,
           role: "propertyOwner",
           csrfToken,
         }),
@@ -146,19 +152,26 @@ export default function SignUp() {
       });
 
       const data = await res.json();
-      if (!data.success) throw new Error(data.message ?? "Signup failed");
 
-      Cookies.set("userId", data.userId, { secure: true, sameSite: "Strict", expires: 7 });
-      Cookies.set("role", data.role, { secure: true, sameSite: "Strict", expires: 7 });
+      if (!data.success) {
+        throw new Error(data.message || "Signup failed");
+      }
 
-      setSuccess("Account created – redirecting…");
+      setSuccess(
+        "Account created successfully!\n\n" +
+        "Your account is pending admin approval.\n" +
+        "You will receive an email once it is activated.\n\n" +
+        "Redirecting to home page..."
+      );
+
+      // Clear form
       setName("");
       setEmail("");
       setPhone("");
       setPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -166,99 +179,59 @@ export default function SignUp() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
+      {/* LEFT: Branding */}
+      <div
+        className="
+          hidden lg:flex lg:w-1/2 
+          bg-gradient-to-br from-white via-slate-50/70 to-white 
+          text-gray-900 items-center justify-center 
+          p-6 xl:p-12 relative overflow-hidden
+          shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
+          lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
+        "
+      >
+        <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
+            <Image
+              src="/logo.png"
+              alt="Sorana Property Managers Limited"
+              width={400}
+              height={140}
+              className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
+              priority
+            />
+          </motion.div>
 
-{/* LEFT: Branding – hidden on mobile – refreshed content for signup */}
-<div
-  className="
-    hidden lg:flex lg:w-1/2 
-    bg-gradient-to-br from-white via-slate-50/70 to-white 
-    text-gray-900 items-center justify-center 
-    p-6 xl:p-12 relative overflow-hidden
-    shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
-    lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
-  "
->
-  {/* Floating subtle bubbles – slightly varied from login for distinction */}
-  <div className="absolute inset-0 pointer-events-none">
-    <motion.div
-      className="absolute left-[12%] top-[15%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-400/12 border border-teal-300/15 backdrop-blur-md"
-      animate={{
-        y: ["0%", "-40%", "10%", "-25%", "0%"],
-        x: ["0%", "15%", "-10%", "8%", "0%"],
-        scale: [1, 1.15, 0.92, 1.1, 1],
-        opacity: [0.65, 0.88, 0.55, 0.8, 0.65],
-      }}
-      transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
-    />
-    <motion.div
-      className="absolute right-[18%] top-[35%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/14 border border-blue-300/18 backdrop-blur-sm"
-      animate={{
-        y: ["0%", "35%", "-20%", "15%", "0%"],
-        x: ["0%", "-12%", "18%", "-6%", "0%"],
-        scale: [1, 1.2, 0.98, 1.12, 1],
-      }}
-      transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 4 }}
-    />
-    <motion.div
-      className="absolute left-[40%] bottom-[25%] w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-emerald-300/10"
-      animate={{
-        y: ["0%", "-50%", "5%", "-35%", "0%"],
-        x: ["0%", "10%", "-15%", "5%", "0%"],
-        scale: [1, 1.28, 0.88, 1.18, 1],
-      }}
-      transition={{ duration: 28, repeat: Infinity, repeatType: "reverse", delay: 2 }}
-    />
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.9 }}
+            className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 bg-clip-text text-transparent"
+          >
+            Maximize Your Returns
+          </motion.h2>
 
-    {/* Smaller decorative bubbles */}
-    <motion.div className="absolute inset-0 opacity-40">
-      <div className="absolute top-[20%] left-[50%] w-7 h-7 rounded-full bg-teal-400/22" />
-      <div className="absolute top-[50%] right-[30%] w-6 h-6 rounded-full bg-blue-400/28" />
-      <div className="absolute bottom-[30%] left-[65%] w-9 h-9 rounded-full bg-emerald-300/18" />
-    </motion.div>
-  </div>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.9 }}
+            className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+          >
+            Smart tools for property owners • Track income & expenses • Optimize occupancy • Grow your portfolio with confidence.
+          </motion.p>
 
-  <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
-      <Image
-        src="/logo.png"
-        alt="Sorana Property Managers Limited"
-        width={400}
-        height={140}
-        className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
-        priority
-      />
-    </motion.div>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.55 }}
+            className="text-sm sm:text-base xl:text-lg font-medium text-teal-700 tracking-wide"
+          >
+            Your properties. Smarter management. Better profits.
+          </motion.p>
+        </div>
+      </div>
 
-    <motion.h2
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2, duration: 0.9 }}
-      className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 bg-clip-text text-transparent"
-    >
-      Maximize Your Returns
-    </motion.h2>
-
-    <motion.p
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.4, duration: 0.9 }}
-      className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
-    >
-      Smart tools for property owners • Track income & expenses • Optimize occupancy • Grow your portfolio with confidence.
-    </motion.p>
-
-    <motion.p
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.55 }}
-      className="text-sm sm:text-base xl:text-lg font-medium text-teal-700 tracking-wide"
-    >
-      Your properties. Smarter management. Better profits.
-    </motion.p>
-  </div>
-</div>
-
-      {/* RIGHT: Form – matched styling */}
+      {/* RIGHT: Form */}
       <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -289,18 +262,17 @@ export default function SignUp() {
             </div>
 
             {error && (
-              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
+              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center whitespace-pre-line">
                 {error}
               </div>
             )}
 
             {success && (
-              <div className="p-2.5 xs:p-3.5 bg-green-50 border border-green-200 text-green-700 text-xs sm:text-sm rounded-xl text-center">
+              <div className="p-2.5 xs:p-3.5 bg-green-50 border border-green-200 text-green-700 text-xs sm:text-sm rounded-xl text-center whitespace-pre-line">
                 {success}
               </div>
             )}
 
-            {/* Google Button – matched */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -422,10 +394,10 @@ export default function SignUp() {
                 />
               </div>
 
-              {/* Password strength – kept but visually toned down to match login simplicity */}
+              {/* Password strength indicator */}
               <div className="space-y-2 pt-1 text-xs">
                 <div className="flex gap-1.5">
-                  {[...Array(4)].map((_, i) => (
+                  {[...Array(5)].map((_, i) => (
                     <div
                       key={i}
                       className={`h-1.5 flex-1 rounded-full transition-all ${i < score ? barColor : "bg-slate-200/70"}`}
@@ -433,15 +405,16 @@ export default function SignUp() {
                   ))}
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>{score === 4 ? "Strong" : score >= 2 ? "Medium" : "Weak"}</span>
-                  <span>{score}/4</span>
+                  <span>{score === 5 ? "Strong" : score >= 3 ? "Medium" : "Weak"}</span>
+                  <span>{score}/5</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   {[
                     { label: "8+ characters", ok: criteria.length },
-                    { label: "Uppercase", ok: criteria.upper },
+                    { label: "Uppercase letter", ok: criteria.upper },
+                    { label: "Lowercase letter", ok: criteria.lower },
                     { label: "Number", ok: criteria.number },
-                    { label: "Special char", ok: criteria.special },
+                    { label: "Special character", ok: criteria.special },
                   ].map((c) => (
                     <div key={c.label} className="flex items-center gap-1.5">
                       {c.ok ? (
@@ -459,7 +432,7 @@ export default function SignUp() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 type="submit"
-                disabled={isLoading || !csrfToken || score < 4}
+                disabled={isLoading || !csrfToken || score < 5}
                 className="w-full bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white font-semibold py-3 xs:py-3.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide mt-2"
               >
                 {isLoading ? "Creating Account…" : "Create Account"}
@@ -474,7 +447,7 @@ export default function SignUp() {
             </p>
           </div>
 
-          {/* Quick Demo section – matched */}
+          {/* Quick Demo section */}
           <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
             <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
             <div className="grid grid-cols-2 gap-3">

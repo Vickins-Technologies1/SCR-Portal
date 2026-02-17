@@ -9,29 +9,33 @@ import bcrypt from "bcrypt";
 
 // ──────────────────────────────────────────────────────────────
 // In-memory rate limiter (IP-based, 5 attempts / 15 min)
+// WARNING: In-memory → lost on restart, not shared between instances
+// Consider Upstash/Redis or edge rate limiting in production
 // ──────────────────────────────────────────────────────────────
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX = 5; // max attempts
+const RATE_LIMIT_MAX = 5;
 
 function customRateLimiter(ip: string): { success: boolean; remaining: number } {
   const now = Date.now();
   const key = ip || "unknown";
-  const record = rateLimitStore.get(key);
+  let record = rateLimitStore.get(key);
 
   if (!record || now - record.lastReset > RATE_LIMIT_WINDOW_MS) {
-    rateLimitStore.set(key, { count: 1, lastReset: now });
+    record = { count: 1, lastReset: now };
+    rateLimitStore.set(key, record);
     logger.debug(`Rate limiter reset - IP: ${key}`);
     return { success: true, remaining: RATE_LIMIT_MAX - 1 };
   }
 
   record.count += 1;
+  rateLimitStore.set(key, record);
+
   if (record.count > RATE_LIMIT_MAX) {
     logger.warn(`Rate limit exceeded - IP: ${key}`, { count: record.count });
     return { success: false, remaining: 0 };
   }
 
-  rateLimitStore.set(key, record);
   logger.debug(`Rate limiter check - IP: ${key}, Remaining: ${RATE_LIMIT_MAX - record.count}`);
   return { success: true, remaining: RATE_LIMIT_MAX - record.count };
 }
@@ -43,9 +47,9 @@ interface SignupRequestBody {
   name: string;
   email: string;
   password: string;
-  phone: string;          // already includes country code, e.g. "+254712345678"
-  confirmPassword?: string; // not used on server – validated client-side
-  role: string;           // always "propertyOwner"
+  phone: string;
+  confirmPassword?: string;
+  role: string;
   csrfToken: string;
 }
 
@@ -53,17 +57,20 @@ interface SignupRequestBody {
 // POST handler
 // ──────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   let body: SignupRequestBody | undefined;
 
   try {
-    // ---------- 1. Rate limiting ----------
-    const { success: rlOk } = customRateLimiter(ip);
+    // 1. Rate limiting
+    const { success: rlOk, remaining } = customRateLimiter(ip);
     if (!rlOk) {
-      throw new Error("Too many signup attempts. Please try again later.");
+      return NextResponse.json(
+        { success: false, message: "Too many signup attempts. Please try again later.", remaining },
+        { status: 429 }
+      );
     }
 
-    // ---------- 2. Parse JSON ----------
+    // 2. Parse JSON
     body = await request.json();
     logger.debug("Received signup request:", { email: body?.email ?? "unknown", ip });
 
@@ -77,16 +84,16 @@ export async function POST(request: NextRequest) {
 
     const { name, email, password, phone, role, csrfToken } = body;
 
-    // ---------- 3. Required fields ----------
+    // 3. Required fields
     if (!name || !email || !password || !phone || !role || !csrfToken) {
-      logger.warn("Missing fields", { ...body });
+      logger.warn("Missing required fields", { provided: Object.keys(body) });
       return NextResponse.json(
         { success: false, message: "All fields are required" },
         { status: 400 }
       );
     }
 
-    // ---------- 4. CSRF protection ----------
+    // 4. CSRF protection
     const headerCsrf = request.headers.get("x-csrf-token");
     if (!headerCsrf || headerCsrf !== csrfToken || !validateCsrfToken(request, csrfToken)) {
       logger.warn("Invalid CSRF token", { provided: csrfToken });
@@ -96,61 +103,79 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ---------- 5. Role validation ----------
+    // 5. Role validation (strict)
     if (role !== "propertyOwner") {
-      logger.warn("Invalid role", { role });
+      logger.warn("Invalid role attempted", { role });
       return NextResponse.json(
-        { success: false, message: "Role must be 'propertyOwner'" },
+        { success: false, message: "Invalid role" },
         { status: 400 }
       );
     }
 
-    // ---------- 6. Sanitize inputs ----------
+    // 6. Sanitize inputs
     const sanitizedName = sanitizeHtml(name, { allowedTags: [], allowedAttributes: {} });
     const sanitizedEmail = sanitizeHtml(email, { allowedTags: [], allowedAttributes: {} });
     const sanitizedPhone = sanitizeHtml(phone, { allowedTags: [], allowedAttributes: {} });
 
-    // ---------- 7. Email validation ----------
+    // 7. Email validation
     if (!validator.isEmail(sanitizedEmail)) {
-      logger.warn("Invalid email", { email: sanitizedEmail });
+      logger.warn("Invalid email format", { email: sanitizedEmail });
       return NextResponse.json(
         { success: false, message: "Invalid email format" },
         { status: 400 }
       );
     }
 
-    // ---------- 8. Phone validation ----------
-    if (!/^(\+?\d{1,4})?\d{6,15}$/.test(sanitizedPhone)) {
-      logger.warn("Invalid phone", { phone: sanitizedPhone });
+    // 8. Phone validation
+    if (!validator.isMobilePhone(sanitizedPhone, "any", { strictMode: true })) {
+      logger.warn("Invalid phone number", { phone: sanitizedPhone });
       return NextResponse.json(
-        { success: false, message: "Invalid phone number (e.g., +254712345678)" },
+        { success: false, message: "Invalid phone number. Use international format (e.g. +254712345678)" },
         { status: 400 }
       );
     }
 
-    // ---------- 9. Password complexity ----------
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
-      logger.warn("Weak password", { length: password.length });
+    // 9. Password validation ── now returns structured errors
+    const passwordErrors: string[] = [];
+    if (password.length < 8) {
+      passwordErrors.push("at least 8 characters");
+    }
+    if (!/[A-Z]/.test(password)) {
+      passwordErrors.push("at least one uppercase letter");
+    }
+    if (!/[a-z]/.test(password)) {
+      passwordErrors.push("at least one lowercase letter");
+    }
+    if (!/\d/.test(password)) {
+      passwordErrors.push("at least one number");
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+      passwordErrors.push("at least one special character");
+    }
+
+    if (passwordErrors.length > 0) {
+      logger.warn("Weak password attempt", { email: sanitizedEmail, issues: passwordErrors });
+
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Password must be ≥8 chars, contain uppercase, lowercase, number & special character",
+          message: "Password requirements not met",
+          field: "password",
+          errors: passwordErrors,
         },
         { status: 400 }
       );
     }
 
-    // ---------- 10. Database connection ----------
+    // 10. Database connection
     if (!process.env.MONGODB_URI) {
-      logger.error("Missing MONGODB_URI");
+      logger.error("Missing MONGODB_URI environment variable");
       throw new Error("Database configuration error");
     }
     const { db } = await connectToDatabase();
     logger.debug("Connected to database");
 
-    // ---------- 11. Check for duplicate email (case-insensitive) ----------
+    // 11. Check for duplicate email (case-insensitive)
     const existingUser = await db
       .collection("propertyOwners")
       .findOne({ email: new RegExp(`^${sanitizedEmail}$`, "i") });
@@ -159,29 +184,29 @@ export async function POST(request: NextRequest) {
       logger.warn("Email already registered", { email: sanitizedEmail });
       return NextResponse.json(
         { success: false, message: "Email already registered" },
-        { status: 400 }
+        { status: 409 }
       );
     }
 
-    // ---------- 12. Hash password ----------
+    // 12. Hash password
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // ---------- 13. Create new property owner (with pending approval) ----------
+    // 13. Create new property owner (pending approval)
     const newUser = {
-      name: sanitizedName,
-      email: sanitizedEmail.toLowerCase(),
+      name: sanitizedName.trim(),
+      email: sanitizedEmail.toLowerCase().trim(),
       password: hashedPassword,
-      phone: sanitizedPhone,
+      phone: sanitizedPhone.trim(),
       role: "propertyOwner",
-      isApproved: false,                    // ← KEY CHANGE: requires admin approval
+      isApproved: false,
       createdAt: new Date().toISOString(),
     };
 
     const result = await db.collection("propertyOwners").insertOne(newUser);
     const userId = result.insertedId.toString();
 
-    // ---------- 14. Audit log (success + pending status) ----------
+    // 14. Audit log
     await db.collection("auditLogs").insertOne({
       action: "signup",
       userId,
@@ -194,15 +219,18 @@ export async function POST(request: NextRequest) {
 
     logger.info("Property owner created (pending approval)", { userId, email: sanitizedEmail });
 
-    // ---------- 15. Response with security headers ----------
+    // 15. Success response
     const response = NextResponse.json(
       {
         success: true,
-        message: "Account created successfully. It is pending admin approval and will be activated soon.",
+        message:
+          "Account created successfully. It is pending admin approval.\n" +
+          "You will be notified by email once your account is activated.",
       },
       { status: 201 }
     );
 
+    // Security headers
     response.headers.set("X-Content-Type-Options", "nosniff");
     response.headers.set("X-Frame-Options", "DENY");
     response.headers.set("X-XSS-Protection", "1; mode=block");
@@ -213,17 +241,14 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    // ────────────────────────────────────────────────────────
-    // Centralised error handling + audit log (failure)
-    // ────────────────────────────────────────────────────────
     logger.error("Signup error", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
-      requestBody: body ? { ...body, password: "[redacted]" } : "N/A",
+      requestBody: body ? { ...body, password: "[REDACTED]" } : "N/A",
       ip,
     });
 
-    // Try to log failure (fire-and-forget)
+    // Best-effort audit log for failure
     try {
       const { db } = await connectToDatabase();
       await db.collection("auditLogs").insertOne({
@@ -235,27 +260,11 @@ export async function POST(request: NextRequest) {
         error: error instanceof Error ? error.message : "Unknown error",
       });
     } catch (logErr) {
-      logger.error("Failed to write audit log", { error: logErr });
-    }
-
-    // User-facing error messages
-    if (error instanceof Error) {
-      if (error.message === "Too many signup attempts. Please try again later.") {
-        return NextResponse.json(
-          { success: false, message: error.message },
-          { status: 429 }
-        );
-      }
-      if (error.message.includes("Database configuration error")) {
-        return NextResponse.json(
-          { success: false, message: "Server misconfigured – contact support" },
-          { status: 500 }
-        );
-      }
+      logger.error("Failed to write audit log on error", { error: logErr });
     }
 
     return NextResponse.json(
-      { success: false, message: "Internal server error" },
+      { success: false, message: "Internal server error. Please try again later." },
       { status: 500 }
     );
   }
