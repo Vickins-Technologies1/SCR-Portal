@@ -67,7 +67,7 @@ export default function AdminSidebar() {
         className="fixed right-5 top-18 z-50 rounded-lg bg-white/95 p-3 shadow-lg ring-1 ring-gray-200/80 backdrop-blur-sm transition-all hover:scale-105 md:hidden"
         aria-label="Toggle sidebar"
       >
-        {isOpen ? <X size={24} className="text-gray-700" /> : <Menu size={24} className="text-gray-700" />}
+        {isOpen ? <X size={20} className="text-gray-700" /> : <Menu size={24} className="text-gray-700" />}
       </button>
 
       {/* Sidebar */}
