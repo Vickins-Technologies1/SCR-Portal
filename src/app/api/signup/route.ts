@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ---------- 4. CSRF (header + body) ----------
+    // ---------- 4. CSRF protection ----------
     const headerCsrf = request.headers.get("x-csrf-token");
     if (!headerCsrf || headerCsrf !== csrfToken || !validateCsrfToken(request, csrfToken)) {
       logger.warn("Invalid CSRF token", { provided: csrfToken });
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ---------- 5. Role ----------
+    // ---------- 5. Role validation ----------
     if (role !== "propertyOwner") {
       logger.warn("Invalid role", { role });
       return NextResponse.json(
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ---------- 6. Sanitize ----------
+    // ---------- 6. Sanitize inputs ----------
     const sanitizedName = sanitizeHtml(name, { allowedTags: [], allowedAttributes: {} });
     const sanitizedEmail = sanitizeHtml(email, { allowedTags: [], allowedAttributes: {} });
     const sanitizedPhone = sanitizeHtml(phone, { allowedTags: [], allowedAttributes: {} });
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ---------- 10. DB connection ----------
+    // ---------- 10. Database connection ----------
     if (!process.env.MONGODB_URI) {
       logger.error("Missing MONGODB_URI");
       throw new Error("Database configuration error");
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
     logger.debug("Connected to database");
 
-    // ---------- 11. Duplicate email (case-insensitive) ----------
+    // ---------- 11. Check for duplicate email (case-insensitive) ----------
     const existingUser = await db
       .collection("propertyOwners")
       .findOne({ email: new RegExp(`^${sanitizedEmail}$`, "i") });
@@ -167,20 +167,21 @@ export async function POST(request: NextRequest) {
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // ---------- 13. Insert new owner ----------
+    // ---------- 13. Create new property owner (with pending approval) ----------
     const newUser = {
       name: sanitizedName,
       email: sanitizedEmail.toLowerCase(),
-      password: hashedPassword, // now securely hashed
+      password: hashedPassword,
       phone: sanitizedPhone,
       role: "propertyOwner",
+      isApproved: false,                    // ← KEY CHANGE: requires admin approval
       createdAt: new Date().toISOString(),
     };
 
     const result = await db.collection("propertyOwners").insertOne(newUser);
     const userId = result.insertedId.toString();
 
-    // ---------- 14. Audit log (success) ----------
+    // ---------- 14. Audit log (success + pending status) ----------
     await db.collection("auditLogs").insertOne({
       action: "signup",
       userId,
@@ -188,17 +189,16 @@ export async function POST(request: NextRequest) {
       ip,
       timestamp: new Date().toISOString(),
       status: "success",
+      pendingApproval: true,
     });
 
-    logger.info("Property owner created", { userId, email: sanitizedEmail });
+    logger.info("Property owner created (pending approval)", { userId, email: sanitizedEmail });
 
     // ---------- 15. Response with security headers ----------
     const response = NextResponse.json(
       {
         success: true,
-        userId,
-        role: "propertyOwner",
-        message: "Account created successfully",
+        message: "Account created successfully. It is pending admin approval and will be activated soon.",
       },
       { status: 201 }
     );
@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
       ip,
     });
 
-    // Try to log the failure (fire-and-forget)
+    // Try to log failure (fire-and-forget)
     try {
       const { db } = await connectToDatabase();
       await db.collection("auditLogs").insertOne({
@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
       logger.error("Failed to write audit log", { error: logErr });
     }
 
-    // Specific user-facing messages
+    // User-facing error messages
     if (error instanceof Error) {
       if (error.message === "Too many signup attempts. Please try again later.") {
         return NextResponse.json(

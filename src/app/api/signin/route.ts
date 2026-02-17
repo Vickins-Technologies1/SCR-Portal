@@ -96,6 +96,18 @@ export async function POST(request: NextRequest) {
           finalRole = "propertyOwner";
           redirectPath = "/property-owner-dashboard";
           isOwner = true;
+
+          // ──── ADMIN APPROVAL CHECK ────
+          if (user.isApproved === false) {
+            return NextResponse.json(
+              {
+                success: false,
+                message: "Your account is still pending admin approval. Please try again later or contact support.",
+              },
+              { status: 403 }
+            );
+          }
+          // ─────────────────────────────────
         } else {
           // Try team member
           user = await db.collection("teamMembers").findOne({ _id: new ObjectId(userId) });
@@ -215,6 +227,18 @@ export async function POST(request: NextRequest) {
       finalRole = "propertyOwner";
       redirectPath = "/property-owner-dashboard";
       isOwner = true;
+
+      // ──── ADMIN APPROVAL CHECK ────
+      if (user.isApproved === false) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Your account is still pending admin approval. Please try again later or contact support.",
+          },
+          { status: 403 }
+        );
+      }
+      // ─────────────────────────────────
     } else {
       // 2. Check teamMembers
       user = await db.collection("teamMembers").findOne({

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Home, Users, Building2, CreditCard, FileText, Shield } from "lucide-react";
 import Navbar from "../components/Navbar";     // adjust path
 import Sidebar from "../components/Sidebar";   // adjust path
+import PendingApprovals from "../components/PendingApprovals";
 
 interface Counts {
   propertyOwners: number;
@@ -140,30 +141,32 @@ export default function AdminDashboard() {
     return null; // already redirected
   }
 
-  return (
-    <div className="min-h-screen bg-white">
-      <Navbar />
-      <Sidebar />
-      <div className="sm:ml-64 mt-16 p-6 lg:p-8">
-        <main className="max-w-7xl mx-auto">
-          <h1 className="text-3xl lg:text-4xl font-extrabold flex items-center gap-3 mb-8">
-            <Home className="h-8 w-8 text-indigo-600" />
-            Admin Dashboard
-          </h1>
+return (
+  <div className="min-h-screen bg-white">
+    <Navbar />
+    <Sidebar />
+    <div className="sm:ml-64 mt-16 p-6 lg:p-8">
+      <main className="max-w-7xl mx-auto">
+        <h1 className="text-3xl lg:text-4xl font-extrabold flex items-center gap-3 mb-8">
+          <Home className="h-8 w-8 text-indigo-600" />
+          Admin Dashboard
+        </h1>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
-              {error}
-            </div>
-          )}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6">
+            {error}
+          </div>
+        )}
 
-          {isLoading ? (
-            <div className="flex justify-center items-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
-              <span className="ml-4 text-lg text-gray-600">Loading...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {isLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+            <span className="ml-4 text-lg text-gray-600">Loading...</span>
+          </div>
+        ) : (
+          <>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
               {[
                 { icon: Users, title: "Property Owners", count: counts.propertyOwners, color: "indigo" },
                 { icon: Users, title: "Tenants", count: counts.tenants, color: "blue" },
@@ -186,9 +189,13 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
-          )}
-        </main>
-      </div>
+
+            {/* Pending Approvals Section */}
+            <PendingApprovals />
+          </>
+        )}
+      </main>
     </div>
-  );
+  </div>
+);
 }

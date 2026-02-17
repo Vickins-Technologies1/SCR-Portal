@@ -1,3 +1,4 @@
+// This is the main admin users page, allowing admins to view, create, edit, and delete property owners.
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";

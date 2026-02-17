@@ -1,4 +1,3 @@
-// src/app/api/admin/property-owners/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
@@ -14,9 +13,22 @@ export async function GET(request: NextRequest) {
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
+
+    const { searchParams } = new URL(request.url);
+    const statusFilter = searchParams.get("status");
+
+    let query: any = { role: "propertyOwner" };
+
+    if (statusFilter === "pending") {
+      query.isApproved = false;
+    } else if (statusFilter === "approved") {
+      query.isApproved = true;
+    }
+    // if no status → show all (default behavior)
+
     const propertyOwners = await db
       .collection("propertyOwners")
-      .find({ role: "propertyOwner" })
+      .find(query)
       .project({
         _id: 1,
         email: 1,
@@ -24,13 +36,16 @@ export async function GET(request: NextRequest) {
         phone: 1,
         role: 1,
         createdAt: 1,
+        isApproved: 1,
+        approvedAt: 1,
         properties: 1,
         payments: 1,
         invoices: 1,
       })
+      .sort({ createdAt: -1 }) // newest first
       .toArray();
 
-    const count = await db.collection("propertyOwners").countDocuments({ role: "propertyOwner" });
+    const count = await db.collection("propertyOwners").countDocuments(query);
 
     return NextResponse.json({
       success: true,
@@ -38,6 +53,7 @@ export async function GET(request: NextRequest) {
         ...po,
         _id: po._id.toString(),
         createdAt: po.createdAt instanceof Date ? po.createdAt.toISOString() : String(po.createdAt),
+        approvedAt: po.approvedAt instanceof Date ? po.approvedAt.toISOString() : po.approvedAt || null,
         properties: po.properties || [],
         payments: po.payments || [],
         invoices: po.invoices || [],
@@ -45,7 +61,7 @@ export async function GET(request: NextRequest) {
       count,
     });
   } catch (error) {
-    console.error("Fetch error:", error);
+    console.error("Fetch property owners error:", error);
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
@@ -65,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    const existing = await db.collection("propertyOwners").findOne({ email });
+    const existing = await db.collection("propertyOwners").findOne({ email: email.toLowerCase() });
     if (existing) {
       return NextResponse.json({ success: false, message: "Email already exists" }, { status: 409 });
     }
@@ -78,6 +94,7 @@ export async function POST(request: NextRequest) {
       phone,
       password: hashedPassword,
       role: "propertyOwner",
+      isApproved: false,           // ← admin must approve even when created by admin
       createdAt: new Date(),
       updatedAt: new Date(),
       properties: [],
@@ -89,13 +106,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Owner created",
+      message: "Owner created (pending approval)",
       propertyOwner: {
         _id: newOwner?._id.toString(),
         name: newOwner?.name,
         email: newOwner?.email,
         phone: newOwner?.phone,
         role: newOwner?.role,
+        isApproved: newOwner?.isApproved ?? false,
         createdAt: newOwner?.createdAt.toISOString(),
         properties: [],
         payments: [],
@@ -103,7 +121,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Create error:", error);
+    console.error("Create property owner error:", error);
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
