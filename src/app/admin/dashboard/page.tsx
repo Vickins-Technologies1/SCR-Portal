@@ -131,7 +131,7 @@ export default function AdminDashboard() {
     }
   }, [status, fetchCounts]);
 
-  // ── Stat items with explanations ────────────────────────────────────────────
+  // ── Stat items ──────────────────────────────────────────────────────────────
   const statItems = [
     {
       title: "Property Owners",
@@ -145,43 +145,43 @@ export default function AdminDashboard() {
       value: counts.tenants.toLocaleString(),
       icon: Users,
       color: "blue",
-      explanation: "Total active tenants across all properties in the platform.",
+      explanation: "Total active tenants across all properties.",
     },
     {
       title: "Properties",
       value: counts.properties.toLocaleString(),
       icon: Building2,
       color: "purple",
-      explanation: "Total number of properties currently listed and managed.",
+      explanation: "Total number of properties listed and managed.",
     },
     {
       title: "Payments",
       value: counts.payments.toLocaleString(),
       icon: CreditCard,
       color: "green",
-      explanation: "Total payment transactions processed in the system to date.",
+      explanation: "Total payment transactions processed to date.",
     },
     {
       title: "Invoices",
       value: counts.invoices.toLocaleString(),
       icon: FileText,
       color: "indigo",
-      explanation: "Total invoices generated and sent to property owners/tenants.",
+      explanation: "Total invoices generated and sent.",
     },
     {
       title: "Admins",
       value: counts.admins.toLocaleString(),
       icon: Shield,
       color: "pink",
-      explanation: "Total admin accounts with system management privileges.",
+      explanation: "Total admin accounts with management privileges.",
     },
   ];
 
   // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="flex flex-col items-center gap-5 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#03a678]"></div>
           <p className="text-lg font-medium text-gray-700">Verifying admin session...</p>
         </div>
@@ -196,30 +196,30 @@ export default function AdminDashboard() {
       <Navbar />
       <Sidebar />
 
-      <div className="md:ml-72 pt-16 pb-16 px-5 sm:px-6 lg:px-8">
+      <div className="md:ml-72 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
         <main className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex items-center gap-4 mb-10 mt-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
-              <Shield size={28} />
+          <div className="flex items-center gap-3 sm:gap-4 mb-8 sm:mb-10 mt-6 sm:mt-8">
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
+              <Shield size={24} className="sm:size-[28px]" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           </div>
 
-          {/* Error Message - aligned with PendingApprovals style */}
+          {/* Error Message */}
           {error && (
-            <div className="mb-10 bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl flex items-start gap-4">
-              <AlertCircle className="h-6 w-6 flex-shrink-0 mt-0.5" />
+            <div className="mb-8 sm:mb-10 bg-red-50 border border-red-200 text-red-700 px-5 py-4 sm:px-6 sm:py-5 rounded-2xl flex items-start gap-3 sm:gap-4">
+              <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-medium">{error}</p>
+                <p className="font-medium text-sm sm:text-base">{error}</p>
                 <button
                   onClick={() => {
                     setError(null);
                     fetchCounts();
                   }}
-                  className="mt-3 inline-flex items-center gap-2 text-sm text-red-700 hover:text-red-800 transition-colors"
+                  className="mt-2 sm:mt-3 inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-red-700 hover:text-red-800 transition-colors"
                 >
-                  <RefreshCw size={16} />
+                  <RefreshCw size={14} className="sm:size-16" />
                   Try again
                 </button>
               </div>
@@ -227,43 +227,43 @@ export default function AdminDashboard() {
           )}
 
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
               {[...Array(6)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-36 animate-pulse"
+                  className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-32 sm:h-36 animate-pulse"
                 >
-                  <div className="p-6 space-y-5">
-                    <div className="h-5 bg-gray-200 rounded w-3/4" />
-                    <div className="h-12 bg-gray-300 rounded-xl w-1/2" />
+                  <div className="p-5 sm:p-6 space-y-4 sm:space-y-5">
+                    <div className="h-4 bg-gray-200 rounded w-3/4" />
+                    <div className="h-9 sm:h-10 bg-gray-300 rounded-xl w-1/2" />
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <>
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 mb-12">
+              {/* Stats Grid – mobile-first */}
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5 lg:gap-6 mb-10 sm:mb-12">
                 {statItems.map((item, i) => (
                   <motion.div
                     key={i}
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06, duration: 0.5 }}
-                    className="group relative bg-white/90 backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100"
+                    transition={{ delay: i * 0.05, duration: 0.45 }}
+                    className="group relative bg-white/95 backdrop-blur-sm rounded-2xl p-5 sm:p-6 shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100/80 flex flex-col"
                   >
                     {/* Title + Info tooltip */}
-                    <div className="flex items-center justify-between mb-4">
-                      <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600 uppercase tracking-wide">
                         {item.title}
                       </p>
                       <div className="relative group/info">
                         <Info
-                          className="text-[#03a678]/60 hover:text-[#03a678] transition-colors cursor-help"
-                          size={18}
+                          className="text-[#03a678]/70 hover:text-[#03a678] transition-colors cursor-help"
+                          size={16}
                         />
-                        <div className="absolute bottom-full right-0 mb-3 hidden group-hover/info:block z-50 pointer-events-none">
-                          <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[220px] leading-relaxed shadow-xl">
+                        <div className="absolute bottom-full right-0 mb-2 sm:mb-3 hidden group-hover/info:block z-50 pointer-events-none">
+                          <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[200px] sm:min-w-[220px] leading-relaxed shadow-xl">
                             {item.explanation}
                           </div>
                           <div
@@ -277,20 +277,22 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* Value + Icon */}
-                    <div className="flex items-center justify-between">
-                      <p className="text-3xl font-bold text-gray-900">
+                    <div className="flex items-center justify-between mt-auto">
+                      <p className="text-2xl sm:text-3xl font-bold text-gray-900">
                         {item.value}
                       </p>
-                      <div className={`p-4 rounded-xl bg-${item.color}-50/70`}>
-                        <item.icon className={`h-8 w-8 text-${item.color}-600`} />
+                      <div className={`p-3 sm:p-4 rounded-xl bg-${item.color}-50/70`}>
+                        <item.icon className={`h-7 w-7 sm:h-8 sm:w-8 text-${item.color}-600`} />
                       </div>
                     </div>
                   </motion.div>
                 ))}
               </div>
 
-              {/* Pending Approvals Section */}
-              <PendingApprovals />
+              {/* Pending Approvals */}
+              <div className="mt-8 sm:mt-10">
+                <PendingApprovals />
+              </div>
             </>
           )}
         </main>
