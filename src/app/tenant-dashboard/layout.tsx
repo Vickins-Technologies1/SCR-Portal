@@ -90,7 +90,7 @@ export default function TenantDashboardLayout({
   const handleLogout = () => {
     Cookies.remove("userId");
     Cookies.remove("role");
-    window.location.href = "/";
+    window.location.href = "/tenant-login";
   };
 
   const initials = name
