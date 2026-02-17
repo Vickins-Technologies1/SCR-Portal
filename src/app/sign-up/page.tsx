@@ -165,157 +165,179 @@ export default function SignUp() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-      {/* LEFT: Branding – hidden on mobile */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-950 via-blue-950 to-teal-950 text-white items-center justify-center p-6 xl:p-12 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <motion.div
-            className="absolute w-64 h-64 rounded-full bg-gradient-to-br from-teal-400/20 to-cyan-300/10 blur-3xl"
-            initial={{ x: "-10%", y: "50%", scale: 1 }}
-            animate={{ x: ["-10%", "20%", "-5%"], y: ["50%", "10%", "60%"], scale: [1, 1.1, 1] }}
-            transition={{ duration: 20, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute w-80 h-80 rounded-full bg-gradient-to-br from-cyan-300/12 to-teal-200/6 blur-2xl"
-            initial={{ x: "60%", y: "-20%", scale: 0.95 }}
-            animate={{ x: ["60%", "35%", "70%"], y: ["-20%", "15%", "-35%"], scale: [0.95, 1.05, 0.95] }}
-            transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 5 }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-indigo-950/20" />
-        </div>
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
 
-        <div className="text-center space-y-6 xl:space-y-9 z-10 max-w-lg">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, ease: "easeOut" }}
-            className="bg-white/90 backdrop-blur-md rounded-2xl p-5 sm:p-6 shadow-2xl border border-white/25 inline-block"
-          >
+{/* LEFT: Branding – hidden on mobile – refreshed content for signup */}
+<div
+  className="
+    hidden lg:flex lg:w-1/2 
+    bg-gradient-to-br from-white via-slate-50/70 to-white 
+    text-gray-900 items-center justify-center 
+    p-6 xl:p-12 relative overflow-hidden
+    shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
+    lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
+  "
+>
+  {/* Floating subtle bubbles – slightly varied from login for distinction */}
+  <div className="absolute inset-0 pointer-events-none">
+    <motion.div
+      className="absolute left-[12%] top-[15%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-400/12 border border-teal-300/15 backdrop-blur-md"
+      animate={{
+        y: ["0%", "-40%", "10%", "-25%", "0%"],
+        x: ["0%", "15%", "-10%", "8%", "0%"],
+        scale: [1, 1.15, 0.92, 1.1, 1],
+        opacity: [0.65, 0.88, 0.55, 0.8, 0.65],
+      }}
+      transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+    />
+    <motion.div
+      className="absolute right-[18%] top-[35%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/14 border border-blue-300/18 backdrop-blur-sm"
+      animate={{
+        y: ["0%", "35%", "-20%", "15%", "0%"],
+        x: ["0%", "-12%", "18%", "-6%", "0%"],
+        scale: [1, 1.2, 0.98, 1.12, 1],
+      }}
+      transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 4 }}
+    />
+    <motion.div
+      className="absolute left-[40%] bottom-[25%] w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-emerald-300/10"
+      animate={{
+        y: ["0%", "-50%", "5%", "-35%", "0%"],
+        x: ["0%", "10%", "-15%", "5%", "0%"],
+        scale: [1, 1.28, 0.88, 1.18, 1],
+      }}
+      transition={{ duration: 28, repeat: Infinity, repeatType: "reverse", delay: 2 }}
+    />
+
+    {/* Smaller decorative bubbles */}
+    <motion.div className="absolute inset-0 opacity-40">
+      <div className="absolute top-[20%] left-[50%] w-7 h-7 rounded-full bg-teal-400/22" />
+      <div className="absolute top-[50%] right-[30%] w-6 h-6 rounded-full bg-blue-400/28" />
+      <div className="absolute bottom-[30%] left-[65%] w-9 h-9 rounded-full bg-emerald-300/18" />
+    </motion.div>
+  </div>
+
+  <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
+      <Image
+        src="/logo.png"
+        alt="Sorana Property Managers Limited"
+        width={400}
+        height={140}
+        className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
+        priority
+      />
+    </motion.div>
+
+    <motion.h2
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2, duration: 0.9 }}
+      className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 bg-clip-text text-transparent"
+    >
+      Maximize Your Returns
+    </motion.h2>
+
+    <motion.p
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.4, duration: 0.9 }}
+      className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+    >
+      Smart tools for property owners • Track income & expenses • Optimize occupancy • Grow your portfolio with confidence.
+    </motion.p>
+
+    <motion.p
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.55 }}
+      className="text-sm sm:text-base xl:text-lg font-medium text-teal-700 tracking-wide"
+    >
+      Your properties. Smarter management. Better profits.
+    </motion.p>
+  </div>
+</div>
+
+      {/* RIGHT: Form – matched styling */}
+      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, ease: "easeOut" }}
+          className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
+        >
+          {/* Mobile logo */}
+          <div className="lg:hidden flex justify-center pt-6 pb-4">
             <Image
               src="/logo.png"
               alt="Sorana"
-              width={300}
-              height={110}
-              className="mx-auto drop-shadow-2xl max-w-[260px] sm:max-w-[300px]"
+              width={240}
+              height={80}
+              className="drop-shadow-lg max-w-[180px] xs:max-w-[200px]"
               priority
             />
-          </motion.div>
-
-          <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.8 }}
-            className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-200 via-cyan-100 to-blue-300"
-          >
-            Build Your Future
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.45, duration: 0.8 }}
-            className="text-lg sm:text-xl xl:text-2xl font-light opacity-90 leading-relaxed px-2 sm:px-0"
-          >
-            Create your account in minutes • Unlock powerful portfolio tools •  
-            Track performance, optimize returns, scale with confidence.
-          </motion.p>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.65, duration: 0.8 }}
-            className="text-base sm:text-lg font-medium text-teal-200/90 tracking-wide"
-          >
-            Your properties. Your data. Your advantage.
-          </motion.p>
-
-          <motion.a
-            href="https://soranapropertymanagers.com"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold bg-white/12 backdrop-blur-lg border border-white/30 px-6 py-3 rounded-full hover:bg-white/20 transition-all shadow-md"
-            whileHover={{ scale: 1.05, boxShadow: "0 10px 30px -10px rgba(45, 212, 191, 0.4)" }}
-          >
-            See How It Works <FaArrowRight className="text-base sm:text-lg" />
-          </motion.a>
-        </div>
-      </div>
-
-      {/* RIGHT: Form – responsive */}
-      <div className="flex-1 flex items-center justify-center min-h-screen lg:min-h-0 px-5 py-8 sm:px-8 md:px-10 lg:p-12 bg-white/40 lg:bg-gradient-to-b lg:from-transparent lg:to-white/30">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="w-full max-w-md sm:max-w-lg bg-white/75 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-xl border border-white/30 overflow-hidden"
-        >
-          <div className="flex justify-center lg:hidden pt-6 pb-4">
-            <Image src="/logo.png" alt="Sorana" width={100} height={40} className="drop-shadow-md max-w-[200px] w-full" />
           </div>
 
-          <div className="px-5 sm:px-8 pt-5 sm:pt-8 pb-8 sm:pb-10 space-y-5 sm:space-y-6">
-            <div className="text-center">
-              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-800 to-teal-700 bg-clip-text text-transparent leading-tight">
-                Create Property Owner Account
+          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
+            <div className="text-center space-y-1">
+              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-700 to-teal-600 bg-clip-text text-transparent">
+                Create Owner Account
               </h1>
-              <p className="text-gray-600 mt-2 text-sm sm:text-base font-medium">
+              <p className="text-xs sm:text-sm text-slate-600 font-medium">
                 Get started in minutes
               </p>
             </div>
 
             {error && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="p-3 bg-red-50/80 backdrop-blur-sm text-red-700 text-sm rounded-xl border border-red-200/60 text-center"
-              >
+              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
                 {error}
-              </motion.div>
+              </div>
             )}
 
             {success && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="p-3 bg-green-50/80 backdrop-blur-sm text-green-700 text-sm rounded-xl border border-green-200/60 text-center"
-              >
+              <div className="p-2.5 xs:p-3.5 bg-green-50 border border-green-200 text-green-700 text-xs sm:text-sm rounded-xl text-center">
                 {success}
-              </motion.div>
+              </div>
             )}
 
+            {/* Google Button – matched */}
             <motion.button
-              whileHover={{ scale: 1.015 }}
-              whileTap={{ scale: 0.985 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               type="button"
               onClick={() => (window.location.href = "/api/auth/google")}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2.5 border border-slate-200 bg-white/85 backdrop-blur-sm text-slate-800 font-medium py-3.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60 text-sm sm:text-base min-h-[48px]"
+              className="w-full flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-medium py-3 xs:py-3.5 rounded-xl transition-all shadow-sm disabled:opacity-60 text-sm xs:text-base"
             >
-              <FaGoogle className="text-red-500 text-base" /> Continue with Google
+              <FaGoogle className="text-red-500 text-lg" />
+              Continue with Google
             </motion.button>
 
-            <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-400 my-2">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
-              <span className="font-medium">or</span>
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
+            <div className="relative my-1 sm:my-2">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white/80 px-3 xs:px-4 text-slate-500 font-medium">or</span>
+              </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
               <input
                 type="text"
                 placeholder="Full Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
+                className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
               />
 
+              {/* Phone with country dropdown */}
               <div className="relative" ref={dropdownRef}>
                 <button
                   type="button"
                   onClick={() => setOpen(!open)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-gray-600 z-10 pointer-events-auto px-2"
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-slate-600 z-10 pointer-events-auto px-2"
                 >
                   <span className="font-medium">{countryCode}</span>
                   <FaChevronDown className="text-xs" />
@@ -327,7 +349,7 @@ export default function SignUp() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
                   required
-                  className="w-full pl-24 pr-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
+                  className="w-full pl-24 pr-3.5 xs:pr-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
                 />
 
                 {open && (
@@ -337,7 +359,7 @@ export default function SignUp() {
                       placeholder="Search country or code..."
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      className="w-full px-4 py-3 border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur-sm z-10 text-sm placeholder:text-gray-400"
+                      className="w-full px-4 py-3 border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur-sm z-10 text-sm placeholder:text-slate-400"
                     />
                     <div className="py-1">
                       {filtered.map((c) => (
@@ -349,11 +371,11 @@ export default function SignUp() {
                             setOpen(false);
                             setSearch("");
                           }}
-                          className="w-full px-4 py-2.5 text-left hover:bg-teal-50/70 transition-colors flex items-center gap-3"
+                          className="w-full px-4 py-2.5 text-left hover:bg-teal-50/40 transition-colors flex items-center gap-3"
                         >
                           <span className="text-xl">{c.flag}</span>
                           <span className="flex-1">{c.name}</span>
-                          <span className="text-gray-500">+{c.phone}</span>
+                          <span className="text-slate-500">+{c.phone}</span>
                         </button>
                       ))}
                     </div>
@@ -363,11 +385,12 @@ export default function SignUp() {
 
               <input
                 type="email"
-                placeholder="Email Address"
+                placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
+                autoComplete="email"
+                className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
               />
 
               <div className="relative">
@@ -377,90 +400,93 @@ export default function SignUp() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3.5 pr-11 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
+                  className="w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-teal-600 transition-colors p-1"
+                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-teal-600 transition-colors"
                 >
                   {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
                 </button>
               </div>
 
-              <input
-                type="password"
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3.5 text-sm sm:text-base bg-white/65 backdrop-blur-sm border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/30 transition-all placeholder:text-gray-500 shadow-inner min-h-[48px]"
-              />
+              <div className="relative">
+                <input
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                />
+              </div>
 
-              <div className="space-y-2 pt-1">
+              {/* Password strength – kept but visually toned down to match login simplicity */}
+              <div className="space-y-2 pt-1 text-xs">
                 <div className="flex gap-1.5">
                   {[...Array(4)].map((_, i) => (
-                    <motion.div
+                    <div
                       key={i}
                       className={`h-1.5 flex-1 rounded-full transition-all ${i < score ? barColor : "bg-slate-200/70"}`}
-                      initial={false}
-                      animate={{ scale: i < score ? 1.08 : 1 }}
-                      transition={{ type: "spring", stiffness: 400, damping: 25 }}
                     />
                   ))}
                 </div>
-
-                <div className="flex justify-between text-xs text-gray-600">
-                  <span>{score === 4 ? "Strong" : score >= 2 ? "Medium" : "Weak"} Password</span>
+                <div className="flex justify-between text-slate-600">
+                  <span>{score === 4 ? "Strong" : score >= 2 ? "Medium" : "Weak"}</span>
                   <span>{score}/4</span>
                 </div>
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   {[
                     { label: "8+ characters", ok: criteria.length },
-                    { label: "Uppercase letter", ok: criteria.upper },
+                    { label: "Uppercase", ok: criteria.upper },
                     { label: "Number", ok: criteria.number },
-                    { label: "Special character", ok: criteria.special },
+                    { label: "Special char", ok: criteria.special },
                   ].map((c) => (
                     <div key={c.label} className="flex items-center gap-1.5">
-                      {c.ok ? <FaCheck className="text-teal-500" size={12} /> : <FaTimes className="text-gray-400" size={12} />}
-                      <span className={c.ok ? "text-teal-700" : "text-gray-500"}>{c.label}</span>
+                      {c.ok ? (
+                        <FaCheck className="text-teal-500" size={12} />
+                      ) : (
+                        <FaTimes className="text-slate-400" size={12} />
+                      )}
+                      <span className={c.ok ? "text-teal-700" : "text-slate-500"}>{c.label}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <motion.button
-                whileHover={{ scale: 1.015 }}
-                whileTap={{ scale: 0.985 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isLoading || !csrfToken || score < 4}
-                className="w-full bg-gradient-to-r from-blue-600 via-teal-500 to-teal-600 text-white font-semibold py-3.5 rounded-xl hover:brightness-110 hover:shadow-lg transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed shadow-md text-sm sm:text-base tracking-wide min-h-[52px] mt-2"
+                className="w-full bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white font-semibold py-3 xs:py-3.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide mt-2"
               >
                 {isLoading ? "Creating Account…" : "Create Account"}
               </motion.button>
             </form>
 
-            <p className="text-center text-sm text-gray-600 pt-2">
+            <p className="text-center text-xs sm:text-sm text-slate-600 pt-1">
               Already have an account?{" "}
-              <Link href="/" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline transition-colors">
+              <Link href="/" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline">
                 Sign in
               </Link>
             </p>
           </div>
 
-          <div className="px-5 sm:px-8 pb-6 pt-3 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-center text-xs text-gray-500 font-medium mb-3">Quick Demo</p>
+          {/* Quick Demo section – matched */}
+          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
+            <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
             <div className="grid grid-cols-2 gap-3">
               <a
                 href="/?demo=owner"
-                className="block text-center bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
+                className="block text-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-xl transition-all shadow-md text-sm"
               >
                 Owner Demo
               </a>
               <a
                 href="/tenant-login?demo=tenant"
-                className="block text-center bg-gradient-to-r from-teal-600 to-teal-700 text-white py-3 rounded-xl hover:brightness-110 transition-all text-sm font-semibold shadow-sm min-h-[48px]"
+                className="block text-center bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold py-3 rounded-xl transition-all shadow-md text-sm"
               >
                 Tenant Demo
               </a>

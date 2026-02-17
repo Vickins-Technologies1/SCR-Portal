@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Building2, ArrowUpDown, Edit, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Navbar from "../components/Navbar";
@@ -13,7 +12,13 @@ interface Property {
   name: string;
   ownerId: string;
   ownerEmail?: string;
-  unitTypes: { type: string; price?: number; deposit?: number; managementType: string; managementFee?: number }[];
+  unitTypes: {
+    type: string;
+    price?: number;
+    deposit?: number;
+    managementType: string;
+    managementFee?: number;
+  }[];
 }
 
 interface SortConfig {
@@ -29,137 +34,107 @@ interface ApiResponse {
 
 export default function PropertiesPage() {
   const router = useRouter();
+
   const [properties, setProperties] = useState<Property[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
+  const [expanded, setExpanded] = useState<string[]>([]);
   const [editProperty, setEditProperty] = useState<Property | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [expanded, setExpanded] = useState<string[]>([]);
-  const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
-  // Fetch CSRF token and check cookies
-  useEffect(() => {
-    const checkCookiesAndFetchCsrf = async () => {
-      const uid = Cookies.get("userId");
-      const userRole = Cookies.get("role");
-      console.log("Checking cookies in PropertiesPage:", { userId: uid, role: userRole });
+  const [status, setStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-      if (!uid || userRole !== "admin") {
-        console.log("Redirecting to /admin/login due to invalid cookies:", { userId: uid, role: userRole });
-        setError("Unauthorized. Please log in as an admin.");
-        router.push("/admin/login");
-        return;
+  // ── 1. Verify session (httpOnly cookies) ───────────────────────────────────
+  const checkSession = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/session", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error("Session invalid");
+
+      const data = await res.json();
+
+      if (!data.authenticated) {
+        throw new Error("Not authenticated");
       }
 
-      setUserId(uid);
-      setRole(userRole);
-
-      const token = Cookies.get("csrf-token");
-      if (token) {
-        setCsrfToken(token);
-        return;
-      }
-
-      try {
-        const res = await fetch("/api/csrf-token", {
-          method: "GET",
-          credentials: "include",
-        });
-        const data = await res.json();
-        if (data.csrfToken) {
-          Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
-          setCsrfToken(data.csrfToken);
-        } else {
-          console.error("Failed to fetch CSRF token:", data);
-          setError("Failed to initialize session. Please try again.");
-        }
-      } catch {
-        console.error("CSRF token fetch error");
-        setError("Failed to connect to server for CSRF token.");
-      }
-    };
-
-    checkCookiesAndFetchCsrf();
-
-    const cookiePoll = setInterval(() => {
-      const uid = Cookies.get("userId");
-      const userRole = Cookies.get("role");
-      if (uid && userRole === "admin") {
-        console.log("Cookies detected on poll:", { userId: uid, role: userRole });
-        setUserId(uid);
-        setRole(userRole);
-        clearInterval(cookiePoll);
-      }
-    }, 100);
-
-    return () => clearInterval(cookiePoll);
+      setStatus("authenticated");
+    } catch {
+      setStatus("unauthenticated");
+      setError("Session expired or invalid. Redirecting...");
+      router.replace("/admin/login?session=expired");
+    }
   }, [router]);
 
-  const fetchData = useCallback(async () => {
-    if (!userId || role !== "admin" || !csrfToken) {
-      setError("Required authentication or CSRF token not available.");
-      setIsLoading(false);
-      return;
-    }
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
+
+  // ── 2. Fetch properties when authenticated ────────────────────────────────
+  const fetchProperties = useCallback(async () => {
+    if (status !== "authenticated") return;
 
     setIsLoading(true);
+    setError(null);
+
     try {
       const res = await fetch("/api/admin/properties", {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
         credentials: "include",
+        cache: "no-store",
       });
 
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        throw new Error("Session expired");
+      }
+
       if (!res.ok) {
-        const body = await res.text();
-        console.error(`Failed to fetch /api/admin/properties: ${res.status} ${res.statusText}`, { body });
-        setError(res.status === 403 ? "Invalid or missing CSRF token" : "Failed to fetch properties");
-        setIsLoading(false);
-        return;
+        throw new Error(`HTTP ${res.status}`);
       }
 
       const data: ApiResponse = await res.json();
-      console.log("API response:", { propertiesData: data });
 
       if (data.success) {
         setProperties(data.properties || []);
       } else {
         setError(data.message || "Failed to fetch properties.");
       }
-    } catch {
-      console.error("Fetch data error");
-      setError("Failed to connect to the server. Please try again later.");
+    } catch (err: any) {
+      setError(
+        err.message.includes("Session expired")
+          ? "Your session has expired."
+          : "Failed to load properties. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [userId, role, csrfToken]);
+  }, [status, router]);
 
   useEffect(() => {
-    if (userId && role === "admin" && csrfToken) {
-      console.log("Fetching data for PropertiesPage:", { userId, role, csrfToken });
-      fetchData();
+    if (status === "authenticated") {
+      fetchProperties();
     }
-  }, [userId, role, csrfToken, fetchData]);
+  }, [status, fetchProperties]);
 
+  // ── Sorting ────────────────────────────────────────────────────────────────
   const handleSort = useCallback(
     (key: keyof Property | "ownerEmail") => {
       setSortConfig((prev) => {
         const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
         const sorted = [...properties].sort((a, b) => {
           if (key === "ownerEmail") {
-            const aEmail = a.ownerEmail || "";
-            const bEmail = b.ownerEmail || "";
-            return direction === "asc" ? aEmail.localeCompare(bEmail) : bEmail.localeCompare(aEmail);
+            const aVal = a.ownerEmail || "";
+            const bVal = b.ownerEmail || "";
+            return direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
           }
-          return direction === "asc"
-            ? String(a[key] ?? "").localeCompare(String(b[key] ?? ""))
-            : String(b[key] ?? "").localeCompare(String(a[key] ?? ""));
+          const aVal = String(a[key] ?? "");
+          const bVal = String(b[key] ?? "");
+          return direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
         });
         setProperties(sorted);
         return { key, direction };
@@ -168,46 +143,48 @@ export default function PropertiesPage() {
     [properties]
   );
 
-  const getSortIcon = useCallback(
-    (key: keyof Property | "ownerEmail") => {
-      if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-      return sortConfig.direction === "asc" ? (
-        <ChevronUp className="inline ml-1 h-4 w-4" />
-      ) : (
-        <ChevronDown className="inline ml-1 h-4 w-4" />);
-    },
-    [sortConfig]
-  );
+  const getSortIcon = (key: keyof Property | "ownerEmail") => {
+    if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4 text-white" />;
+    return sortConfig.direction === "asc" ? (
+      <ChevronUp className="inline ml-1 h-4 w-4 text-white" />
+    ) : (
+      <ChevronDown className="inline ml-1 h-4 w-4 text-white" />
+    );
+  };
 
+  // ── Expand / Collapse unit types ───────────────────────────────────────────
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  // ── Delete property ────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this property?")) return;
-
-    if (!csrfToken) {
-      setError("CSRF token not available. Please refresh the page.");
-      return;
-    }
+    if (!confirm("Are you sure you want to delete this property? This cannot be undone.")) return;
 
     try {
       const res = await fetch(`/api/admin/properties/${id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
         credentials: "include",
       });
+
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        return;
+      }
+
       const data = await res.json();
+
       if (data.success) {
-        setProperties(properties.filter((property) => property._id !== id));
+        setProperties(properties.filter((p) => p._id !== id));
       } else {
         setError(data.message || "Failed to delete property.");
       }
     } catch {
-      console.error("Delete property error");
-      setError("Failed to connect to the server.");
+      setError("Delete request failed. Please try again.");
     }
   };
 
+  // ── Edit property ──────────────────────────────────────────────────────────
   const handleEdit = (property: Property) => {
     setEditProperty(property);
     setShowEditModal(true);
@@ -215,29 +192,30 @@ export default function PropertiesPage() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editProperty || !csrfToken) {
-      setError("CSRF token or property data not available. Please try again.");
-      return;
-    }
+    if (!editProperty) return;
 
     try {
       const res = await fetch(`/api/admin/properties/${editProperty._id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           name: editProperty.name,
-          ownerId: editProperty.ownerId,
+          // ownerId: editProperty.ownerId,  // usually not changeable from here
         }),
       });
+
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        return;
+      }
+
       const data = await res.json();
+
       if (data.success) {
         setProperties(
-          properties.map((property) =>
-            property._id === editProperty._id ? { ...property, ...editProperty } : property
+          properties.map((p) =>
+            p._id === editProperty._id ? { ...p, ...editProperty } : p
           )
         );
         setShowEditModal(false);
@@ -246,14 +224,23 @@ export default function PropertiesPage() {
         setError(data.message || "Failed to update property.");
       }
     } catch {
-      console.error("Update property error");
-      setError("Failed to connect to the server.");
+      setError("Update request failed.");
     }
   };
 
-  const toggleExpand = (id: string) => {
-    setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  // ── Rendering ──────────────────────────────────────────────────────────────
+  if (status === "checking") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex items-center gap-3 text-lg text-gray-600">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
+          Verifying session...
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") return null; // redirect already handled
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
@@ -261,19 +248,21 @@ export default function PropertiesPage() {
       <Sidebar />
       <div className="sm:ml-64 mt-16">
         <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800 mb-6 animate-fade-in-down">
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800 mb-6">
             <Building2 className="text-[#012a4a] h-6 w-6" />
             Properties
           </h1>
+
           {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+            <div className="bg-red-100 text-red-700 p-4 mb-6 rounded-lg shadow">
               {error}
             </div>
           )}
+
           {isLoading ? (
-            <div className="text-center text-gray-600">
+            <div className="text-center py-10 text-gray-600">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <span className="ml-2">Loading...</span>
+              <span className="ml-2">Loading properties...</span>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -299,7 +288,7 @@ export default function PropertiesPage() {
                 <tbody>
                   {properties.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-4 px-4 text-center text-gray-600">
+                      <td colSpan={4} className="py-8 text-center text-gray-600">
                         No properties found.
                       </td>
                     </tr>
@@ -307,15 +296,15 @@ export default function PropertiesPage() {
                     properties.map((p, index) => (
                       <React.Fragment key={p._id}>
                         <tr
-                          className="border-b border-gray-200 hover:bg-gray-50 animate-fade-in"
-                          style={{ animationDelay: `${index * 100}ms` }}
+                          className="border-b border-gray-200 hover:bg-gray-50"
+                          style={{ animationDelay: `${index * 80}ms` }}
                         >
                           <td className="py-3 px-4 text-sm text-gray-800">{p.name}</td>
                           <td className="py-3 px-4 text-sm text-gray-600">{p.ownerEmail || "N/A"}</td>
                           <td className="py-3 px-4 text-sm text-gray-600">
                             {p.unitTypes.length > 0 ? (
                               <button
-                                className="text-[#012a4a] hover:text-[#014a7a]"
+                                className="text-white hover:text-gray-200"
                                 onClick={() => toggleExpand(p._id)}
                               >
                                 {expanded.includes(p._id) ? (
@@ -325,49 +314,46 @@ export default function PropertiesPage() {
                                 )}
                               </button>
                             ) : (
-                              <span>No units</span>
+                              "No units"
                             )}
                           </td>
                           <td className="py-3 px-4 text-sm">
-                            <div className="flex gap-2">
+                            <div className="flex gap-3">
                               <button
                                 onClick={() => handleEdit(p)}
-                                className="text-blue-600 hover:text-blue-800"
-                                aria-label={`Edit property ${p.name}`}
+                                className="text-blue-600 hover:text-blue-800 transition-colors"
+                                aria-label={`Edit ${p.name}`}
                               >
                                 <Edit className="h-5 w-5" />
                               </button>
                               <button
                                 onClick={() => handleDelete(p._id)}
-                                className="text-red-600 hover:text-red-800"
-                                aria-label={`Delete property ${p.name}`}
+                                className="text-red-600 hover:text-red-800 transition-colors"
+                                aria-label={`Delete ${p.name}`}
                               >
                                 <Trash2 className="h-5 w-5" />
                               </button>
                             </div>
                           </td>
                         </tr>
+
                         {expanded.includes(p._id) && (
                           <tr className="bg-gray-50">
-                            <td colSpan={4} className="py-4 px-4">
-                              <h4 className="text-sm font-semibold text-gray-800">Unit Types</h4>
+                            <td colSpan={4} className="py-4 px-6">
+                              <h4 className="text-sm font-semibold text-gray-800 mb-2">Unit Types</h4>
                               {p.unitTypes.length === 0 ? (
-                                <p className="text-sm text-gray-600">No unit types</p>
+                                <p className="text-sm text-gray-600">No unit types defined</p>
                               ) : (
-                                <ul className="list-disc pl-5 text-sm text-gray-600">
-                                  {p.unitTypes.map((u) => {
-                                    if (!u.type) {
-                                      console.warn("Unit type missing type field", { propertyId: p._id, unit: u });
-                                      return null;
-                                    }
-                                    return (
-                                      <li key={u.type}>
-                                        {u.type} (Price: Ksh {u.price != null ? u.price.toFixed(2) : "N/A"}, Deposit: Ksh{" "}
-                                        {u.deposit != null ? u.deposit.toFixed(2) : "N/A"}, Fee: Ksh{" "}
-                                        {u.managementFee != null ? u.managementFee.toFixed(2) : "N/A"})
-                                      </li>
-                                    );
-                                  })}
+                                <ul className="list-disc pl-6 text-sm text-gray-700 space-y-1">
+                                  {p.unitTypes.map((u, i) => (
+                                    <li key={`${p._id}-${i}`}>
+                                      <span className="font-medium">{u.type}</span>
+                                      {u.price != null && ` • Price: Ksh ${u.price.toLocaleString()}`}
+                                      {u.deposit != null && ` • Deposit: Ksh ${u.deposit.toLocaleString()}`}
+                                      {u.managementFee != null && ` • Fee: Ksh ${u.managementFee.toLocaleString()}`}
+                                      {u.managementType && ` (${u.managementType})`}
+                                    </li>
+                                  ))}
                                 </ul>
                               )}
                             </td>
@@ -380,43 +366,51 @@ export default function PropertiesPage() {
               </table>
             </div>
           )}
+
+          {/* Edit Modal */}
           {showEditModal && editProperty && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full">
-                <h2 className="text-xl font-bold mb-4">Edit Property</h2>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-5">Edit Property</h2>
                 <form onSubmit={handleUpdate}>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Property Name</label>
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Property Name
+                    </label>
                     <input
                       type="text"
                       value={editProperty.name}
                       onChange={(e) => setEditProperty({ ...editProperty, name: e.target.value })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
                   </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700">Owner Email</label>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Owner Email
+                    </label>
                     <input
                       type="text"
-                      value={editProperty.ownerEmail || ""}
+                      value={editProperty.ownerEmail || "N/A"}
                       disabled
-                      className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
                   </div>
-                  <div className="flex justify-end gap-2">
+
+                  <div className="flex justify-end gap-3">
                     <button
                       type="button"
                       onClick={() => setShowEditModal(false)}
-                      className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                      className="px-5 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                     >
-                      Save
+                      Save Changes
                     </button>
                   </div>
                 </form>
@@ -425,51 +419,6 @@ export default function PropertiesPage() {
           )}
         </main>
       </div>
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body {
-          font-family: 'Inter', sans-serif;
-        }
-        @keyframes fadeInDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fade-in-down {
-          animation: fadeInDown 0.5s ease-out;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        th,
-        td {
-          text-align: left;
-          vertical-align: middle;
-        }
-        th {
-          font-weight: 600;
-        }
-        tr {
-          transition: background-color 0.2s;
-        }
-      `}</style>
     </div>
   );
 }

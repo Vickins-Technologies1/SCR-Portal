@@ -105,6 +105,7 @@ const SELF_HANDLED_CSRF_ROUTES = [
 const CSRF_EXEMPT_ROUTES = [
   "/api/revert-impersonation",
   "/api/signout",           // if you have it
+  "/api/csrf-token",        // token generation should not require CSRF
 ];
 
 // Route → allowed roles mapping
@@ -155,7 +156,8 @@ const ADMIN_API_PATHS = [
 export async function proxy(request: NextRequest) {
   const fullPath = request.nextUrl.pathname;
   const path = fullPath.split("?")[0];
-  const {method} = request;
+  const { method } = request;
+
   // Skip static assets & Next.js internals
   if (path.startsWith("/_next/") || path === "/favicon.ico") {
     return NextResponse.next();
@@ -176,7 +178,7 @@ export async function proxy(request: NextRequest) {
   logger.debug("Proxy request", { path, method });
 
   try {
-    const {cookies} = request;
+    const { cookies } = request;
     const role = cookies.get("role")?.value as Role;
     const userId = cookies.get("userId")?.value;
     const isImpersonating = cookies.get("isImpersonating")?.value === "true";
@@ -268,19 +270,22 @@ export async function proxy(request: NextRequest) {
       }
     }
 
-    // Apply rate limiting + CSRF protection for mutating API calls
-    if (config.isApi && method !== "GET" && method !== "HEAD") {
+    // ── CSRF & Rate limiting ── only apply to mutating methods ──────────────────
+    if (config.isApi) {
+      const isMutatingMethod = !["GET", "HEAD", "OPTIONS"].includes(method);
       const isAdminApi = ADMIN_API_PATHS.some((p) => path.startsWith(p));
       const isCsrfExempt = CSRF_EXEMPT_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
       const isSelfHandled = SELF_HANDLED_CSRF_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 
       let handler = async (req: NextRequest) => NextResponse.next();
 
-      if (!isCsrfExempt && !isSelfHandled) {
+      // Only apply CSRF on mutating requests (POST/PUT/DELETE/PATCH)
+      if (isMutatingMethod && !isCsrfExempt && !isSelfHandled) {
         handler = csrfMiddleware(handler);
       }
 
-      if (!isAdminApi) { // Admin APIs might have separate rate limits later
+      // Apply rate limiting (you can make this conditional too if desired)
+      if (isMutatingMethod && !isAdminApi) {
         handler = rateLimitMiddleware(handler);
       }
 

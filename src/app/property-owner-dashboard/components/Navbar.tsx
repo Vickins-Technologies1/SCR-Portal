@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { LogOut } from "lucide-react";
 
 export default function Navbar() {
   const router = useRouter();
@@ -30,15 +30,14 @@ export default function Navbar() {
          
         </div>
 
-        {/* Right: Logout Button */}
+      {/* Right: Logout Button – responsive */}
         <button
           onClick={handleSignOut}
-          className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-[#03a678] to-[#029c6b] px-4 py-2.5 font-medium text-white shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-[#03a678]/30 hover:-translate-y-0.5"
+          className="group flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:border-[#03a678]/70 hover:text-[#03a678] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#03a678]/30 focus:ring-offset-1 active:scale-95"
+          title="Sign out" // tooltip on mobile
         >
-          <span className="relative z-10 flex items-center gap-2">
-            <span>Logout</span>
-          </span>
-          <div className="absolute inset-0 -translate-x-full bg-white/20 transition-transform duration-500 group-hover:translate-x-0" />
+          <LogOut size={18} className="transition-transform group-hover:rotate-6" />
+          <span className="hidden sm:inline">Logout</span>
         </button>
       </div>
     </header>

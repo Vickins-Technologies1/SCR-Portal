@@ -72,7 +72,6 @@ interface ApiResponse<T> {
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Payment[]>>> {
   const loggedInUserId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
-  const csrfToken = request.headers.get("x-csrf-token");
   const { searchParams } = new URL(request.url);
   const tenantId = searchParams.get("tenantId");
   const propertyId = searchParams.get("propertyId");
@@ -87,7 +86,6 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   logger.debug("GET /api/payments request", {
     loggedInUserId,
     role,
-    csrfToken,
     tenantId,
     propertyId,
     tenantName,
@@ -127,15 +125,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     effectiveOwnerId = teamMember.ownerId.toString();
   }
 
-  // Validate CSRF token
-  try {
-    if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
-      logger.error("Invalid or missing CSRF token", { loggedInUserId, csrfToken });
-      return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+  // ── CSRF validation only for mutating methods ───────────────────────────────
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const csrfToken = request.headers.get("x-csrf-token");
+    try {
+      if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
+        logger.error("Invalid or missing CSRF token", { loggedInUserId, csrfToken });
+        return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+      }
+    } catch (error) {
+      logger.error("CSRF validation error", { loggedInUserId, error: error instanceof Error ? error.message : String(error) });
+      return NextResponse.json({ success: false, message: "CSRF validation failed" }, { status: 403 });
     }
-  } catch (error) {
-    logger.error("CSRF validation error", { loggedInUserId, error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json({ success: false, message: "CSRF validation failed" }, { status: 403 });
   }
 
   try {
@@ -350,6 +351,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   }
 }
 
+// POST handler remains unchanged (it already needs CSRF, so no change required here)
 const UMS_PAY_API_KEY = process.env.UMS_PAY_API_KEY || "";
 const UMS_PAY_EMAIL = process.env.UMS_PAY_EMAIL || "";
 const UMS_PAY_ACCOUNT_ID = process.env.UMS_PAY_ACCOUNT_ID || "";

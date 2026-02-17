@@ -379,40 +379,62 @@ export default function PropertyOwnerDashboard() {
                         subtitle: `${vacancyRate}% vacancy`,
                         explanation: "Number of unoccupied units across all properties (calculated from total units minus occupied units).",
                       },
-                    ].map((s, i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow relative group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs font-medium text-gray-600">{s.title}</p>
-                            <div className="relative">
-                              <Info className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                              {/* Tooltip on hover - Wide & compact + always on top */}
-                              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2.5 hidden group-hover:block z-[100] pointer-events-none">
-                                <div className="bg-gradient-to-br from-gray-800 to-gray-900 text-white text-xs rounded-md py-0 px-3 max-w-[280px] leading-tight shadow-2xl border border-gray-700/40">
-                                  {s.explanation}
-                                </div>
-                                {/* Small downward arrow */}
-                                <div className="w-2.5 h-2.5 bg-gray-900 rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1.25 border-l border-b border-gray-700/40" />
-                              </div>
-                            </div>
-                          </div>
+                   ].map((s, i) => (
+    <motion.div
+      key={i}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: i * 0.05 }}
+      className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow"
+    >
+      {/* Header row with title + info icon on the right */}
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-medium text-gray-600">{s.title}</p>
 
-                          <div className={`p-3 rounded-xl bg-${s.color}-100`}>
-                            <s.icon className={`h-6 w-6 text-${s.color}-600`} />
-                          </div>
-                        </div>
+        {/* Info tooltip trigger – right aligned */}
+        <div className="relative flex items-center justify-center w-5 h-5 cursor-help">
+          <Info 
+            className="text-[#03a678]/70 hover:text-[#03a678] text-base transition-colors duration-200" 
+          />
+          
+          {/* Tooltip container – appears above-right */}
+          <div className="absolute bottom-full right-0 mb-2.5 hidden group-hover:block z-[100] pointer-events-none">
+            <div className="bg-slate-800 text-white text-xs rounded-lg py-1.5 px-2.5 min-w-[180px] max-w-[260px] leading-snug shadow-xl">
+              {s.explanation}
+              {/* Optional accent line like your example */}
+              {s.subtitle && (
+                <>
+                  <br />
+                  <span className="text-[#03a678]/90">{s.subtitle}</span>
+                </>
+              )}
+            </div>
 
-                        <p className="text-2xl font-bold text-gray-900 mt-2">{s.value}</p>
-                        {s.subtitle && <p className="text-xs text-gray-500 mt-1">{s.subtitle}</p>}
-                      </motion.div>
-                    ))}
-                  </div>
+            {/* Downward triangle arrow – matches dark bg */}
+            <div className="absolute bottom-[-6px] right-3 w-0 h-0 
+                          border-l-[6px] border-l-transparent 
+                          border-r-[6px] border-r-transparent 
+                          border-t-[6px] border-t-slate-800" />
+          </div>
+        </div>
+      </div>
+
+      {/* Main content: value + icon */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
+          {s.subtitle && !s.explanation.includes(s.subtitle) && (
+            <p className="text-xs text-gray-500 mt-1">{s.subtitle}</p>
+          )}
+        </div>
+
+        <div className={`p-3 rounded-xl bg-${s.color}-100/80`}>
+          <s.icon className={`h-6 w-6 text-${s.color}-600`} />
+        </div>
+      </div>
+    </motion.div>
+  ))}
+</div>
 
                   {/* CHARTS */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">

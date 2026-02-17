@@ -1,9 +1,16 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Users, ArrowUpDown, ChevronDown, ChevronUp, Edit, Trash2, Plus } from "lucide-react";
+import {
+  Users,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  Edit,
+  Trash2,
+  Plus,
+} from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
@@ -26,18 +33,16 @@ interface SortConfig {
 
 export default function UsersPage() {
   const router = useRouter();
+
   const [propertyOwners, setPropertyOwners] = useState<PropertyOwner[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    key: "name",
+    direction: "asc",
+  });
   const [expanded, setExpanded] = useState<string[]>([]);
   const [editUser, setEditUser] = useState<PropertyOwner | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-
   const [newOwner, setNewOwner] = useState({
     name: "",
     email: "",
@@ -45,41 +50,86 @@ export default function UsersPage() {
     password: "",
   });
 
-  useEffect(() => {
-    const uid = Cookies.get("userId");
-    const userRole = Cookies.get("role");
-    setUserId(uid || null);
-    setRole(userRole || null);
-    if (!uid || userRole !== "admin") {
-      setError("Unauthorized. Please log in as an admin.");
-      router.push("/login");
+  const [status, setStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+  const [error, setError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ── 1. Check session using secure httpOnly cookies ─────────────────────────────
+  const checkSession = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/session", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error("Session check failed");
+
+      const data = await res.json();
+
+      if (!data.authenticated) {
+        throw new Error("Not authenticated");
+      }
+
+      setStatus("authenticated");
+    } catch {
+      setStatus("unauthenticated");
+      setError("Session expired or invalid. Redirecting...");
+      router.replace("/admin/login?session=expired");
     }
   }, [router]);
 
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
+
+  // ── 2. Fetch property owners only when authenticated ───────────────────────────
   const fetchPropertyOwners = useCallback(async () => {
+    if (status !== "authenticated") return;
+
     setIsLoading(true);
+    setError(null);
+
     try {
       const res = await fetch("/api/admin/property-owners", {
         method: "GET",
         credentials: "include",
+        cache: "no-store",
       });
+
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        throw new Error("Session expired");
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const data = await res.json();
+
       if (data.success) {
         setPropertyOwners(data.propertyOwners || []);
       } else {
         setError(data.message || "Failed to fetch owners.");
       }
-    } catch {
-      setError("Server connection failed.");
+    } catch (err: any) {
+      setError(
+        err.message.includes("Session expired")
+          ? "Your session has expired."
+          : "Failed to load property owners."
+      );
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [status, router]);
 
   useEffect(() => {
-    if (userId && role === "admin") fetchPropertyOwners();
-  }, [userId, role, fetchPropertyOwners]);
+    if (status === "authenticated") {
+      fetchPropertyOwners();
+    }
+  }, [status, fetchPropertyOwners]);
 
+  // ── Sorting ────────────────────────────────────────────────────────────────
   const handleSort = (key: keyof PropertyOwner) => {
     setSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
@@ -95,31 +145,41 @@ export default function UsersPage() {
 
   const getSortIcon = (key: keyof PropertyOwner) => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
-    return sortConfig.direction === "asc" ? <ChevronUp className="inline ml-1 h-4 w-4" /> : <ChevronDown className="inline ml-1 h-4 w-4" />;
+    return sortConfig.direction === "asc" ? (
+      <ChevronUp className="inline ml-1 h-4 w-4" />
+    ) : (
+      <ChevronDown className="inline ml-1 h-4 w-4" />
+    );
   };
 
+  // ── Expand / Collapse ──────────────────────────────────────────────────────
   const toggleExpand = (id: string) => {
     setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this owner?")) return;
+    if (!confirm("Delete this owner? This action cannot be undone.")) return;
+
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+
       const data = await res.json();
+
       if (data.success) {
         setPropertyOwners(propertyOwners.filter((o) => o._id !== id));
       } else {
-        setError(data.message);
+        setError(data.message || "Delete failed");
       }
     } catch {
-      setError("Delete failed.");
+      setError("Delete request failed. Please try again.");
     }
   };
 
+  // ── Edit ───────────────────────────────────────────────────────────────────
   const handleEdit = (owner: PropertyOwner) => {
     setEditUser(owner);
     setShowEditModal(true);
@@ -140,19 +200,24 @@ export default function UsersPage() {
           phone: editUser.phone,
         }),
       });
+
       const data = await res.json();
+
       if (data.success) {
-        setPropertyOwners(propertyOwners.map((o) => (o._id === editUser._id ? { ...o, ...editUser } : o)));
+        setPropertyOwners(
+          propertyOwners.map((o) => (o._id === editUser._id ? { ...o, ...editUser } : o))
+        );
         setShowEditModal(false);
         setEditUser(null);
       } else {
-        setError(data.message);
+        setError(data.message || "Update failed");
       }
     } catch {
-      setError("Update failed.");
+      setError("Update request failed.");
     }
   };
 
+  // ── Create ─────────────────────────────────────────────────────────────────
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
@@ -164,6 +229,7 @@ export default function UsersPage() {
         credentials: "include",
         body: JSON.stringify(newOwner),
       });
+
       const data = await res.json();
 
       if (data.success) {
@@ -171,12 +237,28 @@ export default function UsersPage() {
         setShowCreateModal(false);
         setNewOwner({ name: "", email: "", phone: "", password: "" });
       } else {
-        setCreateError(data.message || "Create failed");
+        setCreateError(data.message || "Could not create owner");
       }
     } catch {
-      setCreateError("Server error");
+      setCreateError("Server error during creation");
     }
   };
+
+  // ── Rendering logic ────────────────────────────────────────────────────────
+  if (status === "checking") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex items-center gap-3 text-lg text-gray-600">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
+          Verifying session...
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return null; // redirect already triggered
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
@@ -213,13 +295,22 @@ export default function UsersPage() {
               <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-md">
                 <thead className="bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white">
                   <tr>
-                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("name")}>
+                    <th
+                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
+                      onClick={() => handleSort("name")}
+                    >
                       Name {getSortIcon("name")}
                     </th>
-                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("email")}>
+                    <th
+                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
+                      onClick={() => handleSort("email")}
+                    >
                       Email {getSortIcon("email")}
                     </th>
-                    <th className="py-3 px-4 text-left text-sm font-semibold cursor-pointer" onClick={() => handleSort("phone")}>
+                    <th
+                      className="py-3 px-4 text-left text-sm font-semibold cursor-pointer"
+                      onClick={() => handleSort("phone")}
+                    >
                       Phone {getSortIcon("phone")}
                     </th>
                     <th className="py-3 px-4 text-left text-sm font-semibold">Created</th>
@@ -230,13 +321,16 @@ export default function UsersPage() {
                   {propertyOwners.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-8 text-center text-gray-500">
-                        No property owners yet.
+                        No property owners found.
                       </td>
                     </tr>
                   ) : (
                     propertyOwners.map((owner, i) => (
                       <React.Fragment key={owner._id}>
-                        <tr className="border-b hover:bg-gray-50" style={{ animationDelay: `${i * 80}ms` }}>
+                        <tr
+                          className="border-b hover:bg-gray-50"
+                          style={{ animationDelay: `${i * 80}ms` }}
+                        >
                           <td className="py-3 px-4 text-sm">{owner.name}</td>
                           <td className="py-3 px-4 text-sm text-gray-600">{owner.email}</td>
                           <td className="py-3 px-4 text-sm text-gray-600">{owner.phone}</td>
@@ -245,10 +339,16 @@ export default function UsersPage() {
                           </td>
                           <td className="py-3 px-4 text-sm">
                             <div className="flex gap-2">
-                              <button onClick={() => handleEdit(owner)} className="text-blue-600 hover:text-blue-800">
+                              <button
+                                onClick={() => handleEdit(owner)}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
                                 <Edit className="h-5 w-5" />
                               </button>
-                              <button onClick={() => handleDelete(owner._id)} className="text-red-600 hover:text-red-800">
+                              <button
+                                onClick={() => handleDelete(owner._id)}
+                                className="text-red-600 hover:text-red-800"
+                              >
                                 <Trash2 className="h-5 w-5" />
                               </button>
                               <button onClick={() => toggleExpand(owner._id)}>
@@ -261,18 +361,19 @@ export default function UsersPage() {
                             </div>
                           </td>
                         </tr>
+
                         {expanded.includes(owner._id) && (
                           <tr className="bg-gray-50">
                             <td colSpan={5} className="py-4 px-6">
                               <div className="space-y-3 text-sm">
                                 <div>
-                                  <strong>Properties:</strong> {owner.properties.length}
+                                  <strong>Properties:</strong> {owner.properties?.length ?? 0}
                                 </div>
                                 <div>
-                                  <strong>Payments:</strong> {owner.payments.length}
+                                  <strong>Payments:</strong> {owner.payments?.length ?? 0}
                                 </div>
                                 <div>
-                                  <strong>Invoices:</strong> {owner.invoices.length}
+                                  <strong>Invoices:</strong> {owner.invoices?.length ?? 0}
                                 </div>
                               </div>
                             </td>
@@ -291,9 +392,13 @@ export default function UsersPage() {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
                 <h2 className="text-2xl font-bold mb-4">Add New Owner</h2>
+
                 {createError && (
-                  <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{createError}</div>
+                  <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">
+                    {createError}
+                  </div>
                 )}
+
                 <form onSubmit={handleCreate}>
                   <input
                     type="text"
@@ -301,7 +406,7 @@ export default function UsersPage() {
                     required
                     value={newOwner.name}
                     onChange={(e) => setNewOwner({ ...newOwner, name: e.target.value })}
-                    className="w-full p-3 border rounded-lg mb-3"
+                    className="w-full p-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-[#012a4a]"
                   />
                   <input
                     type="email"
@@ -309,7 +414,7 @@ export default function UsersPage() {
                     required
                     value={newOwner.email}
                     onChange={(e) => setNewOwner({ ...newOwner, email: e.target.value })}
-                    className="w-full p-3 border rounded-lg mb-3"
+                    className="w-full p-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-[#012a4a]"
                   />
                   <input
                     type="tel"
@@ -317,7 +422,7 @@ export default function UsersPage() {
                     required
                     value={newOwner.phone}
                     onChange={(e) => setNewOwner({ ...newOwner, phone: e.target.value })}
-                    className="w-full p-3 border rounded-lg mb-3"
+                    className="w-full p-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-[#012a4a]"
                   />
                   <input
                     type="password"
@@ -326,8 +431,9 @@ export default function UsersPage() {
                     minLength={6}
                     value={newOwner.password}
                     onChange={(e) => setNewOwner({ ...newOwner, password: e.target.value })}
-                    className="w-full p-3 border rounded-lg mb-4"
+                    className="w-full p-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-[#012a4a]"
                   />
+
                   <div className="flex justify-end gap-3">
                     <button
                       type="button"
@@ -336,13 +442,13 @@ export default function UsersPage() {
                         setCreateError(null);
                         setNewOwner({ name: "", email: "", phone: "", password: "" });
                       }}
-                      className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+                      className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                      className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
                     >
                       Create Owner
                     </button>
@@ -357,36 +463,38 @@ export default function UsersPage() {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
                 <h2 className="text-2xl font-bold mb-4">Edit Owner</h2>
+
                 <form onSubmit={handleUpdate}>
                   <input
                     type="text"
                     value={editUser.name}
                     onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
-                    className="w-full p-3 border rounded-lg mb-3"
+                    className="w-full p-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <input
                     type="email"
                     value={editUser.email}
                     onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
-                    className="w-full p-3 border rounded-lg mb-3"
+                    className="w-full p-3 border rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <input
                     type="tel"
                     value={editUser.phone}
                     onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
-                    className="w-full p-3 border rounded-lg mb-4"
+                    className="w-full p-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+
                   <div className="flex justify-end gap-3">
                     <button
                       type="button"
                       onClick={() => setShowEditModal(false)}
-                      className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+                      className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                     >
                       Save Changes
                     </button>

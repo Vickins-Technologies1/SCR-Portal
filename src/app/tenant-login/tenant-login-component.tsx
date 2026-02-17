@@ -419,13 +419,6 @@ export default function TenantLoginPage() {
                 {isSubmitting ? "Authenticating..." : "Sign In"}
               </motion.button>
             </form>
-
-            <p className="text-center text-xs sm:text-sm text-slate-600 pt-1">
-              New tenant?{" "}
-              <Link href="/sign-up?role=tenant" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline">
-                Contact your manager
-              </Link>
-            </p>
           </div>
 
           {/* Quick Demo */}
