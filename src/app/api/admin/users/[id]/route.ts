@@ -159,7 +159,7 @@ export async function DELETE(
 
   try {
     const connection = await connectToDatabase();
-    const db = connection.db;
+    const {db} = connection;
     client = connection.client;
 
     session = client.startSession(); // session is now defined
