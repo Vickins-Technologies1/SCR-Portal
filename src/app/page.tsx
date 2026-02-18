@@ -220,9 +220,50 @@ export default function LoginPage() {
           </div>
 
           <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
+{/* Tenant Portal Button */}
+<div className="relative group">
+  <Link
+    href="/tenant-login"
+    className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 hover:border-teal-400 text-teal-800 font-semibold py-3 xs:py-3.5 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-sm xs:text-base"
+    // Make the link itself focusable in a natural way
+  >
+    <FaUserTie className="text-teal-600 text-lg" />
+    <span>I'm a Tenant</span>
+    <FaArrowRight className="text-teal-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+  </Link>
+
+  {/* Info icon – now also focusable */}
+  <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+    <div 
+      tabIndex={0}                     // ← makes it focusable via tap
+      className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help outline-none focus:ring-2 focus:ring-teal-400 rounded-full"
+    >
+      <FaInfoCircle className="text-teal-600/70 hover:text-teal-700 text-base xs:text-lg transition-colors" />
+      
+      {/* Tooltip – shows on group-hover OR when icon is focused */}
+      <div 
+        className={`
+          absolute bottom-full right-0 mb-2 
+          hidden 
+          group-hover:block 
+          focus-within:block           /* ← shows when icon (or child) is focused */
+          pointer-events-none          /* prevents blocking clicks elsewhere */
+          z-10
+        `}
+      >
+        <div className="bg-slate-800 text-white text-xs rounded-lg py-1.5 px-2.5 min-w-[160px] shadow-lg leading-snug">
+          For tenants currently renting a property
+          <br />
+          <span className="text-teal-300">View lease, payments & maintenance requests</span>
+        </div>
+        <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-slate-800" />
+      </div>
+    </div>
+  </div>
+</div>
             <div className="text-center space-y-1">
               <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-700 to-teal-600 bg-clip-text text-transparent">
-                Owner Portal
+                Owner Portal Login
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 font-medium">
                 Secure access for property owners
@@ -235,32 +276,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Tenant Portal Button */}
-            <div className="relative group">
-              <Link
-                href="/tenant-login"
-                className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 hover:border-teal-400 text-teal-800 font-semibold py-3 xs:py-3.5 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-sm xs:text-base"
-              >
-                <FaUserTie className="text-teal-600 text-lg" />
-                <span>I'm a Tenant</span>
-                <FaArrowRight className="text-teal-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-              </Link>
-
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                <div className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help">
-                  <FaInfoCircle className="text-teal-600/70 hover:text-teal-700 text-base xs:text-lg transition-colors" />
-                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10">
-                    <div className="bg-slate-800 text-white text-xs rounded-lg py-1.5 px-2.5 min-w-[160px] shadow-lg leading-snug">
-                      For tenants currently renting a property
-                      <br />
-                      <span className="text-teal-300">View lease, payments & maintenance requests</span>
-                    </div>
-                    <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-slate-800" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
+        
             <div className="relative my-1 sm:my-2">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-slate-200" />

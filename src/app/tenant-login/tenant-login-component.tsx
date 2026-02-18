@@ -278,22 +278,7 @@ export default function TenantLoginPage() {
           </div>
 
           <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
-            <div className="text-center space-y-1">
-              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-teal-700 to-blue-600 bg-clip-text text-transparent">
-                Tenant Portal
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                Secure access to your rental dashboard
-              </p>
-            </div>
-
-            {error && (
-              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
-                {error}
-              </div>
-            )}
-
-            {/* Owner Portal Link with tooltip */}
+                        {/* Owner Portal Link with tooltip */}
             <div className="relative group">
               <Link
                 href="/"
@@ -318,6 +303,21 @@ export default function TenantLoginPage() {
                 </div>
               </div>
             </div>
+
+            <div className="text-center space-y-1">
+              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-teal-700 to-blue-600 bg-clip-text text-transparent">
+                Tenant Portal
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-600 font-medium">
+                Secure access to your rental dashboard
+              </p>
+            </div>
+
+            {error && (
+              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
+                {error}
+              </div>
+            )}
 
             <div className="relative my-1 sm:my-2">
               <div className="absolute inset-0 flex items-center">

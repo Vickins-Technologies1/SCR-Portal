@@ -83,7 +83,6 @@ export default function AdminSidebar() {
           {/* Profile Header */}
           <div className="relative border-b border-gray-100/80 px-6 py-8">
         
-
             <div className="flex flex-col items-center text-center">
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-2xl font-bold text-white shadow-xl ring-4 ring-[#03a678]/20 ring-offset-2 ring-offset-white">
                 {initials}
