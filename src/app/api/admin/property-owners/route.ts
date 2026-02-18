@@ -17,52 +17,129 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
 
-    let query: any = { role: "propertyOwner" };
+    let matchStage: any = { role: "propertyOwner" };
 
     if (statusFilter === "pending") {
-      query.isApproved = false;
+      matchStage.isApproved = false;
     } else if (statusFilter === "approved") {
-      query.isApproved = true;
+      matchStage.isApproved = true;
     }
-    // if no status → show all (default behavior)
 
     const propertyOwners = await db
       .collection("propertyOwners")
-      .find(query)
-      .project({
-        _id: 1,
-        email: 1,
-        name: 1,
-        phone: 1,
-        role: 1,
-        createdAt: 1,
-        isApproved: 1,
-        approvedAt: 1,
-        properties: 1,
-        payments: 1,
-        invoices: 1,
-      })
-      .sort({ createdAt: -1 }) // newest first
+      .aggregate([
+        { $match: matchStage },
+
+        // Lookup for properties count
+        {
+          $lookup: {
+            from: "properties",
+            localField: "_id",
+            foreignField: "ownerId",
+            as: "propertiesArray",
+          },
+        },
+
+        // Lookup for payments count
+        {
+          $lookup: {
+            from: "payments",
+            localField: "_id",
+            foreignField: "ownerId",
+            as: "paymentsArray",
+          },
+        },
+
+        // Lookup for invoices count
+        {
+          $lookup: {
+            from: "invoices",
+            localField: "_id",
+            foreignField: "ownerId",
+            as: "invoicesArray",
+          },
+        },
+
+        // ── Safe date projection ───────────────────────────────────────────────
+        {
+          $project: {
+            _id: { $toString: "$_id" },
+            email: 1,
+            name: 1,
+            phone: 1,
+            role: 1,
+            createdAt: {
+              $switch: {
+                branches: [
+                  {
+                    case: { $eq: [{ $type: "$createdAt" }, "date"] },
+                    then: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }
+                  },
+                  {
+                    case: { $eq: [{ $type: "$createdAt" }, "string"] },
+                    then: {
+                      $cond: {
+                        if: { $regexMatch: { input: "$createdAt", regex: "^\\d{4}-\\d{2}-\\d{2}" } },
+                        then: { $substr: ["$createdAt", 0, 10] },
+                        else: "$createdAt" // or "Invalid date"
+                      }
+                    }
+                  }
+                ],
+                default: "—"
+              }
+            },
+            isApproved: 1,
+            approvedAt: {
+              $cond: {
+                if: { $eq: ["$isApproved", true] },
+                then: {
+                  $switch: {
+                    branches: [
+                      {
+                        case: { $eq: [{ $type: "$approvedAt" }, "date"] },
+                        then: { $dateToString: { format: "%Y-%m-%d", date: "$approvedAt" } }
+                      },
+                      {
+                        case: { $eq: [{ $type: "$approvedAt" }, "string"] },
+                        then: {
+                          $cond: {
+                            if: { $regexMatch: { input: "$approvedAt", regex: "^\\d{4}-\\d{2}-\\d{2}" } },
+                            then: { $substr: ["$approvedAt", 0, 10] },
+                            else: "$approvedAt"
+                          }
+                        }
+                      }
+                    ],
+                    default: "—"
+                  }
+                },
+                else: null
+              }
+            },
+            propertiesCount: { $size: "$propertiesArray" },
+            paymentsCount: { $size: "$paymentsArray" },
+            invoicesCount: { $size: "$invoicesArray" },
+          }
+        },
+
+        { $sort: { createdAt: -1 } },
+      ])
       .toArray();
 
-    const count = await db.collection("propertyOwners").countDocuments(query);
+    const count = await db.collection("propertyOwners").countDocuments(matchStage);
 
     return NextResponse.json({
       success: true,
-      propertyOwners: propertyOwners.map((po) => ({
-        ...po,
-        _id: po._id.toString(),
-        createdAt: po.createdAt instanceof Date ? po.createdAt.toISOString() : String(po.createdAt),
-        approvedAt: po.approvedAt instanceof Date ? po.approvedAt.toISOString() : po.approvedAt || null,
-        properties: po.properties || [],
-        payments: po.payments || [],
-        invoices: po.invoices || [],
-      })),
+      propertyOwners,
       count,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Fetch property owners error:", error);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Server error", error: String(error) },
+      { status: 500 }
+    );
   }
 }
 
@@ -94,12 +171,9 @@ export async function POST(request: NextRequest) {
       phone,
       password: hashedPassword,
       role: "propertyOwner",
-      isApproved: false,           // ← admin must approve even when created by admin
+      isApproved: false,
       createdAt: new Date(),
       updatedAt: new Date(),
-      properties: [],
-      payments: [],
-      invoices: [],
     });
 
     const newOwner = await db.collection("propertyOwners").findOne({ _id: result.insertedId });
@@ -114,10 +188,12 @@ export async function POST(request: NextRequest) {
         phone: newOwner?.phone,
         role: newOwner?.role,
         isApproved: newOwner?.isApproved ?? false,
-        createdAt: newOwner?.createdAt.toISOString(),
-        properties: [],
-        payments: [],
-        invoices: [],
+        createdAt: newOwner?.createdAt instanceof Date
+          ? newOwner.createdAt.toISOString().split("T")[0]
+          : "—",
+        propertiesCount: 0,
+        paymentsCount: 0,
+        invoicesCount: 0,
       },
     });
   } catch (error) {
@@ -125,3 +201,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
+
+// Optional: you can also add PUT and DELETE handlers here if they're not in separate files

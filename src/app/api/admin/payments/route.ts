@@ -8,13 +8,12 @@ interface Payment {
   amount: number;
   date: Date;
   status: string;
-  propertyOwnerId?: ObjectId; // Optional reference to property owner
+  propertyOwnerId?: ObjectId;
 }
 
 export async function GET(request: NextRequest) {
   const role = request.cookies.get("role")?.value;
 
-  // Validate role cookie
   if (!role || role !== "admin") {
     console.log("Unauthorized access attempt - role:", role || "missing");
     return NextResponse.json(
@@ -25,21 +24,42 @@ export async function GET(request: NextRequest) {
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
-    
-    // Fetch payment count
+
+    // Get total count
     const count = await db.collection<Payment>("payments").countDocuments();
 
-    // Fetch payment details (optional, for consistency)
+    // Get total collected amount (successful payments)
+    // Adjust statuses based on your actual payment statuses
+    const collectedResult = await db.collection<Payment>("payments").aggregate([
+      {
+        $match: {
+          status: { $in: ["completed", "successful", "paid", "settled"] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCollected: { $sum: "$amount" }
+        }
+      }
+    ]).toArray();
+
+    const totalCollected = collectedResult[0]?.totalCollected ?? 0;
+
+    // Optional: fetch recent payments (limit to last 50 for performance)
     const payments = await db
       .collection<Payment>("payments")
       .find({})
-      .project<Payment>({ _id: 1, amount: 1, date: 1, status: 1 })
+      .sort({ date: -1 })
+      .limit(50)
+      .project({ _id: 1, amount: 1, date: 1, status: 1 })
       .toArray();
 
     return NextResponse.json(
       {
         success: true,
-        count: count || 0, // Ensure count is always a number
+        count: count || 0,
+        totalCollected: totalCollected || 0,
         payments: payments.map((p) => ({
           _id: p._id.toString(),
           amount: p.amount || 0,

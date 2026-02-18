@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Home,
   Users,
   Building2,
   CreditCard,
@@ -13,6 +12,10 @@ import {
   Info,
   AlertCircle,
   RefreshCw,
+  DollarSign,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
@@ -28,6 +31,14 @@ interface Counts {
   admins: number;
 }
 
+interface PaymentSummary {
+  totalCollected: number;
+  totalPaidInvoices: number;
+  totalUnpaidInvoices: number;
+  totalInvoices: number;
+  pendingInvoicesCount: number;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
 
@@ -38,6 +49,14 @@ export default function AdminDashboard() {
     payments: 0,
     invoices: 0,
     admins: 0,
+  });
+
+  const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({
+    totalCollected: 0,
+    totalPaidInvoices: 0,
+    totalUnpaidInvoices: 0,
+    totalInvoices: 0,
+    pendingInvoicesCount: 0,
   });
 
   const [status, setStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
@@ -70,53 +89,56 @@ export default function AdminDashboard() {
     checkSession();
   }, [checkSession]);
 
-  // ── Fetch counts ────────────────────────────────────────────────────────────
-  const fetchCounts = useCallback(async () => {
+  // ── Fetch dashboard data ────────────────────────────────────────────────────
+  const fetchDashboardData = useCallback(async () => {
     if (status !== "authenticated") return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const endpoints = [
-        "/api/admin/property-owners",
-        "/api/admin/tenants",
-        "/api/admin/properties",
-        "/api/admin/payments",
-        "/api/admin/invoices",
-        "/api/admin",
-      ];
+      const [ownersRes, tenantsRes, propsRes, paymentsRes, invoicesRes, adminsRes] = await Promise.all([
+        fetch("/api/admin/property-owners", { credentials: "include" }),
+        fetch("/api/admin/tenants", { credentials: "include" }),
+        fetch("/api/admin/properties", { credentials: "include" }),
+        fetch("/api/admin/payments", { credentials: "include" }),
+        fetch("/api/admin/invoices", { credentials: "include" }),
+        fetch("/api/admin", { credentials: "include" }),
+      ]);
 
-      const results = await Promise.all(
-        endpoints.map(async (url) => {
-          const res = await fetch(url, {
-            credentials: "include",
-            headers: { "Cache-Control": "no-cache" },
-          });
+      const responses = [ownersRes, tenantsRes, propsRes, paymentsRes, invoicesRes, adminsRes];
+      for (const res of responses) {
+        if (res.status === 401 || res.status === 403) {
+          router.replace("/admin/login?session=expired");
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      }
 
-          if (res.status === 401 || res.status === 403) {
-            router.replace("/admin/login?session=expired");
-            throw new Error("Session expired");
-          }
-
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-          return res.json();
-        })
+      const [owners, tenants, properties, payments, invoices, admins] = await Promise.all(
+        responses.map((r) => r.json())
       );
 
       setCounts({
-        propertyOwners: results[0]?.count ?? 0,
-        tenants: results[1]?.count ?? 0,
-        properties: results[2]?.count ?? results[2]?.properties?.length ?? 0,
-        payments: results[3]?.count ?? 0,
-        invoices: results[4]?.count ?? 0,
-        admins: results[5]?.count ?? 0,
+        propertyOwners: owners?.count ?? owners?.propertyOwners?.length ?? 0,
+        tenants: tenants?.count ?? tenants?.tenants?.length ?? 0,
+        properties: properties?.count ?? properties?.properties?.length ?? 0,
+        payments: payments?.count ?? 0,
+        invoices: invoices?.count ?? 0,
+        admins: admins?.count ?? 0,
+      });
+
+      setPaymentSummary({
+        totalCollected: payments?.totalCollected ?? 0,
+        totalPaidInvoices: invoices?.totalPaid ?? 0,
+        totalUnpaidInvoices: invoices?.totalUnpaid ?? 0,
+        totalInvoices: invoices?.count ?? 0,
+        pendingInvoicesCount: invoices?.pendingCount ?? 0,
       });
     } catch (err: any) {
-      console.error("Admin dashboard fetch failed:", err);
+      console.error("Dashboard fetch failed:", err);
       setError(
-        err.message.includes("Session expired")
+        err.message?.includes("Session expired")
           ? "Your session has expired. Please log in again."
           : "Failed to load dashboard data. Please try again."
       );
@@ -127,12 +149,42 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetchCounts();
+      fetchDashboardData();
     }
-  }, [status, fetchCounts]);
+  }, [status, fetchDashboardData]);
 
-  // ── Stat items ──────────────────────────────────────────────────────────────
-  const statItems = [
+  // ── Combined cards (original + payments/invoices) ──────────────────────────
+  const allCards = [
+    // New payment & invoice focused cards
+    {
+      title: "Total Collected",
+      value: `KSh ${paymentSummary.totalCollected.toLocaleString()}`,
+      icon: DollarSign,
+      color: "green",
+      explanation: "Total amount from successful payments received system-wide.",
+    },
+    {
+      title: "Paid Invoices",
+      value: `KSh ${paymentSummary.totalPaidInvoices.toLocaleString()}`,
+      icon: CheckCircle2,
+      color: "emerald",
+      explanation: "Total amount from invoices marked as paid or completed.",
+    },
+    {
+      title: "Unpaid Invoices",
+      value: `KSh ${paymentSummary.totalUnpaidInvoices.toLocaleString()}`,
+      icon: AlertTriangle,
+      color: "red",
+      explanation: "Total outstanding amount from pending/unpaid invoices.",
+    },
+    {
+      title: "Pending Count",
+      value: paymentSummary.pendingInvoicesCount.toLocaleString(),
+      icon: Clock,
+      color: "amber",
+      explanation: "Number of invoices still awaiting payment.",
+    },
+    // Original stats
     {
       title: "Property Owners",
       value: counts.propertyOwners.toLocaleString(),
@@ -215,11 +267,11 @@ export default function AdminDashboard() {
                 <button
                   onClick={() => {
                     setError(null);
-                    fetchCounts();
+                    fetchDashboardData();
                   }}
                   className="mt-2 sm:mt-3 inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-red-700 hover:text-red-800 transition-colors"
                 >
-                  <RefreshCw size={14} className="sm:size-16" />
+                  <RefreshCw size={14} />
                   Try again
                 </button>
               </div>
@@ -227,24 +279,19 @@ export default function AdminDashboard() {
           )}
 
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-              {[...Array(6)].map((_, i) => (
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
+              {[...Array(10)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-32 sm:h-36 animate-pulse"
-                >
-                  <div className="p-5 sm:p-6 space-y-4 sm:space-y-5">
-                    <div className="h-4 bg-gray-200 rounded w-3/4" />
-                    <div className="h-9 sm:h-10 bg-gray-300 rounded-xl w-1/2" />
-                  </div>
-                </div>
+                  className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-36 animate-pulse"
+                />
               ))}
             </div>
           ) : (
             <>
-              {/* Stats Grid – mobile-first */}
+              {/* Single unified grid – original + new cards together */}
               <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5 lg:gap-6 mb-10 sm:mb-12">
-                {statItems.map((item, i) => (
+                {allCards.map((item, i) => (
                   <motion.div
                     key={i}
                     initial={{ opacity: 0, y: 16 }}
@@ -252,7 +299,6 @@ export default function AdminDashboard() {
                     transition={{ delay: i * 0.05, duration: 0.45 }}
                     className="group relative bg-white/95 backdrop-blur-sm rounded-2xl p-5 sm:p-6 shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100/80 flex flex-col"
                   >
-                    {/* Title + Info tooltip */}
                     <div className="flex items-center justify-between mb-3 sm:mb-4">
                       <p className="text-xs sm:text-sm font-medium text-gray-600 uppercase tracking-wide">
                         {item.title}
@@ -262,21 +308,14 @@ export default function AdminDashboard() {
                           className="text-[#03a678]/70 hover:text-[#03a678] transition-colors cursor-help"
                           size={16}
                         />
-                        <div className="absolute bottom-full right-0 mb-2 sm:mb-3 hidden group-hover/info:block z-50 pointer-events-none">
-                          <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[200px] sm:min-w-[220px] leading-relaxed shadow-xl">
+                        <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block z-50 pointer-events-none">
+                          <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[200px] leading-relaxed shadow-xl">
                             {item.explanation}
                           </div>
-                          <div
-                            className="absolute bottom-[-6px] right-3 w-0 h-0 
-                            border-l-[6px] border-l-transparent 
-                            border-r-[6px] border-r-transparent 
-                            border-t-[6px] border-t-slate-800"
-                          />
                         </div>
                       </div>
                     </div>
 
-                    {/* Value + Icon */}
                     <div className="flex items-center justify-between mt-auto">
                       <p className="text-2xl sm:text-3xl font-bold text-gray-900">
                         {item.value}

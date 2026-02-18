@@ -12,6 +12,7 @@ import {
   ChevronUp,
   AlertCircle,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
@@ -29,10 +30,12 @@ interface Property {
     managementType: string;
     managementFee?: number;
   }[];
+  totalUnpaidInvoices?: number;
+  unpaidInvoiceCount?: number;
 }
 
 interface SortConfig {
-  key: keyof Property | "ownerEmail";
+  key: keyof Property | "ownerEmail" | "totalUnpaidInvoices";
   direction: "asc" | "desc";
 }
 
@@ -51,9 +54,30 @@ export default function PropertiesPage() {
   const [editProperty, setEditProperty] = useState<Property | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
+  // New states for delete confirmation
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
+
   const [status, setStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // ── Fetch CSRF token ────────────────────────────────────────────────────────
+  const fetchCsrfToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/csrf-token", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.success && data.csrfToken ? data.csrfToken : null;
+    } catch {
+      return null;
+    }
+  }, []);
 
   // ── Session check ───────────────────────────────────────────────────────────
   const checkSession = useCallback(async () => {
@@ -97,7 +121,7 @@ export default function PropertiesPage() {
 
       if (res.status === 401 || res.status === 403) {
         router.replace("/admin/login?session=expired");
-        throw new Error("Session expired");
+        return;
       }
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -111,7 +135,7 @@ export default function PropertiesPage() {
       }
     } catch (err: any) {
       setError(
-        err.message.includes("Session expired")
+        err.message?.includes("Session expired")
           ? "Your session has expired."
           : "Failed to load properties. Please try again."
       );
@@ -128,19 +152,28 @@ export default function PropertiesPage() {
 
   // ── Sorting ────────────────────────────────────────────────────────────────
   const handleSort = useCallback(
-    (key: keyof Property | "ownerEmail") => {
+    (key: keyof Property | "ownerEmail" | "totalUnpaidInvoices") => {
       setSortConfig((prev) => {
         const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
+
         const sorted = [...properties].sort((a, b) => {
           if (key === "ownerEmail") {
             const aVal = a.ownerEmail || "";
             const bVal = b.ownerEmail || "";
             return direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
           }
+
+          if (key === "totalUnpaidInvoices") {
+            const aVal = a.totalUnpaidInvoices ?? 0;
+            const bVal = b.totalUnpaidInvoices ?? 0;
+            return direction === "asc" ? aVal - bVal : bVal - aVal;
+          }
+
           const aVal = String(a[key] ?? "");
           const bVal = String(b[key] ?? "");
           return direction === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
         });
+
         setProperties(sorted);
         return { key, direction };
       });
@@ -148,7 +181,7 @@ export default function PropertiesPage() {
     [properties]
   );
 
-  const getSortIcon = (key: keyof Property | "ownerEmail") => {
+  const getSortIcon = (key: keyof Property | "ownerEmail" | "totalUnpaidInvoices") => {
     if (sortConfig.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
     return sortConfig.direction === "asc" ? (
       <ChevronUp className="inline ml-1 h-4 w-4" />
@@ -162,14 +195,34 @@ export default function PropertiesPage() {
     setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this property? This cannot be undone.")) return;
+  // ── Delete flow with confirmation modal ────────────────────────────────────
+  const openDeleteModal = (id: string) => {
+    setPropertyToDelete(id);
+    setShowDeleteModal(true);
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setPropertyToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!propertyToDelete) return;
 
     try {
-      const res = await fetch(`/api/admin/properties/${id}`, {
+      const csrfToken = await fetchCsrfToken();
+      if (!csrfToken) {
+        setError("Failed to get security token. Please refresh the page.");
+        closeDeleteModal();
+        return;
+      }
+
+      const res = await fetch(`/api/admin/properties/${propertyToDelete}`, {
         method: "DELETE",
         credentials: "include",
+        headers: {
+          "x-csrf-token": csrfToken,
+        },
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -180,12 +233,16 @@ export default function PropertiesPage() {
       const data = await res.json();
 
       if (data.success) {
-        setProperties(properties.filter((p) => p._id !== id));
+        setProperties(properties.filter((p) => p._id !== propertyToDelete));
+        setError(null);
       } else {
         setError(data.message || "Failed to delete property.");
       }
-    } catch {
+    } catch (err) {
+      console.error("Delete error:", err);
       setError("Delete request failed. Please try again.");
+    } finally {
+      closeDeleteModal();
     }
   };
 
@@ -200,9 +257,18 @@ export default function PropertiesPage() {
     if (!editProperty) return;
 
     try {
+      const csrfToken = await fetchCsrfToken();
+      if (!csrfToken) {
+        setError("Failed to get security token. Please refresh the page.");
+        return;
+      }
+
       const res = await fetch(`/api/admin/properties/${editProperty._id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
         credentials: "include",
         body: JSON.stringify({ name: editProperty.name }),
       });
@@ -306,6 +372,12 @@ export default function PropertiesPage() {
                       >
                         Owner Email {getSortIcon("ownerEmail")}
                       </th>
+                      <th
+                        className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        onClick={() => handleSort("totalUnpaidInvoices")}
+                      >
+                        Pending Invoices (Ksh) {getSortIcon("totalUnpaidInvoices")}
+                      </th>
                       <th className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
                         Unit Types
                       </th>
@@ -317,16 +389,30 @@ export default function PropertiesPage() {
                   <tbody className="divide-y divide-gray-100">
                     {properties.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-12 text-center text-gray-500">
+                        <td colSpan={5} className="py-12 text-center text-gray-500">
                           No properties found.
                         </td>
                       </tr>
                     ) : (
-                      properties.map((p, i) => (
+                      properties.map((p) => (
                         <React.Fragment key={p._id}>
                           <tr className="hover:bg-gray-50/70 transition-colors">
                             <td className="py-4 px-6 text-sm font-medium text-gray-900">{p.name}</td>
                             <td className="py-4 px-6 text-sm text-gray-600">{p.ownerEmail || "N/A"}</td>
+                            <td className="py-4 px-6 text-sm font-medium">
+                              {p.totalUnpaidInvoices && p.totalUnpaidInvoices > 0 ? (
+                                <span className="text-red-600">
+                                  {p.totalUnpaidInvoices.toLocaleString()}
+                                  {p.unpaidInvoiceCount && p.unpaidInvoiceCount > 1 && (
+                                    <span className="text-xs text-red-400 ml-1.5">
+                                      ({p.unpaidInvoiceCount})
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">0</span>
+                              )}
+                            </td>
                             <td className="py-4 px-6 text-sm text-gray-600">
                               {p.unitTypes.length > 0 ? (
                                 <button
@@ -354,7 +440,7 @@ export default function PropertiesPage() {
                                   <Edit size={20} />
                                 </button>
                                 <button
-                                  onClick={() => handleDelete(p._id)}
+                                  onClick={() => openDeleteModal(p._id)} // ← changed to open modal
                                   className="text-red-600 hover:text-red-800 transition-colors"
                                   title="Delete"
                                 >
@@ -366,14 +452,14 @@ export default function PropertiesPage() {
 
                           {expanded.includes(p._id) && (
                             <tr>
-                              <td colSpan={4} className="bg-gray-50/70 px-6 py-5">
+                              <td colSpan={5} className="bg-gray-50/70 px-6 py-5">
                                 <h4 className="text-sm font-semibold text-gray-800 mb-3">Unit Types</h4>
                                 {p.unitTypes.length === 0 ? (
                                   <p className="text-sm text-gray-600">No unit types defined</p>
                                 ) : (
                                   <ul className="space-y-2 text-sm text-gray-700">
                                     {p.unitTypes.map((u, i) => (
-                                      <li key={i} className="flex flex-wrap gap-x-4">
+                                      <li key={i} className="flex flex-wrap gap-x-4 gap-y-1">
                                         <span className="font-medium">{u.type}</span>
                                         {u.price != null && (
                                           <span>Price: Ksh {u.price.toLocaleString()}</span>
@@ -452,6 +538,56 @@ export default function PropertiesPage() {
                   </div>
                 </form>
               </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          {showDeleteModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative"
+              >
+                <button
+                  onClick={closeDeleteModal}
+                  className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 transition"
+                  aria-label="Close"
+                >
+                  <X size={24} />
+                </button>
+
+                <div className="text-center mb-6">
+                  <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                    <Trash2 className="h-8 w-8 text-red-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    Delete Property
+                  </h2>
+                  <p className="text-gray-600">
+                    Are you sure you want to delete this property? This action cannot be undone.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-4 mt-8">
+                  <button
+                    type="button"
+                    onClick={closeDeleteModal}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDelete}
+                    className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition font-medium shadow-md flex items-center gap-2"
+                  >
+                    <Trash2 size={18} />
+                    Delete Property
+                  </button>
+                </div>
+              </motion.div>
             </div>
           )}
         </main>

@@ -1,3 +1,4 @@
+// src/app/api/admin/invoices/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
@@ -7,13 +8,12 @@ interface Invoice {
   amount: number;
   date: Date;
   status: string;
-  propertyOwnerId?: ObjectId; // Optional reference to property owner
+  propertyOwnerId?: ObjectId;
 }
 
 export async function GET(request: NextRequest) {
   const role = request.cookies.get("role")?.value;
 
-  // Validate role cookie
   if (!role || role !== "admin") {
     console.log("Unauthorized access attempt - role:", role || "missing");
     return NextResponse.json(
@@ -24,21 +24,65 @@ export async function GET(request: NextRequest) {
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
-    
-    // Fetch invoice count
+
+    // Total invoice count
     const count = await db.collection<Invoice>("invoices").countDocuments();
 
-    // Fetch invoice details (optional, for consistency)
+    // Sum of paid/completed invoices
+    const paidResult = await db.collection<Invoice>("invoices").aggregate([
+      {
+        $match: {
+          status: { $in: ["completed", "paid", "settled"] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalPaid: { $sum: "$amount" }
+        }
+      }
+    ]).toArray();
+
+    const totalPaid = paidResult[0]?.totalPaid ?? 0;
+
+    // Sum of unpaid/pending invoices
+    const unpaidResult = await db.collection<Invoice>("invoices").aggregate([
+      {
+        $match: {
+          status: { $in: ["pending", "unpaid", "overdue"] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalUnpaid: { $sum: "$amount" }
+        }
+      }
+    ]).toArray();
+
+    const totalUnpaid = unpaidResult[0]?.totalUnpaid ?? 0;
+
+    // Count of pending invoices
+    const pendingCount = await db.collection<Invoice>("invoices").countDocuments({
+      status: { $in: ["pending", "unpaid", "overdue"] }
+    });
+
+    // Optional: recent invoices
     const invoices = await db
       .collection<Invoice>("invoices")
       .find({})
-      .project<Invoice>({ _id: 1, amount: 1, date: 1, status: 1 })
+      .sort({ date: -1 })
+      .limit(50)
+      .project({ _id: 1, amount: 1, date: 1, status: 1 })
       .toArray();
 
     return NextResponse.json(
       {
         success: true,
-        count: count || 0, // Ensure count is always a number
+        count: count || 0,
+        totalPaid: totalPaid || 0,
+        totalUnpaid: totalUnpaid || 0,
+        pendingCount: pendingCount || 0,
         invoices: invoices.map((i) => ({
           _id: i._id.toString(),
           amount: i.amount || 0,

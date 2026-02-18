@@ -1,4 +1,4 @@
-// app/admin/property-owners/page.tsx  (or wherever this file lives)
+// app/admin/property-owners/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -25,9 +25,11 @@ interface PropertyOwner {
   phone: string;
   role: string;
   createdAt: string;
-  properties: any[];
-  payments: any[];
-  invoices: any[];
+  isApproved?: boolean;
+  approvedAt?: string | null;
+  propertiesCount: number;
+  paymentsCount: number;
+  invoicesCount: number;
 }
 
 interface SortConfig {
@@ -115,7 +117,7 @@ export default function PropertyOwnersPage() {
       }
     } catch (err: any) {
       setError(
-        err.message.includes("Session expired")
+        err.message?.includes("Session expired")
           ? "Your session has expired."
           : "Failed to load property owners. Please try again."
       );
@@ -163,15 +165,21 @@ export default function PropertyOwnersPage() {
     if (!confirm("Delete this owner? This action cannot be undone.")) return;
 
     try {
-      const res = await fetch(`/api/admin/users/${id}`, {
+      const res = await fetch(`/api/admin/property-owners/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        return;
+      }
 
       const data = await res.json();
 
       if (data.success) {
         setPropertyOwners(propertyOwners.filter((o) => o._id !== id));
+        setError(null);
       } else {
         setError(data.message || "Delete failed");
       }
@@ -180,7 +188,7 @@ export default function PropertyOwnersPage() {
     }
   };
 
-  // ── Edit & Create logic remains unchanged ──────────────────────────────────
+  // ── Edit ───────────────────────────────────────────────────────────────────
   const handleEdit = (owner: PropertyOwner) => {
     setEditUser(owner);
     setShowEditModal(true);
@@ -218,6 +226,7 @@ export default function PropertyOwnersPage() {
     }
   };
 
+  // ── Create ─────────────────────────────────────────────────────────────────
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
@@ -273,7 +282,7 @@ export default function PropertyOwnersPage() {
             <h1 className="text-3xl font-bold text-gray-900">Property Owners</h1>
           </div>
 
-          {/* Error Message - same style as dashboard */}
+          {/* Error Message */}
           {error && (
             <div className="mb-10 bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-2xl flex items-start gap-4">
               <AlertCircle className="h-6 w-6 flex-shrink-0 mt-0.5" />
@@ -336,8 +345,14 @@ export default function PropertyOwnersPage() {
                       >
                         Phone {getSortIcon("phone")}
                       </th>
+                      <th
+                        className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        onClick={() => handleSort("createdAt")}
+                      >
+                        Created {getSortIcon("createdAt")}
+                      </th>
                       <th className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
-                        Created
+                        Status
                       </th>
                       <th className="py-4 px-6 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
                         Actions
@@ -347,19 +362,30 @@ export default function PropertyOwnersPage() {
                   <tbody className="divide-y divide-gray-100">
                     {propertyOwners.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center text-gray-500">
+                        <td colSpan={6} className="py-12 text-center text-gray-500">
                           No property owners found.
                         </td>
                       </tr>
                     ) : (
-                      propertyOwners.map((owner, i) => (
+                      propertyOwners.map((owner) => (
                         <React.Fragment key={owner._id}>
                           <tr className="hover:bg-gray-50/70 transition-colors">
                             <td className="py-4 px-6 text-sm font-medium text-gray-900">{owner.name}</td>
                             <td className="py-4 px-6 text-sm text-gray-600">{owner.email}</td>
                             <td className="py-4 px-6 text-sm text-gray-600">{owner.phone}</td>
                             <td className="py-4 px-6 text-sm text-gray-600">
-                              {new Date(owner.createdAt).toLocaleDateString()}
+                              {owner.createdAt}
+                            </td>
+                            <td className="py-4 px-6 text-sm">
+                              <span
+                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                                  owner.isApproved
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
+                                {owner.isApproved ? "Approved" : "Pending"}
+                              </span>
                             </td>
                             <td className="py-4 px-6 text-sm">
                               <div className="flex items-center gap-4">
@@ -380,7 +406,7 @@ export default function PropertyOwnersPage() {
                                 <button
                                   onClick={() => toggleExpand(owner._id)}
                                   className="text-gray-500 hover:text-[#03a678] transition-colors"
-                                  title="Details"
+                                  title="View stats"
                                 >
                                   {expanded.includes(owner._id) ? (
                                     <ChevronUp size={20} />
@@ -394,19 +420,25 @@ export default function PropertyOwnersPage() {
 
                           {expanded.includes(owner._id) && (
                             <tr>
-                              <td colSpan={5} className="bg-gray-50/70 px-6 py-5">
-                                <div className="grid grid-cols-3 gap-6 text-sm text-gray-700">
+                              <td colSpan={6} className="bg-gray-50/70 px-6 py-5">
+                                <div className="grid grid-cols-3 gap-8 text-center text-sm text-gray-700">
                                   <div>
-                                    <span className="font-medium">Properties:</span>{" "}
-                                    {owner.properties?.length ?? 0}
+                                    <div className="text-2xl font-bold text-[#03a678]">
+                                      {owner.propertiesCount ?? 0}
+                                    </div>
+                                    <div className="mt-1">Properties</div>
                                   </div>
                                   <div>
-                                    <span className="font-medium">Payments:</span>{" "}
-                                    {owner.payments?.length ?? 0}
+                                    <div className="text-2xl font-bold text-[#03a678]">
+                                      {owner.paymentsCount ?? 0}
+                                    </div>
+                                    <div className="mt-1">Payments</div>
                                   </div>
                                   <div>
-                                    <span className="font-medium">Invoices:</span>{" "}
-                                    {owner.invoices?.length ?? 0}
+                                    <div className="text-2xl font-bold text-[#03a678]">
+                                      {owner.invoicesCount ?? 0}
+                                    </div>
+                                    <div className="mt-1">Invoices</div>
                                   </div>
                                 </div>
                               </td>
@@ -421,7 +453,7 @@ export default function PropertyOwnersPage() {
             </motion.div>
           )}
 
-          {/* Create Modal - matched dashboard style */}
+          {/* Create Modal */}
           {showCreateModal && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
@@ -500,24 +532,33 @@ export default function PropertyOwnersPage() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Property Owner</h2>
 
                 <form onSubmit={handleUpdate} className="space-y-5">
-                  <input
-                    type="text"
-                    value={editUser.name}
-                    onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
-                    className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
-                  />
-                  <input
-                    type="email"
-                    value={editUser.email}
-                    onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
-                    className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
-                  />
-                  <input
-                    type="tel"
-                    value={editUser.phone}
-                    onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
-                    className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                    <input
+                      type="text"
+                      value={editUser.name}
+                      onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
+                      className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={editUser.email}
+                      onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
+                      className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                    <input
+                      type="tel"
+                      value={editUser.phone}
+                      onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
+                      className="w-full p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                    />
+                  </div>
 
                   <div className="flex justify-end gap-4 mt-8">
                     <button
@@ -529,7 +570,7 @@ export default function PropertyOwnersPage() {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium shadow-md"
+                      className="px-6 py-3 bg-[#03a678] text-white rounded-xl hover:bg-[#027a55] transition font-medium shadow-md"
                     >
                       Save Changes
                     </button>
