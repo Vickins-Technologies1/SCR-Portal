@@ -1,4 +1,3 @@
-// src/app/api/admin/properties/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
@@ -32,11 +31,14 @@ async function isAuthenticatedAdmin(request: NextRequest): Promise<{ authenticat
   }
 }
 
-export async function GET(request: NextRequest, context: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const { authenticated, errorResponse } = await isAuthenticatedAdmin(request);
   if (!authenticated) return errorResponse!;
 
-  const { id } = context.params;
+  const { id } = await params;   // ← await here
 
   if (!ObjectId.isValid(id)) {
     return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
@@ -63,11 +65,14 @@ export async function GET(request: NextRequest, context: { params: { id: string 
   }
 }
 
-export async function PUT(request: NextRequest, context: { params: { id: string } }) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const { authenticated, errorResponse } = await isAuthenticatedAdmin(request);
   if (!authenticated) return errorResponse!;
 
-  const { id } = context.params;
+  const { id } = await params;   // ← await here
 
   if (!ObjectId.isValid(id)) {
     return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
@@ -79,7 +84,7 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
 
     const updateData: any = { updatedAt: new Date() };
     if (name !== undefined) updateData.name = name;
-    if (ownerId !== undefined) updateData.ownerId = ownerId;
+    if (ownerId !== undefined) updateData.ownerId = new ObjectId(ownerId); // assuming ownerId is string → ObjectId
 
     const { db }: { db: Db } = await connectToDatabase();
 
@@ -106,11 +111,14 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
   }
 }
 
-export async function DELETE(request: NextRequest, context: { params: { id: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const { authenticated, errorResponse } = await isAuthenticatedAdmin(request);
   if (!authenticated) return errorResponse!;
 
-  const { id } = context.params;
+  const { id } = await params;   // ← await here
 
   if (!ObjectId.isValid(id)) {
     return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
