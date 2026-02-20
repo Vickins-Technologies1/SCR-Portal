@@ -195,7 +195,7 @@ function ResetPasswordContent() {
 
           <div className="mt-6 sm:mt-8 text-center">
             <Link
-              href="/"
+              href="/tenant-login"
               className="inline-flex items-center text-sm sm:text-base text-emerald-600 hover:text-emerald-800 transition-colors"
             >
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
