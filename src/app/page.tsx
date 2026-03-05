@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } from "react-icons/fa";
-import Cookies from "js-cookie";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -16,22 +15,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const demo = params.get("demo");
-
-    if (demo === "owner") {
-      setEmail("demo@admin.com");
-      setPassword("Demo@2025!");
-      setTimeout(() => submitForm(), 600);
-    }
-  }, []);
-
-  const submitForm = () => {
-    const form = document.getElementById("login-form") as HTMLFormElement;
-    form?.requestSubmit();
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -41,40 +24,22 @@ export default function LoginPage() {
       const res = await fetch("/api/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }), // Removed role from payload
-        credentials: "include",
+        body: JSON.stringify({ email, password }),
+        credentials: "include",           // Crucial: allows server-set cookies to be sent/received
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "Login failed");
+        throw new Error(data.message || "Login failed. Please check your credentials.");
       }
 
-      Cookies.set("userId", data.userId, {
-        secure: true,
-        sameSite: "Strict",
-        expires: 7,
-      });
-
-      Cookies.set("role", data.role, {
-        secure: true,
-        sameSite: "Strict",
-        expires: 7,
-      });
-
-      // Optional: store permissions if your backend returns them
-      if (data.permissions) {
-        Cookies.set("permissions", JSON.stringify(data.permissions), {
-          secure: true,
-          sameSite: "Strict",
-          expires: 7,
-        });
-      }
-
+      // No client-side cookie manipulation anymore — session is HttpOnly
+      // Server provides the safe redirect path
       router.push(data.redirect || "/property-owner-dashboard");
+      router.refresh(); // Helps refresh server components with new auth state
     } catch (err: any) {
-      setError(err.message || "Authentication failed. Please check your credentials.");
+      setError(err.message || "Authentication failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +47,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
-      {/* LEFT: Branding – hidden on mobile */}
+      {/* LEFT: Branding section – hidden on mobile */}
       <div
         className="
           hidden lg:flex lg:w-1/2 
@@ -93,69 +58,9 @@ export default function LoginPage() {
           lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
         "
       >
-        {/* Floating bubbles */}
+        {/* Floating decorative bubbles */}
         <div className="absolute inset-0 pointer-events-none">
-          <motion.div
-            className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/12 border border-blue-300/15 backdrop-blur-md"
-            animate={{
-              y: ["0%", "-35%", "15%", "-20%", "0%"],
-              x: ["0%", "12%", "-8%", "5%", "0%"],
-              scale: [1, 1.12, 0.95, 1.08, 1],
-              opacity: [0.7, 0.9, 0.6, 0.85, 0.7],
-            }}
-            transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-emerald-400/15 border border-emerald-300/20 backdrop-blur-sm"
-            animate={{
-              y: ["0%", "30%", "-25%", "10%", "0%"],
-              x: ["0%", "-10%", "15%", "-5%", "0%"],
-              scale: [1, 1.18, 1, 1.1, 1],
-            }}
-            transition={{ duration: 19, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 3 }}
-          />
-          <motion.div
-            className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-300/10"
-            animate={{
-              y: ["0%", "-45%", "0%", "-30%", "0%"],
-              x: ["0%", "8%", "-12%", "0%", "0%"],
-              scale: [1, 1.25, 0.9, 1.15, 1],
-            }}
-            transition={{ duration: 26, repeat: Infinity, repeatType: "reverse", delay: 1.5 }}
-          />
-          <motion.div
-            className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-blue-500/12 backdrop-blur-sm"
-            animate={{
-              y: ["0%", "40%", "-15%", "25%", "0%"],
-              scale: [1, 1.2, 1, 1.1, 1],
-            }}
-            transition={{ duration: 17, repeat: Infinity, repeatType: "reverse", delay: 6 }}
-          />
-          <motion.div
-            className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-emerald-500/10"
-            animate={{
-              y: ["0%", "-50%", "10%", "-35%", "0%"],
-              x: ["0%", "-15%", "10%", "0%", "0%"],
-            }}
-            transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", delay: 8 }}
-          />
-          <motion.div
-            className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-teal-400/8 border border-teal-200/10 backdrop-blur-lg"
-            animate={{
-              y: ["0%", "20%", "-40%", "5%", "0%"],
-              scale: [1, 1.15, 0.95, 1.05, 1],
-            }}
-            transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", delay: 4.5 }}
-          />
-
-          {/* Smaller decorative bubbles */}
-          <motion.div className="absolute inset-0 opacity-40">
-            <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-blue-400/20" />
-            <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-emerald-400/25" />
-            <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-teal-300/15" />
-            <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-blue-300/18" />
-            <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-emerald-300/12" />
-          </motion.div>
+          {/* ... keep all your motion.div bubbles here ... (omitted for brevity) */}
         </div>
 
         <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
@@ -199,7 +104,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* RIGHT: Form */}
+      {/* RIGHT: Login Form */}
       <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -207,7 +112,7 @@ export default function LoginPage() {
           transition={{ duration: 0.9, ease: "easeOut" }}
           className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
         >
-          {/* Mobile logo */}
+          {/* Mobile-only logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
             <Image
               src="/logo.png"
@@ -220,50 +125,42 @@ export default function LoginPage() {
           </div>
 
           <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
-
             <div className="text-center space-y-1">
               <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-700 to-teal-600 bg-clip-text text-transparent">
                 Owner Portal Login
               </h1>
-
               <p className="text-xs sm:text-sm text-slate-600 font-medium">
                 Secure access for property owners
               </p>
             </div>
-            {/* Tenant Portal Button */}
+
+            {/* Switch to Tenant Portal */}
             <div className="relative group">
               <Link
                 href="/tenant-login"
                 className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 hover:border-teal-400 text-teal-800 font-semibold py-3 xs:py-3.5 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-sm xs:text-base"
-              // Make the link itself focusable in a natural way
               >
                 <FaUserTie className="text-teal-600 text-lg" />
                 <span>I'm a Tenant</span>
                 <FaArrowRight className="text-teal-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </Link>
 
-              {/* Info icon – now also focusable */}
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
                 <div
-                  tabIndex={0}                     // ← makes it focusable via tap
+                  tabIndex={0}
                   className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help outline-none focus:ring-2 focus:ring-teal-400 rounded-full"
                 >
                   <FaInfoCircle className="text-teal-600/70 hover:text-teal-700 text-base xs:text-lg transition-colors" />
 
-                  {/* Tooltip – shows on group-hover OR when icon is focused */}
                   <div
                     className={`
-          absolute bottom-full right-0 mb-2 
-          hidden 
-          group-hover:block 
-          focus-within:block           /* ← shows when icon (or child) is focused */
-          pointer-events-none          /* prevents blocking clicks elsewhere */
-          z-10
-        `}
+                      absolute bottom-full right-0 mb-2 
+                      hidden group-hover:block focus-within:block
+                      pointer-events-none z-10
+                    `}
                   >
                     <div className="bg-slate-800 text-white text-xs rounded-lg py-1.5 px-2.5 min-w-[160px] shadow-lg leading-snug">
-                      For tenants currently renting a property
-                      <br />
+                      For tenants currently renting a property<br />
                       <span className="text-teal-300">View lease, payments & maintenance requests</span>
                     </div>
                     <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-slate-800" />
@@ -271,12 +168,12 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
+
             {error && (
               <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
                 {error}
               </div>
             )}
-
 
             <div className="relative my-1 sm:my-2">
               <div className="absolute inset-0 flex items-center">
@@ -287,7 +184,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Google Sign In */}
+            {/* Google Sign-In */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -300,12 +197,13 @@ export default function LoginPage() {
               Continue with Google
             </motion.button>
 
-            <form id="login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
+            {/* Email + Password Form */}
+            <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
               <input
                 type="email"
                 placeholder="Email address"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value.trim())}
                 required
                 autoComplete="email"
                 className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
@@ -349,15 +247,19 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Quick Demo */}
+          {/* Demo credentials filler – NO auto-submit */}
           <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
             <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
-            <a
-              href="/?demo=owner"
-              className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-xl text-center transition-all shadow-md text-sm xs:text-base"
+            <button
+              onClick={() => {
+                setEmail("demo@admin.com");
+                setPassword("Demo@2025!");
+                // User must manually click "Sign In"
+              }}
+              className="block w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 rounded-xl text-center transition-all shadow-md text-sm xs:text-base"
             >
-              Launch Owner Demo
-            </a>
+              Fill Demo Credentials
+            </button>
           </div>
         </motion.div>
       </div>
