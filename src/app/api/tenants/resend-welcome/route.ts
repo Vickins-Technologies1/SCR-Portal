@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       `Property: ${tenant.propertyName || "your property"}\n` +
       `Unit/House: ${tenant.houseNumber || "N/A"}\n\n` +
       `If you did not request this, please contact your property manager immediately.\n\n` +
-      `Best regards,\nSmart Choice Rental Management`;
+      `Best regards,\nSorana Property Managers Ltd.`;
 
     // ────────────────────────────────────────────────
     //  Send EMAIL
