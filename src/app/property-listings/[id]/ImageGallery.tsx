@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
@@ -13,114 +13,182 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
   const safeImages = useMemo(() => (images.length ? images : ["/logo.png"]), [images]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
+  // Reset index if out of bounds
   useEffect(() => {
     if (activeIndex >= safeImages.length) {
       setActiveIndex(0);
     }
   }, [activeIndex, safeImages.length]);
 
-  const goNext = useCallback(() => {
-    setActiveIndex((prev) => (prev + 1) % safeImages.length);
+  const goTo = useCallback((index: number) => {
+    setActiveIndex((prev) => {
+      let next = index;
+      if (next < 0) next = safeImages.length - 1;
+      if (next >= safeImages.length) next = 0;
+      return next;
+    });
   }, [safeImages.length]);
 
-  const goPrev = useCallback(() => {
-    setActiveIndex((prev) => (prev - 1 + safeImages.length) % safeImages.length);
-  }, [safeImages.length]);
+  const goNext = useCallback(() => goTo(activeIndex + 1), [activeIndex, goTo]);
+  const goPrev = useCallback(() => goTo(activeIndex - 1), [activeIndex, goTo]);
 
+  // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-      if (event.key === "ArrowRight") goNext();
-      if (event.key === "ArrowLeft") goPrev();
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "ArrowRight") goNext();
+      if (e.key === "ArrowLeft") goPrev();
     };
+
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [isOpen, goNext, goPrev]);
 
+  // Close on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
   const activeImage = safeImages[activeIndex];
 
   return (
-    <div className="space-y-4">
-      <div className="relative h-72 w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:h-80">
-        <button
-          type="button"
-          className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/70 bg-white/80 p-2 text-slate-700 shadow-sm transition hover:bg-white"
-          onClick={goPrev}
-          aria-label="Previous image"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <button
-          type="button"
-          className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/70 bg-white/80 p-2 text-slate-700 shadow-sm transition hover:bg-white"
-          onClick={goNext}
-          aria-label="Next image"
-        >
-          <ChevronRight size={18} />
-        </button>
+    <>
+      {/* Main gallery preview */}
+      <div className="group relative h-80 w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md sm:h-96">
+        {/* Main image */}
+        <Image
+          src={activeImage}
+          alt={`${title} - Image ${activeIndex + 1}`}
+          fill
+          className="object-cover transition-transform duration-700 group-hover:scale-105"
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 70vw, 60vw"
+          priority={activeIndex === 0}
+        />
+
+        {/* Navigation buttons - appear on hover */}
+        {safeImages.length > 1 && (
+          <>
+            <button
+              onClick={goPrev}
+              className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/40 p-3 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-black/60 group-hover:opacity-100 focus:opacity-100"
+              aria-label="Previous image"
+            >
+              <ChevronLeft size={24} />
+            </button>
+
+            <button
+              onClick={goNext}
+              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/40 p-3 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-black/60 group-hover:opacity-100 focus:opacity-100"
+              aria-label="Next image"
+            >
+              <ChevronRight size={24} />
+            </button>
+          </>
+        )}
+
+        {/* Click to open modal */}
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="absolute inset-0 z-0"
-          aria-label="Open full screen gallery"
+          className="absolute inset-0 z-0 cursor-zoom-in"
+          aria-label="Open full-screen gallery"
         />
-        <Image src={activeImage} alt={title} fill className="object-cover" sizes="(max-width: 1024px) 100vw, 70vw" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/35 via-transparent to-transparent" />
       </div>
 
+      {/* Thumbnails */}
       {safeImages.length > 1 && (
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="mt-4 flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
           {safeImages.map((src, idx) => (
             <button
-              key={src + String(idx)}
+              key={src + idx}
               type="button"
               onClick={() => setActiveIndex(idx)}
-              className={`relative h-20 w-28 shrink-0 overflow-hidden rounded-2xl border ${
-                idx === activeIndex ? "border-cyan-500 ring-2 ring-cyan-200" : "border-slate-200"
+              className={`relative h-20 w-28 flex-shrink-0 overflow-hidden rounded-2xl border-2 transition-all duration-200 ${
+                idx === activeIndex
+                  ? "border-cyan-500 scale-105 shadow-md"
+                  : "border-transparent opacity-70 hover:opacity-100 hover:scale-105 hover:shadow-sm"
               }`}
-              aria-label={`View image ${idx + 1}`}
+              aria-label={`Select image ${idx + 1}`}
             >
-              <Image src={src} alt={`${title} thumbnail ${idx + 1}`} fill className="object-cover" />
+              <Image
+                src={src}
+                alt={`${title} thumbnail ${idx + 1}`}
+                fill
+                className="object-cover"
+              />
             </button>
           ))}
         </div>
       )}
 
+      {/* Full-screen modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 px-4">
-          <div className="relative w-full max-w-5xl">
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl bg-black">
-              <Image src={activeImage} alt={title} fill className="object-contain" sizes="100vw" />
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity duration-300">
+          <div
+            ref={modalRef}
+            className="relative w-full max-w-6xl px-4 animate-in fade-in zoom-in-95 duration-300"
+          >
+            {/* Close button */}
             <button
-              type="button"
               onClick={() => setIsOpen(false)}
-              className="absolute right-3 top-3 rounded-full border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20"
-              aria-label="Close full screen"
+              className="absolute -top-12 right-4 z-20 rounded-full bg-black/50 p-3 text-white hover:bg-black/70 transition-colors"
+              aria-label="Close gallery"
             >
-              <X size={18} />
+              <X size={24} />
             </button>
-            <button
-              type="button"
-              onClick={goPrev}
-              className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20"
-              aria-label="Previous image"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={goNext}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20"
-              aria-label="Next image"
-            >
-              <ChevronRight size={18} />
-            </button>
+
+            {/* Main full-screen image */}
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-black/40">
+              <Image
+                src={activeImage}
+                alt={`${title} - Full screen ${activeIndex + 1}`}
+                fill
+                className="object-contain"
+                sizes="100vw"
+              />
+            </div>
+
+            {/* Navigation in full screen */}
+            {safeImages.length > 1 && (
+              <>
+                <button
+                  onClick={goPrev}
+                  className="absolute left-6 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/50 p-4 text-white hover:bg-black/70 transition-colors"
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft size={28} />
+                </button>
+
+                <button
+                  onClick={goNext}
+                  className="absolute right-6 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/50 p-4 text-white hover:bg-black/70 transition-colors"
+                  aria-label="Next image"
+                >
+                  <ChevronRight size={28} />
+                </button>
+              </>
+            )}
+
+            {/* Counter */}
+            <div className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm text-white backdrop-blur-sm">
+              {activeIndex + 1} / {safeImages.length}
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

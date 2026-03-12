@@ -1,80 +1,135 @@
-// src/app/api/public-properties/[id]/route.ts
+// app/api/public-properties/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
-const summarizeAvailability = (unitTypes: any[]) => {
+const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+
+  if (typeof totalTenants === "number") {
+    const normalizedTenants = Math.max(0, totalTenants);
+    const totalOccupied = Math.min(totalUnits, normalizedTenants);
+    const totalVacant = Math.max(0, totalUnits - totalOccupied);
+    const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
+    return { totalUnits, totalVacant, totalOccupied, occupancyRate };
+  }
+
   const totalVacant = unitTypes.reduce((sum, unit) => sum + (unit.vacant ?? 0), 0);
   const totalOccupied = Math.max(0, totalUnits - totalVacant);
   const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
   return { totalUnits, totalVacant, totalOccupied, occupancyRate };
 };
 
+const toISO = (value?: Date | string | null): string | undefined => {
+  if (!value) return undefined;
+  const date = value instanceof Date ? value : new Date(value);
+  return isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
+const isValidHexId = (id: string): boolean => {
+  return typeof id === "string" && id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id);
+};
+
+const buildTenantMatch = (propertyId: string) => {
+  const matches: (string | ObjectId)[] = [propertyId];
+  if (isValidHexId(propertyId)) {
+    matches.push(new ObjectId(propertyId));
+  }
+  return { propertyId: { $in: matches } };
+};
+
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
-  console.log("Fetching property details");
+  const params = await context.params;
+  const id = params.id;
+
+  console.log("Fetching property details for ID:", id);
 
   try {
-    const { id } = await params;
-
-    if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 });
+    if (!id || !isValidHexId(id)) {
+      console.log("Invalid ID format:", id);
+      return NextResponse.json(
+        { success: false, message: "Invalid property ID format" },
+        { status: 400 }
+      );
     }
 
     const { db } = await connectToDatabase();
 
-    const listing = await db
+    // Primary lookup: treat as ObjectId (this is the standard case)
+    let listing = await db
       .collection("propertyListings")
-      .findOne({ _id: new ObjectId(id), status: "Active" });
+      .findOne({
+        _id: new ObjectId(id),
+        status: "Active",
+      });
+
+    // Optional fallback: if your collection has any documents where _id was stored as string
+    // (very rare — only keep if you actually need it)
+    if (!listing) {
+      console.log(`No match with ObjectId for ${id} — trying string fallback`);
+      listing = await db
+        .collection("propertyListings")
+        .findOne({
+          _id: id as any, // type assertion to bypass strict ObjectId expectation
+          status: "Active",
+        });
+    }
 
     if (!listing) {
+      console.log("Property not found for ID:", id);
       return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
     }
 
     const propertyId = listing.originalPropertyId
-      ? listing.originalPropertyId.toString()
-      : listing._id.toString();
+      ? String(listing.originalPropertyId)
+      : String(listing._id);
 
-    // Count tenants for the underlying property
     const tenants = await db
       .collection("tenants")
-      .find({ propertyId })
+      .find(buildTenantMatch(propertyId))
       .toArray();
 
-    const occupiedByType = tenants.reduce((acc: any, t) => {
-      acc[t.unitType] = (acc[t.unitType] || 0) + 1;
+    const occupiedByType = tenants.reduce((acc: Record<string, number>, t: any) => {
+      const type = t.unitType || "unknown";
+      acc[type] = (acc[type] || 0) + 1;
       return acc;
     }, {});
 
     const unitTypes = (listing.unitTypes || []).map((u: any) => ({
       ...u,
-      vacant: Math.max(0, u.quantity - (occupiedByType[u.type] || 0))
+      vacant: Math.max(0, (u.quantity || 0) - (occupiedByType[u.type] || 0)),
     }));
 
-    const owner = await db
-      .collection("propertyOwners")
-      .findOne(
-        { _id: new ObjectId(listing.ownerId) },
-        { projection: { email: 1, phone: 1 } }
-      );
+    const ownerIdValue = listing.ownerId ? String(listing.ownerId) : "";
+    const owner = ownerIdValue && isValidHexId(ownerIdValue)
+      ? await db
+          .collection("propertyOwners")
+          .findOne(
+            { _id: new ObjectId(ownerIdValue) },
+            { projection: { email: 1, phone: 1 } }
+          )
+      : null;
 
-    const availability = summarizeAvailability(unitTypes);
+    const availability = summarizeAvailability(unitTypes, tenants.length);
+
     const formatted = {
-      _id: listing._id.toString(),
+      _id: String(listing._id),
+      originalPropertyId: listing.originalPropertyId ? String(listing.originalPropertyId) : String(listing._id),
+      ownerId: ownerIdValue,
       name: listing.name,
       address: listing.address,
       description: listing.description,
       facilities: listing.facilities || [],
       unitTypes,
       images: listing.images || [],
-      isAdvertised: listing.isAdvertised || false,
-      adExpiration: listing.adExpiration?.toISOString(),
+      isAdvertised: !!listing.isAdvertised,
+      adExpiration: toISO(listing.adExpiration),
       status: listing.status,
-      createdAt: listing.createdAt.toISOString(),
-      updatedAt: listing.updatedAt.toISOString(),
+      createdAt: toISO(listing.createdAt) || "",
+      updatedAt: toISO(listing.updatedAt),
       availability,
       occupiedByType,
     };
@@ -85,10 +140,13 @@ export async function GET(
         property: formatted,
         owner: owner ? { email: owner.email, phone: owner.phone } : null,
       },
-      { status: 200, headers: { "Cache-Control": "no-store" } }
+      {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      }
     );
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Error fetching property:", error);
     return NextResponse.json(
       { success: false, message: "Server error" },
       { status: 500 }

@@ -348,7 +348,7 @@ export default function TenantDetailsPage() {
         const date = new Date(statement.paymentDate).toLocaleDateString();
         const type = statement.type || "Other";
         const amount = formatCurrency(statement.amount);
-        const status = statement.status;
+        const {status} = statement;
         const ref = getStatementReference(statement).toString();
         const trimmedRef = ref.length > 18 ? `${ref.slice(0, 15)}...` : ref;
 

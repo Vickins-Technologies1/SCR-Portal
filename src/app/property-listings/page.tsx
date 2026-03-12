@@ -3,8 +3,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Building2, DollarSign, MapPin, Star } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Building2,
+  DollarSign,
+  MapPin,
+  Star,
+  SlidersHorizontal,
+  X,
+  ChevronDown,
+} from "lucide-react";
 import { Listing, AvailabilitySummary } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
 
@@ -27,6 +35,7 @@ export default function PropertyListings() {
     location: "",
     featured: "all",
   });
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   useEffect(() => {
     const fetchListings = async () => {
@@ -77,7 +86,7 @@ export default function PropertyListings() {
       if (filters.featured === "standard" && listing.isAdvertised) return false;
 
       if ((min !== null || max !== null) && units.length) {
-        const minListingPrice = Math.min(...units.map((unit) => unit.price));
+        const minListingPrice = Math.min(...units.map((unit) => Number(unit.price) || 0));
         if (min !== null && minListingPrice < min) return false;
         if (max !== null && minListingPrice > max) return false;
       } else if ((min !== null || max !== null) && !units.length) {
@@ -118,135 +127,222 @@ export default function PropertyListings() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Sorana Property Managers</p>
-              <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Available listings</h1>
-              <p className="mt-2 text-sm text-slate-600">
-                Explore verified listings from property owners with live availability.
-              </p>
-            </div>
+      {/* Sleek sticky navbar with bigger logo */}
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur-lg shadow-sm transition-all duration-300">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 sm:h-18 items-center justify-between">
+            {/* Brand with larger logo */}
             <Link
-              href="/contact"
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-400"
+              href="https://www.soranapropertymanagers.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 sm:gap-4 text-slate-900 hover:text-cyan-700 transition-colors"
             >
-              Contact us
+              {/* Bigger logo */}
+              <div className="relative h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0 rounded-full overflow-hidden shadow-md">
+                <Image
+                  src="/logo.png" // ← Replace with your actual logo path (recommended: place in /public/)
+                  // Alternative fallback: "https://via.placeholder.com/120/0ea5e9/ffffff?text=Sorana" 
+                  alt="Sorana Property Managers Logo"
+                  fill
+                  className="object-contain p-1 bg-white"
+                  priority
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <span className="font-extrabold tracking-tight text-xl sm:text-2xl">Sorana</span>
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-500 font-medium -mt-1">
+                  Property Managers
+                </span>
+              </div>
             </Link>
+
+            {/* Right side actions */}
+            <div className="flex items-center gap-3 sm:gap-5">
+              <Link
+                href="https://www.soranapropertymanagers.com/contact-us"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-cyan-400 hover:text-cyan-700 transition-all duration-200"
+              >
+                Contact us
+              </Link>
+
+              <button
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className="flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-cyan-400 hover:text-cyan-700 transition-all duration-200 lg:px-5"
+                aria-expanded={isFilterOpen}
+                aria-controls="filter-panel"
+              >
+                {isFilterOpen ? <X size={18} /> : <SlidersHorizontal size={18} />}
+                <span className="hidden xs:inline">
+                  {isFilterOpen ? "Close" : "Filters"}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-slate-500">Filter listings</p>
-              <p className="text-sm text-slate-600">Keep it simple and narrow down the options.</p>
-            </div>
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-600 hover:border-slate-400"
-            >
-              Reset
-            </button>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Location
-              <input
-                type="text"
-                value={filters.location}
-                onChange={(event) => setFilters((prev) => ({ ...prev, location: event.target.value }))}
-                placeholder="e.g. Westlands"
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
-            </label>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Unit type
-              <select
-                value={filters.unitType}
-                onChange={(event) => setFilters((prev) => ({ ...prev, unitType: event.target.value }))}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="">All types</option>
-                {unitTypeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Min price
-              <input
-                type="number"
-                value={filters.minPrice}
-                onChange={(event) => setFilters((prev) => ({ ...prev, minPrice: event.target.value }))}
-                placeholder="0"
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
-            </label>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Max price
-              <input
-                type="number"
-                value={filters.maxPrice}
-                onChange={(event) => setFilters((prev) => ({ ...prev, maxPrice: event.target.value }))}
-                placeholder="50000"
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
-            </label>
-            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-              Featured
-              <select
-                value={filters.featured}
-                onChange={(event) =>
-                  setFilters((prev) => ({ ...prev, featured: event.target.value as FilterState["featured"] }))
-                }
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="all">All</option>
-                <option value="featured">Featured</option>
-                <option value="standard">Standard</option>
-              </select>
-            </label>
-          </div>
-        </section>
+      {/* Collapsible Filters */}
+      <AnimatePresence>
+        {isFilterOpen && (
+          <motion.div
+            id="filter-panel"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="border-b border-slate-200 bg-white overflow-hidden"
+          >
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 flex items-center gap-3">
+                  <SlidersHorizontal size={22} className="text-cyan-600" />
+                  Refine Your Search
+                </h2>
 
+                {hasActiveFilters && (
+                  <button
+                    onClick={() => {
+                      resetFilters();
+                      setIsFilterOpen(false);
+                    }}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+                  >
+                    <X size={16} />
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+
+              <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+                {/* Location */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={filters.location}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, location: e.target.value }))}
+                    placeholder="e.g. Westlands, Kilimani..."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all shadow-sm hover:border-slate-300"
+                  />
+                </div>
+
+                {/* Unit Type */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
+                    Unit Type
+                  </label>
+                  <select
+                    value={filters.unitType}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, unitType: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all shadow-sm hover:border-slate-300"
+                  >
+                    <option value="">All types</option>
+                    {unitTypeOptions.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Min Price */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
+                    Min Price (Ksh)
+                  </label>
+                  <input
+                    type="number"
+                    value={filters.minPrice}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, minPrice: e.target.value }))}
+                    placeholder="0"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all shadow-sm hover:border-slate-300"
+                  />
+                </div>
+
+                {/* Max Price */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
+                    Max Price (Ksh)
+                  </label>
+                  <input
+                    type="number"
+                    value={filters.maxPrice}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, maxPrice: e.target.value }))}
+                    placeholder="50000"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all shadow-sm hover:border-slate-300"
+                  />
+                </div>
+
+                {/* Featured */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">
+                    Featured
+                  </label>
+                  <select
+                    value={filters.featured}
+                    onChange={(e) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        featured: e.target.value as FilterState["featured"],
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none transition-all shadow-sm hover:border-slate-300"
+                  >
+                    <option value="all">All listings</option>
+                    <option value="featured">Featured only</option>
+                    <option value="standard">Standard only</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-12">
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+          <div className="mb-8 rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-red-800 shadow-sm">
             {error}
           </div>
         )}
 
         {isLoading ? (
-          <div className="flex justify-center py-16">
-            <div className="h-12 w-12 animate-spin rounded-full border-t-2 border-cyan-500" />
+          <div className="flex justify-center items-center min-h-[50vh]">
+            <div className="h-14 w-14 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
           </div>
         ) : sortedListings.length === 0 ? (
-          <div className="rounded-3xl border border-slate-200 bg-white px-6 py-16 text-center text-slate-600 shadow-sm">
-            <Building2 className="mx-auto mb-4 h-14 w-14 text-slate-300" />
-            <p className="text-lg font-medium">
-              {hasActiveFilters ? "No listings match your filters." : "No listings available yet."}
-            </p>
-            <p className="mt-1 text-sm">
-              {hasActiveFilters ? "Try adjusting the filters above." : "Check back soon as new properties are added."}
+          <div className="rounded-3xl border border-slate-200 bg-white px-6 sm:px-10 py-16 sm:py-20 text-center shadow-sm">
+            <Building2 className="mx-auto mb-6 h-16 w-16 sm:h-20 sm:w-20 text-slate-300" />
+            <h3 className="text-xl sm:text-2xl font-semibold text-slate-800 mb-4">
+              {hasActiveFilters ? "No matching properties found" : "No listings available yet"}
+            </h3>
+            <p className="text-slate-600 mb-8 max-w-lg mx-auto">
+              {hasActiveFilters
+                ? "Try adjusting your filters or clear them to see all available properties."
+                : "We're constantly adding new verified listings. Please check back soon!"}
             </p>
             {hasActiveFilters && (
               <button
-                type="button"
-                onClick={resetFilters}
-                className="mt-4 inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-600 hover:border-slate-400"
+                onClick={() => {
+                  resetFilters();
+                  setIsFilterOpen(false);
+                }}
+                className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-6 py-3 text-white font-medium shadow-md hover:bg-cyan-700 transition-all"
               >
-                Clear filters
+                <X size={18} />
+                Clear Filters
               </button>
             )}
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {sortedListings.map((property, index) => (
               <PropertyCard key={property._id} property={property} index={index} />
             ))}
@@ -257,6 +353,10 @@ export default function PropertyListings() {
   );
 }
 
+// ──────────────────────────────────────────────
+// PropertyCard (unchanged – included for completeness)
+// ──────────────────────────────────────────────
+
 interface PropertyCardProps {
   property: Listing;
   index: number;
@@ -265,10 +365,11 @@ interface PropertyCardProps {
 const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
   const availability: AvailabilitySummary = ensureAvailability(property);
   const propertyUnits = property.unitTypes ?? [];
-  const minPrice = propertyUnits.length ? Math.min(...propertyUnits.map((unit) => unit.price)) : 0;
+  const minPrice = propertyUnits.length ? Math.min(...propertyUnits.map((unit) => Number(unit.price) || 0)) : 0;
   const priceLabel = minPrice ? minPrice.toLocaleString() : "";
   const vacancyCount = availability.totalVacant;
-  const vacancyBadge = vacancyCount + " vacant unit" + (vacancyCount === 1 ? "" : "s");
+  const vacancyBadge = `${vacancyCount} vacant unit${vacancyCount === 1 ? "" : "s"}`;
+
   const statusTone =
     property.status === "Active"
       ? "border-emerald-300 bg-emerald-50 text-emerald-700"
@@ -276,7 +377,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
       ? "border-amber-300 bg-amber-50 text-amber-700"
       : "border-slate-300 bg-slate-100 text-slate-600";
 
-  const images = property.images && property.images.length ? property.images : ["/logo.png"];
+  const images = property.images?.length ? property.images : ["/logo.png"];
   const heroImage = images[0];
   const sideImageOne = images[1] || images[0];
   const sideImageTwo = images[2] || images[0];
@@ -286,65 +387,83 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05 }}
-      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg shadow-slate-200/60"
+      className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg shadow-slate-200/40 hover:shadow-xl hover:shadow-slate-300/50 transition-all duration-300"
     >
-      <div className="grid h-48 grid-cols-6 grid-rows-2 gap-2 p-4">
+      <div className="relative h-48 grid grid-cols-6 grid-rows-2 gap-2 p-4">
         <div className="relative col-span-4 row-span-2 overflow-hidden rounded-2xl">
-          <Image src={heroImage} alt={property.name} fill className="object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/30 via-transparent to-transparent" />
+          <Image
+            src={heroImage}
+            alt={property.name}
+            fill
+            className="object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
           {property.isAdvertised && (
-            <span className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-cyan-600/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white">
-              <Star size={12} /> Featured
+            <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-cyan-600/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+              <Star size={12} fill="white" />
+              Featured
             </span>
           )}
         </div>
         <div className="relative col-span-2 row-span-1 overflow-hidden rounded-2xl">
-          <Image src={sideImageOne} alt={property.name + " image"} fill className="object-cover" />
+          <Image src={sideImageOne} alt="" fill className="object-cover" />
         </div>
         <div className="relative col-span-2 row-span-1 overflow-hidden rounded-2xl">
-          <Image src={sideImageTwo} alt={property.name + " image"} fill className="object-cover" />
+          <Image src={sideImageTwo} alt="" fill className="object-cover" />
         </div>
       </div>
 
-      <div className="space-y-4 px-6 pb-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">{property.name}</h2>
-            <p className="mt-1 flex items-center gap-2 text-sm text-slate-600">
-              <MapPin size={14} /> {property.address}
+      <div className="space-y-4 px-6 pb-6 pt-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h2 className="text-xl font-semibold text-slate-900 line-clamp-2">{property.name}</h2>
+            <p className="mt-1.5 flex items-center gap-1.5 text-sm text-slate-600">
+              <MapPin size={15} className="flex-shrink-0" />
+              <span className="line-clamp-1">{property.address}</span>
             </p>
           </div>
-          <span className={"rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-widest " + statusTone}>
+          <span
+            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${statusTone}`}
+          >
             {property.status}
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
-          <div className="flex items-center gap-1">
-            <DollarSign size={16} />
-            {minPrice ? <span>From Ksh {priceLabel}/mo</span> : <span>Pricing on request</span>}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-700">
+          <div className="flex items-center gap-1.5">
+            <DollarSign size={16} className="text-cyan-600" />
+            {minPrice ? (
+              <span className="font-medium">Ksh {priceLabel}/mo</span>
+            ) : (
+              <span>Pricing on request</span>
+            )}
           </div>
-          <span className="text-slate-500">{vacancyBadge}</span>
+          <span className="text-slate-500 font-medium">{vacancyBadge}</span>
         </div>
 
-        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-          {propertyUnits.map((unit, unitIndex) => (
+        <div className="flex flex-wrap gap-2">
+          {propertyUnits.slice(0, 4).map((unit, i) => (
             <span
-              key={property._id + "-" + unit.type + "-" + (unit.uniqueType ?? "standard") + "-" + unitIndex}
-              className="rounded-full border border-slate-200 px-3 py-1"
+              key={`${property._id}-${unit.type}-${i}`}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700"
             >
-              {unit.type} - {unit.vacant ?? unit.quantity} left
+              {unit.type} · {unit.vacant ?? unit.quantity} left
             </span>
           ))}
+          {propertyUnits.length > 4 && (
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
+              +{propertyUnits.length - 4} more
+            </span>
+          )}
         </div>
 
         <Link
-          href={"/property-listings/" + property._id}
-          className="block rounded-2xl bg-cyan-600 px-5 py-3 text-center text-sm font-semibold uppercase tracking-wider text-white transition hover:bg-cyan-500"
+          href={`/property-listings/${property._id}`}
+          className="mt-3 block w-full rounded-2xl bg-gradient-to-r from-cyan-600 to-cyan-500 px-6 py-3.5 text-center text-sm font-semibold uppercase tracking-wider text-white shadow-md hover:from-cyan-700 hover:to-cyan-600 hover:shadow-lg transition-all duration-300"
         >
-          View details
+          View Details
         </Link>
       </div>
     </motion.article>
   );
-};
+}

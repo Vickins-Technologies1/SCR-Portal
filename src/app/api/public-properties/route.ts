@@ -3,12 +3,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
-const summarizeAvailability = (unitTypes: any[]) => {
+const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+
+  if (typeof totalTenants === "number") {
+    const normalizedTenants = Math.max(0, totalTenants);
+    const totalOccupied = Math.min(totalUnits, normalizedTenants);
+    const totalVacant = Math.max(0, totalUnits - totalOccupied);
+    const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
+    return { totalUnits, totalVacant, totalOccupied, occupancyRate };
+  }
+
   const totalVacant = unitTypes.reduce((sum, unit) => sum + (unit.vacant ?? 0), 0);
   const totalOccupied = Math.max(0, totalUnits - totalVacant);
   const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
   return { totalUnits, totalVacant, totalOccupied, occupancyRate };
+};
+
+const toISO = (value?: Date | string | null): string | undefined => {
+  if (!value) return undefined;
+  const date = value instanceof Date ? value : new Date(value);
+  return isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
+const normalizeQuery = (value?: string | null) => value?.trim().toLowerCase() ?? "";
+
+const coerceObjectId = (value: unknown): ObjectId | null => {
+  if (!value) return null;
+  if (value instanceof ObjectId) return value;
+  const str = String(value);
+  return ObjectId.isValid(str) ? new ObjectId(str) : null;
 };
 
 export async function GET(request: NextRequest) {
@@ -16,11 +40,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const unitType = searchParams.get("unitType");
-    const minPrice = searchParams.get("minPrice") ? Number(searchParams.get("minPrice")) : 0;
-    const maxPrice = searchParams.get("maxPrice") ? Number(searchParams.get("maxPrice")) : Infinity;
-    const location = searchParams.get("location")?.toLowerCase();
-    const featured = searchParams.get("featured");
+    const unitType = searchParams.get("unitType")?.trim() || "";
+    const minPriceParam = searchParams.get("minPrice");
+    const maxPriceParam = searchParams.get("maxPrice");
+    const hasPriceFilter = minPriceParam !== null || maxPriceParam !== null;
+    const minPrice = minPriceParam && Number.isFinite(Number(minPriceParam)) ? Number(minPriceParam) : 0;
+    const maxPrice = maxPriceParam && Number.isFinite(Number(maxPriceParam)) ? Number(maxPriceParam) : Infinity;
+    const location = normalizeQuery(searchParams.get("location"));
+    const featured = normalizeQuery(searchParams.get("featured"));
 
     const { db } = await connectToDatabase();
 
@@ -48,13 +75,20 @@ export async function GET(request: NextRequest) {
       )
     );
 
+    const propertyIdMatch: (string | ObjectId)[] = [...propertyIds];
+    propertyIds.forEach((id) => {
+      if (ObjectId.isValid(id)) {
+        propertyIdMatch.push(new ObjectId(id));
+      }
+    });
+
     // Fetch tenants and group by propertyId AND unitType
     const tenantGroups = await db
       .collection("tenants")
       .aggregate([
         {
           $match: {
-            propertyId: { $in: propertyIds }
+            propertyId: { $in: propertyIdMatch }
           }
         },
         {
@@ -68,19 +102,28 @@ export async function GET(request: NextRequest) {
 
     // Build map: propertyId → unitType → occupied count
     const occupiedMap = tenantGroups.reduce((acc: Record<string, Record<string, number>>, group: any) => {
-      const propId = group._id.propertyId;
+      const propId = group._id.propertyId.toString(); // ensure string key
       const uType = group._id.unitType;
       if (!acc[propId]) acc[propId] = {};
       acc[propId][uType] = group.count;
       return acc;
     }, {});
 
+    const totalTenantsByProperty = tenantGroups.reduce((acc: Record<string, number>, group: any) => {
+      const propId = group._id.propertyId.toString(); // ensure string key
+      acc[propId] = (acc[propId] || 0) + group.count;
+      return acc;
+    }, {});
+
     // Fetch owners
     const ownerIds = [...new Set(listings.map((l) => l.ownerId))].filter(Boolean);
-    const owners = ownerIds.length > 0
+    const ownerObjectIds = ownerIds
+      .map((id) => coerceObjectId(id))
+      .filter((id): id is ObjectId => Boolean(id));
+    const owners = ownerObjectIds.length > 0
       ? await db
           .collection("propertyOwners")
-          .find({ _id: { $in: ownerIds.map((id) => new ObjectId(id)) } })
+          .find({ _id: { $in: ownerObjectIds } })
           .toArray()
       : [];
 
@@ -96,25 +139,42 @@ export async function GET(request: NextRequest) {
 
         const unitTypes = (listing.unitTypes || []).map((u: any) => ({
           ...u,
-          vacant: Math.max(0, u.quantity - (occupiedByType[u.type] || 0)),
+          vacant: Math.max(0, (u.quantity || 0) - (occupiedByType[u.type] || 0)),
         }));
 
-        const availability = summarizeAvailability(unitTypes);
-        const minPriceInListing = Math.min(...unitTypes.map((u: any) => u.price));
+        const totalTenants = totalTenantsByProperty[propertyId] || 0;
+        const availability = summarizeAvailability(unitTypes, totalTenants);
+
+        const prices = unitTypes
+          .map((u: any) => (typeof u.price === "number" ? u.price : Number(u.price)))
+          .filter((price: number) => Number.isFinite(price));
+        const minPriceInListing = prices.length ? Math.min(...prices) : null;
 
         const matchesUnit = !unitType || unitTypes.some((u: any) => u.type === unitType);
-        const matchesPrice = minPriceInListing >= minPrice && minPriceInListing <= maxPrice;
-        const matchesLocation = !location || listing.address.toLowerCase().includes(location);
-        const matchesFeatured = featured === null ||
-          (featured === "true" && listing.isAdvertised) ||
-          (featured === "false" && !listing.isAdvertised);
+        const matchesPrice = !hasPriceFilter
+          ? true
+          : minPriceInListing !== null && minPriceInListing >= minPrice && minPriceInListing <= maxPrice;
+
+        const listingAddress = typeof listing.address === "string" ? listing.address.toLowerCase() : "";
+        const listingName = typeof listing.name === "string" ? listing.name.toLowerCase() : "";
+        const matchesLocation = !location || listingAddress.includes(location) || listingName.includes(location);
+
+        const matchesFeatured =
+          !featured ||
+          featured === "all" ||
+          ((featured === "true" || featured === "featured") && listing.isAdvertised) ||
+          ((featured === "false" || featured === "standard") && !listing.isAdvertised);
 
         if (!matchesUnit || !matchesPrice || !matchesLocation || !matchesFeatured) {
           return null;
         }
 
+        const ownerIdValue = listing.ownerId ? String(listing.ownerId) : "";
+
         return {
           _id: listingId,
+          originalPropertyId: listing.originalPropertyId?.toString() || listingId,
+          ownerId: ownerIdValue,
           name: listing.name,
           address: listing.address,
           description: listing.description,
@@ -122,11 +182,12 @@ export async function GET(request: NextRequest) {
           unitTypes,
           images: listing.images || [],
           isAdvertised: listing.isAdvertised || false,
-          adExpiration: listing.adExpiration?.toISOString(),
-          createdAt: listing.createdAt.toISOString(),
-          updatedAt: listing.updatedAt.toISOString(),
+          adExpiration: toISO(listing.adExpiration),
+          status: listing.status,
+          createdAt: toISO(listing.createdAt) || "",
+          updatedAt: toISO(listing.updatedAt),
           availability,
-          owner: ownerMap[listing.ownerId] || null,
+          owner: ownerMap[ownerIdValue] || null,
         };
       })
       .filter(Boolean);
