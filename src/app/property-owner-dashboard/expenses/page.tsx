@@ -145,7 +145,7 @@ export default function ExpensesPage() {
             Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict" });
             token = data.csrfToken;
           }
-        } catch {}
+        } catch { }
       }
       setCsrfToken(token || null);
     };
@@ -165,7 +165,7 @@ export default function ExpensesPage() {
         });
         const data = await res.json();
         if (data.success) setProperties(data.properties || []);
-      } catch {}
+      } catch { }
     };
     fetchProps();
   }, [ownerId, csrfToken, hasAccess]);
@@ -228,7 +228,7 @@ export default function ExpensesPage() {
       if (data.success) {
         setTotalIncome(data.data?.reduce((sum: number, r: Report) => sum + r.revenue, 0) ?? 0);
       }
-    } catch {}
+    } catch { }
   }, [ownerId, csrfToken, period, customStart, customEnd, selectedProperty, hasAccess]);
 
   useEffect(() => {
@@ -483,11 +483,10 @@ export default function ExpensesPage() {
                     <button
                       key={p}
                       onClick={() => setPeriod(p)}
-                      className={`px-4 py-2 text-sm rounded-lg transition-all ${
-                        period === p
+                      className={`px-4 py-2 text-sm rounded-lg transition-all ${period === p
                           ? "bg-emerald-600 text-white shadow-md"
                           : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
+                        }`}
                     >
                       {p === "month" ? "This Month" : p === "year" ? "This Year" : "Custom"}
                     </button>
@@ -624,6 +623,7 @@ export default function ExpensesPage() {
               {/* Charts & Breakdowns – same as before */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
                 {/* Monthly Trend Chart */}
+                {/* Monthly Trend Chart */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -634,37 +634,56 @@ export default function ExpensesPage() {
                     <TrendingUp className="h-5 w-5 text-emerald-600" />
                     Monthly Expense Trend
                   </h2>
+
                   <div className="h-80 relative">
-                    <div className="absolute inset-0 flex items-end gap-4 pb-10 px-2">
-                      {monthlyTrend.map(([month, amt], index) => {
-                        const heightPercent = (amt / maxMonthly) * 100;
-                        const delay = index * 0.08;
-                        return (
-                          <motion.div
-                            key={month}
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: `${heightPercent}%`, opacity: 1 }}
-                            transition={{ duration: 0.8, delay, ease: "easeOut" }}
-                            className="flex-1 flex flex-col items-center justify-end group relative"
-                          >
-                            <div className="w-full bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400 rounded-t-xl shadow-md group-hover:shadow-lg group-hover:scale-[1.02] transition-all duration-300 relative overflow-hidden">
-                              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                            </div>
-                            <div className="mt-3 text-center">
-                              <p className="text-xs font-medium text-gray-700">{month}</p>
-                              <p className="text-sm font-semibold text-gray-900 mt-0.5">
-                                {amt.toLocaleString()}
-                              </p>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                    {monthlyTrend.length === 0 && (
+                    {monthlyTrend.length === 0 ? (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                         No expense data for the selected period
                       </div>
+                    ) : (
+                      <div className="absolute inset-0 flex items-end gap-3 pb-12 px-4">
+                        {monthlyTrend.map(([month, amt], index) => {
+                          const heightPercent = (amt / maxMonthly) * 85; // leave some top margin
+                          const delay = index * 0.06;
+
+                          return (
+                            <motion.div
+                              key={month}
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: `${heightPercent}%`, opacity: 1 }}
+                              transition={{ duration: 0.9, delay, ease: "easeOut" }}
+                              className="flex-1 flex flex-col items-center justify-end group relative"
+                            >
+                              {/* The actual bar */}
+                              <div
+                                className="w-full bg-emerald-500 rounded-t-lg transition-all duration-300 group-hover:bg-emerald-600 group-hover:shadow-md relative overflow-hidden"
+                                style={{
+                                  height: '100%',
+                                  minHeight: '4px', // prevent zero-height collapse
+                                }}
+                              >
+                                {/* Optional shine/hover effect */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+
+                              {/* Labels below bar */}
+                              <div className="mt-3 text-center">
+                                <p className="text-xs font-medium text-gray-600">{month}</p>
+                                <p className="text-sm font-semibold text-gray-900 mt-0.5">
+                                  {amt.toLocaleString()}
+                                </p>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
                     )}
+
+                    {/* Y-axis labels (optional but improves readability) */}
+                    <div className="absolute left-2 top-0 bottom-12 flex flex-col justify-between text-xs text-gray-500 pointer-events-none">
+                      <span>Ksh {maxMonthly.toLocaleString()}</span>
+                      <span>Ksh 0</span>
+                    </div>
                   </div>
                 </motion.div>
 
