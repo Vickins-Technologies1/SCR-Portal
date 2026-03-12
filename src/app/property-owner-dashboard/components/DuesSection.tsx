@@ -41,38 +41,61 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {/* Rent Dues */}
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-            <p className="text-xs font-medium text-orange-700 uppercase tracking-wider">Rent</p>
-            <p className="text-xl sm:text-2xl font-extrabold text-orange-600 mt-1">
-              Ksh {dues.rentDues.toFixed(0)}
-            </p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {/* Rent Dues */}
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+              <p className="text-xs font-medium text-orange-700 uppercase tracking-wider">Rent</p>
+              <p className="text-xl sm:text-2xl font-extrabold text-orange-600 mt-1">
+                Ksh {dues.rentDues.toFixed(0)}
+              </p>
+            </div>
+
+            {/* Utility Dues */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+              <p className="text-xs font-medium text-blue-700 uppercase tracking-wider">Utility</p>
+              <p className="text-xl sm:text-2xl font-extrabold text-blue-600 mt-1">
+                Ksh {dues.utilityDues.toFixed(0)}
+              </p>
+            </div>
+
+            {/* Deposit Dues */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+              <p className="text-xs font-medium text-purple-700 uppercase tracking-wider">Deposit</p>
+              <p className="text-xl sm:text-2xl font-extrabold text-purple-600 mt-1">
+                Ksh {dues.depositDues.toFixed(0)}
+              </p>
+            </div>
+
+            {/* Total Remaining */}
+            <div className="bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-400 rounded-lg p-4 shadow-lg ring-2 ring-red-100 col-span-2 lg:col-span-1">
+              <p className="text-xs font-bold text-red-700 uppercase tracking-wider">Total Due</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-red-600 mt-1">
+                Ksh {dues.totalRemainingDues.toFixed(0)}
+              </p>
+            </div>
           </div>
 
-          {/* Utility Dues */}
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-            <p className="text-xs font-medium text-blue-700 uppercase tracking-wider">Utility</p>
-            <p className="text-xl sm:text-2xl font-extrabold text-blue-600 mt-1">
-              Ksh {dues.utilityDues.toFixed(0)}
-            </p>
-          </div>
-
-          {/* Deposit Dues */}
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-            <p className="text-xs font-medium text-purple-700 uppercase tracking-wider">Deposit</p>
-            <p className="text-xl sm:text-2xl font-extrabold text-purple-600 mt-1">
-              Ksh {dues.depositDues.toFixed(0)}
-            </p>
-          </div>
-
-          {/* Total Remaining */}
-          <div className="bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-400 rounded-lg p-4 shadow-lg ring-2 ring-red-100 col-span-2 lg:col-span-1">
-            <p className="text-xs font-bold text-red-700 uppercase tracking-wider">Total Due</p>
-            <p className="text-2xl sm:text-3xl font-extrabold text-red-600 mt-1">
-              Ksh {dues.totalRemainingDues.toFixed(0)}
-            </p>
-          </div>
+          {((dues.walletApplied ?? 0) > 0 || (dues.walletRemaining ?? 0) > 0) && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-emerald-800 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Wallet Auto-Apply</p>
+                <span className="text-xs font-medium text-emerald-700">
+                  {dues.walletCoverageMonths ?? 0} month{(dues.walletCoverageMonths ?? 0) === 1 ? "" : "s"} runway
+                </span>
+              </div>
+              <p className="mt-2 text-sm">
+                {(dues.walletApplied ?? 0) > 0
+                  ? `Applied Ksh ${dues.walletApplied?.toFixed(0)} to rent this cycle.`
+                  : "Credit is ready for upcoming rent."}
+              </p>
+              {(dues.walletRemaining ?? 0) > 0 && (
+                <p className="text-xs text-emerald-700 mt-1">
+                  Remaining credit: Ksh {dues.walletRemaining?.toFixed(0)}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

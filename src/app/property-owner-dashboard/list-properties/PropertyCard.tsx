@@ -10,6 +10,7 @@ interface PropertyCardProps {
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canManage?: boolean;
 }
 
 export default function PropertyCard({ property, onView, onEdit, onDelete, canManage }: PropertyCardProps) {
@@ -94,5 +95,6 @@ export default function PropertyCard({ property, onView, onEdit, onDelete, canMa
     </motion.div>
   );
 }
+
 
 

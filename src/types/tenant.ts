@@ -57,6 +57,10 @@ export interface ResponseTenant {
     utilityDues: number;
     depositDues: number;
     totalRemainingDues: number;
+    walletApplied?: number;
+    walletRemaining?: number;
+    walletCoverageMonths?: number;
+    walletCoverageRemainder?: number;
   };
 }
 

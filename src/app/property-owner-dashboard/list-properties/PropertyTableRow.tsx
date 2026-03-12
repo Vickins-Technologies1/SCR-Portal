@@ -9,6 +9,7 @@ interface PropertyTableRowProps {
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canManage?: boolean;
 }
 
 export default function PropertyTableRow({
@@ -16,8 +17,10 @@ export default function PropertyTableRow({
   onView,
   onEdit,
   onDelete,
+  canManage,
 }: PropertyTableRowProps) {
   const availability = ensureAvailability(property);
+  const showActions = canManage ?? true;
   return (
     <tr
       className="hover:bg-slate-50 transition cursor-pointer"
@@ -74,4 +77,3 @@ export default function PropertyTableRow({
     </tr>
   );
 }
-

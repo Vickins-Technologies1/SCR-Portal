@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
+import { applyWalletToRent } from "../../../../lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -252,19 +253,33 @@ export async function GET(request: NextRequest) {
 
       const rentDue = tenantDoc.price * monthsStayed;
       const depositDue = tenantDoc.deposit || 0;
-      const totalDue = rentDue + depositDue;
-      const totalPaid = rentPaid + depositPaid + utilityPaid;
 
-      const remaining = Math.max(0, totalDue - totalPaid);
-      const paymentStatus = remaining > 0 ? "overdue" : "up-to-date";
+      const walletResult = applyWalletToRent({
+        rentDue,
+        rentPaidFromPayments: rentPaid,
+        rentPaidRecorded: tenantDoc.totalRentPaid ?? 0,
+        walletBalance: tenantDoc.walletBalance ?? 0,
+        monthlyRent: tenantDoc.price || 0,
+      });
+
+      const updatedTotalRentPaid = walletResult.rentPaidTotal;
+      const updatedWalletBalance = walletResult.walletRemaining;
+
+      const rentDues = Math.max(0, rentDue - updatedTotalRentPaid);
+      const depositDues = Math.max(0, depositDue - depositPaid);
+      const utilityDues = 0;
+      const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
+
+      const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
 
       await db.collection("tenants").updateOne(
         { _id: new ObjectId(targetTenantId) },
         {
           $set: {
-            totalRentPaid: rentPaid,
+            totalRentPaid: updatedTotalRentPaid,
             totalUtilityPaid: utilityPaid,
             totalDepositPaid: depositPaid,
+            walletBalance: updatedWalletBalance,
             paymentStatus,
             updatedAt: today.toISOString(),
           },
@@ -275,15 +290,21 @@ export async function GET(request: NextRequest) {
 
       Object.assign(tenant, {
         monthsStayed,
-        totalRentPaid: rentPaid,
+        totalRentPaid: updatedTotalRentPaid,
         totalUtilityPaid: utilityPaid,
         totalDepositPaid: depositPaid,
+        walletBalance: updatedWalletBalance,
+        wallet: updatedWalletBalance,
         paymentStatus,
         dues: {
-          rentDues: Math.max(0, rentDue - rentPaid),
-          utilityDues: 0,
-          depositDues: Math.max(0, depositDue - depositPaid),
-          totalRemainingDues: remaining,
+          rentDues,
+          utilityDues,
+          depositDues,
+          totalRemainingDues,
+          walletApplied: walletResult.walletAppliedNow,
+          walletRemaining: walletResult.walletRemaining,
+          walletCoverageMonths: walletResult.walletCoverageMonths,
+          walletCoverageRemainder: walletResult.walletCoverageRemainder,
         },
       });
 
@@ -306,3 +327,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

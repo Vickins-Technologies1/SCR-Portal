@@ -44,11 +44,19 @@ export default function ListPropertiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "createdAt",
     direction: "desc",
   });
+
+  const showListButton = isHydrated && canListProperties;
+  const canManageActions = isHydrated && canEditProperties;
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Auth + effective owner logic
   useEffect(() => {
@@ -237,7 +245,7 @@ export default function ListPropertiesPage() {
               <Home className="text-[#012a4a]" />
               Property Listings
             </h1>
-            {canListProperties && (
+            {showListButton && (
             <button
               onClick={openListModal}
               className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white rounded-xl shadow-md hover:shadow-lg transition-all font-medium"
@@ -310,7 +318,7 @@ export default function ListPropertiesPage() {
                         onView={() => setSelectedProperty(p)}
                         onEdit={() => openEditModal(p)}
                         onDelete={() => handleDelete(p._id)}
-                        canManage={canEditProperties}
+                        canManage={canManageActions}
                       />
                     ))}
                   </tbody>
@@ -326,7 +334,7 @@ export default function ListPropertiesPage() {
                     onView={() => setSelectedProperty(p)}
                     onEdit={() => openEditModal(p)}
                     onDelete={() => handleDelete(p._id)}
-                        canManage={canEditProperties}
+                        canManage={canManageActions}
                   />
                 ))}
               </div>
@@ -385,6 +393,9 @@ export default function ListPropertiesPage() {
     </div>
   );
 }
+
+
+
 
 
 

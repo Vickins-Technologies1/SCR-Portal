@@ -22,6 +22,24 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-GB");
   };
+  const getWalletRunway = () => {
+    const walletBalance = tenant.walletBalance || 0;
+    const months = tenant.dues?.walletCoverageMonths ?? 0;
+    const remainder = tenant.dues?.walletCoverageRemainder ?? 0;
+
+    if (walletBalance <= 0) return "No credit";
+
+    if (months > 0 && remainder > 0) {
+      return `${months} month${months === 1 ? "" : "s"} + ${formatCurrency(remainder)}`;
+    }
+    if (months > 0) {
+      return `${months} month${months === 1 ? "" : "s"} covered`;
+    }
+    if (remainder > 0) {
+      return `${formatCurrency(remainder)} toward next month`;
+    }
+    return "Credit available";
+  };
 
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
@@ -97,6 +115,12 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
       label: "Wallet Balance",
       value: formatCurrency(tenant.walletBalance),
       className: "text-emerald-600 font-bold",
+    },
+    {
+      label: "Wallet Runway",
+      value: getWalletRunway(),
+      className: tenant.walletBalance > 0 ? "text-emerald-700 font-bold" : "text-slate-700",
+      note: tenant.walletBalance > 0 ? "Auto-applies to upcoming rent" : undefined,
     },
 
     // Dues — now 100% accurate because backend syncs from payments

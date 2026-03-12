@@ -502,6 +502,7 @@ export default function TenantDetailsPage() {
                 totalRentPaid: data.tenant.totalRentPaid,
                 totalDepositPaid: data.tenant.totalDepositPaid,
                 totalUtilityPaid: data.tenant.totalUtilityPaid,
+                walletBalance: data.tenant.walletBalance ?? prev.walletBalance,
                 paymentStatus: data.tenant.paymentStatus,
                 monthsStayed: data.monthsStayed,
               }
@@ -994,6 +995,24 @@ export default function TenantDetailsPage() {
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

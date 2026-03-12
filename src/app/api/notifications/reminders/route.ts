@@ -146,7 +146,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const formattedNotifications = notifications.map((n) => ({
       ...n,
-      _id: n._id.toString(),
+      _id: n._id.toString(), // already string, but kept for safety
       tenantId: n.tenantId === "all" ? "all" : n.tenantId,
     }));
 
@@ -187,12 +187,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const idFilter = ObjectId.isValid(notificationId)
-        ? { $or: [{ _id: notificationId }, { _id: new ObjectId(notificationId) }] }
-        : { _id: notificationId };
+      // Since _id is stored as string (uuid), we use it directly
+      // If someone sends ObjectId hex string by mistake, we still treat it as string
+      const filter = {
+        _id: notificationId,
+        ownerId: effectiveOwnerId,
+      };
 
       const result = await db.collection<Notification>("notifications").updateOne(
-        { ownerId: effectiveOwnerId, ...idFilter },
+        filter,
         { $set: { status: "read" } }
       );
 
@@ -417,7 +420,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       };
 
       await db.collection<Notification>("notifications").insertOne(newNotification);
-      logger.info("Notification created", { notificationId: newNotification._id, ownerId: effectiveOwnerId, tenantId: tenant._id.toString(), type });
+      logger.info("Notification created", { 
+        notificationId: newNotification._id, 
+        ownerId: effectiveOwnerId, 
+        tenantId: tenant._id.toString(), 
+        type 
+      });
       notifications.push(newNotification);
     }
 
@@ -450,17 +458,20 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     }
 
     const { db } = await connectToDatabase();
-    const deleteFilter = ObjectId.isValid(notificationId)
-      ? { $or: [{ _id: notificationId }, { _id: new ObjectId(notificationId) }] }
-      : { _id: notificationId };
 
-    const result = await db.collection<Notification>("notifications").deleteOne({
+    // _id is string → direct equality
+    const filter = {
+      _id: notificationId,
       ownerId: effectiveOwnerId,
-      ...deleteFilter,
-    });
+    };
+
+    const result = await db.collection<Notification>("notifications").deleteOne(filter);
 
     if (result.deletedCount === 0) {
-      logger.warn("Notification not found or unauthorized for deletion", { notificationId, ownerId: effectiveOwnerId });
+      logger.warn("Notification not found or unauthorized for deletion", { 
+        notificationId, 
+        ownerId: effectiveOwnerId 
+      });
       return NextResponse.json(
         { success: false, message: "Notification not found or unauthorized" },
         { status: 404 }
@@ -477,6 +488,3 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     );
   }
 }
-
-
-
