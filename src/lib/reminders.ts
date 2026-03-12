@@ -274,7 +274,9 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       if (tenant.phone) {
         try {
           await sendWelcomeSms({ phone: tenant.phone, message: smsMessage });
-          if (deliveryStatus !== "failed") deliveryStatus = "success";
+          if (deliveryStatus === "pending") {
+            deliveryStatus = "success";
+          }
         } catch (error) {
           logger.error("Reminder SMS failed", { tenantId, error });
           recordFailure("SMS failed");
@@ -299,7 +301,9 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
             dueDate: formattedDueDate,
             reminderType,
           });
-          if (deliveryStatus !== "failed") deliveryStatus = "success";
+          if (deliveryStatus === "pending") {
+            deliveryStatus = "success";
+          }
         } catch (error) {
           logger.error("Reminder email failed", { tenantId, error });
           recordFailure("Email failed");
@@ -315,7 +319,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
           const waResult = await sendWhatsAppMessage({ phone: tenant.phone, message: whatsappMessage });
           if (!waResult.success) {
             recordFailure(`WhatsApp failed: ${waResult.error?.message || "Unknown error"}`);
-          } else if (deliveryStatus !== "failed") {
+          } else if (deliveryStatus === "pending") {
             deliveryStatus = "success";
           }
         } catch (error) {

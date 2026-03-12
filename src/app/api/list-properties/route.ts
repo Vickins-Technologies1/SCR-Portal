@@ -36,8 +36,17 @@ const FACILITIES = [
 ];
 
 
-const summarizeAvailability = (unitTypes: UnitType[]) => {
+const summarizeAvailability = (unitTypes: UnitType[], totalTenants?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+
+  if (typeof totalTenants === "number") {
+    const normalizedTenants = Math.max(0, totalTenants);
+    const totalOccupied = Math.min(totalUnits, normalizedTenants);
+    const totalVacant = Math.max(0, totalUnits - totalOccupied);
+    const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
+    return { totalUnits, totalVacant, totalOccupied, occupancyRate };
+  }
+
   const totalVacant = unitTypes.reduce((sum, unit) => sum + (unit.vacant ?? 0), 0);
   const totalOccupied = Math.max(0, totalUnits - totalVacant);
   const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
@@ -106,7 +115,7 @@ export async function GET(request: NextRequest) {
           status: listing.status,
           createdAt: listing.createdAt.toISOString(),
           updatedAt: listing.updatedAt.toISOString(),
-          availability: summarizeAvailability(unitTypes),
+          availability: summarizeAvailability(unitTypes, tenants.length),
           occupiedByType,
         };
       })
@@ -402,3 +411,4 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+
