@@ -433,7 +433,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
           <div className="flex items-center gap-1.5">
             <DollarSign size={16} className="text-cyan-600" />
             {minPrice ? (
-              <span className="font-medium">Ksh {priceLabel}/mo</span>
+              <span className="font-medium">Starting from Ksh {priceLabel}/mo</span>
             ) : (
               <span>Pricing on request</span>
             )}
