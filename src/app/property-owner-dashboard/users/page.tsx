@@ -83,6 +83,176 @@ const AVAILABLE_PERMISSIONS = [
   { id: "security:manage", label: "Manage Security & Access" },
 ];
 
+const PERMISSION_ID_SET = new Set(AVAILABLE_PERMISSIONS.map(p => p.id));
+
+const normalizePermissions = (permissions: string[]) =>
+  Array.from(new Set(permissions.filter(p => PERMISSION_ID_SET.has(p))));
+
+const ROLE_PRESETS: Record<TeamMember["teamRole"], string[]> = {
+  "Owner": AVAILABLE_PERMISSIONS.map(p => p.id),
+  "Co-Owner": AVAILABLE_PERMISSIONS.map(p => p.id),
+  "Property Manager": [
+    "dashboard:view",
+    "properties:view", "properties:edit", "properties:list_new",
+    "notifications:view", "notifications:send", "notifications:manage",
+    "reminders:view", "reminders:trigger",
+    "communications:access",
+    "tenants:view", "tenants:edit",
+    "payments:view", "payments:record",
+    "expenses:view", "expenses:create", "expenses:approve",
+    "reports:view", "reports:export",
+    "users:view",
+    "settings:view", "settings:edit",
+  ],
+  "Portfolio Manager": [
+    "dashboard:view",
+    "properties:view", "properties:edit", "properties:list_new",
+    "notifications:view", "notifications:send", "notifications:manage",
+    "reminders:view", "reminders:trigger",
+    "communications:access",
+    "tenants:view", "tenants:edit",
+    "payments:view", "payments:record",
+    "expenses:view", "expenses:create", "expenses:approve",
+    "reports:view", "reports:export",
+    "users:view",
+    "settings:view",
+  ],
+  "Leasing Manager": [
+    "dashboard:view",
+    "properties:view",
+    "tenants:view", "tenants:edit",
+    "notifications:view", "notifications:send",
+    "reminders:view", "reminders:trigger",
+    "communications:access",
+    "reports:view",
+  ],
+  "Maintenance Coordinator": [
+    "dashboard:view",
+    "properties:view",
+    "notifications:view", "notifications:send",
+    "reminders:view", "reminders:trigger",
+    "expenses:view", "expenses:create",
+    "reports:view",
+  ],
+  "Accounts Manager": [
+    "dashboard:view",
+    "payments:view", "payments:record",
+    "expenses:view", "expenses:create", "expenses:approve",
+    "reports:view", "reports:export",
+  ],
+  "Finance Officer": [
+    "dashboard:view",
+    "payments:view", "payments:record",
+    "expenses:view", "expenses:create", "expenses:approve",
+    "reports:view", "reports:export",
+    "settings:view",
+  ],
+  "Rent Collection Officer": [
+    "dashboard:view",
+    "tenants:view",
+    "payments:view", "payments:record",
+    "reminders:view", "reminders:trigger",
+    "notifications:view", "notifications:send",
+  ],
+  "Tenant Relations Officer": [
+    "dashboard:view",
+    "tenants:view", "tenants:edit",
+    "notifications:view", "notifications:send",
+    "reminders:view", "reminders:trigger",
+    "communications:access",
+  ],
+  "Field Inspector": [
+    "dashboard:view",
+    "properties:view",
+    "tenants:view",
+    "reports:view",
+  ],
+  "Real Estate Agent": [
+    "dashboard:view",
+    "properties:view", "properties:list_new",
+    "notifications:view",
+    "communications:access",
+    "reports:view",
+  ],
+  "Marketing & Listings Specialist": [
+    "dashboard:view",
+    "properties:view", "properties:list_new",
+    "notifications:view", "notifications:send",
+    "communications:access",
+  ],
+  "Legal & Compliance Officer": [
+    "dashboard:view",
+    "properties:view",
+    "tenants:view",
+    "reports:view", "reports:export",
+    "settings:view",
+  ],
+  "Administrative Assistant": [
+    "dashboard:view",
+    "properties:view",
+    "tenants:view",
+    "payments:view",
+    "expenses:view",
+    "notifications:view",
+    "reminders:view",
+    "communications:access",
+    "reports:view",
+  ],
+  "Viewer": [
+    "dashboard:view",
+    "properties:view",
+    "tenants:view",
+    "payments:view",
+    "expenses:view",
+    "reports:view",
+    "notifications:view",
+  ],
+  "IT / Systems Admin": [
+    "dashboard:view",
+    "users:view", "users:manage",
+    "roles:manage",
+    "settings:view", "settings:edit",
+    "security:manage",
+    "reports:view",
+  ],
+  "Security Coordinator": [
+    "dashboard:view",
+    "properties:view",
+    "tenants:view",
+    "notifications:view",
+    "reminders:view",
+  ],
+};
+
+const TEAM_ROLE_OPTIONS: Array<{ value: TeamMember["teamRole"]; label: string }> = [
+  { value: "Viewer", label: "Viewer – read-only access" },
+  { value: "Administrative Assistant", label: "Administrative Assistant" },
+  { value: "Field Inspector", label: "Field Inspector" },
+  { value: "Rent Collection Officer", label: "Rent Collection Officer" },
+  { value: "Tenant Relations Officer", label: "Tenant Relations Officer" },
+  { value: "Maintenance Coordinator", label: "Maintenance Coordinator" },
+  { value: "Accounts Manager", label: "Accounts Manager" },
+  { value: "Leasing Manager", label: "Leasing Manager" },
+  { value: "Finance Officer", label: "Finance Officer" },
+  { value: "Marketing & Listings Specialist", label: "Marketing & Listings Specialist" },
+  { value: "Real Estate Agent", label: "Real Estate Agent" },
+  { value: "Legal & Compliance Officer", label: "Legal & Compliance Officer" },
+  { value: "Property Manager", label: "Property Manager" },
+  { value: "Portfolio Manager", label: "Portfolio Manager" },
+  { value: "IT / Systems Admin", label: "IT / Systems Admin" },
+  { value: "Security Coordinator", label: "Security Coordinator" },
+  { value: "Co-Owner", label: "Co-Owner" },
+  { value: "Owner", label: "Owner (full control)" },
+];
+
+const getRolePreset = (teamRole: TeamMember["teamRole"]) =>
+  normalizePermissions(ROLE_PRESETS[teamRole] ?? []);
+
+const normalizeTeamRole = (role: string | undefined): TeamMember["teamRole"] =>
+  TEAM_ROLE_OPTIONS.some(option => option.value === role)
+    ? (role as TeamMember["teamRole"])
+    : "Viewer";
+
 export default function UsersPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
@@ -90,6 +260,8 @@ export default function UsersPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionRole, setSessionRole] = useState<"propertyOwner" | "teamMember" | null>(null);
+  const [sessionPermissions, setSessionPermissions] = useState<string[]>([]);
 
   // Add modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -98,7 +270,7 @@ export default function UsersPage() {
     email: "",
     phone: "",
     teamRole: "Administrative Assistant" as TeamMember["teamRole"],
-    permissions: [] as string[],
+    permissions: getRolePreset("Administrative Assistant"),
     password: "",
     confirmPassword: "",
   });
@@ -117,15 +289,61 @@ export default function UsersPage() {
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  const canViewUsers =
+    sessionRole === "propertyOwner" ||
+    (sessionRole === "teamMember" && sessionPermissions.includes("users:view"));
+
+  const canManageUsers =
+    sessionRole === "propertyOwner" ||
+    (sessionRole === "teamMember" && sessionPermissions.includes("users:manage"));
+
+  const editPermissions = Array.isArray(editForm.permissions) ? editForm.permissions : [];
+  const editRoleValue = normalizeTeamRole(editForm.teamRole);
+
   // Auth & CSRF
   useEffect(() => {
     const uid = Cookies.get("userId");
     const role = Cookies.get("role");
-    if (!uid || role !== "propertyOwner") {
+    const ownerId = Cookies.get("ownerId");
+    const rawPermissions = Cookies.get("permissions");
+    let parsedPermissions: string[] = [];
+
+    if (rawPermissions) {
+      try {
+        const parsed = JSON.parse(rawPermissions);
+        parsedPermissions = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        parsedPermissions = [];
+      }
+    }
+
+    if (!uid || !role) {
       router.replace("/login");
       return;
     }
-    setUserId(uid);
+
+    if (role === "propertyOwner") {
+      setUserId(uid);
+      setSessionRole("propertyOwner");
+      setSessionPermissions(parsedPermissions);
+    } else if (role === "teamMember") {
+      if (!parsedPermissions.includes("users:view")) {
+        router.replace("/property-owner-dashboard");
+        return;
+      }
+
+      if (!ownerId) {
+        router.replace("/login");
+        return;
+      }
+
+      setUserId(ownerId);
+      setSessionRole("teamMember");
+      setSessionPermissions(parsedPermissions);
+    } else {
+      router.replace("/login");
+      return;
+    }
 
     const fetchCsrf = async () => {
       let token = Cookies.get("csrf-token");
@@ -145,7 +363,7 @@ export default function UsersPage() {
   }, [router]);
 
   const fetchUsers = useCallback(async () => {
-    if (!userId || !csrfToken) return;
+    if (!userId || !csrfToken || !canViewUsers) return;
     setIsLoading(true);
     try {
       const res = await fetch(`/api/team-members?ownerId=${userId}`, {
@@ -164,99 +382,34 @@ export default function UsersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, csrfToken]);
+  }, [userId, csrfToken, canViewUsers]);
 
   useEffect(() => {
-    if (userId && csrfToken) fetchUsers();
-  }, [userId, csrfToken, fetchUsers]);
+    if (userId && csrfToken && canViewUsers) fetchUsers();
+  }, [userId, csrfToken, canViewUsers, fetchUsers]);
 
-  // Auto-select permissions based on teamRole (for ADD modal)
-  const applyRolePreset = (teamRole: TeamMember["teamRole"]) => {
-    let preset: string[] = [];
+  // Auto-select permissions based on teamRole
+  const applyRolePresetToAdd = (teamRole: TeamMember["teamRole"]) => {
+    setAddForm(prev => ({ ...prev, teamRole, permissions: getRolePreset(teamRole) }));
+  };
 
-    switch (teamRole) {
-      case "Owner":
-      case "Co-Owner":
-        preset = AVAILABLE_PERMISSIONS.map(p => p.id);
-        break;
-
-      case "Property Manager":
-      case "Portfolio Manager":
-        preset = [
-          "dashboard:view",
-          "properties:view", "properties:edit", "properties:list_new",
-          "notifications:view", "notifications:send", "notifications:manage",
-          "reminders:view", "reminders:trigger",
-          "tenants:view", "tenants:edit",
-          "payments:view", "payments:record",
-          "expenses:view", "expenses:create", "expenses:approve",
-          "reports:view", "reports:export",
-          "settings:view", "settings:edit",
-          "users:view",
-        ];
-        break;
-
-      case "Leasing Manager":
-        preset = [
-          "dashboard:view",
-          "properties:view",
-          "tenants:view", "tenants:edit",
-          "leases:read", "leases:write", // assuming you add lease permissions later
-          "notifications:view", "notifications:send",
-          "reminders:view", "reminders:trigger",
-        ];
-        break;
-
-      case "Maintenance Coordinator":
-        preset = [
-          "dashboard:view",
-          "maintenance:request", "maintenance:assign", "maintenance:close",
-          "properties:view",
-          "vendors:view", "vendors:contact",
-        ];
-        break;
-
-      case "Accounts Manager":
-      case "Finance Officer":
-        preset = [
-          "dashboard:view",
-          "payments:view", "payments:record",
-          "expenses:view", "expenses:create", "expenses:approve",
-          "reports:view", "reports:export",
-        ];
-        break;
-
-      case "Rent Collection Officer":
-        preset = [
-          "payments:view", "payments:record",
-          "tenants:view",
-          "reminders:trigger",
-        ];
-        break;
-
-      case "Administrative Assistant":
-      case "Viewer":
-        preset = [
-          "dashboard:view",
-          "properties:view",
-          "tenants:view",
-          "payments:view",
-          "expenses:view",
-          "reports:view",
-          "notifications:view",
-        ];
-        break;
-
-      default:
-        preset = [];
-    }
-
-    setAddForm(prev => ({ ...prev, permissions: preset }));
+  const applyRolePresetToEdit = (teamRole: TeamMember["teamRole"]) => {
+    setEditForm(prev => ({ ...prev, teamRole, permissions: getRolePreset(teamRole) }));
   };
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
+
+    if (!userId) {
+      setAddError("Session expired. Please log in again.");
+      return;
+    }
+
+    if (!canManageUsers) {
+      setAddError("You don't have permission to add team members.");
+      return;
+    }
 
     if (addForm.password !== addForm.confirmPassword) {
       setAddError("Passwords do not match");
@@ -271,7 +424,8 @@ export default function UsersPage() {
     setAddSubmitting(true);
 
     try {
-      const { confirmPassword, ...payload } = addForm;
+      const { confirmPassword, permissions, ...payload } = addForm;
+      const safePermissions = normalizePermissions(permissions);
 
       const res = await fetch("/api/team-members", {
         method: "POST",
@@ -283,6 +437,7 @@ export default function UsersPage() {
         body: JSON.stringify({
           ownerId: userId,
           ...payload,
+          permissions: safePermissions,
         }),
       });
 
@@ -291,12 +446,13 @@ export default function UsersPage() {
 
       setMembers(prev => [...prev, data.member]);
       setIsAddModalOpen(false);
+      const defaultRole: TeamMember["teamRole"] = "Administrative Assistant";
       setAddForm({
         name: "",
         email: "",
         phone: "",
-        teamRole: "Administrative Assistant",
-        permissions: [],
+        teamRole: defaultRole,
+        permissions: getRolePreset(defaultRole),
         password: "",
         confirmPassword: "",
       });
@@ -308,13 +464,14 @@ export default function UsersPage() {
   };
 
   const openEditModal = (member: TeamMember) => {
+    if (!canManageUsers) return;
     setEditMember(member);
     setEditForm({
       name: member.name,
       email: member.email,
       phone: member.phone || "",
-      teamRole: member.teamRole,
-      permissions: [...member.permissions],
+      teamRole: normalizeTeamRole(member.teamRole),
+      permissions: normalizePermissions(member.permissions || []),
       active: member.active,
     });
     setIsEditModalOpen(true);
@@ -324,10 +481,30 @@ export default function UsersPage() {
     e.preventDefault();
     if (!editMember) return;
 
+    if (!userId) {
+      setEditError("Session expired. Please log in again.");
+      return;
+    }
+
+    if (!canManageUsers) {
+      setEditError("You don't have permission to edit team members.");
+      return;
+    }
+
     setEditError(null);
     setEditSubmitting(true);
 
     try {
+      const payload: Record<string, unknown> = { ownerId: userId };
+      if (editForm.name !== undefined) payload.name = editForm.name;
+      if (editForm.email !== undefined) payload.email = editForm.email;
+      if (editForm.phone !== undefined) payload.phone = editForm.phone;
+      if (editForm.teamRole !== undefined) payload.teamRole = editForm.teamRole;
+      if (editForm.permissions !== undefined) {
+        payload.permissions = normalizePermissions(editForm.permissions);
+      }
+      if (editForm.active !== undefined) payload.active = editForm.active;
+
       const res = await fetch(`/api/team-members/${editMember._id}`, {
         method: "PATCH",
         headers: {
@@ -335,10 +512,7 @@ export default function UsersPage() {
           "x-csrf-token": csrfToken!,
         },
         credentials: "include",
-        body: JSON.stringify({
-          ownerId: userId,
-          ...editForm,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -358,6 +532,7 @@ export default function UsersPage() {
 
   const handleDeleteMember = async () => {
     if (!deleteConfirmId) return;
+    if (!canManageUsers) return;
 
     try {
       const res = await fetch(`/api/team-members/${deleteConfirmId}`, {
@@ -418,6 +593,7 @@ export default function UsersPage() {
               <Users className="h-8 w-8 text-emerald-600" />
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Team Members</h1>
             </div>
+            {canManageUsers ? (
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
@@ -427,7 +603,7 @@ export default function UsersPage() {
                   email: "",
                   phone: "",
                   teamRole: "Administrative Assistant",
-                  permissions: [],
+                  permissions: getRolePreset("Administrative Assistant"),
                   password: "",
                   confirmPassword: "",
                 });
@@ -438,6 +614,11 @@ export default function UsersPage() {
               <UserPlus size={18} />
               Add Member
             </motion.button>
+          ) : (
+            <span className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+              View-only access
+            </span>
+          )}
           </div>
 
           {error && (
@@ -508,22 +689,24 @@ export default function UsersPage() {
                       </div>
                     )}
 
-                    <div className="mt-6 flex items-center justify-end gap-3">
-                      <button
-                        onClick={() => openEditModal(member)}
-                        className="p-2.5 hover:bg-emerald-50 rounded-lg transition-colors text-emerald-600"
-                        title="Edit member"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmId(member._id)}
-                        className="p-2.5 hover:bg-red-50 rounded-lg transition-colors text-red-600"
-                        title="Delete member"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
+                    {canManageUsers && (
+                      <div className="mt-6 flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => openEditModal(member)}
+                          className="p-2.5 hover:bg-emerald-50 rounded-lg transition-colors text-emerald-600"
+                          title="Edit member"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(member._id)}
+                          className="p-2.5 hover:bg-red-50 rounded-lg transition-colors text-red-600"
+                          title="Delete member"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -639,26 +822,13 @@ export default function UsersPage() {
                   value={addForm.teamRole}
                   onChange={e => {
                     const newRole = e.target.value as TeamMember["teamRole"];
-                    setAddForm({ ...addForm, teamRole: newRole });
-                    applyRolePreset(newRole);
+                    applyRolePresetToAdd(newRole);
                   }}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
                 >
-                  <option value="Viewer">Viewer – read-only access</option>
-                  <option value="Administrative Assistant">Administrative Assistant</option>
-                  <option value="Field Inspector">Field Inspector</option>
-                  <option value="Rent Collection Officer">Rent Collection Officer</option>
-                  <option value="Tenant Relations Officer">Tenant Relations Officer</option>
-                  <option value="Maintenance Coordinator">Maintenance Coordinator</option>
-                  <option value="Accounts Manager">Accounts Manager</option>
-                  <option value="Leasing Manager">Leasing Manager</option>
-                  <option value="Finance Officer">Finance Officer</option>
-                  <option value="Marketing & Listings Specialist">Marketing & Listings Specialist</option>
-                  <option value="Property Manager">Property Manager</option>
-                  <option value="Portfolio Manager">Portfolio Manager</option>
-                  <option value="Legal & Compliance Officer">Legal & Compliance Officer</option>
-                  <option value="Co-Owner">Co-Owner</option>
-                  <option value="Owner">Owner (full control)</option>
+                  {TEAM_ROLE_OPTIONS.map((role) => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -712,8 +882,147 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* EDIT MODAL - similar structure, omitted for brevity but follows same pattern */}
-      {/* ... (you can copy-paste and adapt from add modal, just use editForm and handleEditMember) */}
+      {isEditModalOpen && editMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+          >
+            <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-6 py-5 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Edit Team Member</h2>
+              <button
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditMember(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <X size={20} className="text-gray-600" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditMember} className="p-6 space-y-6">
+              {editError && (
+                <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3">
+                  <AlertCircle size={18} />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name *</label>
+                <input
+                  type="text"
+                  value={editForm.name ?? ""}
+                  onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                  required
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  placeholder="John Doe"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address *</label>
+                <input
+                  type="email"
+                  value={editForm.email ?? ""}
+                  onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                  required
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  placeholder="john@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone (optional)</label>
+                <input
+                  type="tel"
+                  value={editForm.phone ?? ""}
+                  onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  placeholder="+254 712 345 678"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Primary Role</label>
+                <select
+                  value={editRoleValue}
+                  onChange={e => {
+                    const newRole = e.target.value as TeamMember["teamRole"];
+                    applyRolePresetToEdit(newRole);
+                  }}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
+                >
+                  {TEAM_ROLE_OPTIONS.map((role) => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!editForm.active}
+                  onChange={e => setEditForm(prev => ({ ...prev, active: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-gray-700">Active account</span>
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Granular Permissions</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6 max-h-80 overflow-y-auto pr-2">
+                  {AVAILABLE_PERMISSIONS.map(perm => (
+                    <label key={perm.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editPermissions.includes(perm.id)}
+                        onChange={e => {
+                          const newPerms = e.target.checked
+                            ? [...editPermissions, perm.id]
+                            : editPermissions.filter(p => p !== perm.id);
+                          setEditForm(prev => ({ ...prev, permissions: newPerms }));
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="text-sm text-gray-700">{perm.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditMember(null);
+                  }}
+                  className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-xl shadow-md transition-all ${
+                    editSubmitting ? "bg-emerald-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                >
+                  {editSubmitting ? "Saving..." : (
+                    <>
+                      <Save size={18} />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* DELETE CONFIRMATION */}
       {deleteConfirmId && (
@@ -748,3 +1057,28 @@ export default function UsersPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

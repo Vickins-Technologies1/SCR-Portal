@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Property {
   _id: string;
@@ -113,6 +114,7 @@ interface SortConfig {
 
 export default function PropertiesPage() {
   const router = useRouter();
+  const perm = usePermissions();
   const [properties, setProperties] = useState<Property[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -134,6 +136,10 @@ export default function PropertiesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
+
+  const canViewProperties = perm.hasPermission("properties:view");
+  const canEditProperties = perm.hasPermission("properties:edit");
+  const canListProperties = perm.hasPermission("properties:list_new");
 
   // Fetch CSRF token on mount
   useEffect(() => {
@@ -181,13 +187,19 @@ export default function PropertiesPage() {
       return;
     }
 
+    if (userRole === "teamMember" && !canViewProperties) {
+      setError("Access restricted. You do not have permission to view properties.");
+      router.replace("/property-owner-dashboard");
+      return;
+    }
+
     if (!ownerIdToUse) {
       setError("Could not determine property owner. Please log in again.");
       return;
     }
 
     setEffectiveOwnerId(ownerIdToUse);
-  }, [router]);
+  }, [router, canViewProperties]);
 
   const fetchProperties = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
@@ -232,13 +244,15 @@ export default function PropertiesPage() {
   }, []);
 
   const openAddModal = useCallback(() => {
+    if (!canListProperties) return;
     resetForm();
     setModalMode("add");
     setIsModalOpen(true);
-  }, [resetForm]);
+  }, [resetForm, canListProperties]);
 
   const openEditModal = useCallback(
     (property: Property) => {
+      if (!canEditProperties) return;
       setModalMode("edit");
       setEditingPropertyId(property._id);
       setPropertyName(property.name);
@@ -257,15 +271,20 @@ export default function PropertiesPage() {
       setFormErrors({});
       setIsModalOpen(true);
     },
-    []
+    [canEditProperties]
   );
 
   const handleDelete = useCallback((id: string) => {
+    if (!canEditProperties) return;
     setPropertyToDelete(id);
     setIsDeleteModalOpen(true);
-  }, []);
+  }, [canEditProperties]);
 
   const confirmDelete = useCallback(async () => {
+    if (!canEditProperties) {
+      setIsDeleteModalOpen(false);
+      return;
+    }
     if (!propertyToDelete || !csrfToken) {
       setError("Missing property ID or CSRF token.");
       return;
@@ -294,7 +313,7 @@ export default function PropertiesPage() {
       setIsDeleteModalOpen(false);
       setPropertyToDelete(null);
     }
-  }, [propertyToDelete, fetchProperties, csrfToken]);
+  }, [propertyToDelete, fetchProperties, csrfToken, canEditProperties]);
 
   const validateForm = useCallback(() => {
     const errors: { [key: string]: string | undefined } = {};
@@ -342,10 +361,20 @@ export default function PropertiesPage() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!validateForm()) return;
-      if (!userId || !csrfToken) {
-        setError("User ID or CSRF token is missing.");
+      if (!userId || !effectiveOwnerId || !csrfToken) {
+        setError("User ID, owner ID, or CSRF token is missing.");
         return;
       }
+
+      if (modalMode === "add" && !canListProperties) {
+        setError("You do not have permission to add properties.");
+        return;
+      }
+      if (modalMode === "edit" && !canEditProperties) {
+        setError("You do not have permission to edit properties.");
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
@@ -361,7 +390,7 @@ export default function PropertiesPage() {
           quantity: parseInt(u.quantity) || 0,
           managementType: u.managementType,
         })),
-        ownerId: userId,
+        ownerId: effectiveOwnerId,
         csrfToken,
       };
 
@@ -391,7 +420,7 @@ export default function PropertiesPage() {
         setIsLoading(false);
       }
     },
-    [userId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, unitTypes, fetchProperties, resetForm, validateForm, csrfToken]
+    [userId, effectiveOwnerId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, unitTypes, fetchProperties, resetForm, validateForm, csrfToken, canListProperties, canEditProperties]
   );
 
   const sortedProperties = useMemo(() => {
@@ -463,16 +492,17 @@ export default function PropertiesPage() {
               <Home className="text-[#012a4a]" />
               Manage Properties
             </h1>
-            <button
-              onClick={openAddModal}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${isLoading || !csrfToken ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"
-                }`}
-              disabled={isLoading || !csrfToken}
-              aria-label="Add new property"
-            >
-              <Plus className="h-5 w-5" />
-              Add Property
-            </button>
+            {canListProperties && (
+              <button
+                onClick={openAddModal}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${isLoading || !csrfToken ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"}`}
+                disabled={isLoading || !csrfToken}
+                aria-label="Add new property"
+              >
+                <Plus className="h-5 w-5" />
+                Add Property
+              </button>
+            )}
           </motion.div>
           {error && (
             <motion.div
@@ -550,22 +580,26 @@ export default function PropertiesPage() {
                         className="px-4 py-3 flex gap-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button
-                          onClick={() => openEditModal(p)}
-                          className="text-[#012a4a] hover:text-[#014a7a] transition"
-                          title="Edit Property"
-                          aria-label={`Edit property ${p.name}`}
-                        >
-                          <Pencil className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(p._id)}
-                          className="text-red-600 hover:text-red-800 transition"
-                          title="Delete Property"
-                          aria-label={`Delete property ${p.name}`}
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </button>
+                        {canEditProperties && (
+                          <>
+                            <button
+                              onClick={() => openEditModal(p)}
+                              className="text-[#012a4a] hover:text-[#014a7a] transition"
+                              title="Edit Property"
+                              aria-label={`Edit property ${p.name}`}
+                            >
+                              <Pencil className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(p._id)}
+                              className="text-red-600 hover:text-red-800 transition"
+                              title="Delete Property"
+                              aria-label={`Delete property ${p.name}`}
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </>
+                        )}
                       </td>
                     </motion.tr>
                   ))}
@@ -848,3 +882,23 @@ export default function PropertiesPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

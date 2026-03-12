@@ -11,6 +11,7 @@ import { connectToDatabase } from "../../../../lib/mongodb";
 import { validateCsrfToken } from "../../../../lib/csrf";
 import logger from "../../../../lib/logger";
 import { Tenant } from "../../../../types/tenant";
+import { sendPaymentReminders } from "../../../../lib/reminders";
 
 interface Notification {
   _id: string;
@@ -23,6 +24,8 @@ interface Notification {
   ownerId: string;
   deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
   deliveryStatus?: "pending" | "success" | "failed";
+  reminderType?: "fiveDaysBefore" | "paymentDate";
+  dueDate?: string;
 }
 
 const transporter = nodemailer.createTransport({
@@ -35,14 +38,14 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const authenticatePropertyOwner = async (req: NextRequest) => {
+const authenticateUser = async (req: NextRequest) => {
   const cookieStore = await cookies();
   const userId = cookieStore.get("userId")?.value;
   const role = cookieStore.get("role")?.value;
   const csrfToken = req.headers.get("X-CSRF-Token");
-  const storedCsrfToken = cookieStore.get("csrfToken")?.value;
+  const storedCsrfToken = cookieStore.get("csrf-token")?.value;
 
-  logger.debug("Authenticating request", {
+  logger.debug("Authenticating reminder request", {
     path: req.nextUrl.pathname,
     userId,
     role,
@@ -50,24 +53,48 @@ const authenticatePropertyOwner = async (req: NextRequest) => {
     csrfTokenMatch: csrfToken === storedCsrfToken,
   });
 
-  if (!userId || role !== "propertyOwner") {
+  if (!userId || !ObjectId.isValid(userId)) {
     logger.warn("Unauthorized access attempt", { userId, role });
-    return { isValid: false, error: "Unauthorized: Property owner access required", userId: null };
+    return { isValid: false, error: "Unauthorized: Missing user", userId: null, effectiveOwnerId: null };
   }
+
+  if (!role || !["propertyOwner", "teamMember"].includes(role)) {
+    logger.warn("Unauthorized role", { userId, role });
+    return { isValid: false, error: "Unauthorized: Property owner access required", userId, effectiveOwnerId: null };
+  }
+
   if (!csrfToken) {
     logger.warn("Missing CSRF token", { userId, path: req.nextUrl.pathname });
-    return { isValid: false, error: "Missing CSRF token", userId };
+    return { isValid: false, error: "Missing CSRF token", userId, effectiveOwnerId: null };
   }
+
   if (!(await validateCsrfToken(req, csrfToken))) {
     logger.warn("Invalid CSRF token", {
       userId,
       receivedToken: csrfToken,
       expectedToken: storedCsrfToken,
     });
-    return { isValid: false, error: "Invalid CSRF token", userId };
+    return { isValid: false, error: "Invalid CSRF token", userId, effectiveOwnerId: null };
   }
-  logger.info("Request authenticated", { userId, role });
-  return { isValid: true, userId };
+
+  let effectiveOwnerId = userId;
+
+  if (role === "teamMember") {
+    const { db } = await connectToDatabase();
+    const teamMember = await db.collection("teamMembers").findOne({
+      _id: new ObjectId(userId),
+      active: true,
+    });
+
+    if (!teamMember || !teamMember.ownerId) {
+      logger.warn("Team member missing owner", { userId });
+      return { isValid: false, error: "Unauthorized: No property owner assigned", userId, effectiveOwnerId: null };
+    }
+
+    effectiveOwnerId = teamMember.ownerId.toString();
+  }
+
+  return { isValid: true, userId, effectiveOwnerId };
 };
 
 const validateTenantOwnership = async (db: Db, tenantId: string, ownerId: string) => {
@@ -95,8 +122,8 @@ const sanitizeInput = (input: string): string => {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const { isValid, userId, error } = await authenticatePropertyOwner(req);
-    if (!isValid || !userId) {
+    const { isValid, effectiveOwnerId, error } = await authenticateUser(req);
+    if (!isValid || !effectiveOwnerId) {
       return NextResponse.json({ success: false, message: error }, { status: 401 });
     }
 
@@ -104,12 +131,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const type = searchParams.get("type");
 
     const { db } = await connectToDatabase();
-    const query: Partial<Notification> = { ownerId: userId };
+    const query: Partial<Notification> = { ownerId: effectiveOwnerId };
     if (type && ["payment", "maintenance", "tenant", "other"].includes(type)) {
       query.type = type as Notification["type"];
     }
 
-    logger.debug("Fetching notifications", { userId, type });
+    logger.debug("Fetching notifications", { ownerId: effectiveOwnerId, type });
 
     const notifications = await db
       .collection<Notification>("notifications")
@@ -124,7 +151,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }));
 
     logger.info("Notifications fetched successfully", {
-      userId,
+      ownerId: effectiveOwnerId,
       type,
       count: formattedNotifications.length,
     });
@@ -141,34 +168,38 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const { isValid, userId, error } = await authenticatePropertyOwner(req);
-    if (!isValid || !userId) {
+    const { isValid, effectiveOwnerId, error } = await authenticateUser(req);
+    if (!isValid || !effectiveOwnerId) {
       return NextResponse.json({ success: false, message: error }, { status: 401 });
     }
 
     const { db } = await connectToDatabase();
-    const body = await req.json();
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const { pathname } = new URL(req.url);
 
     if (pathname.includes("mark-read")) {
-      const { notificationId } = body;
+      const { notificationId } = body as { notificationId?: string };
       if (!notificationId) {
-        logger.warn("Missing notification ID for mark-read", { userId });
+        logger.warn("Missing notification ID for mark-read", { ownerId: effectiveOwnerId });
         return NextResponse.json(
           { success: false, message: "Notification ID is required" },
           { status: 400 }
         );
       }
 
+      const idFilter = ObjectId.isValid(notificationId)
+        ? { $or: [{ _id: notificationId }, { _id: new ObjectId(notificationId) }] }
+        : { _id: notificationId };
+
       const result = await db.collection<Notification>("notifications").updateOne(
-        { _id: notificationId, ownerId: userId },
+        { ownerId: effectiveOwnerId, ...idFilter },
         { $set: { status: "read" } }
       );
 
       if (result.matchedCount === 0) {
         logger.warn("Notification not found or unauthorized for mark-read", {
           notificationId,
-          userId,
+          ownerId: effectiveOwnerId,
         });
         return NextResponse.json(
           { success: false, message: "Notification not found or unauthorized" },
@@ -176,197 +207,223 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
 
-      logger.info("Notification marked as read", { notificationId, userId });
+      logger.info("Notification marked as read", { notificationId, ownerId: effectiveOwnerId });
       return NextResponse.json({ success: true }, { status: 200 });
-    } else {
-      const { message, tenantId, type, deliveryMethod } = body;
-
-      if (!tenantId) {
-        logger.warn("Missing tenant ID", { userId });
-        return NextResponse.json(
-          { success: false, message: "Tenant ID is required" },
-          { status: 400 }
-        );
-      }
-
-      if (!type || !["payment", "maintenance", "tenant", "other"].includes(type)) {
-        logger.warn("Invalid notification type", { userId, type });
-        return NextResponse.json(
-          { success: false, message: "Valid notification type is required" },
-          { status: 400 }
-        );
-      }
-
-      if (!deliveryMethod || !["app", "sms", "email", "whatsapp", "both"].includes(deliveryMethod)) {
-        logger.warn("Invalid delivery method", { userId, deliveryMethod });
-        return NextResponse.json(
-          { success: false, message: "Valid delivery method is required" },
-          { status: 400 }
-        );
-      }
-
-      if (!message && type !== "payment") {
-        logger.warn("Missing message for non-payment notification", { userId, type });
-        return NextResponse.json(
-          { success: false, message: "Message is required for non-payment notifications" },
-          { status: 400 }
-        );
-      }
-
-      if (!(await validateTenantOwnership(db, tenantId, userId))) {
-        logger.warn("Invalid tenant ID or unauthorized access", { userId, tenantId });
-        return NextResponse.json(
-          { success: false, message: "Invalid tenant ID or unauthorized access" },
-          { status: 403 }
-        );
-      }
-
-      let tenants: Tenant[] = [];
-      if (tenantId === "all") {
-        tenants = await db.collection<Tenant>("tenants").find({ ownerId: userId }).toArray();
-      } else {
-        const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
-        if (tenant) tenants = [tenant];
-      }
-
-      if (!tenants.length && tenantId !== "all") {
-        logger.warn("Tenant not found", { userId, tenantId });
-        return NextResponse.json(
-          { success: false, message: "Tenant not found" },
-          { status: 404 }
-        );
-      }
-
-      const notifications: Notification[] = [];
-
-      for (const tenant of tenants) {
-        let finalMessage = message ? sanitizeInput(message) : "";
-        const tenantName = tenant.name; // Changed from let to const
-        let effectiveDeliveryMethod = deliveryMethod;
-
-        // Respect tenant's deliveryMethod preference unless overridden by "both"
-        if (deliveryMethod !== "both" && tenant.deliveryMethod && tenant.deliveryMethod !== "both") {
-          effectiveDeliveryMethod = tenant.deliveryMethod;
-        }
-
-        if (type === "payment") {
-          finalMessage = tenant.price
-            ? `Payment of Ksh. ${tenant.price.toFixed(2)} is due for ${tenant.name}`
-            : `Payment reminder for ${tenant.name}`;
-        } else if (type === "maintenance") {
-          finalMessage = finalMessage || "Scheduled maintenance for your property";
-        } else if (type === "tenant") {
-          finalMessage = finalMessage || "Important tenant update";
-        } else {
-          finalMessage = finalMessage || "Important information from your property manager";
-        }
-
-        let deliveryStatus: Notification["deliveryStatus"] = "pending";
-
-        if (effectiveDeliveryMethod === "sms" || effectiveDeliveryMethod === "both") {
-          if (tenant.phone) {
-            try {
-              await sendWelcomeSms({
-                phone: tenant.phone,
-                message: finalMessage.slice(0, 160),
-              });
-              logger.info("SMS sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
-              deliveryStatus = "success";
-            } catch (error) {
-              logger.error("Failed to send SMS", { tenantId: tenant._id.toString(), phone: tenant.phone, error });
-              deliveryStatus = "failed";
-            }
-          } else {
-            logger.warn("No phone number for SMS delivery", { tenantId: tenant._id.toString() });
-            deliveryStatus = "failed";
-          }
-        }
-
-        if (effectiveDeliveryMethod === "email" || effectiveDeliveryMethod === "both") {
-          if (tenant.email) {
-            try {
-              const emailTitle = type === "payment" ? "Payment Reminder" :
-                                type === "maintenance" ? "Maintenance Notification" :
-                                type === "tenant" ? "Tenant Update" : "Property Notification";
-              const emailIntro = type === "payment" ? "This is a reminder regarding your rental payment." :
-                                type === "maintenance" ? "We have scheduled maintenance for your property." :
-                                type === "tenant" ? "Important update regarding your tenancy." :
-                                "Important information from your property manager.";
-              const emailDetails = `
-                <ul>
-                  <li><strong>Message:</strong> ${finalMessage}</li>
-                  <li><strong>Action:</strong> ${type === "payment" ? "Please make your payment at your earliest convenience." :
-                                              type === "maintenance" ? "Please ensure access to your property or contact us for details." :
-                                              type === "tenant" ? "Please review the update and contact us if you have questions." :
-                                              "Please review and contact us if needed."}</li>
-                </ul>
-              `;
-              const html = generateStyledTemplate({
-                name: tenant.name,
-                title: emailTitle,
-                intro: emailIntro,
-                details: emailDetails,
-              });
-
-              await transporter.sendMail({
-                from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
-                to: tenant.email,
-                subject: emailTitle,
-                html,
-              });
-              logger.info("Email sent successfully", { tenantId: tenant._id.toString(), email: tenant.email });
-              deliveryStatus = deliveryStatus !== "failed" ? "success" : "failed";
-            } catch (error) {
-              logger.error("Failed to send email", { tenantId: tenant._id.toString(), email: tenant.email, error });
-              deliveryStatus = "failed";
-            }
-          } else {
-            logger.warn("No email address for email delivery", { tenantId: tenant._id.toString() });
-            deliveryStatus = "failed";
-          }
-        }
-
-        if (effectiveDeliveryMethod === "whatsapp" || effectiveDeliveryMethod === "both") {
-          if (tenant.phone) {
-            try {
-              await sendWhatsAppMessage({
-                phone: tenant.phone,
-                message: finalMessage,
-              });
-              logger.info("WhatsApp message sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
-              deliveryStatus = deliveryStatus !== "failed" ? "success" : "failed";
-            } catch (error) {
-              logger.error("Failed to send WhatsApp message", { tenantId: tenant._id.toString(), phone: tenant.phone, error });
-              deliveryStatus = "failed";
-            }
-          } else {
-            logger.warn("No phone number for WhatsApp delivery", { tenantId: tenant._id.toString() });
-            deliveryStatus = "failed";
-          }
-        }
-
-        const newNotification: Notification = {
-          _id: uuidv4(),
-          message: finalMessage,
-          type,
-          createdAt: new Date().toISOString(),
-          status: "unread",
-          tenantId: tenantId === "all" ? tenant._id.toString() : tenantId,
-          tenantName,
-          ownerId: userId,
-          deliveryMethod: effectiveDeliveryMethod,
-          deliveryStatus: effectiveDeliveryMethod === "app" ? "success" : deliveryStatus,
-        };
-
-        await db.collection<Notification>("notifications").insertOne(newNotification);
-        logger.info("Notification created", { notificationId: newNotification._id, userId, tenantId: tenant._id.toString(), type });
-        notifications.push(newNotification);
-      }
-
-      return NextResponse.json({ success: true, data: notifications[0] }, { status: 201 });
     }
+
+    const isAutoTrigger =
+      !body ||
+      (typeof body === "object" && Object.keys(body as Record<string, unknown>).length === 0) ||
+      (body as { trigger?: string }).trigger === "auto" ||
+      (body as { auto?: boolean }).auto === true;
+
+    if (isAutoTrigger) {
+      const { sent, skipped, notifications } = await sendPaymentReminders({ ownerId: effectiveOwnerId });
+      const formatted = notifications.map((notification) => ({
+        ...notification,
+        _id: notification._id.toString(),
+      }));
+      return NextResponse.json(
+        {
+          success: true,
+          message: `Sent ${sent} reminder(s), skipped ${skipped}.`,
+          data: formatted,
+        },
+        { status: 200 }
+      );
+    }
+
+    const { message, tenantId, type, deliveryMethod } = body as {
+      message?: string;
+      tenantId?: string;
+      type?: Notification["type"];
+      deliveryMethod?: Notification["deliveryMethod"];
+    };
+
+    if (!tenantId) {
+      logger.warn("Missing tenant ID", { ownerId: effectiveOwnerId });
+      return NextResponse.json(
+        { success: false, message: "Tenant ID is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!type || !["payment", "maintenance", "tenant", "other"].includes(type)) {
+      logger.warn("Invalid notification type", { ownerId: effectiveOwnerId, type });
+      return NextResponse.json(
+        { success: false, message: "Valid notification type is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!deliveryMethod || !["app", "sms", "email", "whatsapp", "both"].includes(deliveryMethod)) {
+      logger.warn("Invalid delivery method", { ownerId: effectiveOwnerId, deliveryMethod });
+      return NextResponse.json(
+        { success: false, message: "Valid delivery method is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!message && type !== "payment") {
+      logger.warn("Missing message for non-payment notification", { ownerId: effectiveOwnerId, type });
+      return NextResponse.json(
+        { success: false, message: "Message is required for non-payment notifications" },
+        { status: 400 }
+      );
+    }
+
+    if (!(await validateTenantOwnership(db, tenantId, effectiveOwnerId))) {
+      logger.warn("Invalid tenant ID or unauthorized access", { ownerId: effectiveOwnerId, tenantId });
+      return NextResponse.json(
+        { success: false, message: "Invalid tenant ID or unauthorized access" },
+        { status: 403 }
+      );
+    }
+
+    let tenants: Tenant[] = [];
+    if (tenantId === "all") {
+      tenants = await db.collection<Tenant>("tenants").find({ ownerId: effectiveOwnerId }).toArray();
+    } else {
+      const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
+      if (tenant) tenants = [tenant];
+    }
+
+    if (!tenants.length && tenantId !== "all") {
+      logger.warn("Tenant not found", { ownerId: effectiveOwnerId, tenantId });
+      return NextResponse.json(
+        { success: false, message: "Tenant not found" },
+        { status: 404 }
+      );
+    }
+
+    const notifications: Notification[] = [];
+
+    for (const tenant of tenants) {
+      let finalMessage = message ? sanitizeInput(message) : "";
+      const tenantName = tenant.name;
+      let effectiveDeliveryMethod = deliveryMethod;
+
+      if (deliveryMethod !== "both" && tenant.deliveryMethod && tenant.deliveryMethod !== "both") {
+        effectiveDeliveryMethod = tenant.deliveryMethod as Notification["deliveryMethod"];
+      }
+
+      if (type === "payment") {
+        finalMessage = tenant.price
+          ? `Payment of Ksh. ${tenant.price.toFixed(2)} is due for ${tenant.name}`
+          : `Payment reminder for ${tenant.name}`;
+      } else if (type === "maintenance") {
+        finalMessage = finalMessage || "Scheduled maintenance for your property";
+      } else if (type === "tenant") {
+        finalMessage = finalMessage || "Important tenant update";
+      } else {
+        finalMessage = finalMessage || "Important information from your property manager";
+      }
+
+      let deliveryStatus: Notification["deliveryStatus"] = "pending";
+
+      if (effectiveDeliveryMethod === "sms" || effectiveDeliveryMethod === "both") {
+        if (tenant.phone) {
+          try {
+            await sendWelcomeSms({
+              phone: tenant.phone,
+              message: finalMessage.slice(0, 160),
+            });
+            logger.info("SMS sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
+            deliveryStatus = "success";
+          } catch (err) {
+            logger.error("Failed to send SMS", { tenantId: tenant._id.toString(), phone: tenant.phone, err });
+            deliveryStatus = "failed";
+          }
+        } else {
+          logger.warn("No phone number for SMS delivery", { tenantId: tenant._id.toString() });
+          deliveryStatus = "failed";
+        }
+      }
+
+      if (effectiveDeliveryMethod === "email" || effectiveDeliveryMethod === "both") {
+        if (tenant.email) {
+          try {
+            const emailTitle = type === "payment" ? "Payment Reminder" :
+                              type === "maintenance" ? "Maintenance Notification" :
+                              type === "tenant" ? "Tenant Update" : "Property Notification";
+            const emailIntro = type === "payment" ? "This is a reminder regarding your rental payment." :
+                              type === "maintenance" ? "We have scheduled maintenance for your property." :
+                              type === "tenant" ? "Important update regarding your tenancy." :
+                              "Important information from your property manager.";
+            const emailDetails = `
+              <ul>
+                <li><strong>Message:</strong> ${finalMessage}</li>
+                <li><strong>Action:</strong> ${type === "payment" ? "Please make your payment at your earliest convenience." :
+                                            type === "maintenance" ? "Please ensure access to your property or contact us for details." :
+                                            type === "tenant" ? "Please review the update and contact us if you have questions." :
+                                            "Please review and contact us if needed."}</li>
+              </ul>
+            `;
+            const html = generateStyledTemplate({
+              name: tenant.name,
+              title: emailTitle,
+              intro: emailIntro,
+              details: emailDetails,
+            });
+
+            await transporter.sendMail({
+              from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+              to: tenant.email,
+              subject: emailTitle,
+              html,
+            });
+            logger.info("Email sent successfully", { tenantId: tenant._id.toString(), email: tenant.email });
+            if (deliveryStatus !== "failed") deliveryStatus = "success";
+          } catch (err) {
+            logger.error("Failed to send email", { tenantId: tenant._id.toString(), email: tenant.email, err });
+            deliveryStatus = "failed";
+          }
+        } else {
+          logger.warn("No email address for email delivery", { tenantId: tenant._id.toString() });
+          deliveryStatus = "failed";
+        }
+      }
+
+      if (effectiveDeliveryMethod === "whatsapp" || effectiveDeliveryMethod === "both") {
+        if (tenant.phone) {
+          try {
+            await sendWhatsAppMessage({
+              phone: tenant.phone,
+              message: finalMessage,
+            });
+            logger.info("WhatsApp message sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
+            if (deliveryStatus !== "failed") deliveryStatus = "success";
+          } catch (err) {
+            logger.error("Failed to send WhatsApp message", { tenantId: tenant._id.toString(), phone: tenant.phone, err });
+            deliveryStatus = "failed";
+          }
+        } else {
+          logger.warn("No phone number for WhatsApp delivery", { tenantId: tenant._id.toString() });
+          deliveryStatus = "failed";
+        }
+      }
+
+      const newNotification: Notification = {
+        _id: uuidv4(),
+        message: finalMessage,
+        type,
+        createdAt: new Date().toISOString(),
+        status: "unread",
+        tenantId: tenantId === "all" ? tenant._id.toString() : tenantId,
+        tenantName,
+        ownerId: effectiveOwnerId,
+        deliveryMethod: effectiveDeliveryMethod,
+        deliveryStatus: effectiveDeliveryMethod === "app" ? "success" : deliveryStatus,
+      };
+
+      await db.collection<Notification>("notifications").insertOne(newNotification);
+      logger.info("Notification created", { notificationId: newNotification._id, ownerId: effectiveOwnerId, tenantId: tenant._id.toString(), type });
+      notifications.push(newNotification);
+    }
+
+    return NextResponse.json({ success: true, data: notifications }, { status: 201 });
   } catch (error) {
-    logger.error("Error processing POST request", { error });
+    logger.error("Error processing reminders POST request", { error });
     return NextResponse.json(
       { success: false, message: "Server error" },
       { status: 500 }
@@ -376,8 +433,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
   try {
-    const { isValid, userId, error } = await authenticatePropertyOwner(req);
-    if (!isValid || !userId) {
+    const { isValid, effectiveOwnerId, error } = await authenticateUser(req);
+    if (!isValid || !effectiveOwnerId) {
       return NextResponse.json({ success: false, message: error }, { status: 401 });
     }
 
@@ -385,7 +442,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     const notificationId = searchParams.get("notificationId");
 
     if (!notificationId) {
-      logger.warn("Missing notification ID for deletion", { userId });
+      logger.warn("Missing notification ID for deletion", { ownerId: effectiveOwnerId });
       return NextResponse.json(
         { success: false, message: "Notification ID is required" },
         { status: 400 }
@@ -393,20 +450,24 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     }
 
     const { db } = await connectToDatabase();
+    const deleteFilter = ObjectId.isValid(notificationId)
+      ? { $or: [{ _id: notificationId }, { _id: new ObjectId(notificationId) }] }
+      : { _id: notificationId };
+
     const result = await db.collection<Notification>("notifications").deleteOne({
-      _id: notificationId,
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
+      ...deleteFilter,
     });
 
     if (result.deletedCount === 0) {
-      logger.warn("Notification not found or unauthorized for deletion", { notificationId, userId });
+      logger.warn("Notification not found or unauthorized for deletion", { notificationId, ownerId: effectiveOwnerId });
       return NextResponse.json(
         { success: false, message: "Notification not found or unauthorized" },
         { status: 404 }
       );
     }
 
-    logger.info("Notification deleted", { notificationId, userId });
+    logger.info("Notification deleted", { notificationId, ownerId: effectiveOwnerId });
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     logger.error("Error deleting notification", { error });
@@ -416,3 +477,6 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     );
   }
 }
+
+
+

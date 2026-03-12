@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Users, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -47,6 +48,10 @@ interface FilterConfig {
 
 export default function TenantsPage() {
   const router = useRouter();
+  const perm = usePermissions();
+  const canViewTenants = perm.hasPermission("tenants:view");
+  const canManageTenants = perm.hasPermission("tenants:edit");
+  const canSendNotifications = perm.hasPermission("notifications:send");
 
   const [tenants, setTenants] = useState<ResponseTenant[]>([]);
   const [properties, setProperties] = useState<ClientProperty[]>([]);
@@ -129,7 +134,7 @@ export default function TenantsPage() {
     }
 
     setEffectiveOwnerId(ownerIdToUse);
-  }, [router]);
+  }, [router, canViewTenants]);
 
   // Fetch user/owner name (especially useful for team members)
   const fetchUserData = useCallback(async () => {
@@ -319,7 +324,7 @@ export default function TenantsPage() {
       setIsResendModalOpen(false);
       setTenantToResend(null);
     }
-  }, [tenantToResend, csrfToken, effectiveOwnerId]);
+  }, [tenantToResend, csrfToken, effectiveOwnerId, canSendNotifications]);
 
   // Modal handlers
   const openAddModal = () => {
@@ -406,7 +411,7 @@ export default function TenantsPage() {
   };
 
   // Determine if user can add tenants (simple check — you can tie to permissions later)
-  const canAddTenants = role === "propertyOwner" || (role === "teamMember"); // adjust based on permissions
+  const canAddTenants = canManageTenants;
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -647,6 +652,8 @@ export default function TenantsPage() {
     </div>
   );
 }
+
+
 
 
 

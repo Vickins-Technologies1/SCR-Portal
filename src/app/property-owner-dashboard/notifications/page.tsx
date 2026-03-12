@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Bell, Plus, Send, Trash2, ChevronLeft, ChevronRight, Eye, RefreshCw, ChevronDown } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -112,6 +113,12 @@ interface ApiResponse<T = any> {
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const perm = usePermissions();
+  const canViewNotifications = perm.hasPermission("notifications:view");
+  const canViewReminders = perm.hasPermission("reminders:view");
+  const canSendNotifications = perm.hasPermission("notifications:send");
+  const canManageNotifications = perm.hasPermission("notifications:manage");
+  const canTriggerReminders = perm.hasPermission("reminders:trigger");
   const [viewMode, setViewMode] = useState<"sent" | "upcoming">("sent");
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<UpcomingReminder[]>([]);
@@ -148,7 +155,7 @@ export default function NotificationsPage() {
       const data: ApiResponse = await response.json();
       if (data.success && data.csrfToken) {
         setCsrfToken(data.csrfToken);
-        Cookies.set("csrfToken", data.csrfToken, { sameSite: "strict", secure: true });
+        Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", secure: true });
         return data.csrfToken;
       } else {
         setError("Failed to fetch CSRF token. Please try again.");
@@ -162,12 +169,13 @@ export default function NotificationsPage() {
 
   const makeAuthenticatedRequest = useCallback(
     async (url: string, options: RequestInit, retries = 1): Promise<Response> => {
-      if (!csrfToken) {
-        const newToken = await fetchCsrfToken();
-        if (!newToken) throw new Error("Unable to fetch CSRF token");
+      let token = csrfToken;
+      if (!token) {
+        token = await fetchCsrfToken();
+        if (!token) throw new Error("Unable to fetch CSRF token");
       }
       const headers = new Headers(options.headers || {});
-      headers.set("X-CSRF-Token", csrfToken!);
+      headers.set("X-CSRF-Token", token);
       headers.set("Content-Type", "application/json");
 
       const response = await fetch(url, {
@@ -181,7 +189,7 @@ export default function NotificationsPage() {
         if (newToken) {
           headers.set("X-CSRF-Token", newToken);
           setCsrfToken(newToken);
-          Cookies.set("csrfToken", newToken, { sameSite: "strict", secure: true });
+          Cookies.set("csrf-token", newToken, { sameSite: "strict", secure: true });
           return makeAuthenticatedRequest(url, { ...options, headers }, retries - 1);
         }
       }
@@ -221,13 +229,22 @@ export default function NotificationsPage() {
 
     setEffectiveOwnerId(ownerIdToUse);
 
-    const storedCsrfToken = Cookies.get("csrfToken") ?? null;
+    const storedCsrfToken = Cookies.get("csrf-token") ?? null;
     setCsrfToken(storedCsrfToken);
-    if (!storedCsrfToken) fetchCsrfToken();
-  }, [router, fetchCsrfToken]);
+    fetchCsrfToken();
+  }, [router, fetchCsrfToken, canViewNotifications, canViewReminders]);
 
+  useEffect(() => {
+    if (role !== "teamMember") return;
+    if (!canViewNotifications && canViewReminders) {
+      setViewMode("upcoming");
+    } else if (canViewNotifications && !canViewReminders) {
+      setViewMode("sent");
+    }
+  }, [role, canViewNotifications, canViewReminders]);
   const fetchTenantsAndPayments = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
+    if (!canViewReminders && !canSendNotifications) return;
     setIsLoading(true);
     try {
       const propertiesRes = await makeAuthenticatedRequest(
@@ -273,19 +290,49 @@ export default function NotificationsPage() {
 
       const reminders: UpcomingReminder[] = [];
       const currentDate = new Date();
+      const todayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
       const utilityAmount = 1000;
+
+      const getDueDateForMonth = (year: number, month: number, paymentDay: number) => {
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const day = Math.min(Math.max(1, paymentDay), daysInMonth);
+        return new Date(year, month, day);
+      };
+
+      const getNextDueDate = (paymentDay: number) => {
+        const thisMonthDue = getDueDateForMonth(todayStart.getFullYear(), todayStart.getMonth(), paymentDay);
+        if (todayStart > thisMonthDue) {
+          return getDueDateForMonth(todayStart.getFullYear(), todayStart.getMonth() + 1, paymentDay);
+        }
+        return thisMonthDue;
+      };
+
+      const addDays = (date: Date, days: number) => {
+        const next = new Date(date);
+        next.setDate(next.getDate() + days);
+        return next;
+      };
+
+      const isSameDay = (a: Date, b: Date) =>
+        a.getFullYear() === b.getFullYear() &&
+        a.getMonth() === b.getMonth() &&
+        a.getDate() === b.getDate();
 
       for (const tenant of fetchedTenants) {
         const property = fetchedProperties.find((p) => p._id === tenant.propertyId);
-        if (!property) continue;
+        if (!property || !property.rentPaymentDate) continue;
 
-        const unit = property.unitTypes.find((u) => u.uniqueType === tenant.unitType);
+        const unit = property.unitTypes.find((u) => u.uniqueType === tenant.unitType || u.type === tenant.unitType);
         const rentAmount = unit ? unit.price : tenant.price;
         const depositAmount = unit ? unit.deposit : tenant.deposit;
 
+        const dueDate = getNextDueDate(property.rentPaymentDate);
+        const reminderDate = addDays(dueDate, -5);
+        const formattedDueDate = dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
         const tenantPayments = fetchedPayments.filter((p) => p.tenantId === tenant._id);
-        const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        const startOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
+        const endOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0);
 
         const rentPayments = tenantPayments
           .filter((p) => p.type === "Rent" && p.status === "completed" && new Date(p.paymentDate) >= startOfMonth && new Date(p.paymentDate) <= endOfMonth)
@@ -304,17 +351,10 @@ export default function NotificationsPage() {
 
         if (totalDue <= 0) continue;
 
-        const dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), property.rentPaymentDate);
-        const formattedDueDate = dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-
-        const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-        const fiveDaysBefore = property.rentPaymentDate - 5;
-        const adjustedFiveDaysBefore = fiveDaysBefore <= 0 ? fiveDaysBefore + daysInMonth : fiveDaysBefore;
-
         const reminderType =
-          currentDate.getDate() === property.rentPaymentDate
+          isSameDay(todayStart, dueDate)
             ? "paymentDate"
-            : currentDate.getDate() === adjustedFiveDaysBefore
+            : isSameDay(todayStart, reminderDate)
               ? "fiveDaysBefore"
               : null;
 
@@ -339,10 +379,11 @@ export default function NotificationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest]);
+  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest, canViewReminders, canSendNotifications]);
 
   const fetchNotifications = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
+    if (!canViewNotifications) return;
     try {
       const response = await makeAuthenticatedRequest(
         `/api/notifications?ownerId=${encodeURIComponent(effectiveOwnerId)}&page=1&limit=100`,
@@ -357,10 +398,14 @@ export default function NotificationsPage() {
     } catch (err) {
       setError("Failed to fetch notifications.");
     }
-  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest]);
+  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest, canViewNotifications]);
 
   const triggerReminders = async () => {
     if (!effectiveOwnerId || !csrfToken) return;
+    if (!canTriggerReminders) {
+      setError("You do not have permission to send reminders.");
+      return;
+    }
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest("/api/notifications/reminders", {
@@ -383,6 +428,10 @@ export default function NotificationsPage() {
 
   const deleteNotification = useCallback(async (notificationId: string) => {
     if (!effectiveOwnerId || !csrfToken) return;
+    if (!canManageNotifications) {
+      setError("You do not have permission to delete notifications.");
+      return;
+    }
     setIsLoading(true);
     try {
       const response = await makeAuthenticatedRequest(
@@ -402,7 +451,7 @@ export default function NotificationsPage() {
       setIsDeleteModalOpen(false);
       setNotificationToDelete(null);
     }
-  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest]);
+  }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest, canManageNotifications]);
 
   const markAsRead = async (notificationId: string) => {
     if (!effectiveOwnerId || !csrfToken) return;
@@ -427,6 +476,10 @@ export default function NotificationsPage() {
 
   const retryNotification = async (notificationId: string) => {
     if (!effectiveOwnerId || !csrfToken) return;
+    if (!canSendNotifications) {
+      setError("You do not have permission to resend notifications.");
+      return;
+    }
     setIsLoading(true);
     try {
       const notification = notifications.find((n) => n._id === notificationId);
@@ -454,6 +507,10 @@ export default function NotificationsPage() {
 
   const createNotification = async () => {
     if (!effectiveOwnerId || !csrfToken || newNotification.tenantIds.length === 0) return;
+    if (!canSendNotifications) {
+      setError("You do not have permission to send notifications.");
+      return;
+    }
     setIsLoading(true);
     try {
       const tenantIds = newNotification.tenantIds.includes("all")
@@ -495,10 +552,14 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (effectiveOwnerId && csrfToken) {
-      fetchTenantsAndPayments();
-      fetchNotifications();
+      if (canViewReminders || canSendNotifications) {
+        fetchTenantsAndPayments();
+      }
+      if (canViewNotifications) {
+        fetchNotifications();
+      }
     }
-  }, [effectiveOwnerId, csrfToken]);
+  }, [effectiveOwnerId, csrfToken, canViewReminders, canSendNotifications, canViewNotifications, fetchTenantsAndPayments, fetchNotifications]);
 
   const openNotificationDetails = useCallback((notification: Notification) => {
     setSelectedNotification(notification);
@@ -547,8 +608,18 @@ export default function NotificationsPage() {
           <NotificationsHeader
             viewMode={viewMode}
             setViewMode={setViewMode}
-            onCreateNotification={() => setIsCreateModalOpen(true)}
-            onSendReminders={viewMode === "upcoming" ? triggerReminders : undefined}
+            canViewSent={canViewNotifications}
+            canViewUpcoming={canViewReminders}
+            canCreateNotification={canSendNotifications}
+            canSendReminders={canTriggerReminders}
+            onCreateNotification={() => {
+              if (!canSendNotifications) {
+                setError("You do not have permission to send notifications.");
+                return;
+              }
+              setIsCreateModalOpen(true);
+            }}
+            onSendReminders={viewMode === "upcoming" && canTriggerReminders ? triggerReminders : undefined}
             isLoading={isLoading}
             tenantsCount={tenants.length}
             csrfToken={csrfToken}
@@ -588,9 +659,9 @@ export default function NotificationsPage() {
                       ? openNotificationDetails(item as Notification)
                       : openReminderDetails(item as UpcomingReminder)
                   }
-                  onMarkAsRead={viewMode === "sent" ? markAsRead : undefined}
-                  onRetry={viewMode === "sent" ? retryNotification : undefined}
-                  onDelete={viewMode === "sent" ? openDeleteConfirmation : undefined}
+                  onMarkAsRead={viewMode === "sent" && canViewNotifications ? markAsRead : undefined}
+                  onRetry={viewMode === "sent" && canSendNotifications ? retryNotification : undefined}
+                  onDelete={viewMode === "sent" && canManageNotifications ? openDeleteConfirmation : undefined}
                 />
               </div>
 
@@ -646,7 +717,7 @@ export default function NotificationsPage() {
                   <p className="mt-1 capitalize">{selectedNotification.status}</p>
                 </div>
                 <div className="flex gap-3 mt-6">
-                  {selectedNotification.status !== "read" && (
+                  {selectedNotification.status !== "read" && canViewNotifications && (
                     <button
                       onClick={() => markAsRead(selectedNotification._id)}
                       className="bg-[#03a678] text-white px-5 py-2.5 rounded-xl hover:bg-[#02956a] transition-colors shadow-md"
@@ -655,7 +726,7 @@ export default function NotificationsPage() {
                       {isLoading ? "Processing..." : "Mark as Read"}
                     </button>
                   )}
-                  {selectedNotification.deliveryStatus === "failed" && (
+                  {selectedNotification.deliveryStatus === "failed" && canSendNotifications && (
                     <button
                       onClick={() => retryNotification(selectedNotification._id)}
                       className="bg-yellow-600 text-white px-5 py-2.5 rounded-xl hover:bg-yellow-700 transition-colors shadow-md"
@@ -821,3 +892,13 @@ export default function NotificationsPage() {
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+

@@ -18,7 +18,8 @@ interface TeamMember {
   name: string;
   email: string;
   phone?: string;
-  role: "Co-Owner" | "Manager" | "Accountant" | "Assistant" | "Viewer";
+  role: string;
+  teamRole?: string;
   permissions: string[];
   password: string;
   active: boolean;
@@ -74,7 +75,8 @@ function toSafeTeamMember(doc: any): SafeTeamMember {
     name: rest.name ?? "",
     email: rest.email ?? "",
     phone: rest.phone ?? undefined,
-    role: rest.role ?? "Viewer",
+    role: rest.role ?? "teamMember",
+    teamRole: rest.teamRole ?? "Team Member",
     permissions: rest.permissions ?? [],
     active: rest.active ?? true,
     lastActive: rest.lastActive ?? undefined,
@@ -106,7 +108,7 @@ export async function PATCH(
     const { db } = await connectToDatabase();
 
     const body = await req.json();
-    const { ownerId, name, email, phone, role, permissions, active, password } = body;
+    const { ownerId, name, email, phone, teamRole, permissions, active, password } = body;
 
     if (!ownerId) {
       return NextResponse.json({ success: false, message: "ownerId required" }, { status: 400 });
@@ -120,12 +122,33 @@ export async function PATCH(
     }
 
     const sessionUserId = req.cookies.get("userId")?.value;
-    if (!sessionUserId || sessionUserId !== ownerId) {
+    const sessionRole = req.cookies.get("role")?.value || "";
+
+    if (!sessionUserId) {
       logger.warn("Unauthorized PATCH attempt on team member", { sessionUserId, memberId, ip });
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
     }
 
     const collection = db.collection<TeamMember>("teamMembers");
+
+    if (sessionRole === "teamMember") {
+      const member = await collection.findOne({
+        _id: new ObjectId(sessionUserId),
+        ownerId: new ObjectId(ownerId),
+        active: true,
+      });
+
+      if (!member || !member.permissions?.includes("users:manage")) {
+        logger.warn("Insufficient permissions for team member PATCH", { sessionUserId, memberId, ip });
+        return NextResponse.json(
+          { success: false, message: "Insufficient permissions to manage team members" },
+          { status: 403 }
+        );
+      }
+    } else if (sessionUserId !== ownerId) {
+      logger.warn("Unauthorized PATCH attempt on team member", { sessionUserId, memberId, ip });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
 
     // Email uniqueness check (if email is being updated)
     if (email && typeof email === "string") {
@@ -157,7 +180,7 @@ export async function PATCH(
     if (name !== undefined) updateData.$set.name = sanitizeHtml(name.trim(), { allowedTags: [] });
     if (email !== undefined) updateData.$set.email = email.trim().toLowerCase();
     if (phone !== undefined) updateData.$set.phone = phone ? sanitizeHtml(phone.trim(), { allowedTags: [] }) : null;
-    if (role !== undefined) updateData.$set.role = role;
+    if (teamRole !== undefined) updateData.$set.teamRole = teamRole;
     if (permissions !== undefined && Array.isArray(permissions)) updateData.$set.permissions = permissions;
     if (active !== undefined) updateData.$set.active = !!active;
 
@@ -261,33 +284,53 @@ export async function DELETE(
       return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
     }
 
-    const ownerId = req.cookies.get("userId")?.value;
-    if (!ownerId) {
+    const sessionUserId = req.cookies.get("userId")?.value;
+    const sessionRole = req.cookies.get("role")?.value || "";
+
+    if (!sessionUserId) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
     }
 
     const collection = db.collection<TeamMember>("teamMembers");
+    let effectiveOwnerId = sessionUserId;
+
+    if (sessionRole === "teamMember") {
+      const member = await collection.findOne({
+        _id: new ObjectId(sessionUserId),
+        active: true,
+      });
+
+      if (!member || !member.permissions?.includes("users:manage")) {
+        logger.warn("Insufficient permissions for team member DELETE", { sessionUserId, memberId, ip });
+        return NextResponse.json(
+          { success: false, message: "Insufficient permissions to manage team members" },
+          { status: 403 }
+        );
+      }
+
+      effectiveOwnerId = member.ownerId.toString();
+    }
 
     const result = await collection.deleteOne({
       _id: new ObjectId(memberId),
-      ownerId: new ObjectId(ownerId),
+      ownerId: new ObjectId(effectiveOwnerId),
     });
 
     if (result.deletedCount === 0) {
-      logger.warn("Team member not found or unauthorized for DELETE", { memberId, ownerId, ip });
+      logger.warn("Team member not found or unauthorized for DELETE", { memberId, ownerId: effectiveOwnerId, ip });
       return NextResponse.json({ success: false, message: "Member not found or unauthorized" }, { status: 404 });
     }
 
     await db.collection("auditLogs").insertOne({
       action: "team_member_deleted",
-      ownerId,
+      ownerId: effectiveOwnerId,
       memberId,
       ip,
       timestamp: new Date().toISOString(),
       status: "success",
     });
 
-    logger.info("Team member deleted", { memberId, ownerId, ip });
+    logger.info("Team member deleted", { memberId, ownerId: effectiveOwnerId, ip });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -314,3 +357,12 @@ export async function DELETE(
     return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
   }
 }
+
+
+
+
+
+
+
+
+

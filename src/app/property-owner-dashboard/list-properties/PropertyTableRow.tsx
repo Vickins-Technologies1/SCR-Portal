@@ -49,22 +49,29 @@ export default function PropertyTableRow({
           </span>
         </div>
       </td>
-      <td className="px-6 py-4 flex gap-3" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={onEdit}
-          className="text-[#012a4a] hover:text-[#014a7a] transition p-2 rounded-lg hover:bg-blue-50"
-          title="Edit"
-        >
-          <Pencil className="h-5 w-5" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="text-red-600 hover:text-red-800 transition p-2 rounded-lg hover:bg-red-50"
-          title="Remove"
-        >
-          <Trash2 className="h-5 w-5" />
-        </button>
+      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+        {showActions ? (
+          <div className="flex gap-3">
+            <button
+              onClick={onEdit}
+              className="text-[#012a4a] hover:text-[#014a7a] transition p-2 rounded-lg hover:bg-blue-50"
+              title="Edit"
+            >
+              <Pencil className="h-5 w-5" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="text-red-600 hover:text-red-800 transition p-2 rounded-lg hover:bg-red-50"
+              title="Remove"
+            >
+              <Trash2 className="h-5 w-5" />
+            </button>
+          </div>
+        ) : (
+          <span className="text-xs text-slate-400">View only</span>
+        )}
       </td>
     </tr>
   );
 }
+

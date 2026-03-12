@@ -23,6 +23,8 @@ interface Payment {
   type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference?: string;
+  mpesaCode?: string;
+  isManual?: boolean;
   date?: string; // Optional, for backward compatibility
   tenantName?: string;
   unitType?: string;
@@ -48,6 +50,10 @@ interface Report {
   tenantPaymentStatus: string;
   unitType?: string;
   type: string;
+  reference?: string;
+  transactionId?: string;
+  mpesaCode?: string;
+  isManual?: boolean;
 }
 
 interface ApiResponse<T> {
@@ -223,7 +229,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             as: "property",
           },
         },
-        { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
+                { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            isManual: {
+              $regexMatch: {
+                input: { $ifNull: ["$transactionId", ""] },
+                regex: "^MANUAL-",
+              },
+            },
+          },
+        },
         {
           $project: {
             _id: { $toString: "$_id" },
@@ -246,6 +262,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
               ],
             },
             status: "$status",
+            transactionId: 1,
+            reference: 1,
+            mpesaCode: 1,
+            isManual: 1,
             ownerId: effectiveOwnerId,
             tenantPaymentStatus: { $ifNull: ["$tenant.paymentStatus", "Unknown"] },
             unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },

@@ -1,9 +1,12 @@
+"use client";
+
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, DollarSign, Phone, Mail } from "lucide-react";
 import { Listing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
 import ImageGallery from "./ImageGallery";
+import { use } from "react";
 
 interface PropertyResponse {
   success: boolean;

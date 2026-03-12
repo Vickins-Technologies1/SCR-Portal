@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { Save, User, Lock, CreditCard, Settings, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast"; // Import react-hot-toast
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function OwnerSettingsPage() {
+  const router = useRouter();
+  const perm = usePermissions();
+  const canViewSettings = perm.hasPermission("settings:view");
+  const canEditSettings = perm.hasPermission("settings:edit");
+  const isReadOnly = !canEditSettings;
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [profile, setProfile] = useState({ name: "", email: "", phone: "" });
   const [password, setPassword] = useState("");
@@ -36,16 +43,33 @@ export default function OwnerSettingsPage() {
   useEffect(() => {
     const id = Cookies.get("userId");
     const role = Cookies.get("role");
-    if (!id || role !== "propertyOwner") {
+    const ownerIdFromCookie = Cookies.get("ownerId");
+
+    if (!id || !["propertyOwner", "teamMember"].includes(role || "")) {
       console.log("[OwnerSettingsPage] Invalid userId or role:", { id, role });
-      toast.error("Unauthorized access. Please log in as a property owner.");
+      toast.error("Unauthorized access. Please log in as a property owner or team member.");
+      router.replace("/login");
       return;
     }
-    setOwnerId(id);
+
+    if (role === "teamMember" && !canViewSettings) {
+      toast.error("Access restricted. You do not have permission to view settings.");
+      router.replace("/property-owner-dashboard");
+      return;
+    }
+
+    const ownerIdToUse = role === "propertyOwner" ? id : (ownerIdFromCookie || id);
+    if (!ownerIdToUse) {
+      toast.error("Could not determine property owner. Please log in again.");
+      router.replace("/login");
+      return;
+    }
+
+    setOwnerId(ownerIdToUse);
 
     const fetchData = async () => {
       try {
-        const res = await fetch(`/api/settings?ownerId=${id}`);
+        const res = await fetch(`/api/settings?ownerId=${ownerIdToUse}`);
         const data = await res.json();
         console.log("[OwnerSettingsPage] Fetch data response:", data);
         if (data.success) {
@@ -78,9 +102,13 @@ export default function OwnerSettingsPage() {
     };
 
     fetchData();
-  }, []);
+  }, [router, canViewSettings]);
 
   const updateProfile = async () => {
+    if (isReadOnly) {
+      toast.error("You do not have permission to edit settings.");
+      return;
+    }
     setLoading(true);
     try {
       const payload = { ownerId, ...profile };
@@ -106,6 +134,10 @@ export default function OwnerSettingsPage() {
   };
 
   const changePassword = async () => {
+    if (isReadOnly) {
+      toast.error("You do not have permission to edit settings.");
+      return;
+    }
     if (!password || password !== confirmPassword) {
       toast.error("Passwords do not match or are empty.");
       return;
@@ -134,6 +166,10 @@ export default function OwnerSettingsPage() {
   };
 
   const updatePaymentSettings = async () => {
+    if (isReadOnly) {
+      toast.error("You do not have permission to edit settings.");
+      return;
+    }
     setPaymentLoading(true);
     try {
       if (
@@ -190,6 +226,7 @@ export default function OwnerSettingsPage() {
   };
 
   const toggleGateway = (gateway: string) => {
+    if (isReadOnly) return;
     setExpandedGateway(expandedGateway === gateway ? null : gateway);
   };
 
@@ -227,6 +264,7 @@ export default function OwnerSettingsPage() {
                   type="text"
                   value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                  disabled={isReadOnly}
                   className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
                   placeholder="Enter your full name"
                 />
@@ -237,6 +275,7 @@ export default function OwnerSettingsPage() {
                   type="email"
                   value={profile.email}
                   onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                  disabled={isReadOnly}
                   className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
                   placeholder="Enter your email"
                 />
@@ -247,6 +286,7 @@ export default function OwnerSettingsPage() {
                   type="tel"
                   value={profile.phone}
                   onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                  disabled={isReadOnly}
                   className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
                   placeholder="Enter your phone number"
                 />
@@ -255,7 +295,7 @@ export default function OwnerSettingsPage() {
             <button
               onClick={updateProfile}
               className="mt-6 bg-[#03a678] hover:bg-[#02956a] text-white px-5 py-2 rounded-lg flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
-              disabled={loading}
+              disabled={loading || isReadOnly}
             >
               <Save size={16} />
               {loading ? "Saving..." : "Save Changes"}
@@ -279,6 +319,7 @@ export default function OwnerSettingsPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isReadOnly}
                   className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
                   placeholder="Enter new password"
                 />
@@ -289,6 +330,7 @@ export default function OwnerSettingsPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isReadOnly}
                   className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
                   placeholder="Confirm new password"
                 />
@@ -296,7 +338,7 @@ export default function OwnerSettingsPage() {
             </div>
             <button
               onClick={changePassword}
-              className="mt-6 bg-[#012a4a] hover:bg-[#011d34] text-white px-5 py-2 rounded-lg transition-colors duration-200"
+              className="mt-6 bg-[#012a4a] hover:bg-[#011d34] text-white px-5 py-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
             >
               Change Password
             </button>
@@ -329,6 +371,7 @@ export default function OwnerSettingsPage() {
                       }`}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isReadOnly) return;
                         setPaymentSettings({ ...paymentSettings, umsPayEnabled: !paymentSettings.umsPayEnabled });
                       }}
                     >
@@ -421,6 +464,7 @@ export default function OwnerSettingsPage() {
                       }`}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isReadOnly) return;
                         setPaymentSettings({ ...paymentSettings, umsCommsEnabled: !paymentSettings.umsCommsEnabled });
                       }}
                     >
@@ -500,7 +544,7 @@ export default function OwnerSettingsPage() {
             <button
               onClick={updatePaymentSettings}
               className="mt-6 bg-[#03a678] hover:bg-[#02956a] text-white px-5 py-2 rounded-lg flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
-              disabled={paymentLoading}
+              disabled={paymentLoading || isReadOnly}
             >
               <Save size={16} />
               {paymentLoading ? "Saving..." : "Save Settings"}
@@ -517,3 +561,6 @@ export default function OwnerSettingsPage() {
     </div>
   );
 }
+
+
+

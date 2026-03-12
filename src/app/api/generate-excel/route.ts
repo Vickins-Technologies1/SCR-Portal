@@ -17,6 +17,10 @@ interface Report {
   tenantPaymentStatus: string;
   type: string;
   unitType?: string;
+  reference?: string;
+  transactionId?: string;
+  mpesaCode?: string;
+  isManual?: boolean;
 }
 
 interface Property {
@@ -34,6 +38,14 @@ interface GenerateExcelRequest {
   totalRevenue: number;
   properties: Property[];
 }
+
+const getPaymentReference = (report: Report): string => {
+  const isManual = report.isManual ?? report.transactionId?.startsWith("MANUAL-");
+  if (isManual) {
+    return report.reference || report.transactionId || "N/A";
+  }
+  return report.mpesaCode || report.transactionId || "N/A";
+};
 
 function groupByMonth(
   reports: Report[],
@@ -88,19 +100,22 @@ export async function POST(
         : properties.find((p) => p._id === selectedPropertyId)?.name ??
           "Selected Property";
 
-    sheet.mergeCells("A1:G1");
+    const totalColumns = selectedPropertyId === "all" ? 8 : 9;
+    const lastColumn = String.fromCharCode(64 + totalColumns);
+
+    sheet.mergeCells(`A1:${lastColumn}1`);
     const companyRow = sheet.getCell("A1");
     companyRow.value = "Smart Choice Rental Management";
     companyRow.font = { bold: true, size: 20, color: { argb: "FF00334D" } };
     companyRow.alignment = { horizontal: "center", vertical: "middle" };
 
-    sheet.mergeCells("A2:G2");
+    sheet.mergeCells(`A2:${lastColumn}2`);
     const contactRow = sheet.getCell("A2");
     contactRow.value = "PO Box 617-10300 Kerugoya • management@gmail.com • 0702036837 • 0117649850";
     contactRow.font = { size: 11, italic: true, color: { argb: "FF555555" } };
     contactRow.alignment = { horizontal: "center", vertical: "middle" };
 
-    sheet.mergeCells("A4:G5");
+    sheet.mergeCells(`A4:${lastColumn}5`);
     const titleCell = sheet.getCell("A4");
     titleCell.value = "Monthly Financial Contributions Report";
     titleCell.font = { bold: true, size: 28, color: { argb: "FFFFFFFF" } };
@@ -111,7 +126,7 @@ export async function POST(
       fgColor: { argb: "FF00334D" },
     };
 
-    sheet.mergeCells("A6:G6");
+    sheet.mergeCells(`A6:${lastColumn}6`);
     const genDateCell = sheet.getCell("A6");
     genDateCell.value = `Generated on ${new Date().toLocaleDateString()}`;
     genDateCell.font = { size: 12, italic: true, color: { argb: "FF00334D" } };
@@ -151,11 +166,12 @@ export async function POST(
       "Revenue (KES)",
       "Date",
       "Status",
+      "Reference",
       "Type",
       "Payment Status",
     ];
     if (selectedPropertyId !== "all") {
-      baseHeaders.splice(6, 0, "Unit Type");
+      baseHeaders.splice(7, 0, "Unit Type");
     }
     const headerRow = sheet.getRow(currentRow);
     headerRow.values = baseHeaders;
@@ -176,7 +192,7 @@ export async function POST(
     monthGroups.forEach((monthReports, monthKey) => {
       const monthName = format(new Date(monthKey + "-01"), "MMMM yyyy");
 
-      sheet.mergeCells(`A${currentRow}:G${currentRow}`);
+      sheet.mergeCells(`A${currentRow}:${lastColumn}${currentRow}`);
       const monthHeaderCell = sheet.getCell(`A${currentRow}`);
       monthHeaderCell.value = `> ${monthName}`;
       monthHeaderCell.font = { bold: true, size: 14, color: { argb: "FF00334D" } };
@@ -197,6 +213,7 @@ export async function POST(
           r.revenue,
           format(new Date(r.date), "dd MMM yyyy"),
           r.status,
+          getPaymentReference(r),
           r.type,
         ];
         if (selectedPropertyId !== "all") {
@@ -248,7 +265,7 @@ export async function POST(
     };
 
     sheet.columns = baseHeaders.map((_, i) => ({
-      width: [22, 22, 16, 14, 14, 12, 14, 18][i] || 16,
+      width: [22, 22, 16, 14, 14, 18, 12, 14, 18][i] || 16,
     }));
 
     const dataStartRow = 10 + filterDetails.length + 1;
@@ -292,3 +309,4 @@ export async function POST(
     );
   }
 }
+

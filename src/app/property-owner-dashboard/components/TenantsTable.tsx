@@ -52,6 +52,8 @@ interface TenantsTableProps {
   isLoading: boolean;
   userId: string | null;
   csrfToken: string | null | undefined;
+  canManageTenants?: boolean;
+  canSendNotifications?: boolean;
   onEdit: (tenant: ResponseTenant) => void;
   onDelete: (id: string) => void;
   onResendWelcome: (tenant: ResponseTenant) => void;   // ← NEW prop
@@ -70,6 +72,8 @@ export default function TenantsTable({
   isLoading,
   userId,
   csrfToken,
+  canManageTenants = true,
+  canSendNotifications = true,
   onEdit,
   onDelete,
   onResendWelcome,   // ← NEW
@@ -433,31 +437,41 @@ export default function TenantsTable({
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => onEdit(tenant)}
-                            className="text-blue-600 hover:text-blue-800 transition"
-                            title="Edit tenant"
-                          >
-                            <Pencil className="h-5 w-5" />
-                          </button>
+                        {(canManageTenants || canSendNotifications) ? (
+                          <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
+                            {canManageTenants && (
+                              <button
+                                onClick={() => onEdit(tenant)}
+                                className="text-blue-600 hover:text-blue-800 transition"
+                                title="Edit tenant"
+                              >
+                                <Pencil className="h-5 w-5" />
+                              </button>
+                            )}
 
-                          <button
-                            onClick={() => onResendWelcome(tenant)}
-                            className="text-green-600 hover:text-green-800 transition"
-                            title="Resend welcome notification"
-                          >
-                            <Send className="h-5 w-5" />
-                          </button>
+                            {canSendNotifications && (
+                              <button
+                                onClick={() => onResendWelcome(tenant)}
+                                className="text-green-600 hover:text-green-800 transition"
+                                title="Resend welcome notification"
+                              >
+                                <Send className="h-5 w-5" />
+                              </button>
+                            )}
 
-                          <button
-                            onClick={() => onDelete(tenant._id)}
-                            className="text-red-600 hover:text-red-800 transition"
-                            title="Delete tenant"
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
-                        </div>
+                            {canManageTenants && (
+                              <button
+                                onClick={() => onDelete(tenant._id)}
+                                className="text-red-600 hover:text-red-800 transition"
+                                title="Delete tenant"
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">View only</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -537,38 +551,44 @@ export default function TenantsTable({
                       </p>
 
                       <div className="flex gap-8 pt-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit(tenant);
-                          }}
-                          className="text-blue-600 hover:text-blue-800"
-                          title="Edit tenant"
-                        >
-                          <Pencil className="h-5 w-5" />
-                        </button>
+                        {canManageTenants && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEdit(tenant);
+                            }}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit tenant"
+                          >
+                            <Pencil className="h-5 w-5" />
+                          </button>
+                        )}
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onResendWelcome(tenant);
-                          }}
-                          className="text-green-600 hover:text-green-800"
-                          title="Resend welcome notification"
-                        >
-                          <Send className="h-5 w-5" />
-                        </button>
+                        {canSendNotifications && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onResendWelcome(tenant);
+                            }}
+                            className="text-green-600 hover:text-green-800"
+                            title="Resend welcome notification"
+                          >
+                            <Send className="h-5 w-5" />
+                          </button>
+                        )}
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(tenant._id);
-                          }}
-                          className="text-red-600 hover:text-red-800"
-                          title="Delete tenant"
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </button>
+                        {canManageTenants && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDelete(tenant._id);
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete tenant"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -604,6 +624,7 @@ export default function TenantsTable({
     </div>
   );
 }
+
 
 
 

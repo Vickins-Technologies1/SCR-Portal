@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Home, Plus, CheckCircle, Building2 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
@@ -24,6 +25,10 @@ interface SortConfig {
 
 export default function ListPropertiesPage() {
   const router = useRouter();
+  const perm = usePermissions();
+  const canViewProperties = perm.hasPermission("properties:view");
+  const canListProperties = perm.hasPermission("properties:list_new");
+  const canEditProperties = perm.hasPermission("properties:edit");
 
   const [listings, setListings] = useState<Listing[]>([]); // ← Renamed for clarity: these are advertised listings
   const [originalProperties, setOriginalProperties] = useState<Property[]>([]);
@@ -65,6 +70,12 @@ export default function ListPropertiesPage() {
       return;
     }
 
+    if (userRole === "teamMember" && !canViewProperties) {
+      setError("Access restricted. You do not have permission to view property listings.");
+      router.replace("/property-owner-dashboard");
+      return;
+    }
+
     if (!ownerIdToUse) {
       setError("Could not determine property owner. Please log in again.");
       router.push("/login");
@@ -72,7 +83,7 @@ export default function ListPropertiesPage() {
     }
 
     setEffectiveOwnerId(ownerIdToUse);
-  }, [router]);
+  }, [router, canViewProperties]);
 
   // CSRF token
   useEffect(() => {
@@ -184,17 +195,29 @@ export default function ListPropertiesPage() {
   };
 
   const openListModal = () => {
+    if (!canListProperties) {
+      setError("You do not have permission to list new properties.");
+      return;
+    }
     setModalMode("list");
     setIsFormModalOpen(true);
   };
 
   const openEditModal = (property: Listing) => { // ← Now Listing
+    if (!canEditProperties) {
+      setError("You do not have permission to edit listings.");
+      return;
+    }
     setModalMode("edit");
     setEditingPropertyId(property._id);
     setIsFormModalOpen(true);
   };
 
   const handleDelete = (id: string) => {
+    if (!canEditProperties) {
+      setError("You do not have permission to delete listings.");
+      return;
+    }
     setPropertyToDelete(id);
     setIsDeleteModalOpen(true);
   };
@@ -214,6 +237,7 @@ export default function ListPropertiesPage() {
               <Home className="text-[#012a4a]" />
               Property Listings
             </h1>
+            {canListProperties && (
             <button
               onClick={openListModal}
               className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white rounded-xl shadow-md hover:shadow-lg transition-all font-medium"
@@ -221,6 +245,7 @@ export default function ListPropertiesPage() {
               <Plus className="h-5 w-5" />
               List Property
             </button>
+            )}
           </motion.div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
             {listingStatCards.map((stat) => (
@@ -285,6 +310,7 @@ export default function ListPropertiesPage() {
                         onView={() => setSelectedProperty(p)}
                         onEdit={() => openEditModal(p)}
                         onDelete={() => handleDelete(p._id)}
+                        canManage={canEditProperties}
                       />
                     ))}
                   </tbody>
@@ -300,6 +326,7 @@ export default function ListPropertiesPage() {
                     onView={() => setSelectedProperty(p)}
                     onEdit={() => openEditModal(p)}
                     onDelete={() => handleDelete(p._id)}
+                        canManage={canEditProperties}
                   />
                 ))}
               </div>
@@ -358,6 +385,11 @@ export default function ListPropertiesPage() {
     </div>
   );
 }
+
+
+
+
+
 
 
 

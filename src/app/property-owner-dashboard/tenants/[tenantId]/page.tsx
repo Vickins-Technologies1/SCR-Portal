@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Cookies from "js-cookie";
 import { useRouter, useParams } from "next/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ArrowLeft } from "lucide-react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
@@ -36,6 +37,7 @@ interface PaymentStatement {
   type?: string;
   reference?: string;
   transactionId?: string;
+  mpesaCode?: string;
   isManual?: boolean;
 }
 
@@ -56,6 +58,14 @@ interface PaymentReport {
 export default function TenantDetailsPage() {
   const router = useRouter();
   const { tenantId } = useParams() as { tenantId: string };
+  const perm = usePermissions();
+  const canViewTenants = perm.hasPermission("tenants:view");
+  const canManageTenants = perm.hasPermission("tenants:edit");
+  const canRecordPayments = perm.hasPermission("payments:record");
+  const canViewPayments = perm.hasPermission("payments:view");
+  const canViewReports = perm.hasPermission("reports:view");
+  const canExportReports = perm.hasPermission("reports:export");
+  const canImpersonate = perm.hasPermission("security:manage");
 
   const [tenant, setTenant] = useState<ResponseTenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
@@ -89,6 +99,14 @@ export default function TenantDetailsPage() {
   const rateLimitDelay = 800;
 
   const formatCurrency = (amount: number) => `Ksh ${amount.toLocaleString()}`;
+
+  const getStatementReference = (statement: PaymentStatement) => {
+    const isManual = statement.isManual ?? statement.transactionId?.startsWith("MANUAL-");
+    if (isManual) {
+      return statement.reference || statement.transactionId || "—";
+    }
+    return statement.mpesaCode || statement.transactionId || "—";
+  };
 
   const getPaymentSnapshot = (currentTenant: ResponseTenant) => {
     const overdueBalance = Math.max(currentTenant.dues?.totalRemainingDues ?? 0, 0);
@@ -145,7 +163,7 @@ export default function TenantDetailsPage() {
     const statementLines = statements.length
       ? statements.map((statement) => {
           const date = new Date(statement.paymentDate).toLocaleDateString();
-          const ref = statement.reference || statement.transactionId || "—";
+          const ref = getStatementReference(statement);
           const type = statement.type || "Other";
           return `${date} | ${type} | Ksh ${statement.amount.toLocaleString()} | ${statement.status} | ${ref}`;
         })
@@ -197,6 +215,7 @@ export default function TenantDetailsPage() {
 
   const handleGenerateReport = () => {
     if (!tenant) return;
+    if (!canViewReports) return;
     const report = buildPaymentReport(tenant, property, paymentStatements);
     setReportData(report);
     setReportCopied(false);
@@ -330,7 +349,7 @@ export default function TenantDetailsPage() {
         const type = statement.type || "Other";
         const amount = formatCurrency(statement.amount);
         const status = statement.status;
-        const ref = (statement.reference || statement.transactionId || "—").toString();
+        const ref = getStatementReference(statement).toString();
         const trimmedRef = ref.length > 18 ? `${ref.slice(0, 15)}...` : ref;
 
         page.drawText(sanitizePdfText(date), { x: colX.date, y, size: 9, font });
@@ -348,6 +367,10 @@ export default function TenantDetailsPage() {
 
   const handleDownloadReport = async () => {
     if (!tenant || !reportData) return;
+    if (!canExportReports) {
+      alert("You do not have permission to export reports.");
+      return;
+    }
 
     const safeName = tenant.name
       .toLowerCase()
@@ -439,6 +462,7 @@ export default function TenantDetailsPage() {
 
   const fetchPaymentStatements = useCallback(async () => {
     if (!tenantId) return;
+    if (!canViewPayments) return;
     setIsPaymentsLoading(true);
     try {
       const res = await fetch(
@@ -456,7 +480,7 @@ export default function TenantDetailsPage() {
     } finally {
       setIsPaymentsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, canViewPayments]);
 
   const fetchDues = useCallback(async (token: string) => {
     if (!userId || !tenantId || !token) return;
@@ -495,12 +519,26 @@ export default function TenantDetailsPage() {
   useEffect(() => {
     const uid = Cookies.get("userId");
     const role = Cookies.get("role");
-    if (!uid || role !== "propertyOwner") {
-      router.push("/login");
-    } else {
-      setUserId(uid);
+    const ownerIdFromCookie = Cookies.get("ownerId");
+
+    if (!uid || !["propertyOwner", "teamMember"].includes(role || "")) {
+      router.replace("/login");
+      return;
     }
-  }, [router]);
+
+    if (role === "teamMember" && !canViewTenants) {
+      router.replace("/property-owner-dashboard");
+      return;
+    }
+
+    const ownerIdToUse = role === "propertyOwner" ? uid : (ownerIdFromCookie || uid);
+    if (!ownerIdToUse) {
+      router.replace("/login");
+      return;
+    }
+
+    setUserId(ownerIdToUse);
+  }, [router, canViewTenants]);
 
   // Load tenant data and dues
   useEffect(() => {
@@ -533,6 +571,10 @@ export default function TenantDetailsPage() {
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenant || !csrfToken) return;
+    if (!canRecordPayments) {
+      setPaymentErrors({ general: "You do not have permission to record payments." });
+      return;
+    }
 
     const errors: Record<string, string> = {};
     if (!paymentData.amount || parseFloat(paymentData.amount) <= 0) errors.amount = "Invalid amount";
@@ -584,6 +626,10 @@ export default function TenantDetailsPage() {
   // Impersonation handler
   const handleImpersonate = async () => {
     if (!tenant || !userId || !csrfToken) return;
+    if (!canImpersonate) {
+      alert("You do not have permission to impersonate tenants.");
+      return;
+    }
 
     setIsImpersonating(true);
 
@@ -730,11 +776,24 @@ export default function TenantDetailsPage() {
               <TenantInfoGrid tenant={tenant} property={property} />
               <DuesSection tenant={tenant} isDuesLoading={isDuesLoading} />
               <ActionButtons
-                onRecordPayment={() => setShowPaymentModal(true)}
+                onRecordPayment={() => {
+                  if (!canRecordPayments) return;
+                  setShowPaymentModal(true);
+                }}
                 onEdit={() => alert("Coming soon")}
-                onImpersonate={() => setShowImpersonateModal(true)}
-                onDelete={() => alert("Coming soon")}
+                onImpersonate={() => {
+                  if (!canImpersonate) return;
+                  setShowImpersonateModal(true);
+                }}
+                onDelete={() => {
+                  if (!canManageTenants) return;
+                  alert("Coming soon");
+                }}
                 onGenerateReport={handleGenerateReport}
+                canRecordPayment={canRecordPayments}
+                canGenerateReport={canViewReports}
+                canImpersonate={canImpersonate}
+                canDelete={canManageTenants}
               />
             </div>
           </div>
@@ -897,7 +956,7 @@ export default function TenantDetailsPage() {
                             </td>
                             <td className="py-2 px-2 capitalize">{statement.status}</td>
                             <td className="py-2 px-2">
-                              {statement.reference || statement.transactionId || "—"}
+                              {getStatementReference(statement)}
                             </td>
                           </tr>
                         ))
@@ -916,12 +975,14 @@ export default function TenantDetailsPage() {
                   >
                     {reportCopied ? "Copied" : "Copy Summary"}
                   </button>
-                  <button
-                    onClick={handleDownloadReport}
-                    className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-950 transition"
-                  >
-                    Download PDF
-                  </button>
+                  {canExportReports && (
+                    <button
+                      onClick={handleDownloadReport}
+                      className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-950 transition"
+                    >
+                      Download PDF
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -933,3 +994,10 @@ export default function TenantDetailsPage() {
     </>
   );
 }
+
+
+
+
+
+
+

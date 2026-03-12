@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface Payment {
   _id: string;
@@ -41,6 +42,8 @@ interface FilterConfig {
 
 export default function PaymentsPage() {
   const router = useRouter();
+  const perm = usePermissions();
+  const canViewPayments = perm.canViewPayments;
   const [payments, setPayments] = useState<Payment[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
@@ -121,13 +124,19 @@ export default function PaymentsPage() {
       return;
     }
 
+    if (userRole === "teamMember" && !canViewPayments) {
+      setError("Access restricted. You do not have permission to view payments.");
+      router.replace("/property-owner-dashboard");
+      return;
+    }
+
     if (!ownerIdToUse) {
       setError("Could not determine property owner. Please log in again.");
       return;
     }
 
     setEffectiveOwnerId(ownerIdToUse);
-  }, [router]);
+  }, [router, canViewPayments]);
 
   // Fetch properties with CSRF retry
   const fetchProperties = useCallback(async () => {
@@ -612,4 +621,6 @@ export default function PaymentsPage() {
     </div>
   );
 }
+
+
 

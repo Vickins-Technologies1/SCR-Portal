@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { FileText, BarChart2, ArrowUpDown, Download } from "lucide-react";
+import { FileText, BarChart2, ArrowUpDown, Download, Lock } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -33,6 +34,10 @@ interface Report {
   tenantPaymentStatus: string;
   type: string;
   unitType?: string;
+  reference?: string;
+  transactionId?: string;
+  mpesaCode?: string;
+  isManual?: boolean;
 }
 
 interface Invoice {
@@ -58,6 +63,7 @@ interface SortConfig<T> {
 
 export default function ReportsAndInvoicesPage() {
   const router = useRouter();
+  const perm = usePermissions();
   const [activeTab, setActiveTab] = useState<"reports" | "invoices">("reports");
   const [reports, setReports] = useState<Report[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -73,6 +79,10 @@ export default function ReportsAndInvoicesPage() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+
+  const canViewReports = perm.hasPermission("reports:view");
+  const canExportReports = perm.hasPermission("reports:export");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string>("");
@@ -89,6 +99,14 @@ export default function ReportsAndInvoicesPage() {
   const formatDate = (dateString: string): string => {
     if (!isValidDate(dateString)) return "N/A";
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const getReportReference = (report: Report) => {
+    const isManual = report.isManual ?? report.transactionId?.startsWith("MANUAL-");
+    if (isManual) {
+      return report.reference || report.transactionId || "—";
+    }
+    return report.mpesaCode || report.transactionId || "—";
   };
 
   // Generate all months between two dates
@@ -135,8 +153,15 @@ export default function ReportsAndInvoicesPage() {
       return;
     }
 
+    const allowed = userRole === "propertyOwner" || canViewReports;
+    setHasAccess(allowed);
+
+    if (!allowed) {
+      return;
+    }
+
     setEffectiveOwnerId(ownerIdToUse);
-  }, [router]);
+  }, [router, canViewReports]);
 
   // Fetch CSRF token
   useEffect(() => {
@@ -270,7 +295,7 @@ export default function ReportsAndInvoicesPage() {
 
   // Load data when effectiveOwnerId is ready
   useEffect(() => {
-    if (effectiveOwnerId && csrfToken) {
+    if (hasAccess && effectiveOwnerId && csrfToken) {
       Promise.all([
         fetchOwnerInfo(),
         fetchProperties(),
@@ -286,6 +311,7 @@ export default function ReportsAndInvoicesPage() {
     startDate,
     endDate,
     paymentType,
+    hasAccess,
     fetchOwnerInfo,
     fetchProperties,
     fetchUserData,
@@ -388,6 +414,10 @@ export default function ReportsAndInvoicesPage() {
 
   // Export to Excel (unchanged)
   const exportToExcel = useCallback(async () => {
+    if (!canExportReports) {
+      setError("You do not have permission to export reports.");
+      return;
+    }
     if (reports.length === 0) {
       setError("No data to export.");
       return;
@@ -486,6 +516,47 @@ export default function ReportsAndInvoicesPage() {
     plugins: { legend: { display: true } },
   };
 
+  if (hasAccess === false) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+        <Navbar />
+        <Sidebar />
+        <div className="sm:ml-64 mt-16">
+          <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+              <Lock className="h-16 w-16 text-amber-500 mb-6" />
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">Access Restricted</h2>
+              <p className="text-gray-600 max-w-md mb-6">
+                Your account does not have permission to view reports and invoices.
+              </p>
+              <button
+                onClick={() => router.push("/property-owner-dashboard")}
+                className="px-6 py-3 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasAccess === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+        <Navbar />
+        <Sidebar />
+        <div className="sm:ml-64 mt-16">
+          <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
+            <div className="flex justify-center items-center min-h-[60vh]">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#012a4a]"></div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -623,9 +694,9 @@ export default function ReportsAndInvoicesPage() {
               <div className="mb-6">
                 <button
                   onClick={exportToExcel}
-                  disabled={isExporting || reports.length === 0}
+                  disabled={!canExportReports || isExporting || reports.length === 0}
                   className={`flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#013a6a] transition ${
-                    isExporting || reports.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+                    !canExportReports || isExporting || reports.length === 0 ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                 >
                   <Download className="h-5 w-5" />
@@ -687,6 +758,9 @@ export default function ReportsAndInvoicesPage() {
                       <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("status")}>
                         Status {getSortIcon("status", reportSortConfig)}
                       </th>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("reference")}>
+                        Reference {getSortIcon("reference", reportSortConfig)}
+                      </th>
                       <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("type")}>
                         Type {getSortIcon("type", reportSortConfig)}
                       </th>
@@ -708,6 +782,7 @@ export default function ReportsAndInvoicesPage() {
                         <td className="px-4 py-3">Ksh {r.revenue.toFixed(2)}</td>
                         <td className="px-4 py-3">{formatDate(r.date)}</td>
                         <td className="px-4 py-3">{r.status}</td>
+                        <td className="px-4 py-3">{getReportReference(r)}</td>
                         <td className="px-4 py-3">{r.type}</td>
                         {selectedPropertyId !== "all" && <td className="px-4 py-3">{r.unitType || "N/A"}</td>}
                         <td className="px-4 py-3">{r.tenantPaymentStatus}</td>
@@ -769,3 +844,11 @@ export default function ReportsAndInvoicesPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+

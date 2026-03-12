@@ -12,8 +12,9 @@ interface PropertyCardProps {
   onDelete: () => void;
 }
 
-export default function PropertyCard({ property, onView, onEdit, onDelete }: PropertyCardProps) {
+export default function PropertyCard({ property, onView, onEdit, onDelete, canManage }: PropertyCardProps) {
   const availability = ensureAvailability(property);
+  const showActions = canManage ?? true;
   const vacancyLabel = `${availability.totalVacant} vacant unit${availability.totalVacant === 1 ? "" : "s"}`;
   return (
     <motion.div
@@ -69,25 +70,29 @@ export default function PropertyCard({ property, onView, onEdit, onDelete }: Pro
         </div>
       </div>
 
-      <div
-        className="bg-gradient-to-r from-slate-50 to-slate-100 px-5 py-3 flex justify-end gap-3 border-t border-slate-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onEdit}
-          className="flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition text-sm font-medium"
+      {showActions && (
+        <div
+          className="bg-gradient-to-r from-slate-50 to-slate-100 px-5 py-3 flex justify-end gap-3 border-t border-slate-200"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Pencil className="h-4 w-4" />
-          Edit
-        </button>
-        <button
-          onClick={onDelete}
-          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
-        >
-          <Trash2 className="h-4 w-4" />
-          Remove
-        </button>
-      </div>
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition text-sm font-medium"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit
+          </button>
+          <button
+            onClick={onDelete}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
+          >
+            <Trash2 className="h-4 w-4" />
+            Remove
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }
+
+

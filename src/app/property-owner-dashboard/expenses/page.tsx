@@ -69,6 +69,8 @@ const categoryConfig: Record<string, { icon: React.ElementType; color: string; b
 export default function ExpensesPage() {
   const router = useRouter();
   const perm = usePermissions();
+  const canCreateExpense = perm.hasPermission("expenses:create");
+  const canExportExpenses = perm.hasPermission("reports:export");
 
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -275,6 +277,10 @@ export default function ExpensesPage() {
   };
 
   const handleExportCSV = () => {
+    if (!canExportExpenses) {
+      setError("You do not have permission to export expenses.");
+      return;
+    }
     setIsExporting(true);
     setTimeout(() => {
       const headers = ["Date", "Description", "Property", "Category", "Amount", "Receipt URL"];
@@ -300,6 +306,10 @@ export default function ExpensesPage() {
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreateExpense) {
+      setError("You do not have permission to add expenses.");
+      return;
+    }
     if (!csrfToken || !ownerId) return;
 
     setIsSavingExpense(true);
@@ -432,13 +442,12 @@ export default function ExpensesPage() {
                 <p className="text-gray-600 mt-1">Track, categorize and optimize property costs</p>
               </div>
             </div>
-
             <div className="flex flex-wrap gap-3">
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleExportCSV}
-                disabled={isExporting || filteredExpenses.length === 0}
+                disabled={isExporting || filteredExpenses.length === 0 || !canExportExpenses}
                 className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isExporting ? (
@@ -449,15 +458,17 @@ export default function ExpensesPage() {
                 {isExporting ? "Exporting..." : "Export CSV"}
               </motion.button>
 
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200/30 hover:bg-emerald-700 transition-all font-medium"
-              >
-                <PlusCircle size={20} />
-                Add Expense
-              </motion.button>
+              {canCreateExpense && (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200/30 hover:bg-emerald-700 transition-all font-medium"
+                >
+                  <PlusCircle size={20} />
+                  Add Expense
+                </motion.button>
+              )}
             </div>
           </div>
 
@@ -1154,3 +1165,11 @@ export default function ExpensesPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
