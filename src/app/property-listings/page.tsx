@@ -441,22 +441,6 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
           <span className="text-slate-500 font-medium">{vacancyBadge}</span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {propertyUnits.slice(0, 4).map((unit, i) => (
-            <span
-              key={`${property._id}-${unit.type}-${i}`}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700"
-            >
-              {unit.type} · {unit.vacant ?? unit.quantity} left
-            </span>
-          ))}
-          {propertyUnits.length > 4 && (
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
-              +{propertyUnits.length - 4} more
-            </span>
-          )}
-        </div>
-
         <Link
           href={`/property-listings/${property._id}`}
           className="mt-3 block w-full rounded-2xl bg-gradient-to-r from-cyan-600 to-cyan-500 px-6 py-3.5 text-center text-sm font-semibold uppercase tracking-wider text-white shadow-md hover:from-cyan-700 hover:to-cyan-600 hover:shadow-lg transition-all duration-300"
