@@ -348,18 +348,36 @@ export default function TenantDetailsPage() {
 
   const handleDownloadReport = async () => {
     if (!tenant || !reportData) return;
-    const safeName = tenant.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+    const safeName = tenant.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
     const dateStamp = new Date().toISOString().split("T")[0];
-    const pdfBytes = await generateReportPdf(reportData, tenant, property);
-    const blob = new Blob([pdfBytes], { type: "application/pdf" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `tenant-payment-report-${safeName || "tenant"}-${dateStamp}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+
+    try {
+      const pdfBytes = await generateReportPdf(reportData, tenant, property);
+
+      // Fix for TS error: pdf-lib returns Uint8Array, Blob accepts it at runtime
+      // Type assertion resolves the strict ArrayBuffer vs ArrayBufferLike mismatch
+      const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `tenant-payment-report-${safeName || "tenant"}-${dateStamp}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+
+      // Clean up
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to generate or download PDF:", err);
+      alert("Could not generate the PDF report. Please try again.");
+    }
   };
 
   const handleCopyReport = async () => {
@@ -661,7 +679,8 @@ export default function TenantDetailsPage() {
                     {property?.name ? `${property.name} • ${tenant.houseNumber}` : "Property"}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Lease {new Date(tenant.leaseStartDate).toLocaleDateString()} → {new Date(tenant.leaseEndDate).toLocaleDateString()}
+                    Lease {new Date(tenant.leaseStartDate).toLocaleDateString()} →{" "}
+                    {new Date(tenant.leaseEndDate).toLocaleDateString()}
                   </p>
                 </div>
               </div>
@@ -914,5 +933,3 @@ export default function TenantDetailsPage() {
     </>
   );
 }
-
-
