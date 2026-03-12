@@ -608,10 +608,6 @@ export default function NotificationsPage() {
           <NotificationsHeader
             viewMode={viewMode}
             setViewMode={setViewMode}
-            canViewSent={canViewNotifications}
-            canViewUpcoming={canViewReminders}
-            canCreateNotification={canSendNotifications}
-            canSendReminders={canTriggerReminders}
             onCreateNotification={() => {
               if (!canSendNotifications) {
                 setError("You do not have permission to send notifications.");
