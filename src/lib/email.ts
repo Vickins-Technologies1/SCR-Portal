@@ -42,21 +42,22 @@ interface ConfirmationEmailOptions {
   paymentType: string;
   transactionId: string;
   paymentDate: string;
-  tenantName?: string; // Optional for owner emails
+  tenantName?: string;       // Optional – used in owner emails
+  mpesaCode?: string;        // Optional – added for M-Pesa reference
 }
 
 // ────────────────────────────────────────────────
-//  NEW INTERFACE for password reset/setup emails
+//  Password reset/setup email options
 // ────────────────────────────────────────────────
 interface ResetEmailOptions {
   to: string;
   name: string;
   resetLink: string;
-  propertyName?: string;     // optional – can be included if available
-  houseNumber?: string;      // optional
+  propertyName?: string;
+  houseNumber?: string;
 }
 
-// Create reusable transporter
+// Reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT || "587"),
@@ -84,7 +85,7 @@ export async function sendWelcomeEmail({
     const html = generateStyledTemplate({
       name,
       title: "Welcome to Your New Home!",
-      intro: "Your tenant account has been successfully created. Below are your login details to access your account and manage your rental information.",
+      intro: "Your tenant account has been successfully created. Below are your login details.",
       details: `
         <ul>
           <li><strong>Email:</strong> ${email}</li>
@@ -93,7 +94,7 @@ export async function sendWelcomeEmail({
           <li><strong>Property:</strong> ${propertyName}</li>
           <li><strong>House Number:</strong> ${houseNumber}</li>
         </ul>
-        <p style="font-size: 14px; margin-top: 16px;">For security, please set a new password after logging in.</p>
+        <p style="font-size: 14px; margin-top: 16px;">Please change your password after first login for security.</p>
       `,
     });
 
@@ -110,9 +111,6 @@ export async function sendWelcomeEmail({
   }
 }
 
-// ────────────────────────────────────────────────
-//  NEW FUNCTION: Send password reset/setup link
-// ────────────────────────────────────────────────
 export async function sendPasswordResetEmail({
   to,
   name,
@@ -128,10 +126,10 @@ export async function sendPasswordResetEmail({
     const html = generateStyledTemplate({
       name,
       title: "Set / Reset Your Password",
-      intro: `A secure link has been generated so you can set up or reset your password for your tenant account.`,
+      intro: `A secure link has been generated to set up or reset your password.`,
       details: `
         <p style="font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-          Click the button below to set your password:
+          Click below to set your password:
         </p>
         <p style="text-align: center; margin: 32px 0;">
           <a href="${resetLink}" class="button" style="padding: 14px 32px; font-size: 16px;">
@@ -139,14 +137,14 @@ export async function sendPasswordResetEmail({
           </a>
         </p>
         <p style="font-size: 14px; color: #dc2626; margin-top: 16px;">
-          This link will expire in 1 hour for your security.
+          This link expires in 1 hour.
         </p>
         <p style="font-size: 14px; margin-top: 24px;">
           Property: <strong>${propertyName}</strong>  
-          ${houseNumber ? ` | Unit/House: <strong>${houseNumber}</strong>` : ""}
+          ${houseNumber ? ` | Unit: <strong>${houseNumber}</strong>` : ""}
         </p>
         <p style="font-size: 14px; margin-top: 16px;">
-          If you did not request this link, please contact your property manager immediately.
+          If you didn't request this, contact your property manager immediately.
         </p>
       `,
     });
@@ -187,7 +185,7 @@ export async function sendUpdateEmail({
       name,
       title: "Tenant Account Updated",
       intro: "Your account details have been successfully updated.",
-      details: `<ul>${detailItems}</ul>`,
+      details: detailItems ? `<ul>${detailItems}</ul>` : "<p>No additional details to show.</p>",
     });
 
     await transporter.sendMail({
@@ -220,14 +218,11 @@ export async function sendReminderEmail({
       throw new Error("SMTP credentials are missing");
     }
 
-    const title =
-      reminderType === "fiveDaysBefore"
-        ? "Upcoming Payment Reminder"
-        : "Payment Due Today";
+    const title = reminderType === "fiveDaysBefore" ? "Upcoming Payment Reminder" : "Payment Due Today";
     const intro =
       reminderType === "fiveDaysBefore"
-        ? `This is a reminder that your payment for ${propertyName} is due in 5 days.`
-        : `This is a reminder that your payment for ${propertyName} is due today.`;
+        ? `Your payment for ${propertyName} is due in 5 days.`
+        : `Your payment for ${propertyName} is due today.`;
 
     const detailItems = [
       `<li><strong>Property:</strong> ${propertyName}</li>`,
@@ -237,7 +232,7 @@ export async function sendReminderEmail({
       depositDue > 0 ? `<li><strong>Deposit Due:</strong> Ksh. ${depositDue.toFixed(2)}</li>` : "",
       `<li><strong>Total Due:</strong> Ksh. ${totalDue.toFixed(2)}</li>`,
       `<li><strong>Due Date:</strong> ${dueDate}</li>`,
-      `<li><strong>Action:</strong> Please make your payment by the due date to avoid late fees.</li>`,
+      `<li><strong>Action:</strong> Please pay by the due date to avoid penalties.</li>`,
     ].filter(Boolean).join("");
 
     const html = generateStyledTemplate({
@@ -246,7 +241,11 @@ export async function sendReminderEmail({
       intro,
       details: `
         <ul>${detailItems}</ul>
-        <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal" class="button">Go to Tenant Portal</a></p>
+        <p style="text-align: center; margin-top: 32px;">
+          <a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal" class="button">
+            Go to Tenant Portal
+          </a>
+        </p>
       `,
     });
 
@@ -272,22 +271,26 @@ export async function sendConfirmationEmail({
   transactionId,
   paymentDate,
   tenantName,
+  mpesaCode,
 }: ConfirmationEmailOptions): Promise<void> {
   try {
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
       throw new Error("SMTP credentials are missing");
     }
 
+    const isOwnerEmail = !!tenantName;
+
     const title = "Payment Confirmation";
-    const intro = tenantName
-      ? `A payment by ${tenantName} for ${propertyName} has been successfully processed.`
-      : `Your payment for ${propertyName} has been successfully processed.`;
+    const intro = isOwnerEmail
+      ? `A payment of Ksh. ${amount.toFixed(2)} by ${tenantName} for ${propertyName} has been received.`
+      : `Your payment of Ksh. ${amount.toFixed(2)} for ${propertyName} has been successfully processed.`;
 
     const detailItems = [
       `<li><strong>Property:</strong> ${propertyName}</li>`,
-      tenantName ? `<li><strong>Tenant:</strong> ${tenantName}</li>` : "",
+      isOwnerEmail ? `<li><strong>Tenant:</strong> ${tenantName}</li>` : "",
       `<li><strong>Amount:</strong> Ksh. ${amount.toFixed(2)}</li>`,
       `<li><strong>Payment Type:</strong> ${paymentType}</li>`,
+      mpesaCode ? `<li><strong>M-Pesa Code / Ref:</strong> ${mpesaCode}</li>` : "",
       `<li><strong>Transaction ID:</strong> ${transactionId}</li>`,
       `<li><strong>Payment Date:</strong> ${paymentDate}</li>`,
     ].filter(Boolean).join("");
@@ -298,7 +301,11 @@ export async function sendConfirmationEmail({
       intro,
       details: `
         <ul>${detailItems}</ul>
-        <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal" class="button">View Payment History</a></p>
+        <p style="text-align: center; margin-top: 32px;">
+          <a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal" class="button">
+            View Payment History
+          </a>
+        </p>
       `,
     });
 
@@ -308,7 +315,8 @@ export async function sendConfirmationEmail({
       subject: "Payment Confirmation",
       html,
     });
-    console.log(`Confirmation email sent to ${to}`);
+
+    console.log(`Confirmation email sent to ${to} (${isOwnerEmail ? "owner" : "tenant"})`);
   } catch (error) {
     console.error(`Error sending confirmation email to ${to}:`, error);
     throw new Error("Failed to send confirmation email");

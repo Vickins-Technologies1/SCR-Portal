@@ -126,12 +126,6 @@ export async function POST(request: NextRequest) {
 
     const { umsPayApiKey, umsPayEmail, umsPayAccountId } = paymentSettings;
 
-    logger.debug(`UMS Pay credentials for ownerId: ${property.ownerId}`, {
-      umsPayApiKey: umsPayApiKey ? "[REDACTED]" : "MISSING",
-      umsPayEmail: umsPayEmail || "MISSING",
-      umsPayAccountId: umsPayAccountId || "MISSING",
-    });
-
     if (!umsPayApiKey || !umsPayEmail || !umsPayAccountId) {
       logger.error(`Incomplete UMS Pay configuration for ownerId: ${property.ownerId}`);
       return NextResponse.json(
@@ -173,13 +167,14 @@ export async function POST(request: NextRequest) {
     }
 
     let status: Payment["status"] = "pending";
-    let {errorMessage} = umsPayData;
+    let errorMessage: string | undefined = umsPayData.errorMessage;
 
     if (umsPayData.TransactionStatus === "Pending" && umsPayData.MpesaResponse) {
       try {
-        const mpesaResponse = typeof umsPayData.MpesaResponse === "string" 
-          ? JSON.parse(umsPayData.MpesaResponse) 
+        const mpesaResponse = typeof umsPayData.MpesaResponse === "string"
+          ? JSON.parse(umsPayData.MpesaResponse)
           : umsPayData.MpesaResponse;
+
         if (mpesaResponse.errorMessage) {
           if (mpesaResponse.errorMessage.includes("Cancel Button")) {
             status = "cancelled";
@@ -206,8 +201,15 @@ export async function POST(request: NextRequest) {
 
     if (!errorMessage && umsPayData.TransactionStatus !== "Pending") {
       status = statusMap[umsPayData.TransactionStatus] || "pending";
-      errorMessage = status === "failed" ? "Payment failed." : status === "cancelled" ? "Payment was cancelled by the user." : undefined;
+      errorMessage =
+        status === "failed"
+          ? "Payment failed."
+          : status === "cancelled"
+          ? "Payment was cancelled by the user."
+          : undefined;
     }
+
+    const mpesaCode = umsPayData.TransactionReceipt || transaction_request_id;
 
     await db.collection<Payment>("payments").updateOne(
       { transactionId: transaction_request_id },
@@ -217,13 +219,12 @@ export async function POST(request: NextRequest) {
           paymentDate: umsPayData.TransactionDate
             ? new Date(umsPayData.TransactionDate).toISOString()
             : new Date().toISOString(),
-          mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
+          mpesaCode,
         },
       }
     );
 
     if (status === "completed") {
-      // Calculate required amounts and update tenant fields
       const updateFields: { [key: string]: number } = {};
       let overpayment = 0;
       const amount = Number(umsPayData.TransactionAmount);
@@ -249,24 +250,21 @@ export async function POST(request: NextRequest) {
             updateFields.totalDepositPaid = tenant.totalDepositPaid + amount;
           }
         } else {
-          overpayment = amount; // Deposit already fulfilled, all goes to wallet
+          overpayment = amount;
         }
       } else {
-        overpayment = amount; // Other payments go to wallet
+        overpayment = amount;
       }
 
-      // Add overpayment to walletBalance
       if (overpayment > 0) {
-        updateFields.walletBalance = tenant.walletBalance + overpayment;
+        updateFields.walletBalance = (tenant.walletBalance || 0) + overpayment;
       }
 
-      // Update tenant with calculated fields
       await db.collection<Tenant>("tenants").updateOne(
         { _id: new ObjectId(tenantId) },
         { $set: updateFields }
       );
 
-      // Fetch updated tenant data
       const updatedTenant = await db.collection<Tenant>("tenants").findOne({
         _id: new ObjectId(tenantId),
       });
@@ -279,107 +277,111 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Fetch property owner details
       const owner = await db
         .collection<User>("users")
         .findOne({ _id: new ObjectId(property.ownerId), role: "propertyOwner" });
 
-      if (!owner) {
-        logger.error("Property owner not found", { ownerId: property.ownerId });
-      } else {
-        // Send confirmation email and SMS to tenant
-        const paymentDate = new Date(umsPayData.TransactionDate || new Date()).toLocaleDateString("en-US", {
+      const paymentDateFormatted = new Date(umsPayData.TransactionDate || Date.now()).toLocaleDateString(
+        "en-US",
+        {
           month: "long",
           day: "numeric",
           year: "numeric",
+        }
+      );
+
+      const emailCommon = {
+        amount: Number(umsPayData.TransactionAmount),
+        paymentType: payment.type || "Other",
+        transactionId: transaction_request_id,
+        paymentDate: paymentDateFormatted,
+      };
+
+      // ─── Tenant email ────────────────────────────────────────
+      try {
+        await sendConfirmationEmail({
+          to: tenant.email,
+          name: tenant.name,
+          propertyName: property.name,
+          ...emailCommon,
+          mpesaCode, // optional – shown if present
         });
+        logger.info("Payment confirmation email sent to tenant", {
+          tenantId,
+          email: tenant.email,
+          mpesaCode,
+        });
+      } catch (emailError) {
+        logger.error("Failed to send payment confirmation email to tenant", {
+          tenantId,
+          email: tenant.email,
+          error: emailError instanceof Error ? emailError.message : String(emailError),
+        });
+      }
 
+      // ─── Tenant SMS ──────────────────────────────────────────
+      if (tenant.phone) {
         try {
-          await sendConfirmationEmail({
-            to: tenant.email,
-            name: tenant.name,
-            propertyName: property.name,
-            amount: Number(umsPayData.TransactionAmount),
-            paymentType: payment.type || "Other",
-            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
-            paymentDate,
+          const smsText = `Payment of Ksh. ${umsPayData.TransactionAmount} for ${property.name} (${
+            payment.type || "Other"
+          }) confirmed on ${paymentDateFormatted}. Ref: ${mpesaCode}`;
+          await sendWelcomeSms({
+            phone: tenant.phone,
+            message: smsText.slice(0, 160),
           });
-          logger.info("Payment confirmation email sent to tenant", {
+          logger.info("Payment confirmation SMS sent to tenant", { tenantId, phone: tenant.phone, mpesaCode });
+        } catch (smsError) {
+          logger.error("Failed to send payment confirmation SMS to tenant", {
             tenantId,
-            email: tenant.email,
-            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
-          });
-        } catch (emailError) {
-          logger.error("Failed to send payment confirmation email to tenant", {
-            tenantId,
-            email: tenant.email,
-            error: emailError instanceof Error ? emailError.message : "Unknown error",
+            phone: tenant.phone,
+            error: smsError instanceof Error ? smsError.message : String(smsError),
           });
         }
+      }
 
-        if (tenant.phone) {
-          try {
-            const smsMessage = `Payment of Ksh. ${umsPayData.TransactionAmount} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDate}. Ref: ${umsPayData.TransactionReceipt || transaction_request_id}`;
-            await sendWelcomeSms({
-              phone: tenant.phone,
-              message: smsMessage.slice(0, 160),
-            });
-            logger.info("Payment confirmation SMS sent to tenant", {
-              tenantId,
-              phone: tenant.phone,
-              mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
-            });
-          } catch (smsError) {
-            logger.error("Failed to send payment confirmation SMS to tenant", {
-              tenantId,
-              phone: tenant.phone,
-              error: smsError instanceof Error ? smsError.message : "Unknown error",
-            });
-          }
-        }
-
-        // Send confirmation email and SMS to property owner
+      // ─── Owner notifications ─────────────────────────────────
+      if (owner) {
         try {
           await sendConfirmationEmail({
             to: owner.email,
             name: owner.name,
             propertyName: property.name,
-            amount: Number(umsPayData.TransactionAmount),
-            paymentType: payment.type || "Other",
-            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
-            paymentDate,
             tenantName: tenant.name,
+            ...emailCommon,
+            mpesaCode, // optional
           });
           logger.info("Payment confirmation email sent to property owner", {
             ownerId: property.ownerId,
             email: owner.email,
-            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
+            mpesaCode,
           });
         } catch (emailError) {
           logger.error("Failed to send payment confirmation email to property owner", {
             ownerId: property.ownerId,
             email: owner.email,
-            error: emailError instanceof Error ? emailError.message : "Unknown error",
+            error: emailError instanceof Error ? emailError.message : String(emailError),
           });
         }
 
         if (owner.phone) {
           try {
-            const smsMessage = `Payment of Ksh. ${umsPayData.TransactionAmount} by ${tenant.name} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDate}. Ref: ${umsPayData.TransactionReceipt || transaction_request_id}`;
+            const smsText = `Payment of Ksh. ${umsPayData.TransactionAmount} by ${tenant.name} for ${
+              property.name
+            } (${payment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${mpesaCode}`;
             await sendWelcomeSms({
               phone: owner.phone,
-              message: smsMessage.slice(0, 160),
+              message: smsText.slice(0, 160),
             });
             logger.info("Payment confirmation SMS sent to property owner", {
               ownerId: property.ownerId,
               phone: owner.phone,
-              mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
+              mpesaCode,
             });
           } catch (smsError) {
             logger.error("Failed to send payment confirmation SMS to property owner", {
               ownerId: property.ownerId,
               phone: owner.phone,
-              error: smsError instanceof Error ? smsError.message : "Unknown error",
+              error: smsError instanceof Error ? smsError.message : String(smsError),
             });
           }
         }
@@ -391,7 +393,7 @@ export async function POST(request: NextRequest) {
       message: errorMessage || "Transaction status retrieved",
       status,
       transaction: {
-        mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
+        mpesaCode,
         amount: umsPayData.TransactionAmount,
         status,
         paymentDate: umsPayData.TransactionDate,
@@ -409,17 +411,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
