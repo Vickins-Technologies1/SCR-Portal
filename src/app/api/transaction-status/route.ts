@@ -78,31 +78,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transacti
       body: JSON.stringify(requestBody),
     });
 
-    const statusData = await statusRes.json();
-    logger.debug("Transaction status response", { statusData, userId });
-
     if (!statusRes.ok) {
-      logger.error("Status check failed", { status: statusRes.status, response: statusData, userId });
+      const errorData = await statusRes.json();
+      logger.error("Status check failed", { status: statusRes.status, response: errorData, userId });
       return NextResponse.json(
-        { success: false, message: statusData.errorMessage || "Failed to check transaction status" },
+        { success: false, message: errorData.errorMessage || "Failed to check transaction status" },
         { status: statusRes.status }
       );
     }
 
-    // Store the transaction status in the database
-    const { db }: { db: Db } = await connectToDatabase();
-    const terminalStatusMap: Record<string, "completed" | "failed" | "cancelled"> = {
+    const statusData = await statusRes.json();
+    logger.debug("Transaction status response", { statusData, userId });
+
+    // ────────────────────────────────────────────────────────────────
+    // Fix: explicitly allow "pending" in the type
+    // ────────────────────────────────────────────────────────────────
+    const terminalStatusMap: Record<string, "completed" | "failed" | "cancelled" | "pending"> = {
       Completed: "completed",
       Failed: "failed",
       Cancelled: "cancelled",
       Timeout: "failed",
+      // Pending is explicitly allowed (fallback case)
     };
-    const normalizedStatus = terminalStatusMap[statusData.TransactionStatus || ""] || "pending";
+
+    const normalizedStatus: "completed" | "failed" | "cancelled" | "pending" =
+      terminalStatusMap[statusData.TransactionStatus || ""] ?? "pending";
+
     if (normalizedStatus !== "pending") {
       const transactionDate = statusData.TransactionDate
         ? new Date(statusData.TransactionDate).toISOString()
         : new Date().toISOString();
+
       try {
+        const { db }: { db: Db } = await connectToDatabase();
+
         const updateResult = await db.collection("payments").updateOne(
           { transactionId: transactionRequestId },
           {
@@ -113,8 +122,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transacti
             },
           }
         );
+
         if (updateResult.matchedCount === 0) {
-          logger.warn("No payment record matched when syncing transaction status", { transactionRequestId });
+          logger.warn("No payment record matched when syncing transaction status", {
+            transactionRequestId,
+          });
         }
       } catch (dbError) {
         logger.error("Unable to sync transaction status to payments collection", {
@@ -123,6 +135,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transacti
         });
       }
     }
+
+    // Log status check (moved after possible DB update)
+    const { db }: { db: Db } = await connectToDatabase();
     await db.collection("payment_status_logs").insertOne({
       userId,
       transactionRequestId,
@@ -156,6 +171,3 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transacti
     );
   }
 }
-
-
-
