@@ -6,6 +6,7 @@ import { validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { sendConfirmationEmail } from "../../../../../lib/email";
 import { sendWelcomeSms } from "../../../../../lib/sms";
+import { nanoid } from 'nanoid';
 
 interface Tenant {
   _id: ObjectId;
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Generate a unique transaction ID
-    const transactionId = `MANUAL-${new ObjectId().toString()}`;
+   const transactionId = `MANUAL-${nanoid(12)}`;
 
     // Create payment record
     const payment: Payment = {

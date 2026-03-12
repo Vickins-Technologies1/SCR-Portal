@@ -3,6 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
+const summarizeAvailability = (unitTypes: any[]) => {
+  const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  const totalVacant = unitTypes.reduce((sum, unit) => sum + (unit.vacant ?? 0), 0);
+  const totalOccupied = Math.max(0, totalUnits - totalVacant);
+  const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
+  return { totalUnits, totalVacant, totalOccupied, occupancyRate };
+};
+
 export async function GET(request: NextRequest) {
   console.log("Handling GET /api/public-properties");
 
@@ -26,7 +34,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, properties: [] });
     }
 
-    const listingIds = listings.map(l => l._id.toString());
+    const propertyIdByListingId = new Map<string, string>();
+    const propertyIds = Array.from(
+      new Set(
+        listings.map((listing) => {
+          const listingId = listing._id.toString();
+          const propertyId = listing.originalPropertyId
+            ? listing.originalPropertyId.toString()
+            : listingId;
+          propertyIdByListingId.set(listingId, propertyId);
+          return propertyId;
+        })
+      )
+    );
 
     // Fetch tenants and group by propertyId AND unitType
     const tenantGroups = await db
@@ -34,7 +54,7 @@ export async function GET(request: NextRequest) {
       .aggregate([
         {
           $match: {
-            propertyId: { $in: listingIds }
+            propertyId: { $in: propertyIds }
           }
         },
         {
@@ -56,28 +76,30 @@ export async function GET(request: NextRequest) {
     }, {});
 
     // Fetch owners
-    const ownerIds = [...new Set(listings.map(l => l.ownerId))].filter(Boolean);
+    const ownerIds = [...new Set(listings.map((l) => l.ownerId))].filter(Boolean);
     const owners = ownerIds.length > 0
       ? await db
           .collection("propertyOwners")
-          .find({ _id: { $in: ownerIds.map(id => new ObjectId(id)) } })
+          .find({ _id: { $in: ownerIds.map((id) => new ObjectId(id)) } })
           .toArray()
       : [];
 
     const ownerMap = Object.fromEntries(
-      owners.map(o => [o._id.toString(), { email: o.email, phone: o.phone }])
+      owners.map((o) => [o._id.toString(), { email: o.email, phone: o.phone }])
     );
 
     const enriched = listings
-      .map(listing => {
+      .map((listing) => {
         const listingId = listing._id.toString();
-        const occupiedByType = occupiedMap[listingId] || {};
+        const propertyId = propertyIdByListingId.get(listingId) || listingId;
+        const occupiedByType = occupiedMap[propertyId] || {};
 
         const unitTypes = (listing.unitTypes || []).map((u: any) => ({
           ...u,
           vacant: Math.max(0, u.quantity - (occupiedByType[u.type] || 0)),
         }));
 
+        const availability = summarizeAvailability(unitTypes);
         const minPriceInListing = Math.min(...unitTypes.map((u: any) => u.price));
 
         const matchesUnit = !unitType || unitTypes.some((u: any) => u.type === unitType);
@@ -103,6 +125,8 @@ export async function GET(request: NextRequest) {
           adExpiration: listing.adExpiration?.toISOString(),
           createdAt: listing.createdAt.toISOString(),
           updatedAt: listing.updatedAt.toISOString(),
+          availability,
+          owner: ownerMap[listing.ownerId] || null,
         };
       })
       .filter(Boolean);
@@ -115,7 +139,7 @@ export async function GET(request: NextRequest) {
       { success: true, properties: sorted },
       {
         status: 200,
-        headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30" },
+        headers: { "Cache-Control": "no-store" },
       }
     );
   } catch (error) {

@@ -18,6 +18,7 @@ interface Payment {
   type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference?: string;
+  mpesaCode?: string | null;
 }
 
 interface Tenant {
@@ -331,7 +332,7 @@ export async function POST(request: NextRequest) {
         api_key: umsPayApiKey,
         email: umsPayEmail,
         amount,
-        msisdn: normalizedPhone, // Use normalized phone number
+        msisdn: normalizedPhone,
         reference,
         account_id: umsPayAccountId,
       },
@@ -361,18 +362,20 @@ export async function POST(request: NextRequest) {
 
     // Store pending payment
     const transactionId = umsPayData.transaction_request_id!;
+    const nowIso = new Date().toISOString();
     const payment: Payment = {
       _id: new ObjectId(),
       tenantId,
       amount: Number(amount),
       propertyId,
-      paymentDate: new Date("2025-08-07T14:49:00+03:00").toISOString(),
+      paymentDate: nowIso,
       transactionId,
       status: "pending",
-      createdAt: new Date("2025-08-07T14:49:00+03:00").toISOString(),
+      createdAt: nowIso,
       type,
       phoneNumber: normalizedPhone,
       reference,
+      mpesaCode: null,
     };
 
     await db.collection<Payment>("payments").insertOne(payment);
@@ -411,3 +414,7 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
+
+

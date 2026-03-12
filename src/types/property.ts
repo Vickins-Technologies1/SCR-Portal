@@ -12,6 +12,13 @@ export interface UnitType {
   vacant?: number; // Optional field to track vacancies in real-time
 }
 
+export interface AvailabilitySummary {
+  totalUnits: number;
+  totalVacant: number;
+  totalOccupied: number;
+  occupancyRate: number;
+}
+
 export interface Tenant {
   _id: string;
   name: string;
@@ -68,4 +75,5 @@ export interface Listing {
   status: "Active" | "Inactive" | "Expired";
   createdAt: string;
   updatedAt?: string;
+  availability?: AvailabilitySummary;
 }

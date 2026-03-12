@@ -35,6 +35,15 @@ const FACILITIES = [
   'Elevator', 'Air Conditioning', 'Heating', 'Balcony', 'Garden',
 ];
 
+
+const summarizeAvailability = (unitTypes: UnitType[]) => {
+  const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  const totalVacant = unitTypes.reduce((sum, unit) => sum + (unit.vacant ?? 0), 0);
+  const totalOccupied = Math.max(0, totalUnits - totalVacant);
+  const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
+  return { totalUnits, totalVacant, totalOccupied, occupancyRate };
+};
+
 async function validateCsrf(req: NextRequest): Promise<boolean> {
   const token = req.headers.get('X-CSRF-Token');
   const cookieToken = (await cookies()).get('csrf-token')?.value;
@@ -97,6 +106,8 @@ export async function GET(request: NextRequest) {
           status: listing.status,
           createdAt: listing.createdAt.toISOString(),
           updatedAt: listing.updatedAt.toISOString(),
+          availability: summarizeAvailability(unitTypes),
+          occupiedByType,
         };
       })
     );

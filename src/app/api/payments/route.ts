@@ -20,6 +20,8 @@ interface Payment {
   date: string;
   tenantName: string;
   unitType?: string;
+  mpesaCode?: string;
+  isManual?: boolean;
 }
 
 interface PaymentDb {
@@ -37,6 +39,7 @@ interface PaymentDb {
   date: string;
   tenantName?: string;
   unitType?: string;
+  mpesaCode?: string;
 }
 
 interface Tenant {
@@ -286,6 +289,16 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         },
         { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
         {
+          $addFields: {
+            isManual: {
+              $regexMatch: {
+                input: { $ifNull: ["$transactionId", ""] },
+                regex: "^MANUAL-",
+              },
+            },
+          },
+        },
+        {
           $project: {
             _id: { $toString: "$_id" },
             tenantId: { $ifNull: ["$tenantId", null] },
@@ -293,12 +306,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             propertyId: 1,
             paymentDate: 1,
             transactionId: 1,
+            mpesaCode: 1,
             status: 1,
             type: 1,
             phoneNumber: 1,
             reference: 1,
             tenantName: { $ifNull: ["$tenant.name", "Unknown"] },
             date: "$paymentDate",
+            isManual: 1,
+            createdAt: 1,
             unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },
           },
         },
@@ -480,3 +496,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
+

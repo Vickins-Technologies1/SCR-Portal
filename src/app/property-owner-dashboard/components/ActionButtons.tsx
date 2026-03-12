@@ -1,18 +1,20 @@
 // src/app/property-owner-dashboard/components/ActionButtons.tsx
 import React from "react";
-import { DollarSign, Edit, LogIn, Trash2 } from "lucide-react";
+import { DollarSign, FileText, LogIn, Trash2 } from "lucide-react";
 
 interface ActionButtonsProps {
   onRecordPayment: () => void;
   onEdit: () => void;
   onImpersonate: () => void;
   onDelete: () => void;
+  onGenerateReport: () => void;
 }
 
 export default function ActionButtons({
   onRecordPayment,
   onImpersonate,
   onDelete,
+  onGenerateReport,
 }: ActionButtonsProps) {
   return (
     <div className="flex flex-wrap gap-4 pt-8 border-t border-slate-200 mt-10">
@@ -22,6 +24,14 @@ export default function ActionButtons({
       >
         <DollarSign className="h-6 w-6" />
         Record Payment
+      </button>
+
+      <button
+        onClick={onGenerateReport}
+        className="flex items-center gap-3 px-7 py-4 bg-gradient-to-r from-indigo-500 to-slate-900 text-white font-semibold rounded-xl hover:from-indigo-600 hover:to-slate-950 transform hover:scale-105 transition-all shadow-lg"
+      >
+        <FileText className="h-6 w-6" />
+        Generate Report
       </button>
 
       <button

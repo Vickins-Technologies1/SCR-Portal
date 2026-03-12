@@ -2,16 +2,19 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { MapPin, DollarSign, Pencil, Trash2 } from "lucide-react";
-import { Listing } from "@/types/property";   // ← Updated to Listing
+import { Listing } from "@/types/property";
+import { ensureAvailability } from "@/lib/availability";
 
 interface PropertyCardProps {
-  property: Listing; // ← Updated
+  property: Listing;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
 export default function PropertyCard({ property, onView, onEdit, onDelete }: PropertyCardProps) {
+  const availability = ensureAvailability(property);
+  const vacancyLabel = `${availability.totalVacant} vacant unit${availability.totalVacant === 1 ? "" : "s"}`;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -44,18 +47,20 @@ export default function PropertyCard({ property, onView, onEdit, onDelete }: Pro
             </span>
           </div>
 
-          <div>
-            <p className="font-medium text-slate-700 mb-1">Available Units:</p>
-            <div className="flex flex-wrap gap-2">
-              {property.unitTypes.map((u, idx) => (
-                <span
-                  key={idx}
-                  className="bg-blue-50 text-[#012a4a] px-2.5 py-1 rounded-md text-xs font-medium"
-                >
-                  {u.type} (x{u.vacant ?? 0})
-                </span>
-              ))}
+          <div className="rounded-xl border border-slate-200/20 bg-slate-50/40 px-3 py-2 text-xs text-slate-500">
+            <div className="flex items-center justify-between">
+              <span>Vacant units</span>
+              <span className="font-semibold text-slate-900">{vacancyLabel}</span>
             </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+              <span
+                style={{ width: `${Math.min(100, availability.occupancyRate)}%` }}
+                className="block h-full rounded-full bg-gradient-to-r from-[#0ea5e9] via-[#22d3ee] to-[#6366f1]"
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Occupied {availability.totalOccupied} of {availability.totalUnits} units ({availability.occupancyRate}% occupancy)
+            </p>
           </div>
 
           <div className="text-xs text-slate-500">

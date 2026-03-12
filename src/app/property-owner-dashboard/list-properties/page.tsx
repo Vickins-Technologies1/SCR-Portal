@@ -14,7 +14,8 @@ import PropertyModal from "./PropertyModal";
 import ListingFormModal from "./ListingFormModal";
 import DeleteConfirmationModal from "./DeleteConfirmationModal";
 
-import { Property, Listing } from "@/types/property";  // ← Updated imports
+import { Property, Listing } from "@/types/property";
+import { ensureAvailability } from "@/lib/availability";  // ← Updated imports
 
 interface SortConfig {
   key: "name" | "address" | "createdAt" | "status";
@@ -148,6 +149,32 @@ export default function ListPropertiesPage() {
     });
     return sorted;
   }, [listings, sortConfig]);
+  const listingStats = useMemo(() => {
+    const totals = listings.reduce(
+      (acc, listing) => {
+        const availability = ensureAvailability(listing);
+        acc.totalUnits += availability.totalUnits;
+        acc.totalVacant += availability.totalVacant;
+        return acc;
+      },
+      { totalUnits: 0, totalVacant: 0 }
+    );
+    return {
+      activeCount: listings.filter((listing) => listing.status === "Active").length,
+      totalUnits: totals.totalUnits,
+      totalVacant: totals.totalVacant,
+      occupancyRate: totals.totalUnits
+        ? Math.round(((totals.totalUnits - totals.totalVacant) / totals.totalUnits) * 100)
+        : 0,
+    };
+  }, [listings]);
+  const listingStatCards = [
+    { label: "Active listings", value: listingStats.activeCount, detail: `${listings.length} total` },
+    { label: "Total units", value: listingStats.totalUnits, detail: "Across all listings" },
+    { label: "Vacant units", value: listingStats.totalVacant, detail: "Live vacancies" },
+    { label: "Occupancy", value: `${listingStats.occupancyRate}%`, detail: "Based on reported units" },
+  ];
+
 
   const handleSort = (key: SortConfig["key"]) => {
     setSortConfig((c) => ({
@@ -195,6 +222,15 @@ export default function ListPropertiesPage() {
               List Property
             </button>
           </motion.div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
+            {listingStatCards.map((stat) => (
+              <div key={stat.label} className="rounded-2xl border border-slate-200/20 bg-white/80 p-5 shadow-sm">
+                <p className="text-xs uppercase tracking-widest text-slate-500">{stat.label}</p>
+                <p className="text-2xl font-semibold text-slate-900 mt-2">{stat.value}</p>
+                <p className="text-xs text-slate-500">{stat.detail}</p>
+              </div>
+            ))}
+          </div>
 
           {error && (
             <motion.div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 shadow-sm">
@@ -322,3 +358,8 @@ export default function ListPropertiesPage() {
     </div>
   );
 }
+
+
+
+
+

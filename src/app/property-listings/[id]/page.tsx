@@ -1,324 +1,188 @@
-"use client";
-
-import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Phone, Star, ChevronLeft, ChevronRight, Maximize2, X, Menu } from "lucide-react";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-
-interface UnitType {
-  type: string;
-  price: number;
-  deposit: number;
-  quantity: number;
-  vacant?: number;
-}
-
-interface PropertyListing {
-  _id: string;
-  name: string;
-  address: string;
-  unitTypes: UnitType[];
-  status: "Active" | "Inactive";
-  createdAt: string;
-  updatedAt: string;
-  images: string[];
-  isAdvertised: boolean;
-  adExpiration?: string;
-  description?: string;
-  facilities?: string[];
-}
-
-interface Owner {
-  email: string;
-  phone: string;
-}
+import { MapPin, DollarSign, Phone, Mail } from "lucide-react";
+import { Listing } from "@/types/property";
+import { ensureAvailability } from "@/lib/availability";
+import ImageGallery from "./ImageGallery";
 
 interface PropertyResponse {
   success: boolean;
-  property: PropertyListing;
-  owner: Owner | null;
-  message?: string;
+  property?: Listing;
+  owner?: { email?: string; phone?: string } | null;
 }
 
-const Footer: React.FC = () => {
-  return (
-    <footer className="bg-gradient-to-r from-[#1e3a8a] to-[#0f172a] text-white py-12">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-          <div>
-            <h3 className="text-xl font-semibold mb-4 tracking-tight">About Us</h3>
-            <p className="text-sm text-gray-200 leading-relaxed">
-              Sorana Property Managers connects property owners with tenants, offering premium rentals with unmatched quality.
-            </p>
-          </div>
-          <div>
-            <h3 className="text-xl font-semibold mb-4 tracking-tight">Quick Links</h3>
-            <ul className="text-sm space-y-3">
-              <li><Link href="/" className="hover:text-[#34d399]">Home</Link></li>
-              <li><Link href="/property-listings" className="hover:text-[#34d399]">Properties</Link></li>
-              <li><Link href="/contact" className="hover:text-[#34d399]">Contact</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h3 className="text-xl font-semibold mb-4 tracking-tight">Contact</h3>
-            <p className="text-sm text-gray-200">Email: support@soranapropertymanagers.com</p>
-            <p className="text-sm text-gray-200 mt-2">Phone: +254 117 649 850</p>
-          </div>
-        </div>
-        <div className="mt-10 text-center text-sm text-gray-300">
-          © {new Date().getFullYear()} Sorana Property Managers Ltd.
-        </div>
-        <div className="mt-2 text-center text-xs text-gray-400">
-          Created by <a href="https://vickins-technologies.vercel.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
-        </div>
-      </div>
-    </footer>
-  );
-};
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
-export default function PropertyDetails({ params }: { params: Promise<{ id: string }> }) {
-  const [property, setProperty] = useState<PropertyListing | null>(null);
-  const [owner, setOwner] = useState<Owner | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+async function getProperty(id: string): Promise<PropertyResponse> {
+  const url = new URL("/api/public-properties/" + id, baseUrl).toString();
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return { success: false };
+  return res.json();
+}
 
-  useEffect(() => {
-    async function fetchProperty() {
-      try {
-        const { id } = await params;
-        const res = await fetch(`/api/public-properties/${id}`);
-        const data: PropertyResponse = await res.json();
-        if (data.success) {
-          setProperty(data.property);
-          setOwner(data.owner);
-        } else {
-          setError(data.message || "Property not found");
-        }
-      } catch (err) {
-        setError("Failed to connect");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchProperty();
-  }, [params]);
+export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const data = await getProperty(id);
+  if (!data.success || !data.property) {
+    notFound();
+  }
 
-  const images = property?.images.length ? property.images : ["/logo.png"];
-  const isSingleImage = images.length === 1;
+  const property = data.property;
+  const owner = data.owner;
+  const availability = ensureAvailability(property);
+  const images = property.images && property.images.length ? property.images : ["/logo.png"];
 
-  const handlePrevImage = () => setCurrentImageIndex((i) => (i > 0 ? i - 1 : images.length - 1));
-  const handleNextImage = () => setCurrentImageIndex((i) => (i < images.length - 1 ? i + 1 : 0));
-
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-10 w-10 border-t-4 border-[#34d399] rounded-full"></div></div>;
-  if (error || !property) return <div className="min-h-screen flex items-center justify-center text-red-600 text-xl">{error || "Not found"}</div>;
+  const unitTypes = property.unitTypes ?? [];
+  const minPrice = unitTypes.length ? Math.min(...unitTypes.map((unit) => unit.price)) : 0;
+  const maxPrice = unitTypes.length ? Math.max(...unitTypes.map((unit) => unit.price)) : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white py-6 shadow-sm">
-        <div className="container mx-auto px-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Logo" width={48} height={48} />
-            <h1 className="text-2xl font-bold text-[#1e3a8a]">Smart Choice Rentals</h1>
-          </div>
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden">
-            {isMobileMenuOpen ? <X /> : <Menu />}
-          </button>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-12">
-        <Link href="/property-listings" className="inline-flex items-center text-[#1e3a8a] hover:text-[#2563eb] mb-8">
-          <ChevronLeft className="h-5 w-5 mr-1" /> Back to Listings
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <Link href="/property-listings" className="text-sm font-medium text-cyan-700 hover:text-cyan-900">
+          Back to listings
         </Link>
 
-        <motion.div className="bg-white rounded-2xl shadow-lg p-6 lg:p-10" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Image Gallery */}
-            <div className="space-y-4">
-              <div className="relative h-96 rounded-xl overflow-hidden shadow-lg">
-                <Image src={images[currentImageIndex]} alt={property.name} fill className="object-cover" />
-                <button onClick={() => setIsFullScreen(true)} className="absolute bottom-4 right-4 bg-white/90 p-2.5 rounded-full shadow hover:bg-white">
-                  <Maximize2 className="h-5 w-5" />
-                </button>
-                {property.isAdvertised && (
-                  <div className="absolute top-4 left-4 bg-[#012a4a] text-white px-4 py-1.5 rounded-full text-sm font-medium flex items-center">
-                    <Star className="h-4 w-4 mr-1" /> Featured
-                  </div>
-                )}
+        <section className="mt-6 grid gap-8 lg:grid-cols-[2fr,1fr]">
+          <div className="space-y-6">
+            <ImageGallery images={images} title={property.name} />
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Property</p>
+                  <h1 className="text-3xl font-semibold text-slate-900">{property.name}</h1>
+                  <p className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                    <MapPin size={16} /> {property.address}
+                  </p>
+                </div>
+                <span
+                  className={
+                    "mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-widest " +
+                    (property.status === "Active"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                      : "border-slate-300 bg-slate-100 text-slate-600")
+                  }
+                >
+                  {property.status}
+                </span>
               </div>
 
-              {!isSingleImage && (
-                <div className="flex justify-center items-center gap-4">
-                  <button onClick={handlePrevImage} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><ChevronLeft className="h-6 w-6" /></button>
-                  <span className="text-sm font-medium">{currentImageIndex + 1} / {images.length}</span>
-                  <button onClick={handleNextImage} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><ChevronRight className="h-6 w-6" /></button>
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-widest text-slate-500">Price range</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">
+                    {minPrice ? "Ksh " + minPrice.toLocaleString() + " - " + maxPrice.toLocaleString() : "On request"}
+                  </p>
                 </div>
-              )}
-            </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-widest text-slate-500">Vacant units</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">{availability.totalVacant}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs uppercase tracking-widest text-slate-500">Occupancy</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">{availability.occupancyRate}%</p>
+                </div>
+              </div>
 
-            {/* Details */}
-            <div className="space-y-8">
-              <div>
-                <h1 className="text-4xl font-bold text-[#012a4a] mb-3">{property.name}</h1>
-                <div className="flex items-center text-gray-600 mb-4">
-                  <MapPin className="h-5 w-5 mr-2 text-[#34d399]" />
-                  <span className="text-lg">{property.address}</span>
-                </div>
-                <p className="text-3xl font-bold text-[#34d399]">
-                  Starting from Ksh {Math.min(...property.unitTypes.map(u => u.price)).toLocaleString()}/month
+              <div className="mt-6">
+                <p className="text-xs uppercase tracking-widest text-slate-500">Description</p>
+                <p className="mt-3 text-sm text-slate-700 leading-relaxed">
+                  {property.description || "No additional description has been added yet."}
                 </p>
               </div>
+            </div>
 
-              {/* Unit Types & Availability */}
-              <div>
-                <h3 className="text-2xl font-semibold text-[#012a4a] mb-4">Unit Types & Availability</h3>
-                <div className="space-y-4">
-                  {property.unitTypes.map((unit, i) => {
-                    const available = unit.vacant ?? unit.quantity;
-                    const occupied = unit.quantity - available;
-                    const percentage = unit.quantity > 0 ? Math.round((available / unit.quantity) * 100) : 0;
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-slate-900">Unit mix</h2>
+                <p className="text-sm text-slate-500">Live availability</p>
+              </div>
+              <div className="mt-4 space-y-4">
+                {unitTypes.map((unit, idx) => (
+                  <div
+                    key={property._id + "-" + unit.type + "-" + idx}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-base font-semibold text-slate-900">{unit.type}</p>
+                      <span className="text-xs text-slate-500">{unit.uniqueType || "Standard"}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      <span className="flex items-center gap-1">
+                        <DollarSign size={14} /> {unit.price.toLocaleString()} / mo
+                      </span>
+                      <span>{unit.deposit ? "Deposit: " + unit.deposit.toLocaleString() : "No deposit"}</span>
+                      <span>Quantity: {unit.quantity}</span>
+                      <span>Vacant: {unit.vacant ?? unit.quantity}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-                    return (
-                      <div key={i} className="border border-gray-200 rounded-xl p-5 bg-gray-50">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <span className="text-xl font-bold text-gray-800">{unit.type}</span>
-                            <span className="ml-4 text-lg text-gray-600">
-                              Ksh {unit.price.toLocaleString()}/mo
-                            </span>
-                          </div>
-                          <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${
-                            available > 0
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}>
-                            {available > 0
-                              ? `${available} Vacant`
-                              : "Fully Occupied"}
-                          </span>
-                        </div>
-
-                        <div className="text-sm text-gray-600 mb-3">
-                          <span>Total units: {unit.quantity}</span>
-                          {occupied > 0 && <span className="ml-4">• {occupied} occupied</span>}
-                        </div>
-
-                        <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-green-500 to-emerald-600 transition-all"
-                            style={{ width: `${100 - percentage}%` }}
-                          />
-                        </div>
-                        <div className="text-xs text-gray-500 text-right mt-1">
-                          {percentage}% available
-                        </div>
-                      </div>
-                    );
-                  })}
+          <aside className="space-y-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">At a glance</h3>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between text-xs uppercase tracking-widest text-slate-500">
+                  Occupancy
+                  <span className="text-sm font-semibold text-slate-900">{availability.occupancyRate}%</span>
+                </div>
+                <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <span
+                    style={{ width: Math.min(100, availability.occupancyRate) + "%" }}
+                    className="block h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500"
+                  />
                 </div>
               </div>
 
-              {/* Facilities */}
-              {property.facilities?.length ? (
-                <div>
-                  <h3 className="text-xl font-semibold text-[#012a4a] mb-3">Facilities</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {property.facilities.map((f, i) => (
-                      <span key={i} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-full text-sm font-medium">
-                        {f}
+              {property.facilities && property.facilities.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs uppercase tracking-widest text-slate-500">Facilities</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+                    {property.facilities.map((facility) => (
+                      <span key={facility} className="rounded-full border border-slate-200 px-3 py-1">
+                        {facility}
                       </span>
                     ))}
                   </div>
                 </div>
-              ) : null}
-
-              {/* Description */}
-              {property.description && (
-                <div>
-                  <h3 className="text-xl font-semibold text-[#012a4a] mb-3">Description</h3>
-                  <p className="text-gray-700 leading-relaxed">{property.description}</p>
-                </div>
               )}
-
-              {/* Contact */}
-              <div className="border-t pt-6">
-                <h3 className="text-xl font-semibold text-[#012a4a] mb-4">Contact the Owner</h3>
-                {owner ? (
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <a
-                      href={`https://wa.me/${owner.phone.replace(/[^0-9]/g, "")}?text=Hi! I'm interested in ${encodeURIComponent(property.name)} at ${encodeURIComponent(property.address)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-3 px-6 py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 transition shadow-lg font-medium"
-                    >
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.297-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.263c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
-                      </svg>
-                      Message on WhatsApp
-                    </a>
-                    <a href={`tel:${owner.phone}`} className="flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-lg font-medium">
-                      <Phone className="w-6 h-6" /> Call Owner
-                    </a>
-                  </div>
-                ) : (
-                  <p className="text-gray-500 italic">Contact details not available</p>
-                )}
-              </div>
             </div>
-          </div>
-        </motion.div>
-      </main>
 
-      {/* Fullscreen Image Modal */}
-      <AnimatePresence>
-        {isFullScreen && (
-          <motion.div
-            className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center p-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsFullScreen(false)}
-          >
-            <motion.div
-              className="relative max-w-5xl w-full"
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Image
-                src={images[currentImageIndex]}
-                alt="Full view"
-                width={1400}
-                height={900}
-                className="rounded-xl shadow-2xl"
-              />
-              <button
-                onClick={() => setIsFullScreen(false)}
-                className="absolute top-4 right-4 bg-white text-gray-800 p-3 rounded-full shadow-lg hover:bg-gray-100"
-              >
-                <X className="h-6 w-6" />
-              </button>
-              {!isSingleImage && (
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
-                  <button onClick={handlePrevImage} className="bg-white/80 p-3 rounded-full hover:bg-white">
-                    <ChevronLeft className="h-6 w-6" />
-                  </button>
-                  <button onClick={handleNextImage} className="bg-white/80 p-3 rounded-full hover:bg-white">
-                    <ChevronRight className="h-6 w-6" />
-                  </button>
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Contact owner</h3>
+              {owner ? (
+                <div className="mt-4 space-y-3 text-sm text-slate-700">
+                  {owner.email && (
+                    <p className="flex items-center gap-2">
+                      <Mail size={14} />
+                      <a className="text-cyan-700 hover:text-cyan-900" href={"mailto:" + owner.email}>
+                        {owner.email}
+                      </a>
+                    </p>
+                  )}
+                  {owner.phone && (
+                    <p className="flex items-center gap-2">
+                      <Phone size={14} />
+                      <a className="text-cyan-700 hover:text-cyan-900" href={"tel:" + owner.phone}>
+                        {owner.phone}
+                      </a>
+                    </p>
+                  )}
                 </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">Owner details unavailable.</p>
               )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <Footer />
+              <p className="mt-4 text-sm text-slate-600">
+                Reach out to schedule a viewing or to learn more about current availability.
+              </p>
+            </div>
+          </aside>
+        </section>
+      </div>
     </div>
   );
 }

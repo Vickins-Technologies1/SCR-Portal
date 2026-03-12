@@ -3,6 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 
+const summarizeAvailability = (unitTypes: any[]) => {
+  const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  const totalVacant = unitTypes.reduce((sum, unit) => sum + (unit.vacant ?? 0), 0);
+  const totalOccupied = Math.max(0, totalUnits - totalVacant);
+  const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
+  return { totalUnits, totalVacant, totalOccupied, occupancyRate };
+};
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,12 +34,14 @@ export async function GET(
       return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
     }
 
-    const listingId = listing._id.toString();
+    const propertyId = listing.originalPropertyId
+      ? listing.originalPropertyId.toString()
+      : listing._id.toString();
 
-    // Count tenants for THIS listing only
+    // Count tenants for the underlying property
     const tenants = await db
       .collection("tenants")
-      .find({ propertyId: listingId })
+      .find({ propertyId })
       .toArray();
 
     const occupiedByType = tenants.reduce((acc: any, t) => {
@@ -51,8 +61,9 @@ export async function GET(
         { projection: { email: 1, phone: 1 } }
       );
 
+    const availability = summarizeAvailability(unitTypes);
     const formatted = {
-      _id: listingId,
+      _id: listing._id.toString(),
       name: listing.name,
       address: listing.address,
       description: listing.description,
@@ -64,6 +75,8 @@ export async function GET(
       status: listing.status,
       createdAt: listing.createdAt.toISOString(),
       updatedAt: listing.updatedAt.toISOString(),
+      availability,
+      occupiedByType,
     };
 
     return NextResponse.json(
@@ -72,7 +85,7 @@ export async function GET(
         property: formatted,
         owner: owner ? { email: owner.email, phone: owner.phone } : null,
       },
-      { status: 200 }
+      { status: 200, headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
     console.error("Error:", error);

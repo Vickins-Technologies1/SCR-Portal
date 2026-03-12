@@ -1,334 +1,350 @@
-// src/app/property-listings/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { motion, AnimatePresence, Variants } from "framer-motion";
-import { MapPin, DollarSign, Star, Filter, Menu, X } from "lucide-react";
-import Link from "next/link";
+import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-
-interface UnitType {
-  type: string;
-  price: number;
-  deposit: number;
-  quantity: number;
-  vacant?: number;
-}
-
-interface PropertyListing {
-  _id: string;
-  name: string;
-  address: string;
-  unitTypes: UnitType[];
-  status: "Active" | "Inactive";
-  createdAt: string;
-  updatedAt: string;
-  images: string[];
-  isAdvertised: boolean;
-  adExpiration?: string;
-  description?: string;
-  facilities?: string[];
-}
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { Building2, DollarSign, MapPin, Star } from "lucide-react";
+import { Listing, AvailabilitySummary } from "@/types/property";
+import { ensureAvailability } from "@/lib/availability";
 
 interface FilterState {
   unitType: string;
-  priceRange: [number, number];
-  isAdvertised: boolean | null;
+  minPrice: string;
+  maxPrice: string;
   location: string;
+  featured: "all" | "featured" | "standard";
 }
 
-const Footer: React.FC = () => {
-  return (
-    <footer className="bg-[#012a4a] text-white py-8">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div>
-            <h3 className="text-lg font-semibold mb-4">About Us</h3>
-            <p className="text-sm text-gray-200">
-              We connect property owners with tenants, offering premium rental properties across the region.
-            </p>
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
-            <ul className="text-sm space-y-2">
-              <li><Link href="/" className="hover:text-[#34d399] transition">Home</Link></li>
-              <li><Link href="/property-listings" className="hover:text-[#34d399] transition">Properties</Link></li>
-              <li><Link href="/contact" className="hover:text-[#34d399] transition">Contact</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Contact</h3>
-            <p className="text-sm text-gray-200">Email: support@soranapropertymanagers.com</p>
-            <p className="text-sm text-gray-200">Phone: +254 117 649 850</p>
-          </div>
-        </div>
-        <div className="mt-8 text-center text-sm text-gray-200">
-          © {new Date().getFullYear()} Sorana Property Managers Ltd. All rights reserved.
-        </div>
-        <div className="mt-2 text-center text-xs text-gray-400">
-          Developed by <a href="https://vickins-technologies.vercel.app/" target="_blank" rel="noopener noreferrer" className="hover:text-[#34d399] underline">Vickins Technologies</a>
-        </div>
-      </div>
-    </footer>
-  );
-};
-
 export default function PropertyListings() {
-  const [properties, setProperties] = useState<PropertyListing[]>([]);
-  const [filteredProperties, setFilteredProperties] = useState<PropertyListing[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     unitType: "",
-    priceRange: [0, Infinity],
-    isAdvertised: null,
+    minPrice: "",
+    maxPrice: "",
     location: "",
+    featured: "all",
   });
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const fetchProperties = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (filters.unitType) params.set("unitType", filters.unitType);
-      if (filters.priceRange[0] > 0) params.set("minPrice", filters.priceRange[0].toString());
-      if (filters.priceRange[1] < Infinity) params.set("maxPrice", filters.priceRange[1].toString());
-      if (filters.location) params.set("location", filters.location);
-      if (filters.isAdvertised !== null) params.set("featured", filters.isAdvertised.toString());
-
-      const res = await fetch(`/api/public-properties?${params.toString()}`, {
-        next: { revalidate: 60 },
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        const sorted = (data.properties || []).sort((a: any, b: any) =>
-          a.isAdvertised === b.isAdvertised ? 0 : a.isAdvertised ? -1 : 1
-        );
-        setProperties(sorted);
-        setFilteredProperties(sorted);
-      } else {
-        setError(data.message || "No properties found.");
-      }
-    } catch (err) {
-      setError("Failed to connect to server.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filters]);
 
   useEffect(() => {
-    fetchProperties();
-  }, [fetchProperties]);
+    const fetchListings = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/public-properties", { cache: "no-store" });
+        const data = await res.json();
+        if (data.success) {
+          setListings(data.properties || []);
+        } else {
+          setError(data.message || "Failed to load listings.");
+        }
+      } catch {
+        setError("Failed to load listings.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const handleFilterChange = useCallback(
-    (key: keyof FilterState, value: any) => {
-      setFilters((prev) => ({ ...prev, [key]: value }));
-    },
-    []
-  );
-
-  const resetFilters = useCallback(() => {
-    setFilters({ unitType: "", priceRange: [0, Infinity], isAdvertised: null, location: "" });
-    setIsFilterOpen(false);
+    fetchListings();
   }, []);
 
-  const toggleMobileMenu = useCallback(() => {
-    setIsMobileMenuOpen((prev) => !prev);
-  }, []);
+  const unitTypeOptions = useMemo(() => {
+    const types = listings.flatMap((listing) => (listing.unitTypes ?? []).map((unit) => unit.type));
+    return Array.from(new Set(types)).sort();
+  }, [listings]);
 
-  const unitTypes = useMemo(
-    () => Array.from(new Set(properties.flatMap((p) => p.unitTypes.map((u) => u.type)))),
-    [properties]
-  );
+  const filteredListings = useMemo(() => {
+    const locationFilter = filters.location.trim().toLowerCase();
+    const min = filters.minPrice ? Number(filters.minPrice) : null;
+    const max = filters.maxPrice ? Number(filters.maxPrice) : null;
 
-  const filterVariants: Variants = {
-    hidden: { opacity: 0, height: 0, y: -20 },
-    visible: { opacity: 1, height: "auto", y: 0 },
-    exit: { opacity: 0, height: 0, y: -20 },
-  };
+    return listings.filter((listing) => {
+      const units = listing.unitTypes ?? [];
 
-  const inputVariants: Variants = {
-    hidden: { opacity: 0, y: 10 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: { delay: i * 0.1, duration: 0.3, ease: "easeOut" },
-    }),
+      if (filters.unitType && !units.some((unit) => unit.type === filters.unitType)) {
+        return false;
+      }
+
+      if (locationFilter) {
+        const addressMatch = listing.address?.toLowerCase().includes(locationFilter);
+        const nameMatch = listing.name?.toLowerCase().includes(locationFilter);
+        if (!addressMatch && !nameMatch) return false;
+      }
+
+      if (filters.featured === "featured" && !listing.isAdvertised) return false;
+      if (filters.featured === "standard" && listing.isAdvertised) return false;
+
+      if ((min !== null || max !== null) && units.length) {
+        const minListingPrice = Math.min(...units.map((unit) => unit.price));
+        if (min !== null && minListingPrice < min) return false;
+        if (max !== null && minListingPrice > max) return false;
+      } else if ((min !== null || max !== null) && !units.length) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [listings, filters]);
+
+  const sortedListings = useMemo(() => {
+    return [...filteredListings].sort((a, b) => {
+      if (a.isAdvertised === b.isAdvertised) {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      }
+      return a.isAdvertised ? -1 : 1;
+    });
+  }, [filteredListings]);
+
+  const hasActiveFilters =
+    filters.unitType ||
+    filters.minPrice ||
+    filters.maxPrice ||
+    filters.location ||
+    filters.featured !== "all";
+
+  const resetFilters = () => {
+    setFilters({
+      unitType: "",
+      minPrice: "",
+      maxPrice: "",
+      location: "",
+      featured: "all",
+    });
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-800">
-      <header className="bg-white text-gray-800 py-6 shadow-lg">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Image src="/logo.png" alt="Logo" width={52} height={52} className="object-contain" />
-            <h1 className="text-3xl md:text-4xl font-bold">Smart Choice Rentals</h1>
-          </div>
-          <div className="flex items-center">
-            <nav className="hidden md:flex gap-6">
-              <Link href="https://smartchoicerentalmanagement.com/" className="text-sm font-medium hover:text-[#012a4a] transition">
-                Home
-              </Link>
-              <Link href="https://www.smartchoicerentalmanagement.com/contact-us" className="text-sm font-medium hover:text-[#012a4a] transition">
-                Contact
-              </Link>
-            </nav>
-            <button
-              className="md:hidden p-2 text-gray-800 hover:text-[#012a4a] transition"
-              onClick={toggleMobileMenu}
-              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Sorana Property Managers</p>
+              <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Available listings</h1>
+              <p className="mt-2 text-sm text-slate-600">
+                Explore verified listings from property owners with live availability.
+              </p>
+            </div>
+            <Link
+              href="/contact"
+              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-400"
             >
-              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
+              Contact us
+            </Link>
           </div>
         </div>
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <motion.nav
-              className="md:hidden bg-white shadow-lg"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="container mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4">
-                <Link href="https://smartchoicerentalmanagement.com/" onClick={toggleMobileMenu} className="text-sm font-medium hover:text-[#012a4a]">
-                  Home
-                </Link>
-                <Link href="https://www.smartchoicerentalmanagement.com/contact-us" onClick={toggleMobileMenu} className="text-sm font-medium hover:text-[#012a4a]">
-                  Contact
-                </Link>
-              </div>
-            </motion.nav>
-          )}
-        </AnimatePresence>
       </header>
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <motion.div className="flex flex-col sm:flex-row justify-between items-center mb-8" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-          <h2 className="text-2xl md:text-3xl font-semibold text-[#012a4a]">Available Properties</h2>
-          <button onClick={() => setIsFilterOpen(!isFilterOpen)} className="mt-4 sm:mt-0 flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition">
-            <Filter className="h-5 w-5" />
-            {isFilterOpen ? "Close Filters" : "Open Filters"}
-          </button>
-        </motion.div>
-
-        <AnimatePresence>
-          {isFilterOpen && (
-            <motion.div className="bg-gray-50 p-6 rounded-lg shadow-md mb-8" variants={filterVariants} initial="hidden" animate="visible" exit="exit" transition={{ duration: 0.5 }}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: "Location", component: <input type="text" placeholder="e.g. Westlands" value={filters.location} onChange={(e) => handleFilterChange("location", e.target.value)} className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] text-sm" /> },
-                  { label: "Unit Type", component: (
-                    <select value={filters.unitType} onChange={(e) => handleFilterChange("unitType", e.target.value)} className="w-full border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] text-sm">
-                      <option value="">All Types</option>
-                      {unitTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  )},
-                  { label: "Price Range (Ksh/mo)", component: (
-                    <div className="flex gap-2">
-                      <input type="number" placeholder="Min" value={filters.priceRange[0] === 0 ? "" : filters.priceRange[0]} onChange={(e) => handleFilterChange("priceRange", [parseInt(e.target.value) || 0, filters.priceRange[1]])} className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm" />
-                      <input type="number" placeholder="Max" value={filters.priceRange[1] === Infinity ? "" : filters.priceRange[1]} onChange={(e) => handleFilterChange("priceRange", [filters.priceRange[0], parseInt(e.target.value) || Infinity])} className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm" />
-                    </div>
-                  )},
-                  { label: "Status", component: (
-                    <select value={filters.isAdvertised === null ? "all" : filters.isAdvertised ? "yes" : "no"} onChange={(e) => handleFilterChange("isAdvertised", e.target.value === "all" ? null : e.target.value === "yes")} className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm">
-                      <option value="all">All</option>
-                      <option value="yes">Featured Only</option>
-                      <option value="no">Non-Featured</option>
-                    </select>
-                  )},
-                ].map((f, i) => (
-                  <motion.div key={f.label} variants={inputVariants} initial="hidden" animate="visible" custom={i}>
-                    <label className="block text-sm font-medium text-[#012a4a] mb-2">{f.label}</label>
-                    {f.component}
-                  </motion.div>
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-slate-500">Filter listings</p>
+              <p className="text-sm text-slate-600">Keep it simple and narrow down the options.</p>
+            </div>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-600 hover:border-slate-400"
+            >
+              Reset
+            </button>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Location
+              <input
+                type="text"
+                value={filters.location}
+                onChange={(event) => setFilters((prev) => ({ ...prev, location: event.target.value }))}
+                placeholder="e.g. Westlands"
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Unit type
+              <select
+                value={filters.unitType}
+                onChange={(event) => setFilters((prev) => ({ ...prev, unitType: event.target.value }))}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              >
+                <option value="">All types</option>
+                {unitTypeOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
                 ))}
-              </div>
-              <motion.div className="mt-4 flex justify-end" variants={inputVariants} initial="hidden" animate="visible" custom={4}>
-                <button onClick={resetFilters} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition text-sm">
-                  Reset Filters
-                </button>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </select>
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Min price
+              <input
+                type="number"
+                value={filters.minPrice}
+                onChange={(event) => setFilters((prev) => ({ ...prev, minPrice: event.target.value }))}
+                placeholder="0"
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Max price
+              <input
+                type="number"
+                value={filters.maxPrice}
+                onChange={(event) => setFilters((prev) => ({ ...prev, maxPrice: event.target.value }))}
+                placeholder="50000"
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Featured
+              <select
+                value={filters.featured}
+                onChange={(event) =>
+                  setFilters((prev) => ({ ...prev, featured: event.target.value as FilterState["featured"] }))
+                }
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              >
+                <option value="all">All</option>
+                <option value="featured">Featured</option>
+                <option value="standard">Standard</option>
+              </select>
+            </label>
+          </div>
+        </section>
 
-        {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-8">{error}</div>}
+        {error && (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         {isLoading ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#012a4a]"></div>
-            <p className="mt-4 text-lg">Loading properties...</p>
+          <div className="flex justify-center py-16">
+            <div className="h-12 w-12 animate-spin rounded-full border-t-2 border-cyan-500" />
           </div>
-        ) : filteredProperties.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl shadow-md">
-            <p className="text-lg text-gray-600">No properties match your filters.</p>
-            <button onClick={resetFilters} className="mt-4 px-6 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a]">Clear Filters</button>
+        ) : sortedListings.length === 0 ? (
+          <div className="rounded-3xl border border-slate-200 bg-white px-6 py-16 text-center text-slate-600 shadow-sm">
+            <Building2 className="mx-auto mb-4 h-14 w-14 text-slate-300" />
+            <p className="text-lg font-medium">
+              {hasActiveFilters ? "No listings match your filters." : "No listings available yet."}
+            </p>
+            <p className="mt-1 text-sm">
+              {hasActiveFilters ? "Try adjusting the filters above." : "Check back soon as new properties are added."}
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="mt-4 inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-slate-600 hover:border-slate-400"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProperties.map((property, i) => (
-              <motion.div
-                key={property._id}
-                className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition relative group"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: i * 0.1 }}
-              >
-                {property.isAdvertised && (
-                  <div className="absolute top-3 right-3 bg-[#012a4a] text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center z-10">
-                    <Star className="h-4 w-4 mr-1" /> Featured
-                  </div>
-                )}
-                <div className="relative h-56">
-                  <Image
-                    src={property.images[0] || "/logo.png"}
-                    alt={property.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition"
-                  />
-                </div>
-                <div className="p-5">
-                  <h3 className="text-xl font-semibold text-[#012a4a] mb-2 truncate">{property.name}</h3>
-                  <div className="flex items-center text-gray-600 mb-2">
-                    <MapPin className="h-5 w-5 mr-1 text-[#012a4a]" />
-                    <span className="text-sm">{property.address}</span>
-                  </div>
-                  <div className="flex items-center text-gray-600 mb-2">
-                    <DollarSign className="h-5 w-5 mr-1 text-[#012a4a]" />
-                    <span className="text-sm">
-                      From Ksh {Math.min(...property.unitTypes.map(u => u.price)).toLocaleString()}/mo
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-500 mb-4">
-                    {property.unitTypes
-                      .filter(u => (u.vacant ?? u.quantity) > 0)
-                      .map(u => `${u.type} (${u.vacant ?? u.quantity} left)`)
-                      .join(" • ")}
-                  </div>
-                  <Link
-                    href={`/property-listings/${property._id}`}
-                    className="w-full bg-[#012a4a] text-white py-2 rounded-lg hover:bg-[#014a7a] transition text-center block text-sm font-medium"
-                  >
-                    View Details
-                  </Link>
-                </div>
-              </motion.div>
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {sortedListings.map((property, index) => (
+              <PropertyCard key={property._id} property={property} index={index} />
             ))}
           </div>
         )}
       </main>
-
-      <Footer />
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-      `}</style>
     </div>
   );
 }
+
+interface PropertyCardProps {
+  property: Listing;
+  index: number;
+}
+
+const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
+  const availability: AvailabilitySummary = ensureAvailability(property);
+  const propertyUnits = property.unitTypes ?? [];
+  const minPrice = propertyUnits.length ? Math.min(...propertyUnits.map((unit) => unit.price)) : 0;
+  const priceLabel = minPrice ? minPrice.toLocaleString() : "";
+  const vacancyCount = availability.totalVacant;
+  const vacancyBadge = vacancyCount + " vacant unit" + (vacancyCount === 1 ? "" : "s");
+  const statusTone =
+    property.status === "Active"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+      : property.status === "Inactive"
+      ? "border-amber-300 bg-amber-50 text-amber-700"
+      : "border-slate-300 bg-slate-100 text-slate-600";
+
+  const images = property.images && property.images.length ? property.images : ["/logo.png"];
+  const heroImage = images[0];
+  const sideImageOne = images[1] || images[0];
+  const sideImageTwo = images[2] || images[0];
+
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.05 }}
+      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg shadow-slate-200/60"
+    >
+      <div className="grid h-48 grid-cols-6 grid-rows-2 gap-2 p-4">
+        <div className="relative col-span-4 row-span-2 overflow-hidden rounded-2xl">
+          <Image src={heroImage} alt={property.name} fill className="object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/30 via-transparent to-transparent" />
+          {property.isAdvertised && (
+            <span className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-cyan-600/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white">
+              <Star size={12} /> Featured
+            </span>
+          )}
+        </div>
+        <div className="relative col-span-2 row-span-1 overflow-hidden rounded-2xl">
+          <Image src={sideImageOne} alt={property.name + " image"} fill className="object-cover" />
+        </div>
+        <div className="relative col-span-2 row-span-1 overflow-hidden rounded-2xl">
+          <Image src={sideImageTwo} alt={property.name + " image"} fill className="object-cover" />
+        </div>
+      </div>
+
+      <div className="space-y-4 px-6 pb-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">{property.name}</h2>
+            <p className="mt-1 flex items-center gap-2 text-sm text-slate-600">
+              <MapPin size={14} /> {property.address}
+            </p>
+          </div>
+          <span className={"rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-widest " + statusTone}>
+            {property.status}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
+          <div className="flex items-center gap-1">
+            <DollarSign size={16} />
+            {minPrice ? <span>From Ksh {priceLabel}/mo</span> : <span>Pricing on request</span>}
+          </div>
+          <span className="text-slate-500">{vacancyBadge}</span>
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+          {propertyUnits.map((unit, unitIndex) => (
+            <span
+              key={property._id + "-" + unit.type + "-" + (unit.uniqueType ?? "standard") + "-" + unitIndex}
+              className="rounded-full border border-slate-200 px-3 py-1"
+            >
+              {unit.type} - {unit.vacant ?? unit.quantity} left
+            </span>
+          ))}
+        </div>
+
+        <Link
+          href={"/property-listings/" + property._id}
+          className="block rounded-2xl bg-cyan-600 px-5 py-3 text-center text-sm font-semibold uppercase tracking-wider text-white transition hover:bg-cyan-500"
+        >
+          View details
+        </Link>
+      </div>
+    </motion.article>
+  );
+};

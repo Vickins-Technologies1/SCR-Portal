@@ -91,6 +91,38 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transacti
 
     // Store the transaction status in the database
     const { db }: { db: Db } = await connectToDatabase();
+    const terminalStatusMap: Record<string, "completed" | "failed" | "cancelled"> = {
+      Completed: "completed",
+      Failed: "failed",
+      Cancelled: "cancelled",
+      Timeout: "failed",
+    };
+    const normalizedStatus = terminalStatusMap[statusData.TransactionStatus || ""] || "pending";
+    if (normalizedStatus !== "pending") {
+      const transactionDate = statusData.TransactionDate
+        ? new Date(statusData.TransactionDate).toISOString()
+        : new Date().toISOString();
+      try {
+        const updateResult = await db.collection("payments").updateOne(
+          { transactionId: transactionRequestId },
+          {
+            $set: {
+              status: normalizedStatus,
+              mpesaCode: statusData.TransactionReceipt || transactionRequestId,
+              paymentDate: transactionDate,
+            },
+          }
+        );
+        if (updateResult.matchedCount === 0) {
+          logger.warn("No payment record matched when syncing transaction status", { transactionRequestId });
+        }
+      } catch (dbError) {
+        logger.error("Unable to sync transaction status to payments collection", {
+          error: dbError instanceof Error ? dbError.message : String(dbError),
+          transactionRequestId,
+        });
+      }
+    }
     await db.collection("payment_status_logs").insertOne({
       userId,
       transactionRequestId,
@@ -124,3 +156,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<Transacti
     );
   }
 }
+
+
+

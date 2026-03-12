@@ -1,4 +1,3 @@
-// src/app/api/expenses/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
@@ -22,7 +21,6 @@ export interface Expense {
   updatedAt: Date;
 }
 
-// Type used specifically for documents being inserted (no _id yet)
 type ExpenseInsert = Omit<Expense, "_id">;
 
 // ────────────────────────────────────────────────
@@ -84,7 +82,6 @@ export async function GET(req: NextRequest) {
       ownerId: new ObjectId(effectiveOwnerId),
     };
 
-    // Date filtering
     if (startDate || endDate) {
       query.date = {};
       if (startDate) query.date.$gte = new Date(startDate);
@@ -101,12 +98,10 @@ export async function GET(req: NextRequest) {
       query.date = { $gte: new Date(now.getFullYear(), 0, 1) };
     }
 
-    // Property filter
     if (propertyId && ObjectId.isValid(propertyId)) {
       query.propertyId = new ObjectId(propertyId);
     }
 
-    // Aggregation to include property name
     const expenses = await collection
       .aggregate([
         { $match: query },
@@ -131,7 +126,7 @@ export async function GET(req: NextRequest) {
             propertyName: { $ifNull: ["$property.name", null] },
             propertyId: { $ifNull: [{ $toString: "$propertyId" }, null] },
             notes: 1,
-            receiptUrl: 1,
+            receiptUrl: 1,           // ← ensure it's included
           },
         },
       ])
@@ -174,7 +169,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // CSRF protection
     const submittedCsrf = req.headers.get("x-csrf-token") || "";
     const storedCsrf = req.cookies.get("csrf-token")?.value || "";
     if (!submittedCsrf || submittedCsrf !== storedCsrf) {
@@ -203,7 +197,6 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       }
-      // Optional: check permission here if you have a fine-grained system
     } else if (sessionRole !== "propertyOwner" || sessionUserId !== ownerId) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
     }
@@ -213,7 +206,6 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const expenseDate = date ? new Date(date) : now;
 
-    // Prepare document without _id (MongoDB will generate it)
     const expenseToInsert: ExpenseInsert = {
       ownerId: new ObjectId(ownerId),
       propertyId: propertyId && ObjectId.isValid(propertyId)
@@ -224,18 +216,17 @@ export async function POST(req: NextRequest) {
       category,
       date: expenseDate,
       notes,
-      receiptUrl,
+      receiptUrl,                  // ← now accepted
       createdAt: now,
       updatedAt: now,
     };
 
     const result = await collection.insertOne(expenseToInsert);
 
-    // Construct response object with the generated _id
     const newExpense = {
       _id: result.insertedId.toString(),
       ...expenseToInsert,
-      ownerId: ownerId,                    // keep as string for client
+      ownerId: ownerId,
       propertyId: propertyId || null,
       date: expenseDate.toISOString().split("T")[0],
       createdAt: now.toISOString(),
@@ -246,6 +237,7 @@ export async function POST(req: NextRequest) {
       expenseId: result.insertedId,
       ownerId,
       amount,
+      hasReceipt: !!receiptUrl,
     });
 
     return NextResponse.json(

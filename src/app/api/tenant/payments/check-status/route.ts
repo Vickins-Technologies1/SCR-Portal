@@ -50,6 +50,7 @@ interface Payment {
   type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber: string;
   reference: string;
+  mpesaCode?: string | null;
 }
 
 interface User {
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
     }
 
     let status: Payment["status"] = "pending";
-    let errorMessage = umsPayData.errorMessage;
+    let {errorMessage} = umsPayData;
 
     if (umsPayData.TransactionStatus === "Pending" && umsPayData.MpesaResponse) {
       try {
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
           paymentDate: umsPayData.TransactionDate
             ? new Date(umsPayData.TransactionDate).toISOString()
             : new Date().toISOString(),
-          transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+          mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
         },
       }
     );
@@ -300,13 +301,13 @@ export async function POST(request: NextRequest) {
             propertyName: property.name,
             amount: Number(umsPayData.TransactionAmount),
             paymentType: payment.type || "Other",
-            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
             paymentDate,
           });
           logger.info("Payment confirmation email sent to tenant", {
             tenantId,
             email: tenant.email,
-            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
           });
         } catch (emailError) {
           logger.error("Failed to send payment confirmation email to tenant", {
@@ -326,7 +327,7 @@ export async function POST(request: NextRequest) {
             logger.info("Payment confirmation SMS sent to tenant", {
               tenantId,
               phone: tenant.phone,
-              transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+              mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
             });
           } catch (smsError) {
             logger.error("Failed to send payment confirmation SMS to tenant", {
@@ -345,14 +346,14 @@ export async function POST(request: NextRequest) {
             propertyName: property.name,
             amount: Number(umsPayData.TransactionAmount),
             paymentType: payment.type || "Other",
-            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
             paymentDate,
             tenantName: tenant.name,
           });
           logger.info("Payment confirmation email sent to property owner", {
             ownerId: property.ownerId,
             email: owner.email,
-            transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+            mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
           });
         } catch (emailError) {
           logger.error("Failed to send payment confirmation email to property owner", {
@@ -372,7 +373,7 @@ export async function POST(request: NextRequest) {
             logger.info("Payment confirmation SMS sent to property owner", {
               ownerId: property.ownerId,
               phone: owner.phone,
-              transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+              mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
             });
           } catch (smsError) {
             logger.error("Failed to send payment confirmation SMS to property owner", {
@@ -390,7 +391,7 @@ export async function POST(request: NextRequest) {
       message: errorMessage || "Transaction status retrieved",
       status,
       transaction: {
-        transactionId: umsPayData.TransactionReceipt || transaction_request_id,
+        mpesaCode: umsPayData.TransactionReceipt || transaction_request_id,
         amount: umsPayData.TransactionAmount,
         status,
         paymentDate: umsPayData.TransactionDate,
@@ -408,3 +409,17 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

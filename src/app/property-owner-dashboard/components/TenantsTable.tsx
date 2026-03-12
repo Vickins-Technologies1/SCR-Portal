@@ -184,10 +184,23 @@ export default function TenantsTable({
     return Array.from(set);
   }, [properties]);
 
+  const getPaymentSnapshot = (tenant: ResponseTenant) => {
+    const overdueBalance = Math.max(tenant.dues?.totalRemainingDues ?? 0, 0);
+    const statusText = (tenant.paymentStatus || "").toLowerCase();
+    const isOverdue = statusText === "overdue" || overdueBalance > 0;
+    return {
+      isOverdue,
+      label: isOverdue ? "Overdue" : "Up to date",
+      overdueBalance,
+    };
+  };
+
+  const formatCurrency = (amount: number) => `Ksh ${amount.toLocaleString()}`;
+
   // Skeleton Row (Desktop)
   const SkeletonRow = () => (
     <tr className="animate-pulse">
-      {[...Array(8)].map((_, i) => (
+      {[...Array(10)].map((_, i) => (
         <td key={i} className="px-6 py-4">
           <div className="h-4 bg-gray-200 rounded"></div>
         </td>
@@ -306,7 +319,7 @@ export default function TenantsTable({
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  {[...Array(9)].map((_, i) => (
+                  {[...Array(11)].map((_, i) => (
                     <th key={i} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       <div className="h-4 bg-gray-200 rounded w-20"></div>
                     </th>
@@ -348,15 +361,21 @@ export default function TenantsTable({
                     { key: "price", label: "Rent" },
                     { key: "houseNumber", label: "House No." },
                     { key: "leaseStartDate", label: "Lease Start" },
+                    { key: "paymentStatus", label: "Payment Status" },
+                    { key: "overdueBalance", label: "Overdue Balance" },
                     { key: "status", label: "Status" },
                   ].map(({ key, label }) => (
                     <th
                       key={key}
-                      onClick={() => debouncedHandleSort(key as any)}
+                      onClick={() => { if (key !== "overdueBalance") debouncedHandleSort(key as any); }}
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                     >
                       <span className="flex items-center">
-                        {label} {getSortIcon(key as any)}
+                        {label} {key === "overdueBalance" ? (
+                          <ArrowUpDown className="ml-2 h-4 w-4 text-gray-300" />
+                        ) : (
+                          getSortIcon(key as any)
+                        )}
                       </span>
                     </th>
                   ))}
@@ -366,6 +385,7 @@ export default function TenantsTable({
               <tbody className="bg-white divide-y divide-gray-200">
                 {displayedTenants.map((tenant) => {
                   const property = properties.find((p) => p._id === tenant.propertyId);
+                  const paymentSnapshot = getPaymentSnapshot(tenant);
                   return (
                     <tr
                       key={tenant._id}
@@ -380,6 +400,26 @@ export default function TenantsTable({
                       <td className="px-6 py-4 text-sm text-gray-600">{tenant.houseNumber || "—"}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {new Date(tenant.leaseStartDate).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full font-medium ${
+                            paymentSnapshot.isOverdue
+                              ? "bg-red-100 text-red-800"
+                              : "bg-green-100 text-green-800"
+                          }`}
+                        >
+                          {paymentSnapshot.label}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <span
+                          className={`font-medium ${
+                            paymentSnapshot.isOverdue ? "text-red-700" : "text-green-700"
+                          }`}
+                        >
+                          {formatCurrency(paymentSnapshot.overdueBalance)}
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <span
@@ -464,6 +504,26 @@ export default function TenantsTable({
                         <strong>Lease:</strong> {new Date(tenant.leaseStartDate).toLocaleDateString()} →{" "}
                         {new Date(tenant.leaseEndDate).toLocaleDateString()}
                       </p>
+                      <p><strong>Payment Status:</strong>{" "}
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full font-medium ${
+                            getPaymentSnapshot(tenant).isOverdue
+                              ? "bg-red-100 text-red-800"
+                              : "bg-green-100 text-green-800"
+                          }`}
+                        >
+                          {getPaymentSnapshot(tenant).label}
+                        </span>
+                      </p>
+                      <p><strong>Overdue Balance:</strong>{" "}
+                        <span
+                          className={`font-semibold ${
+                            getPaymentSnapshot(tenant).isOverdue ? "text-red-700" : "text-green-700"
+                          }`}
+                        >
+                          {formatCurrency(getPaymentSnapshot(tenant).overdueBalance)}
+                        </span>
+                      </p>
                       <p><strong>Status:</strong>{" "}
                         <span
                           className={`px-2 py-1 text-xs rounded-full font-medium ${
@@ -544,3 +604,13 @@ export default function TenantsTable({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+

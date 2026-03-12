@@ -20,6 +20,9 @@ interface Payment {
   phoneNumber: string;
   reference: string;
   unitType: string;
+  createdAt: string;
+  mpesaCode?: string;
+  isManual?: boolean;
 }
 
 interface Property {
@@ -337,6 +340,11 @@ export default function PaymentsPage() {
         return "text-gray-600 bg-gray-100";
     }
   };
+  const formatTransactionDisplay = (payment: Payment) => {
+    const isManual = payment.isManual ?? payment.transactionId?.startsWith("MANUAL-");
+    const identifier = isManual ? payment.transactionId : payment.mpesaCode || payment.transactionId || "N/A";
+    return { identifier, isManual };
+  };
 
   // Get unique unit types for filter (base types without index)
   const uniqueUnitTypes = [
@@ -493,7 +501,7 @@ export default function PaymentsPage() {
                 <thead className="bg-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left">#</th>
-                    <th className="px-4 py-3 text-left">Transaction ID</th>
+                    <th className="px-4 py-3 text-left">Transaction / MPesa ID</th>
                     <th className="px-4 py-3 text-left">Tenant</th>
                     <th className="px-4 py-3 text-left">Property</th>
                     <th className="px-4 py-3 text-left">Unit Type</th>
@@ -506,10 +514,20 @@ export default function PaymentsPage() {
                 <tbody>
                   {payments.map((payment, index) => {
                     const [baseUnitType] = payment.unitType?.split('-') || ['N/A'];
+                    const transactionDisplay = formatTransactionDisplay(payment);
                     return (
                       <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
                         <td className="px-4 py-3">{index + 1 + (currentPage - 1) * itemsPerPage}</td>
-                        <td className="px-4 py-3">{payment.transactionId}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-gray-800">
+                              {transactionDisplay.identifier}
+                            </span>
+                            <span className="text-xs uppercase tracking-wide text-gray-500">
+                              {transactionDisplay.isManual ? "Manual entry" : "M-Pesa code"}
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3">{payment.tenantName || payment.tenantId || "Unknown"}</td>
                         <td className="px-4 py-3">
                           {properties.find((p) => p._id === payment.propertyId)?.name || "N/A"}
@@ -517,7 +535,16 @@ export default function PaymentsPage() {
                         <td className="px-4 py-3">{`${baseUnitType} (${payment.unitType})`}</td>
                         <td className="px-4 py-3">{payment.type}</td>
                         <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
-                        <td className="px-4 py-3">{new Date(payment.paymentDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                          {new Date(payment.paymentDate || payment.createdAt).toLocaleString("en-KE", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit"
+                          })}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusStyles(payment.status)}`}>
                             {payment.status}
@@ -549,13 +576,12 @@ export default function PaymentsPage() {
                           key={index}
                           onClick={() => typeof page === "number" && handlePageChange(page)}
                           disabled={page === "..." || page === currentPage || isLoading}
-                          className={`px-3 py-1 rounded-lg transition ${
-                            page === currentPage
+                          className={`px-3 py-1 rounded-lg transition ${page === currentPage
                               ? "bg-[#012a4a] text-white"
                               : page === "..."
-                              ? "bg-gray-100 text-gray-500 cursor-default"
-                              : "bg-gray-200 hover:bg-gray-300"
-                          }`}
+                                ? "bg-gray-100 text-gray-500 cursor-default"
+                                : "bg-gray-200 hover:bg-gray-300"
+                            }`}
                           aria-label={typeof page === "number" ? `Page ${page}` : "Ellipsis"}
                         >
                           {page}
@@ -586,3 +612,4 @@ export default function PaymentsPage() {
     </div>
   );
 }
+

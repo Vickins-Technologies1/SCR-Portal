@@ -1,10 +1,11 @@
 // src/app/property-owner-dashboard/list-properties/PropertyTableRow.tsx
 import React from "react";
 import { Pencil, Trash2 } from "lucide-react";
-import { Listing } from "@/types/property";   // ← Updated to Listing
+import { Listing } from "@/types/property";
+import { ensureAvailability } from "@/lib/availability";
 
 interface PropertyTableRowProps {
-  property: Listing; // ← Updated
+  property: Listing;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -16,6 +17,7 @@ export default function PropertyTableRow({
   onEdit,
   onDelete,
 }: PropertyTableRowProps) {
+  const availability = ensureAvailability(property);
   return (
     <tr
       className="hover:bg-slate-50 transition cursor-pointer"
@@ -32,11 +34,20 @@ export default function PropertyTableRow({
           {property.status}
         </span>
       </td>
-      <td className="px-6 py-4 text-slate-600">
-        {new Date(property.createdAt).toLocaleDateString()}
-      </td>
-      <td className="px-6 py-4 text-sm text-slate-700">
-        {property.unitTypes.map((u) => `${u.type} (x${u.vacant ?? 0})`).join(", ")}
+      <td className="px-6 py-4 text-slate-600">{new Date(property.createdAt).toLocaleDateString()}</td>
+      <td className="px-6 py-4 text-sm text-slate-700 space-y-2">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500">Vacant units: {availability.totalVacant}</span>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+            <span
+              style={{ width: `${Math.min(100, availability.occupancyRate)}%` }}
+              className="block h-full rounded-full bg-gradient-to-r from-cyan-400 to-indigo-500"
+            />
+          </div>
+          <span className="text-[10px] text-slate-500">
+            Occupancy {availability.occupancyRate}% • {property.unitTypes.map((u) => u.type).join(", ")}
+          </span>
+        </div>
       </td>
       <td className="px-6 py-4 flex gap-3" onClick={(e) => e.stopPropagation()}>
         <button

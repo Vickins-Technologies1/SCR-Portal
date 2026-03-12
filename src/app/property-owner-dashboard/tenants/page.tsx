@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Users, Plus } from "lucide-react";
@@ -71,6 +71,7 @@ export default function TenantsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const duesRequestId = useRef(0);
 
   // Pagination & Filters
   const [page, setPage] = useState(1);
@@ -150,6 +151,46 @@ export default function TenantsPage() {
     }
   }, [userId, csrfToken, effectiveOwnerId]);
 
+  const enrichTenantsWithDues = useCallback(
+    async (tenantList: ResponseTenant[]) => {
+      if (!effectiveOwnerId || !csrfToken || tenantList.length === 0) return;
+      const requestId = ++duesRequestId.current;
+
+      const enriched = await Promise.all(
+        tenantList.map(async (tenant) => {
+          try {
+            const res = await fetch("/api/tenants/check-dues", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-csrf-token": csrfToken,
+              },
+              credentials: "include",
+              body: JSON.stringify({ tenantId: tenant._id, userId: effectiveOwnerId }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              return {
+                ...tenant,
+                dues: data.dues,
+                totalRentPaid: data.tenant?.totalRentPaid ?? tenant.totalRentPaid,
+                totalDepositPaid: data.tenant?.totalDepositPaid ?? tenant.totalDepositPaid,
+                totalUtilityPaid: data.tenant?.totalUtilityPaid ?? tenant.totalUtilityPaid,
+                paymentStatus: data.tenant?.paymentStatus ?? tenant.paymentStatus,
+              };
+            }
+          } catch {}
+          return tenant;
+        })
+      );
+
+      if (requestId === duesRequestId.current) {
+        setTenants(enriched);
+      }
+    },
+    [csrfToken, effectiveOwnerId]
+  );
+
   // Fetch tenants (using effectiveOwnerId)
   const fetchTenants = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
@@ -171,8 +212,10 @@ export default function TenantsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setTenants(data.tenants || []);
+        const baseTenants = data.tenants || [];
+        setTenants(baseTenants);
         setTotalTenants(data.total || 0);
+        enrichTenantsWithDues(baseTenants);
       } else {
         setError(data.message || "Failed to load tenants");
       }
@@ -181,7 +224,7 @@ export default function TenantsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveOwnerId, csrfToken, page, limit, filters]);
+  }, [effectiveOwnerId, csrfToken, page, limit, filters, enrichTenantsWithDues]);
 
   // Fetch properties (using effectiveOwnerId)
   const fetchProperties = useCallback(async () => {
@@ -604,3 +647,10 @@ export default function TenantsPage() {
     </div>
   );
 }
+
+
+
+
+
+
+

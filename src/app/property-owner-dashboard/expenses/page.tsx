@@ -1,4 +1,3 @@
-// src/app/property-owner-dashboard/expenses/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -24,6 +23,9 @@ import {
   Lock,
   Loader2,
   BarChart2,
+  Upload,
+  FileUp,
+  XCircle,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,6 +43,7 @@ interface Expense {
   date: string;
   propertyName?: string;
   propertyId?: string;
+  receiptUrl?: string;
 }
 
 interface Property {
@@ -90,6 +93,7 @@ export default function ExpensesPage() {
   // Modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     description: "",
     amount: "",
@@ -98,6 +102,9 @@ export default function ExpensesPage() {
     propertyId: "",
     notes: "",
   });
+
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
   const [totalIncome, setTotalIncome] = useState(0);
 
@@ -266,15 +273,15 @@ export default function ExpensesPage() {
 
   const handleExportCSV = () => {
     setIsExporting(true);
-    // Small delay to show loader (visual feedback)
     setTimeout(() => {
-      const headers = ["Date", "Description", "Property", "Category", "Amount"];
+      const headers = ["Date", "Description", "Property", "Category", "Amount", "Receipt URL"];
       const rows = filteredExpenses.map(e => [
         format(new Date(e.date), "yyyy-MM-dd"),
         `"${e.description.replace(/"/g, '""')}"`,
         e.propertyName || "—",
         e.category,
         e.amount,
+        e.receiptUrl || "",
       ]);
       const csv = [headers, ...rows].map(row => row.join(",")).join("\n");
       const blob = new Blob([csv], { type: "text/csv" });
@@ -294,6 +301,42 @@ export default function ExpensesPage() {
 
     setIsSavingExpense(true);
 
+    let receiptUrl: string | undefined = undefined;
+
+    // 1. Upload receipt if selected
+    if (receiptFile) {
+      setUploading(true);
+      try {
+        const formDataUpload = new FormData();
+        formDataUpload.append("images", receiptFile);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          headers: {
+            "X-CSRF-Token": csrfToken || "",
+          },
+          credentials: "include",
+          body: formDataUpload,
+        });
+
+        const data = await res.json();
+
+        if (!data.success || !data.urls?.length) {
+          throw new Error(data.message || "Receipt upload failed");
+        }
+
+        receiptUrl = data.urls[0];
+      } catch (err: any) {
+        alert("Failed to upload receipt: " + (err.message || "Unknown error"));
+        setIsSavingExpense(false);
+        setUploading(false);
+        return;
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    // 2. Save expense
     try {
       const res = await fetch("/api/expenses", {
         method: "POST",
@@ -306,6 +349,7 @@ export default function ExpensesPage() {
           ownerId,
           ...formData,
           amount: Number(formData.amount),
+          receiptUrl,
         }),
       });
 
@@ -313,9 +357,16 @@ export default function ExpensesPage() {
       if (data.success) {
         setShowAddModal(false);
         setFormData({
-          description: "", amount: "", category: "maintenance",
-          date: new Date().toISOString().split("T")[0], propertyId: "", notes: ""
+          description: "",
+          amount: "",
+          category: "maintenance",
+          date: new Date().toISOString().split("T")[0],
+          propertyId: "",
+          notes: "",
         });
+        setReceiptFile(null);
+        setReceiptPreview(null);
+
         await Promise.all([fetchExpenses(), fetchIncome()]);
       } else {
         alert(data.message || "Failed to save expense");
@@ -522,32 +573,19 @@ export default function ExpensesPage() {
             </div>
           ) : (
             <>
-              {/* Summary Cards with staggered animation */}
+              {/* Summary Cards */}
               <motion.div
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12"
                 initial="hidden"
                 animate="visible"
                 variants={{
                   hidden: { opacity: 0 },
-                  visible: {
-                    opacity: 1,
-                    transition: { staggerChildren: 0.1 }
-                  }
+                  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
                 }}
               >
                 {[
-                  {
-                    title: "Total Expenses",
-                    value: `Ksh ${totalExpenses.toLocaleString()}`,
-                    icon: Receipt,
-                    color: "emerald"
-                  },
-                  {
-                    title: "Avg Monthly",
-                    value: `Ksh ${(totalExpenses / 12).toFixed(0).toLocaleString()}`,
-                    icon: TrendingUp,
-                    color: "amber"
-                  },
+                  { title: "Total Expenses", value: `Ksh ${totalExpenses.toLocaleString()}`, icon: Receipt, color: "emerald" },
+                  { title: "Avg Monthly", value: `Ksh ${(totalExpenses / 12).toFixed(0).toLocaleString()}`, icon: TrendingUp, color: "amber" },
                   {
                     title: "Net Position",
                     value: `Ksh ${netPosition.toLocaleString()}`,
@@ -555,20 +593,11 @@ export default function ExpensesPage() {
                     color: netPosition >= 0 ? "emerald" : "red",
                     subtitle: `Income: Ksh ${totalIncome.toLocaleString()}`
                   },
-                  {
-                    title: "Active Months",
-                    value: `${monthlyTrend.length}`,
-                    icon: Calendar,
-                    color: "blue",
-                    subtitle: "in selected period"
-                  }
+                  { title: "Active Months", value: `${monthlyTrend.length}`, icon: Calendar, color: "blue", subtitle: "in selected period" },
                 ].map((item, i) => (
                   <motion.div
                     key={i}
-                    variants={{
-                      hidden: { opacity: 0, y: 20 },
-                      visible: { opacity: 1, y: 0 }
-                    }}
+                    variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
                     className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300 group"
                   >
                     <div className="flex items-center justify-between">
@@ -577,9 +606,7 @@ export default function ExpensesPage() {
                         <p className={`text-3xl font-bold mt-2 ${item.color === "red" ? "text-red-600" : `text-${item.color}-600`}`}>
                           {item.value}
                         </p>
-                        {item.subtitle && (
-                          <p className="text-xs text-gray-500 mt-1">{item.subtitle}</p>
-                        )}
+                        {item.subtitle && <p className="text-xs text-gray-500 mt-1">{item.subtitle}</p>}
                       </div>
                       <div className={`p-3 rounded-xl bg-${item.color}-50/70 group-hover:bg-${item.color}-100 transition-colors`}>
                         <item.icon className={`h-8 w-8 text-${item.color}-600`} />
@@ -590,7 +617,7 @@ export default function ExpensesPage() {
               </motion.div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
-                {/* Premium Monthly Trend Chart */}
+                {/* Monthly Trend Chart */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -601,13 +628,11 @@ export default function ExpensesPage() {
                     <TrendingUp className="h-5 w-5 text-emerald-600" />
                     Monthly Expense Trend
                   </h2>
-
                   <div className="h-80 relative">
                     <div className="absolute inset-0 flex items-end gap-4 pb-10 px-2">
                       {monthlyTrend.map(([month, amt], index) => {
                         const heightPercent = (amt / maxMonthly) * 100;
                         const delay = index * 0.08;
-
                         return (
                           <motion.div
                             key={month}
@@ -617,10 +642,8 @@ export default function ExpensesPage() {
                             className="flex-1 flex flex-col items-center justify-end group relative"
                           >
                             <div className="w-full bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400 rounded-t-xl shadow-md group-hover:shadow-lg group-hover:scale-[1.02] transition-all duration-300 relative overflow-hidden">
-                              {/* Subtle shine effect */}
                               <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                             </div>
-
                             <div className="mt-3 text-center">
                               <p className="text-xs font-medium text-gray-700">{month}</p>
                               <p className="text-sm font-semibold text-gray-900 mt-0.5">
@@ -631,7 +654,6 @@ export default function ExpensesPage() {
                         );
                       })}
                     </div>
-
                     {monthlyTrend.length === 0 && (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                         No expense data for the selected period
@@ -652,13 +674,11 @@ export default function ExpensesPage() {
                     <BarChart2 className="h-5 w-5 text-indigo-600" />
                     Category Breakdown
                   </h2>
-
                   <div className="space-y-6">
                     {Object.entries(categoryTotals).map(([cat, amt]) => {
                       const cfg = categoryConfig[cat] || categoryConfig.other;
                       const pct = totalExpenses ? Math.round((amt / totalExpenses) * 100) : 0;
                       const Icon = cfg.icon;
-
                       return (
                         <div key={cat} className="group">
                           <div className="flex items-center gap-4 mb-2">
@@ -737,14 +757,25 @@ export default function ExpensesPage() {
                             </div>
                           </div>
 
-                          <div className="text-right whitespace-nowrap">
+                          <div className="text-right whitespace-nowrap flex flex-col items-end gap-1">
                             <p className="text-xl font-semibold text-red-600">
                               -Ksh {exp.amount.toLocaleString()}
                             </p>
-                            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 justify-end">
+                            <p className="text-xs text-gray-500 flex items-center gap-1.5 justify-end">
                               <Calendar size={14} />
                               {format(new Date(exp.date), "dd MMM yyyy")}
                             </p>
+                            {exp.receiptUrl && (
+                              <a
+                                href={exp.receiptUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1 mt-1"
+                              >
+                                <FileUp size={14} />
+                                View Receipt
+                              </a>
+                            )}
                           </div>
                         </motion.div>
                       );
@@ -871,6 +902,76 @@ export default function ExpensesPage() {
                     />
                   </div>
 
+                  {/* Receipt Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Receipt / Attachment (optional)
+                    </label>
+
+                    {!receiptFile ? (
+                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-emerald-400 transition-colors">
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert("File too large (max 5MB)");
+                                return;
+                              }
+                              if (!["image/jpeg", "image/png"].includes(file.type)) {
+                                alert("Only JPG and PNG images allowed");
+                                return;
+                              }
+
+                              setReceiptFile(file);
+                              setReceiptPreview(URL.createObjectURL(file));
+                            }}
+                          />
+                          <div className="flex flex-col items-center gap-2">
+                            <Upload className="h-10 w-10 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-700">
+                              Click to upload or drag & drop
+                            </span>
+                            <span className="text-xs text-gray-500">JPG, PNG • max 5MB</span>
+                          </div>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                        {receiptPreview && (
+                          <img
+                            src={receiptPreview}
+                            alt="Receipt preview"
+                            className="max-h-48 mx-auto object-contain"
+                          />
+                        )}
+                        <div className="p-3 flex items-center justify-between bg-white/80 backdrop-blur-sm">
+                          <div className="flex items-center gap-2">
+                            <FileUp className="h-5 w-5 text-emerald-600" />
+                            <span className="text-sm font-medium truncate max-w-[180px]">
+                              {receiptFile.name}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReceiptFile(null);
+                              setReceiptPreview(null);
+                            }}
+                            className="text-red-600 hover:text-red-800 p-1"
+                          >
+                            <XCircle size={20} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="pt-6 flex gap-4 border-t border-gray-200">
                     <button
                       type="button"
@@ -883,13 +984,13 @@ export default function ExpensesPage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       type="submit"
-                      disabled={isSavingExpense}
+                      disabled={isSavingExpense || uploading}
                       className="flex-1 bg-emerald-600 text-white py-3.5 rounded-xl hover:bg-emerald-700 transition-all shadow-md disabled:opacity-70 flex items-center justify-center gap-2 font-medium"
                     >
-                      {isSavingExpense ? (
+                      {isSavingExpense || uploading ? (
                         <>
                           <Loader2 className="h-5 w-5 animate-spin" />
-                          Saving...
+                          {uploading ? "Uploading..." : "Saving..."}
                         </>
                       ) : (
                         "Save Expense"
