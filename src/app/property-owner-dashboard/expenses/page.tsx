@@ -826,10 +826,180 @@ export default function ExpensesPage() {
                   </button>
                 </div>
 
+
                 <form onSubmit={handleAddExpense} className="space-y-6">
-                  {/* ... same form content as before ... */}
-                  {/* Description, Amount, Date, Category, Property, Notes, Receipt upload */}
-                  {/* (keeping it unchanged for brevity – copy your original form fields here) */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+                    <input
+                      required
+                      value={formData.description}
+                      onChange={e => setFormData({ ...formData, description: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                      placeholder="e.g. Plumbing repair - Apt 4B"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount (Ksh)</label>
+                      <input
+                        required
+                        type="number"
+                        value={formData.amount}
+                        onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                        placeholder="14500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Date</label>
+                      <input
+                        required
+                        type="date"
+                        value={formData.date}
+                        onChange={e => setFormData({ ...formData, date: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
+                      <select
+                        value={formData.category}
+                        onChange={e => setFormData({ ...formData, category: e.target.value as any })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white transition-all"
+                      >
+                        {Object.keys(categoryConfig).map(c => (
+                          <option key={c} value={c}>
+                            {c.charAt(0).toUpperCase() + c.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Property</label>
+                      <select
+                        value={formData.propertyId}
+                        onChange={e => setFormData({ ...formData, propertyId: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white transition-all"
+                      >
+                        <option value="">Unassigned / General</option>
+                        {properties.map(p => (
+                          <option key={p._id} value={p._id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
+                    <textarea
+                      value={formData.notes}
+                      onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none min-h-[100px] transition-all"
+                      placeholder="Payment method, receipt reference, notes..."
+                    />
+                  </div>
+
+                  {/* Receipt Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Receipt / Attachment (optional)
+                    </label>
+
+                    {!receiptFile ? (
+                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-emerald-400 transition-colors">
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert("File too large (max 5MB)");
+                                return;
+                              }
+                              if (!["image/jpeg", "image/png"].includes(file.type)) {
+                                alert("Only JPG and PNG images allowed");
+                                return;
+                              }
+
+                              setReceiptFile(file);
+                              setReceiptPreview(URL.createObjectURL(file));
+                            }}
+                          />
+                          <div className="flex flex-col items-center gap-2">
+                            <Upload className="h-10 w-10 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-700">
+                              Click to upload or drag & drop
+                            </span>
+                            <span className="text-xs text-gray-500">JPG, PNG • max 5MB</span>
+                          </div>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                        {receiptPreview && (
+                          <img
+                            src={receiptPreview}
+                            alt="Receipt preview"
+                            className="max-h-48 mx-auto object-contain"
+                          />
+                        )}
+                        <div className="p-3 flex items-center justify-between bg-white/80 backdrop-blur-sm">
+                          <div className="flex items-center gap-2">
+                            <FileUp className="h-5 w-5 text-emerald-600" />
+                            <span className="text-sm font-medium truncate max-w-[180px]">
+                              {receiptFile.name}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReceiptFile(null);
+                              setReceiptPreview(null);
+                            }}
+                            className="text-red-600 hover:text-red-800 p-1"
+                          >
+                            <XCircle size={20} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-6 flex gap-4 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddModal(false)}
+                      className="flex-1 py-3.5 text-gray-700 hover:text-gray-900 font-medium transition-colors rounded-xl hover:bg-gray-100"
+                    >
+                      Cancel
+                    </button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="submit"
+                      disabled={isSavingExpense || uploading}
+                      className="flex-1 bg-emerald-600 text-white py-3.5 rounded-xl hover:bg-emerald-700 transition-all shadow-md disabled:opacity-70 flex items-center justify-center gap-2 font-medium"
+                    >
+                      {isSavingExpense || uploading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          {uploading ? "Uploading..." : "Saving..."}
+                        </>
+                      ) : (
+                        "Save Expense"
+                      )}
+                    </motion.button>
+                  </div>
                 </form>
               </div>
             </motion.div>
