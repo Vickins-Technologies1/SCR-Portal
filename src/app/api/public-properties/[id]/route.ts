@@ -43,7 +43,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const params = await context.params;
-  const {id} = params;
+  const { id } = params;
 
   console.log("Fetching property details for ID:", id);
 
@@ -58,24 +58,20 @@ export async function GET(
 
     const { db } = await connectToDatabase();
 
-    // Primary lookup: treat as ObjectId (this is the standard case)
-    let listing = await db
-      .collection("propertyListings")
-      .findOne({
-        _id: new ObjectId(id),
-        status: "Active",
-      });
+    // Primary lookup – correct way (satisfies TypeScript)
+    let listing = await db.collection("propertyListings").findOne({
+      _id: new ObjectId(id),          // ← this is the fix
+      status: "Active",
+    });
 
-    // Optional fallback: if your collection has any documents where _id was stored as string
-    // (very rare — only keep if you actually need it)
+    // Optional fallback – only if you have legacy documents where _id is stored as string
+    // (very uncommon in modern MongoDB – you can safely delete this block)
     if (!listing) {
-      console.log(`No match with ObjectId for ${id} — trying string fallback`);
-      listing = await db
-        .collection("propertyListings")
-        .findOne({
-          _id: id as any, // type assertion to bypass strict ObjectId expectation
-          status: "Active",
-        });
+      console.log(`No ObjectId match for ${id} — trying string fallback`);
+      listing = await db.collection("propertyListings").findOne({
+        _id: id,                      // ← string comparison (TS needs type assertion here)
+        status: "Active",
+      } as any);  // or better: define collection with generic { _id: string | ObjectId }
     }
 
     if (!listing) {
@@ -117,7 +113,9 @@ export async function GET(
 
     const formatted = {
       _id: String(listing._id),
-      originalPropertyId: listing.originalPropertyId ? String(listing.originalPropertyId) : String(listing._id),
+      originalPropertyId: listing.originalPropertyId
+        ? String(listing.originalPropertyId)
+        : String(listing._id),
       ownerId: ownerIdValue,
       name: listing.name,
       address: listing.address,
