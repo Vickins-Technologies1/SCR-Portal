@@ -19,7 +19,9 @@ interface Stats {
   totalTenants: number;
   totalUnits: number;
   occupiedUnits: number;
+  expectedMonthlyRent: number;
   totalMonthlyRent: number;
+  totalRentPaid: number;
   overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
@@ -94,7 +96,9 @@ export async function GET(request: NextRequest) {
         totalTenants: 0,
         totalUnits: 0,
         occupiedUnits: 0,
+        expectedMonthlyRent: 0,
         totalMonthlyRent: 0,
+        totalRentPaid: 0,
         overduePayments: 0,
         totalPayments: 0,
         totalOverdueAmount: 0,
@@ -129,6 +133,7 @@ export async function GET(request: NextRequest) {
       .aggregate<{
         totalTenants: number;
         occupiedUnits: number;
+        expectedMonthlyRent: number;
       }>([
         { $match: { propertyId: { $in: propertyIds } } },
         {
@@ -153,12 +158,13 @@ export async function GET(request: NextRequest) {
             _id: null,
             totalTenants: { $sum: 1 },
             occupiedUnits: { $sum: 1 },
+            expectedMonthlyRent: { $sum: { $ifNull: ["$price", 0] } },
           },
         },
       ])
       .toArray();
 
-    const { totalTenants = 0, occupiedUnits = 0 } = tenantsResult[0] || {};
+    const { totalTenants = 0, occupiedUnits = 0, expectedMonthlyRent = 0 } = tenantsResult[0] || {};
 
     // Current month range
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -190,6 +196,27 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
     const totalMonthlyRent = currentMonthRentResult[0]?.totalMonthlyRent || 0;
+
+    // Total rent paid (all time)
+    const totalRentPaidResult = await db
+      .collection("payments")
+      .aggregate([
+        {
+          $match: {
+            propertyId: { $in: propertyIds },
+            status: "completed",
+            type: "Rent",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalRentPaid: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+    const totalRentPaid = totalRentPaidResult[0]?.totalRentPaid || 0;
 
     // Total payments (all time)
     const paymentsResult = await db
@@ -337,7 +364,9 @@ export async function GET(request: NextRequest) {
       totalTenants,
       totalUnits,
       occupiedUnits,
+      expectedMonthlyRent,
       totalMonthlyRent,
+      totalRentPaid,
       overduePayments,
       totalPayments,
       totalOverdueAmount,
@@ -354,3 +383,6 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+
+

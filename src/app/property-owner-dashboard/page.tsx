@@ -66,7 +66,9 @@ export default function PropertyOwnerDashboard() {
     totalTenants: 0,
     totalUnits: 0,
     occupiedUnits: 0,
+    expectedMonthlyRent: 0,
     totalMonthlyRent: 0,
+    totalRentPaid: 0,
     overduePayments: 0,
     totalPayments: 0,
     totalOverdueAmount: 0,
@@ -306,7 +308,7 @@ export default function PropertyOwnerDashboard() {
 
               {isLoading ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-                  {[...Array(8)].map((_, i) => (
+                  {[...Array(10)].map((_, i) => (
                     <div key={i} className="bg-white/80 rounded-2xl h-32 shadow-lg animate-pulse">
                       <div className="p-5 space-y-4">
                         <div className="h-4 bg-gray-200 rounded-lg w-24" />
@@ -321,6 +323,14 @@ export default function PropertyOwnerDashboard() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-10">
                     {[
                       {
+                        title: "Expected Monthly Revenue",
+                        value: `Ksh ${stats.expectedMonthlyRent.toLocaleString()}`,
+                        icon: DollarSign,
+                        color: "green",
+                        subtitle: `${stats.totalTenants} active tenants`,
+                        explanation: "Projected rent for this month based on active tenants and their current rent.",
+                      },
+                      {
                         title: "Monthly Rent",
                         value: `Ksh ${stats.totalMonthlyRent.toLocaleString()}`,
                         icon: DollarSign,
@@ -328,11 +338,11 @@ export default function PropertyOwnerDashboard() {
                         explanation: "Total received rent income from all active tenants for the current month.",
                       },
                       {
-                        title: "Total Revenue",
-                        value: `Ksh ${stats.totalPayments.toLocaleString()}`,
+                        title: "Total Rent Paid",
+                        value: `Ksh ${stats.totalRentPaid.toLocaleString()}`,
                         icon: DollarSign,
                         color: "blue",
-                        explanation: "Cumulative amount of all completed payments received to date.",
+                        explanation: "All-time rent payments received from tenants (completed rent transactions only).",
                       },
                       {
                         title: "Overdue Amount",
@@ -343,25 +353,11 @@ export default function PropertyOwnerDashboard() {
                         explanation: "Total unpaid rent + deposits that are currently past due across all tenants.",
                       },
                       {
-                        title: "Deposits",
-                        value: `Ksh ${stats.totalDepositPaid.toLocaleString()}`,
+                        title: "Total Revenue",
+                        value: `Ksh ${stats.totalPayments.toLocaleString()}`,
                         icon: DollarSign,
-                        color: "indigo",
-                        explanation: "Total security deposits collected and marked as paid from all tenants.",
-                      },
-                      {
-                        title: "Utilities Paid",
-                        value: `Ksh ${stats.totalUtilityPaid.toLocaleString()}`,
-                        icon: DollarSign,
-                        color: "pink",
-                        explanation: "Total amount tenants have paid for utilities (water, electricity, etc.) to date.",
-                      },
-                      {
-                        title: "Properties",
-                        value: stats.activeProperties,
-                        icon: Building2,
-                        color: "purple",
-                        explanation: "Number of properties currently listed and managed under your account.",
+                        color: "blue",
+                        explanation: "Cumulative amount of all completed payments received to date.",
                       },
                       {
                         title: "Active Tenants",
@@ -379,7 +375,28 @@ export default function PropertyOwnerDashboard() {
                         subtitle: `${vacancyRate}% vacancy`,
                         explanation: "Number of unoccupied units across all properties (calculated from total units minus occupied units).",
                       },
-                   ].map((s, i) => (
+                      {
+                        title: "Properties",
+                        value: stats.activeProperties,
+                        icon: Building2,
+                        color: "purple",
+                        explanation: "Number of properties currently listed and managed under your account.",
+                      },
+                      {
+                        title: "Deposits",
+                        value: `Ksh ${stats.totalDepositPaid.toLocaleString()}`,
+                        icon: DollarSign,
+                        color: "indigo",
+                        explanation: "Total security deposits collected and marked as paid from all tenants.",
+                      },
+                      {
+                        title: "Utilities Paid",
+                        value: `Ksh ${stats.totalUtilityPaid.toLocaleString()}`,
+                        icon: DollarSign,
+                        color: "pink",
+                        explanation: "Total amount tenants have paid for utilities (water, electricity, etc.) to date.",
+                      },
+                    ].map((s, i) => (
     <motion.div
       key={i}
       initial={{ opacity: 0, y: 20 }}
@@ -592,3 +609,7 @@ export default function PropertyOwnerDashboard() {
     </div>
   );
 }
+
+
+
+
