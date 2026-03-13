@@ -151,9 +151,7 @@ export async function GET(request: NextRequest) {
         const minPriceInListing = prices.length ? Math.min(...prices) : null;
 
         const matchesUnit = !unitType || unitTypes.some((u: any) => u.type === unitType);
-        const matchesPrice = !hasPriceFilter
-          ? true
-          : minPriceInListing !== null && minPriceInListing >= minPrice && minPriceInListing <= maxPrice;
+const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInListing >= minPrice && minPriceInListing <= maxPrice : true;
 
         const listingAddress = typeof listing.address === "string" ? listing.address.toLowerCase() : "";
         const listingName = typeof listing.name === "string" ? listing.name.toLowerCase() : "";

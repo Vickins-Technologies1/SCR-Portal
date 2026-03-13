@@ -43,7 +43,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const params = await context.params;
-  const id = params.id;
+  const {id} = params;
 
   console.log("Fetching property details for ID:", id);
 
