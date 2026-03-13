@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { MapPin, DollarSign, Phone, Mail, ArrowLeft } from "lucide-react";
 import { Listing } from "@/types/property";
@@ -13,8 +14,15 @@ interface PropertyResponse {
 
 async function getProperty(id: string): Promise<PropertyResponse> {
   try {
+    const hdrs = await headers();
+    const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host");
+    const proto =
+      hdrs.get("x-forwarded-proto") ?? (host?.includes("localhost") ? "http" : "https");
+    const fallbackBase = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = host ? `${proto}://${host}` : fallbackBase;
+
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/public-properties/${id}`,
+      `${baseUrl}/api/public-properties/${id}`,
       { cache: "no-store" }
     );
 
@@ -241,3 +249,5 @@ export default async function PropertyDetailPage({
     </div>
   );
 }
+
+

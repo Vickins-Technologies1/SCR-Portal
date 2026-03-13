@@ -42,36 +42,37 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const params = await context.params;
-  const { id } = params;
+  const { id } = await context.params;
 
   console.log("Fetching property details for ID:", id);
 
   try {
-    if (!id || !isValidHexId(id)) {
-      console.log("Invalid ID format:", id);
+    if (!id) {
+      console.log("Missing property ID");
       return NextResponse.json(
-        { success: false, message: "Invalid property ID format" },
+        { success: false, message: "Missing property ID" },
         { status: 400 }
       );
     }
 
     const { db } = await connectToDatabase();
 
-    // Primary lookup – correct way (satisfies TypeScript)
-    let listing = await db.collection("propertyListings").findOne({
-      _id: new ObjectId(id),          // ← this is the fix
-      status: "Active",
-    });
+    // Primary lookup – ObjectId when possible
+    let listing = null;
+    if (isValidHexId(id)) {
+      listing = await db.collection("propertyListings").findOne({
+        _id: new ObjectId(id),
+        status: "Active",
+      });
+    }
 
-    // Optional fallback – only if you have legacy documents where _id is stored as string
-    // (very uncommon in modern MongoDB – you can safely delete this block)
+    // Fallback – handle legacy string _id values
     if (!listing) {
       console.log(`No ObjectId match for ${id} — trying string fallback`);
       listing = await db.collection("propertyListings").findOne({
-        _id: id,                      // ← string comparison (TS needs type assertion here)
+        _id: id,
         status: "Active",
-      } as any);  // or better: define collection with generic { _id: string | ObjectId }
+      } as any);
     }
 
     if (!listing) {
@@ -151,3 +152,6 @@ export async function GET(
     );
   }
 }
+
+
+
