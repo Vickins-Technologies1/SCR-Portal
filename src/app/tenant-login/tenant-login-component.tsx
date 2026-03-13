@@ -421,16 +421,7 @@ export default function TenantLoginPage() {
             </form>
           </div>
 
-          {/* Quick Demo */}
-          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
-            <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
-            <a
-              href="/tenant-login?demo=tenant"
-              className="block w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold py-3 rounded-xl text-center transition-all shadow-md text-sm xs:text-base"
-            >
-              Launch Tenant Demo
-            </a>
-          </div>
+         
         </motion.div>
       </div>
     </div>
