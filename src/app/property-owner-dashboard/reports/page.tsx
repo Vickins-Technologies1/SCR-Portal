@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Cookies from "js-cookie";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText, BarChart2, ArrowUpDown, Download, Lock } from "lucide-react";
@@ -61,7 +61,7 @@ interface SortConfig<T> {
   direction: "asc" | "desc";
 }
 
-export default function ReportsAndInvoicesPage() {
+function ReportsAndInvoicesPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const perm = usePermissions();
@@ -883,6 +883,28 @@ export default function ReportsAndInvoicesPage() {
         body { font-family: 'Inter', sans-serif; }
       `}</style>
     </div>
+  );
+}
+
+export default function ReportsAndInvoicesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+          <Navbar />
+          <Sidebar />
+          <div className="sm:ml-64 mt-16">
+            <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
+              <div className="flex justify-center items-center min-h-[60vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#012a4a]"></div>
+              </div>
+            </main>
+          </div>
+        </div>
+      }
+    >
+      <ReportsAndInvoicesPageInner />
+    </Suspense>
   );
 }
 
