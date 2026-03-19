@@ -19,6 +19,100 @@ body {
   font-family: var(--font-sans, Arial, Helvetica, sans-serif);
 }
 
+/* Sorana public theme (scoped) */
+.sorana-theme {
+  --font-sans: var(--font-sora, var(--font-sans));
+  --font-display: var(--font-cormorant, var(--font-sans));
+  --font-mono: var(--font-jetbrains, var(--font-mono));
+
+  --background: #ffffff;
+  --foreground: #1e3a8a;
+  --accent: #42c775;
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --primary-hover: #34b46d;
+  --muted: #1e3a8a0f;
+  --muted-foreground: #1e3a8ab3;
+  --muted-hover: #1e3a8a1f;
+  --card: #ffffffdb;
+  --border: #1e3a8a1f;
+  --ring: #42c77559;
+  --accent-hover: #34b46d;
+  --surface-1: #ffffffb3;
+  --surface-2: #ffffff8c;
+  --shadow-soft: 0 30px 80px -55px #1e3a8a8c;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-hover: var(--muted-hover);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-feature-settings: "kern";
+  isolation: isolate;
+  min-height: 100vh;
+  position: relative;
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+@supports (color: color-mix(in srgb, red 50%, blue 50%)) {
+  .sorana-theme {
+    --primary-hover: color-mix(in srgb, var(--accent) 82%, var(--foreground) 18%);
+    --accent-hover: color-mix(in srgb, var(--accent) 80%, var(--foreground) 20%);
+  }
+}
+
+.sorana-theme::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 640px at 8% -10%, #1e3a8a14, transparent 60%),
+    radial-gradient(900px 520px at 92% 12%, #42c77529, transparent 62%),
+    radial-gradient(700px 420px at 50% 100%, #1e3a8a0f, transparent 70%);
+}
+
+.sorana-theme::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.24;
+  background-image:
+    linear-gradient(#1e3a8a0d 1px, transparent 0),
+    linear-gradient(90deg, #1e3a8a0d 1px, transparent 0);
+  background-size: 64px 64px;
+}
+
+@media (min-width: 1024px) {
+  .sorana-theme {
+    font-size: 15.5px;
+  }
+}
+
+.sorana-theme h1,
+.sorana-theme h2,
+.sorana-theme h3,
+.sorana-theme h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
 /* Ensure dark mode respects the white background */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -41,10 +135,68 @@ body {
   .text-accent {
     color: var(--color-accent);
   }
+  .bg-muted {
+    background-color: var(--color-muted);
+  }
+  .text-muted-foreground {
+    color: var(--color-muted-foreground);
+  }
+  .bg-primary {
+    background-color: var(--color-primary);
+  }
+  .text-primary {
+    color: var(--color-primary);
+  }
+  .text-primary-foreground {
+    color: var(--color-primary-foreground);
+  }
+  .bg-card {
+    background-color: var(--color-card);
+  }
+  .border-border {
+    border-color: var(--color-border);
+  }
 }
 @layer utilities {
   .animate-fade-in {
     animation: fadeIn 0.5s ease-in-out;
+  }
+  .surface-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(16px);
+  }
+  .glass-panel {
+    background: linear-gradient(130deg, #ffffffbf, #ffffff8c);
+    border: 1px solid var(--color-border);
+    box-shadow: 0 26px 70px -50px #1e3a8a99;
+    backdrop-filter: blur(20px);
+  }
+  .stroke-card {
+    border: 1px solid #1e3a8a33;
+    box-shadow: 0 20px 55px -40px #1e3a8a8c;
+  }
+  .text-display {
+    font-family: var(--font-display);
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.38em;
+    color: var(--color-muted-foreground);
+    font-size: 0.64rem;
+  }
+  .glow-ring {
+    box-shadow: 0 22px 45px -30px #42c77599;
+  }
+  .text-gradient-primary {
+    background: linear-gradient(110deg, var(--color-foreground) 10%, var(--color-accent) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .animate-fade-up {
+    animation: fadeUp 0.9s ease-out both;
   }
 }
 
@@ -54,5 +206,16 @@ body {
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
