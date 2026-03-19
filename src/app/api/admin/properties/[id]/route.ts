@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { computeExpectedMonthlyIncome, getGracePeriodEndDate, resolveBillingPlan, upsertPercentageInvoice } from "../../../../../lib/billing";
+import { Property } from "../../../../../types/property";
 
 // Helper: check if request is from authenticated admin
 async function isAuthenticatedAdmin(request: NextRequest): Promise<{ authenticated: boolean; errorResponse?: NextResponse }> {
@@ -48,7 +49,7 @@ export async function GET(
   try {
     const { db }: { db: Db } = await connectToDatabase();
 
-    const property = await db.collection('properties').findOne({ _id: new ObjectId(id) });
+    const property = await db.collection<Property>('properties').findOne({ _id: new ObjectId(id) });
     if (!property) {
       return NextResponse.json({ success: false, message: 'Property not found' }, { status: 404 });
     }
@@ -99,7 +100,7 @@ export async function PUT(
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    const property = await db.collection("properties").findOne({ _id: new ObjectId(id) });
+    const property = await db.collection<Property>("properties").findOne({ _id: new ObjectId(id) });
     if (!property) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
@@ -188,7 +189,7 @@ export async function DELETE(
   try {
     const { db }: { db: Db } = await connectToDatabase();
 
-    const property = await db.collection('properties').findOne({ _id: new ObjectId(id) });
+    const property = await db.collection<Property>('properties').findOne({ _id: new ObjectId(id) });
     if (!property) {
       return NextResponse.json({ success: false, message: 'Property not found' }, { status: 404 });
     }
