@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FileText, BarChart2, ArrowUpDown, Download, Lock } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -63,8 +63,16 @@ interface SortConfig<T> {
 
 export default function ReportsAndInvoicesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const perm = usePermissions();
   const [activeTab, setActiveTab] = useState<"reports" | "invoices">("reports");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "invoices") {
+      setActiveTab("invoices");
+    }
+  }, [searchParams]);
   const [reports, setReports] = useState<Report[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -77,6 +85,7 @@ export default function ReportsAndInvoicesPage() {
   const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState<string>(""); // For team member context
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
@@ -88,6 +97,7 @@ export default function ReportsAndInvoicesPage() {
   const [csrfToken, setCsrfToken] = useState<string>("");
   const [reportSortConfig, setReportSortConfig] = useState<SortConfig<Report>>({ key: "date", direction: "desc" });
   const [invoiceSortConfig, setInvoiceSortConfig] = useState<SortConfig<Invoice>>({ key: "createdAt", direction: "desc" });
+  const isDue = !!dueStatus?.isDue;
 
   // Helper: Validate and format date
   const isValidDate = (dateString: string): boolean => {
@@ -162,6 +172,28 @@ export default function ReportsAndInvoicesPage() {
 
     setEffectiveOwnerId(ownerIdToUse);
   }, [router, canViewReports]);
+
+  useEffect(() => {
+    if (!userId || !["propertyOwner", "teamMember"].includes(role ?? "")) return;
+    let cancelled = false;
+
+    const fetchDueStatus = async () => {
+      try {
+        const res = await fetch("/api/owner-dues", { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setDueStatus(data);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchDueStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, role]);
 
   // Fetch CSRF token
   useEffect(() => {
@@ -321,10 +353,17 @@ export default function ReportsAndInvoicesPage() {
 
   // Tab switch
   const handleTabSwitch = (tab: "reports" | "invoices") => {
+    if (isDue && tab === "reports") return;
     setActiveTab(tab);
     setError(null);
     setSuccessMessage(null);
   };
+
+  useEffect(() => {
+    if (isDue && activeTab === "reports") {
+      setActiveTab("invoices");
+    }
+  }, [isDue, activeTab]);
 
   // Filters
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -584,16 +623,18 @@ export default function ReportsAndInvoicesPage() {
           {/* Tabs */}
           <div className="mb-6">
             <div className="flex border-b border-gray-200">
-              <button
-                onClick={() => handleTabSwitch("reports")}
-                className={`px-4 py-2 text-sm font-medium ${
-                  activeTab === "reports"
-                    ? "border-b-2 border-[#012a4a] text-[#012a4a]"
-                    : "text-gray-500 hover:text-[#012a4a]"
-                }`}
-              >
-                Reports
-              </button>
+              {!isDue && (
+                <button
+                  onClick={() => handleTabSwitch("reports")}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    activeTab === "reports"
+                      ? "border-b-2 border-[#012a4a] text-[#012a4a]"
+                      : "text-gray-500 hover:text-[#012a4a]"
+                  }`}
+                >
+                  Reports
+                </button>
+              )}
               <button
                 onClick={() => handleTabSwitch("invoices")}
                 className={`px-4 py-2 text-sm font-medium ${
@@ -844,6 +885,10 @@ export default function ReportsAndInvoicesPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

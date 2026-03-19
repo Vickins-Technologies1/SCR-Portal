@@ -46,6 +46,17 @@ interface ConfirmationEmailOptions {
   mpesaCode?: string;        // M-Pesa receipt / reference number
 }
 
+interface VacateRequestEmailOptions {
+  to: string;
+  ownerName: string;
+  tenantName: string;
+  propertyName: string;
+  houseNumber?: string;
+  moveOutDate?: string;
+  message: string;
+  dashboardUrl: string;
+}
+
 interface ResetEmailOptions {
   to: string;
   name: string;
@@ -314,5 +325,53 @@ export async function sendConfirmationEmail({
   } catch (error) {
     console.error(`Error sending confirmation email to ${to}:`, error);
     throw new Error("Failed to send confirmation email");
+  }
+}
+
+export async function sendVacateRequestEmail({
+  to,
+  ownerName,
+  tenantName,
+  propertyName,
+  houseNumber,
+  moveOutDate,
+  message,
+  dashboardUrl,
+}: VacateRequestEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const detailItems = [
+      `<li><strong>Tenant:</strong> ${tenantName}</li>`,
+      `<li><strong>Property:</strong> ${propertyName}</li>`,
+      houseNumber ? `<li><strong>House/Unit:</strong> ${houseNumber}</li>` : "",
+      moveOutDate ? `<li><strong>Preferred move-out:</strong> ${moveOutDate}</li>` : "",
+      `<li><strong>Message:</strong> ${message}</li>`,
+    ].filter(Boolean).join("");
+
+    const html = generateStyledTemplate({
+      name: ownerName || "Property Owner",
+      title: "Tenant Vacate Request",
+      intro: "A tenant has submitted a request to vacate. Please review and approve in your dashboard.",
+      details: `
+        <ul>${detailItems}</ul>
+        <p style="text-align: center; margin-top: 32px;">
+          <a href="${dashboardUrl}" class="button">Review Vacate Requests</a>
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Tenant Vacate Request Submitted",
+      html,
+    });
+    console.log(`Vacate request email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending vacate request email to ${to}:`, error);
+    throw new Error("Failed to send vacate request email");
   }
 }

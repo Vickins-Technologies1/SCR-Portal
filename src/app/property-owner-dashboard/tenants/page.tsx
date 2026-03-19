@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Users, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -62,6 +63,7 @@ export default function TenantsPage() {
   const [paymentStatus, setPaymentStatus] = useState<"active" | "inactive" | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [pendingInvoices, setPendingInvoices] = useState<number>(0);
+  const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPaymentPromptOpen, setIsPaymentPromptOpen] = useState(false);
@@ -248,6 +250,14 @@ export default function TenantsPage() {
     }
   }, [effectiveOwnerId, csrfToken]);
 
+  const fetchDueStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/owner-dues", { credentials: "include" });
+      const data = await res.json();
+      if (data.success) setDueStatus(data);
+    } catch {}
+  }, []);
+
   // Fetch pending invoices (scoped to effective owner)
   const fetchPendingInvoices = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
@@ -269,6 +279,7 @@ export default function TenantsPage() {
         fetchTenants(),
         fetchProperties(),
         fetchPendingInvoices(),
+        fetchDueStatus(),
       ]).catch(() => setError("Failed to load initial data."));
     }
   }, [
@@ -281,6 +292,7 @@ export default function TenantsPage() {
     fetchTenants,
     fetchProperties,
     fetchPendingInvoices,
+    fetchDueStatus,
   ]);
 
   // ────────────────────────────────────────────────
@@ -411,7 +423,7 @@ export default function TenantsPage() {
   };
 
   // Determine if user can add tenants (simple check — you can tie to permissions later)
-  const canAddTenants = canManageTenants;
+  const canAddTenants = canManageTenants && !dueStatus?.isDue;
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
       <Navbar />
@@ -481,9 +493,17 @@ export default function TenantsPage() {
                 You have {pendingInvoices} pending invoice{pendingInvoices > 1 ? "s" : ""}.
               </div>
             )}
-            {tenants.length >= 3 && paymentStatus !== "active" && (
-              <div className="bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 mb-6 rounded-lg">
-                Note: Adding more tenants may require a management fee payment.
+            {dueStatus?.isDue && (
+              <div className="bg-amber-100 border border-amber-300 text-amber-900 p-4 mb-6 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <span>
+                  Payment required: Your grace period has ended. Please pay your invoice to add tenants.
+                </span>
+                <Link
+                  href="/property-owner-dashboard/reports?tab=invoices"
+                  className="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-700"
+                >
+                  Go to Invoices
+                </Link>
               </div>
             )}
           </AnimatePresence>
@@ -652,6 +672,15 @@ export default function TenantsPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
 
 
 

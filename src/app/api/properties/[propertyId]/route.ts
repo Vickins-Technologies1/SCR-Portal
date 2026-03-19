@@ -22,6 +22,7 @@ export interface Property {
   name: string;
   address: string;
   unitTypes: UnitType[];
+  billingType?: "RentCollection" | "FullManagement";
   managementFee?: number;
   status: string;
   rentPaymentDate?: number;
@@ -54,6 +55,7 @@ interface PropertyRequest {
   name?: string;
   address?: string;
   unitTypes?: UnitType[];
+  billingType?: "RentCollection" | "FullManagement";
 }
 
 // ===============================================
@@ -221,7 +223,7 @@ export async function PUT(
       );
     }
 
-    const allowed: Array<keyof PropertyRequest> = ['name', 'address', 'unitTypes'];
+    const allowed: Array<keyof PropertyRequest> = ['name', 'address', 'unitTypes', 'billingType'];
     const update: Partial<Property> = {};
 
     for (const field of allowed) {
@@ -234,9 +236,22 @@ export async function PUT(
       }
     }
 
-    // === UNIT TYPE VALIDATION ===
+    const requestedBillingType = payload.billingType;
+
+    if (requestedBillingType !== undefined) {
+      if (!['RentCollection', 'FullManagement'].includes(requestedBillingType)) {
+        return NextResponse.json(
+          { success: false, message: 'billingType must be RentCollection or FullManagement' },
+          { status: 400 }
+        );
+      }
+      update.billingType = requestedBillingType;
+    }
+
+
     if (update.unitTypes) {
       const validated: UnitType[] = [];
+      const enforcedPlan = requestedBillingType ?? existing.billingType;
       const currentTypes = new Set(existing.unitTypes.map(u => u.type));
       const newTypes = new Set(update.unitTypes.map(u => u.type));
 
@@ -245,8 +260,7 @@ export async function PUT(
           !u.type ||
           typeof u.price !== 'number' || u.price < 0 ||
           typeof u.deposit !== 'number' || u.deposit < 0 ||
-          typeof u.quantity !== 'number' || u.quantity < 0 ||
-          !['RentCollection', 'FullManagement'].includes(u.managementType)
+          typeof u.quantity !== 'number' || u.quantity < 0
         ) {
           return NextResponse.json(
             { success: false, message: `Invalid unit type '${u.type ?? 'unknown'}: missing or invalid fields` },
@@ -254,23 +268,17 @@ export async function PUT(
           );
         }
 
-        if (u.managementType === 'FullManagement') {
-          if (typeof u.managementFee !== 'number' || u.managementFee < 0) {
-            return NextResponse.json(
-              { success: false, message: `managementFee is required and must be >= 0 for FullManagement unit '${u.type}'` },
-              { status: 400 }
-            );
-          }
-        } else if (u.managementFee !== undefined && typeof u.managementFee !== 'number') {
+        if (u.managementFee !== undefined && (typeof u.managementFee !== 'number' || u.managementFee < 0)) {
           return NextResponse.json(
-            { success: false, message: `managementFee must be a number for RentCollection unit '${u.type}'` },
+            { success: false, message: `managementFee must be a number >= 0 for unit '${u.type}'` },
             { status: 400 }
           );
         }
 
         validated.push({
           ...u,
-          managementFee: u.managementType === 'RentCollection' && u.managementFee === undefined ? 0 : u.managementFee,
+          managementType: enforcedPlan ?? u.managementType ?? "RentCollection",
+          managementFee: u.managementFee ?? 0,
         });
       }
 
@@ -301,7 +309,13 @@ export async function PUT(
         }
       }
     }
-
+    if (requestedBillingType && !update.unitTypes) {
+      update.unitTypes = existing.unitTypes.map((u) => ({
+        ...u,
+        managementType: requestedBillingType,
+        managementFee: u.managementFee ?? 0,
+      }));
+    }
     if (Object.keys(update).length === 0) {
       return NextResponse.json(
         { success: false, message: 'No fields provided for update' },
@@ -426,3 +440,19 @@ export async function DELETE(
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

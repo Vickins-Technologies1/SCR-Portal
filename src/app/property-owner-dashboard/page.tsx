@@ -4,8 +4,10 @@ import { Inter } from "next/font/google";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import MaintenanceRequests from "./components/MaintenanceRequests";
+import VacateRequests from "./components/VacateRequests";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Info } from "lucide-react";
 import {
   Building2,
@@ -59,6 +61,7 @@ export default function PropertyOwnerDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [hasDashboardAccess, setHasDashboardAccess] = useState<boolean | null>(null); // ← new: permission check
 
   const [stats, setStats] = useState<OwnerStats>({
@@ -141,6 +144,28 @@ export default function PropertyOwnerDashboard() {
 
     fetchCsrfAndData();
   }, [loggedInUserId, role, ownerIdFromCookie, router, perm]);
+
+  useEffect(() => {
+    if (!loggedInUserId || !["propertyOwner", "teamMember"].includes(role ?? "")) return;
+    let cancelled = false;
+
+    const fetchDueStatus = async () => {
+      try {
+        const res = await fetch("/api/owner-dues", { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setDueStatus(data);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchDueStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedInUserId, role]);
 
   // ─── DATA FETCHING ──────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -306,6 +331,25 @@ export default function PropertyOwnerDashboard() {
                 </div>
               )}
 
+              {dueStatus?.isDue && (
+                <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-900 px-5 py-4 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 mt-0.5" />
+                    <div>
+                      <p className="font-semibold">Payment required</p>
+                      <p className="text-sm text-amber-800">
+                        Your grace period has ended for at least one property. Please settle your invoice to regain full access.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/property-owner-dashboard/reports?tab=invoices"
+                    className="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-700"
+                  >
+                    View Invoices
+                  </Link>
+                </div>
+              )}
               {isLoading ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
                   {[...Array(10)].map((_, i) => (
@@ -470,6 +514,7 @@ export default function PropertyOwnerDashboard() {
                   </div>
 
                   {/* MAINTENANCE REQUESTS */}
+                  <VacateRequests csrfToken={csrfToken!} />
                   <MaintenanceRequests
                     userId={ownerIdFromCookie || loggedInUserId!}
                     csrfToken={csrfToken!}
@@ -609,6 +654,11 @@ export default function PropertyOwnerDashboard() {
     </div>
   );
 }
+
+
+
+
+
 
 
 

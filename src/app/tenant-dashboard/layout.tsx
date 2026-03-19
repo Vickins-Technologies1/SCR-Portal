@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   Wrench,
+  DoorOpen,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import Image from "next/image";
@@ -58,6 +59,7 @@ export default function TenantDashboardLayout({
     { href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
     { href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
     { href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
+    { href: "/tenant-dashboard/vacate", label: "Vacate Notice", icon: <DoorOpen size={18} /> },
     { href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
   ];
 

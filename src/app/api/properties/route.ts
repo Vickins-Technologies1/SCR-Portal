@@ -3,31 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
 import { ObjectId } from 'mongodb';
-import { UNIT_TYPES, getManagementFee } from '../../../lib/unitTypes';
+import { UNIT_TYPES } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
-import { sendWhatsAppMessage } from '../../../lib/whatsapp';
-
-// Define Invoice interface for type safety
-interface Invoice {
-  _id: ObjectId;
-  userId: string;
-  propertyId: string;
-  unitType: string;
-  amount: number;
-  status: 'pending' | 'completed' | 'failed';
-  reference: string;
-  createdAt: Date;
-  updatedAt: Date;
-  expiresAt: Date;
-  description: string;
-}
-
-// Define PropertyOwner interface for retrieving phone number
-interface PropertyOwner {
-  _id: ObjectId;
-  phone: string;
-}
+
 
 // Logger (aligned with tenant route handler)
 interface LogMeta {
@@ -318,7 +297,7 @@ export async function POST(request: NextRequest) {
 
     const { db } = await connectToDatabase();
     logger.debug('Connected to MongoDB database: rentaldb');
-    const { name, address, unitTypes, status, rentPaymentDate } = body;
+    const { name, address, unitTypes, status, rentPaymentDate, billingType } = body;
 
     if (
       !name ||
@@ -337,10 +316,18 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (billingType && !['RentCollection', 'FullManagement'].includes(billingType)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid billingType. Must be RentCollection or FullManagement.' },
+        { status: 400 }
+      );
+    }
+
+    const billingPlan = billingType === 'FullManagement' ? 'FullManagement' : 'RentCollection';
 
     // Validate unit types and calculate total units
     let totalUnits = 0;
-    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: UnitType, index: number) => {
+    const validatedUnitTypes: UnitType[] = unitTypes.map((unit: any, index: number) => {
       const validUnitType = UNIT_TYPES.find((ut) => ut.type === unit.type);
       if (
         !unit.type ||
@@ -350,8 +337,7 @@ export async function POST(request: NextRequest) {
         typeof unit.price !== 'number' ||
         unit.price < 0 ||
         typeof unit.deposit !== 'number' ||
-        unit.deposit < 0 ||
-        !['RentCollection', 'FullManagement'].includes(unit.managementType)
+        unit.deposit < 0
       ) {
         throw new Error(`Invalid unit type at index ${index}: ${JSON.stringify(unit)}`);
       }
@@ -362,17 +348,12 @@ export async function POST(request: NextRequest) {
         quantity: unit.quantity,
         price: unit.price,
         deposit: unit.deposit,
-        managementType: unit.managementType,
+        managementType: billingPlan,
         managementFee: 0, // Set to 0 as fee will be calculated for total units
       };
     });
 
-    // Calculate management fee based on total units
-    const managementFee = getManagementFee({
-      type: validatedUnitTypes[0].type,
-      managementType: validatedUnitTypes[0].managementType,
-      quantity: totalUnits,
-    });
+    const managementFee = 0;
 
     const newProperty: Property = {
       _id: new ObjectId(),
@@ -382,89 +363,13 @@ export async function POST(request: NextRequest) {
       status,
       ownerId,
       rentPaymentDate,
+      billingType: billingPlan,
       managementFee,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const result = await db.collection<Property>('properties').insertOne(newProperty);
-
-    // Generate a single invoice for the property if management fee is non-zero
-    if (managementFee > 0) {
-      const createdAt = new Date();
-      const expiresAt = new Date(createdAt);
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
-
-      const invoice: Omit<Invoice, '_id'> = {
-        userId: ownerId,
-        propertyId: result.insertedId.toString(),
-        unitType: 'All Units',
-        amount: managementFee,
-        reference: `PROPERTY-INVOICE-${ownerId}-ALL-UNITS-${Date.now()}`,
-        status: 'pending',
-        createdAt,
-        updatedAt: createdAt,
-        expiresAt,
-        description: `Property management fee for ${name} - Total Units: ${totalUnits}`,
-      };
-
-      const invoiceResult = await db.collection<Omit<Invoice, '_id'>>('invoices').insertOne(invoice);
-      logger.info('Generated invoice for property', {
-        invoiceId: invoiceResult.insertedId.toString(),
-        propertyId: result.insertedId.toString(),
-        totalUnits,
-        managementFee,
-        invoice,
-      });
-
-      // Retrieve owner's phone number
-      const owner = await db.collection<PropertyOwner>('propertyOwners').findOne({
-        _id: new ObjectId(ownerId),
-      });
-
-      if (!owner || !owner.phone) {
-        logger.warn('Owner phone number not found', { ownerId });
-      } else {
-        // Send WhatsApp message to owner
-        try {
-          const maxPropertyNameLength = 50;
-          const truncatedPropertyName = name.length > maxPropertyNameLength
-            ? `${name.substring(0, maxPropertyNameLength)}...`
-            : name;
-
-          const paymentUrl = process.env.NEXT_PUBLIC_PAYMENT_URL || 'https://app.smartchoicerentalmanagement.com/';
-          const whatsAppMessage = `Greetings, a new invoice has been generated for your property "${truncatedPropertyName}". Management Fee: ${managementFee}. Please pay by ${expiresAt.toLocaleDateString()} at ${paymentUrl}. Reference: ${invoice.reference} to add tenants.`;
-
-          if (whatsAppMessage.length > 4096) {
-            logger.warn('WhatsApp message exceeds 4096 characters', {
-              messageLength: whatsAppMessage.length,
-              ownerId,
-            });
-            const fallbackMessage = `New invoice for "${truncatedPropertyName}". Fee: ${managementFee}. Pay by ${expiresAt.toLocaleDateString()} at ${paymentUrl}. Ref: ${invoice.reference}.`;
-            await sendWhatsAppMessage({
-              phone: owner.phone,
-              message: fallbackMessage,
-            });
-          } else {
-            await sendWhatsAppMessage({
-              phone: owner.phone,
-              message: whatsAppMessage,
-            });
-          }
-          logger.info('WhatsApp message sent successfully', { phone: owner.phone });
-        } catch (whatsAppError) {
-          logger.error('Failed to send WhatsApp message', {
-            phone: owner.phone,
-            error: whatsAppError instanceof Error ? whatsAppError.message : 'Unknown error',
-          });
-        }
-      }
-    } else {
-      logger.info('No management fee for property, skipping invoice generation', {
-        propertyId: result.insertedId.toString(),
-        totalUnits,
-      });
-    }
 
     return NextResponse.json(
       {
@@ -489,3 +394,15 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+

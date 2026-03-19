@@ -40,10 +40,11 @@ export async function GET(
   { params }: { params: Promise<{ tenantId: string }> }
 ) {
   const { tenantId } = await params;
-  const userId = (await cookies()).get("userId")?.value;
-  const role = (await cookies()).get("role")?.value;
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("userId")?.value;
+  const role = cookieStore.get("role")?.value;
 
-  if (!userId || !ObjectId.isValid(userId) || !["propertyOwner", "admin"].includes(role || "")) {
+  if (!userId || !ObjectId.isValid(userId) || !["propertyOwner", "teamMember", "admin"].includes(role || "")) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
@@ -57,10 +58,24 @@ export async function GET(
 
   try {
     const { db } = await connectToDatabase();
+    let effectiveOwnerId = userId;
+
+    if (role === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(userId),
+        active: true,
+      });
+
+      if (!teamMember || !teamMember.ownerId) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+
+      effectiveOwnerId = teamMember.ownerId.toString();
+    }
 
     const tenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(tenantId),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
     });
 
     if (!tenant) {
@@ -69,7 +84,7 @@ export async function GET(
 
     const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(tenant.propertyId),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
     });
 
     if (!property) {

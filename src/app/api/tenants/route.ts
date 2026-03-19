@@ -9,6 +9,7 @@ import { sendWelcomeSms } from "../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 import { TenantRequest, ResponseTenant, Tenant } from "../../../types/tenant";
 import { Property } from "../../../types/property";
+import { computeExpectedMonthlyIncome, getGracePeriodEndDate, getOwnerDueStatus, resolveBillingPlan, SOFTWARE_LEASING_PERCENT, upsertPercentageInvoice } from "../../../lib/billing";
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -32,25 +33,53 @@ const toISO = (date?: Date | string): string | undefined => date ? new Date(date
 // GET: List Tenants (with pagination & filters)
 export async function GET(request: NextRequest) {
   try {
-    const userId = (await cookies()).get("userId")?.value;
-    const role = (await cookies()).get("role")?.value;
+    const { searchParams } = new URL(request.url);
+    const cookieStore = await cookies();
+    const sessionUserId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
+    const requestedOwnerId = searchParams.get("userId") || searchParams.get("ownerId");
 
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
+    if (!sessionUserId || !ObjectId.isValid(sessionUserId) || !["propertyOwner", "teamMember"].includes(role || "")) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "10")));
     const skip = (page - 1) * limit;
 
-    const filters: any = { ownerId: userId };
+    const { db } = await connectToDatabase();
+    let effectiveOwnerId = sessionUserId;
+
+    if (role === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(sessionUserId),
+        active: true,
+      });
+
+      if (!teamMember || !teamMember.ownerId) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+
+      const ownerIdFromTeam = teamMember.ownerId.toString();
+      if (requestedOwnerId && requestedOwnerId !== ownerIdFromTeam) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+
+      effectiveOwnerId = ownerIdFromTeam;
+    } else if (requestedOwnerId && requestedOwnerId !== sessionUserId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    if (!effectiveOwnerId || !ObjectId.isValid(effectiveOwnerId)) {
+      return NextResponse.json({ success: false, message: "Invalid owner ID" }, { status: 400 });
+    }
+
+    const filters: any = { ownerId: effectiveOwnerId };
     if (searchParams.get("name")) filters.name = { $regex: searchParams.get("name")!, $options: "i" };
     if (searchParams.get("email")) filters.email = { $regex: searchParams.get("email")!, $options: "i" };
     if (searchParams.get("propertyId")) filters.propertyId = searchParams.get("propertyId");
     if (searchParams.get("unitType")) filters.unitType = { $regex: searchParams.get("unitType")!, $options: "i" };
 
-    const { db } = await connectToDatabase();
     const total = await db.collection<Tenant>("tenants").countDocuments(filters);
     const tenants = await db.collection<Tenant>("tenants")
       .find(filters)
@@ -214,24 +243,13 @@ export async function POST(request: NextRequest) {
         message: `No available units for ${unitConfigWithUnique.type} (Ksh ${unitConfigWithUnique.price}/mo)`,
       }, { status: 400 });
     }
-
-    // Management fee check after 3 tenants
-    const tenantCount = await db.collection("tenants").countDocuments({ ownerId: userId });
-    if (tenantCount >= 3) {
-      const paidInvoice = await db.collection("invoices").findOne({
-        userId,
-        propertyId: body.propertyId,
-        unitType: "All Units",
-        status: "completed",
-      });
-      if (!paidInvoice) {
-        return NextResponse.json(
-          { success: false, message: "Payment required: Management fee invoice must be paid to add more tenants" },
-          { status: 402 }
-        );
-      }
+    const dueStatus = await getOwnerDueStatus(db, userId, new Date());
+    if (dueStatus.isDue) {
+      return NextResponse.json(
+        { success: false, message: "Payment required: Outstanding invoice past grace period. Please pay your invoice to continue." },
+        { status: 402 }
+      );
     }
-
     // Create tenant
     const tenantData: Tenant = {
       _id: new ObjectId(),
@@ -269,6 +287,25 @@ export async function POST(request: NextRequest) {
       { arrayFilters: [{ "elem.uniqueType": unitConfigWithUnique.uniqueType }] }
     );
 
+    const billingPlan = resolveBillingPlan(property);
+    if (billingPlan === "RentCollection") {
+      const now = new Date();
+      const expectedIncome = await computeExpectedMonthlyIncome(db, property._id.toString(), now);
+      const dueDate = getGracePeriodEndDate(property.createdAt as Date, now);
+      const description = `Software leasing fee (${SOFTWARE_LEASING_PERCENT}% of expected monthly income Ksh ${expectedIncome.toFixed(2)}) for ${now.toLocaleString("default", { month: "long", year: "numeric" })}`;
+
+      await upsertPercentageInvoice({
+        db,
+        userId,
+        propertyId: property._id.toString(),
+        billingPlan: "RentCollection",
+        percentage: SOFTWARE_LEASING_PERCENT,
+        expectedIncome,
+        description,
+        expiresAt: dueDate,
+        now,
+      });
+    }
     // ────────────────────────────────────────────────
     //          Welcome notifications with password
     // ────────────────────────────────────────────────
@@ -335,3 +372,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
+
+
+

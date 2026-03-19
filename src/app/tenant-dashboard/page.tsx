@@ -23,9 +23,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  AreaChart,
+  Area,
 } from "recharts";
 import { Property } from "../../types/property";
 
@@ -137,20 +136,32 @@ const formatCurrency = (value: unknown): string => {
   return isNaN(num) ? "—" : `Ksh ${num.toLocaleString("en-US")}`;
 };
 
-function PaymentTrendChart({ data }: { data: Array<{ month: string; paid: number; due: number }> }) {
+function PaymentTrendChart({
+  data,
+}: {
+  data: Array<{ month: string; rent: number; utility: number; deposit: number; total: number }>;
+}) {
   if (!data?.length) {
     return <div className="text-gray-400 text-center py-10 text-sm italic">No payment history yet</div>;
   }
 
   return (
-    <InfoCard icon={<DollarSign className="w-5 h-5 text-emerald-600" />} title="Payment Trend" isLoading={false}>
-      <div className="h-64 sm:h-72 md:h-80 pt-2">
+    <InfoCard icon={<DollarSign className="w-5 h-5 text-emerald-600" />} title="Monthly Payments" isLoading={false}>
+      <div className="h-64 sm:h-72 md:h-80 pt-3">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 12, right: 16, left: -12, bottom: 16 }}>
+          <AreaChart data={data} margin={{ top: 12, right: 16, left: -12, bottom: 16 }}>
             <defs>
-              <linearGradient id="paidGradient" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="rentGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.9} />
-                <stop offset="95%" stopColor="#059669" stopOpacity={0.5} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0.2} />
+              </linearGradient>
+              <linearGradient id="utilityGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.85} />
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0.2} />
+              </linearGradient>
+              <linearGradient id="depositGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.85} />
+                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.2} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -174,10 +185,11 @@ function PaymentTrendChart({ data }: { data: Array<{ month: string; paid: number
               labelStyle={{ color: "#e5e7eb", fontSize: "0.85rem", fontWeight: 500 }}
             />
             <Legend wrapperStyle={{ fontSize: "0.8rem", paddingTop: 4 }} iconSize={8} />
-            <Bar dataKey="due" name="Due" fill="#e5e7eb" radius={[5, 5, 0, 0]} />
-            <Bar dataKey="paid" name="Paid" fill="url(#paidGradient)" radius={[5, 5, 0, 0]} />
-            <Line type="monotone" dataKey="paid" stroke="#059669" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: "white" }} activeDot={{ r: 5 }} />
-          </BarChart>
+            <Area type="monotone" dataKey="rent" name="Rent" stackId="1" stroke="#10b981" fill="url(#rentGradient)" strokeWidth={2} />
+            <Area type="monotone" dataKey="utility" name="Utility" stackId="1" stroke="#6366f1" fill="url(#utilityGradient)" strokeWidth={2} />
+            <Area type="monotone" dataKey="deposit" name="Deposit" stackId="1" stroke="#f59e0b" fill="url(#depositGradient)" strokeWidth={2} />
+            <Line type="monotone" dataKey="total" name="Total Paid" stroke="#111827" strokeWidth={2} dot={{ r: 2, strokeWidth: 2, fill: "white" }} activeDot={{ r: 4 }} />
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </InfoCard>
@@ -185,7 +197,6 @@ function PaymentTrendChart({ data }: { data: Array<{ month: string; paid: number
 }
 
 function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string; value: number }> }) {
-  const COLORS = ["#10b981", "#8b5cf6", "#f59e0b", "#ef4444", "#6366f1"];
   const total = breakdown.reduce((sum, item) => sum + item.value, 0);
 
   if (total === 0) {
@@ -193,25 +204,26 @@ function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string;
   }
 
   return (
-    <InfoCard icon={<PieChartIcon className="w-5 h-5 text-purple-600" />} title="Breakdown" isLoading={false}>
-      <div className="h-64 sm:h-72 flex flex-col items-center justify-center">
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={breakdown}
-              cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={75}
-              paddingAngle={1}
-              dataKey="value"
-              label={({ percent }) => (percent != null && percent > 0.09 ? `${Math.round(percent * 100)}%` : "")}
-              labelLine={false}
-            >
-              {breakdown.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="#fff" strokeWidth={1} />
-              ))}
-            </Pie>
+    <InfoCard icon={<PieChartIcon className="w-5 h-5 text-purple-600" />} title="Payment Mix" isLoading={false}>
+      <div className="h-64 sm:h-72 md:h-80 pt-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={breakdown} layout="vertical" margin={{ top: 6, right: 24, left: 10, bottom: 6 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
+            <XAxis
+              type="number"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "#6b7280", fontSize: 11 }}
+              tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
+            />
+            <YAxis
+              dataKey="name"
+              type="category"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "#6b7280", fontSize: 12 }}
+              width={70}
+            />
             <Tooltip
               formatter={(value, name) => [formatCurrency(value), name]}
               contentStyle={{
@@ -223,23 +235,12 @@ function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string;
                 fontSize: "0.8rem",
               }}
             />
-            <text x="50%" y="45%" textAnchor="middle" className="text-base sm:text-lg font-bold fill-gray-800">
-              {formatCurrency(total)}
-            </text>
-            <text x="50%" y="52%" textAnchor="middle" className="text-xs fill-gray-500">
-              Total Paid
-            </text>
-          </PieChart>
+            <Bar dataKey="value" name="Paid" radius={[6, 6, 6, 6]} fill="#8b5cf6" />
+          </BarChart>
         </ResponsiveContainer>
-
-        <div className="flex flex-wrap justify-center gap-3 mt-3 text-xs">
-          {breakdown.map((item, i) => (
-            <div key={i} className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-              <span className="text-gray-700">{item.name}</span>
-            </div>
-          ))}
-        </div>
+      </div>
+      <div className="mt-2 text-xs text-gray-500 text-center">
+        Total paid: <span className="font-semibold text-gray-700">{formatCurrency(total)}</span>
       </div>
     </InfoCard>
   );
@@ -280,7 +281,8 @@ export default function TenantDashboardPage() {
       if (data.success && data.csrfToken) {
         const token = data.csrfToken;
         setCsrfToken(token);
-        Cookies.set("csrf-token", token, { path: "/", secure: true, sameSite: "strict" });
+        const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+        Cookies.set("csrf-token", token, { path: "/", secure: isSecure, sameSite: "strict" });
         return token;
       }
     } catch (e) {
@@ -447,8 +449,10 @@ export default function TenantDashboardPage() {
 
   const paymentTrendData = (analytics?.monthlyPayments ?? []).map((item) => ({
     month: item.month,
-    paid: item.total,
-    due: item.rent + item.utility,
+    rent: item.rent,
+    utility: item.utility,
+    deposit: item.deposit,
+    total: item.total,
   }));
 
   const paymentBreakdown = [

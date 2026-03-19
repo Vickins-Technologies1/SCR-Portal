@@ -15,6 +15,7 @@ interface Property {
   name: string;
   address: string;
   unitTypes: { type: string; price: number; deposit: number; quantity: number; managementType: "RentCollection" | "FullManagement"; managementFee: number }[];
+  billingType?: "RentCollection" | "FullManagement";
   status: "Active" | "Inactive";
   rentPaymentDate: number;
   createdAt: string;
@@ -130,8 +131,9 @@ export default function PropertiesPage() {
   const [status, setStatus] = useState<"Active" | "Inactive">("Active");
   const [rentPaymentDate, setRentPaymentDate] = useState<string>("");
   const [unitTypes, setUnitTypes] = useState<
-    { type: string; price: string; deposit: string; quantity: string; managementType: "RentCollection" | "FullManagement" }[]
-  >([{ type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
+    { type: string; price: string; deposit: string; quantity: string }[]
+  >([{ type: "", price: "", deposit: "", quantity: "" }]);
+  const [billingType, setBillingType] = useState<"RentCollection" | "FullManagement">("RentCollection");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
@@ -238,7 +240,8 @@ export default function PropertiesPage() {
     setAddress("");
     setStatus("Active");
     setRentPaymentDate("");
-    setUnitTypes([{ type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
+    setUnitTypes([{ type: "", price: "", deposit: "", quantity: "" }]);
+    setBillingType("RentCollection");
     setFormErrors({});
     setEditingPropertyId(null);
   }, []);
@@ -265,9 +268,9 @@ export default function PropertiesPage() {
           price: u.price.toString(),
           deposit: u.deposit.toString(),
           quantity: u.quantity.toString(),
-          managementType: u.managementType,
         }))
       );
+      setBillingType(property.billingType || property.unitTypes?.[0]?.managementType || "RentCollection");
       setFormErrors({});
       setIsModalOpen(true);
     },
@@ -334,25 +337,10 @@ export default function PropertiesPage() {
         errors[`unitDeposit_${index}`] = `Deposit for unit ${index + 1} must be a non-negative number`;
       if (!unit.quantity || isNaN(parseInt(unit.quantity)) || parseInt(unit.quantity) < 0)
         errors[`unitQuantity_${index}`] = `Quantity for unit ${index + 1} must be a non-negative integer`;
-      if (!unit.managementType)
-        errors[`unitManagementType_${index}`] = `Management type for unit ${index + 1} is required`;
     });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }, [propertyName, address, rentPaymentDate, unitTypes]);
-
-  const getManagementFee = (quantity: number): string => {
-    const unit = UNIT_TYPES[0]; // Use first unit type for pricing tier lookup
-    const pricing = unit.pricing.RentCollection; // Use RentCollection as default
-    for (const tier of pricing) {
-      const [min, max] = tier.range;
-      if (quantity >= min && quantity <= max) {
-        return `${tier.fee} Ksh/mo`;
-      }
-    }
-    return "0 Ksh/mo";
-  };
-
   const calculateTotalUnits = useCallback(() => {
     return unitTypes.reduce((sum, unit) => sum + (parseInt(unit.quantity) || 0), 0);
   }, [unitTypes]);
@@ -388,8 +376,9 @@ export default function PropertiesPage() {
           price: parseFloat(u.price) || 0,
           deposit: parseFloat(u.deposit) || 0,
           quantity: parseInt(u.quantity) || 0,
-          managementType: u.managementType,
+          managementType: billingType,
         })),
+        billingType,
         ownerId: effectiveOwnerId,
         csrfToken,
       };
@@ -420,7 +409,7 @@ export default function PropertiesPage() {
         setIsLoading(false);
       }
     },
-    [userId, effectiveOwnerId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, unitTypes, fetchProperties, resetForm, validateForm, csrfToken, canListProperties, canEditProperties]
+    [userId, effectiveOwnerId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, unitTypes, billingType, fetchProperties, resetForm, validateForm, csrfToken, canListProperties, canEditProperties]
   );
 
   const sortedProperties = useMemo(() => {
@@ -461,7 +450,7 @@ export default function PropertiesPage() {
   }, [sortConfig]);
 
   const addUnitType = useCallback(() => {
-    setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "", quantity: "", managementType: "RentCollection" }]);
+    setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "", quantity: "" }]);
   }, []);
 
   const updateUnitType = useCallback((index: number, field: string, value: string) => {
@@ -696,6 +685,17 @@ export default function PropertiesPage() {
                     </select>
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-gray-700">Billing Plan</label>
+                    <select
+                      value={billingType}
+                      onChange={(e) => setBillingType(e.target.value as "RentCollection" | "FullManagement")}
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition border-gray-300 text-sm sm:text-base"
+                    >
+                      <option value="RentCollection">Software Leasing (3% of expected income)</option>
+                      <option value="FullManagement">Full Property Management</option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700">Unit Types</label>
                     {unitTypes.map((unit, index) => (
                       <div
@@ -749,15 +749,6 @@ export default function PropertiesPage() {
                           className={`w-full sm:w-20 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors[`unitQuantity_${index}`] ? "border-red-500" : "border-gray-300"
                             } text-sm sm:text-base`}
                         />
-                        <select
-                          value={unit.managementType}
-                          onChange={(e) => updateUnitType(index, "managementType", e.target.value)}
-                          className={`w-full sm:w-40 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors[`unitManagementType_${index}`] ? "border-red-500" : "border-gray-300"
-                            } text-sm sm:text-base`}
-                        >
-                          <option value="RentCollection">Rent Collection</option>
-                          <option value="FullManagement">Full Management</option>
-                        </select>
                         {unitTypes.length > 1 && (
                           <button
                             type="button"
@@ -784,9 +775,6 @@ export default function PropertiesPage() {
                         {formErrors[`unitQuantity_${index}`] && (
                           <p className="text-red-500 text-xs">{formErrors[`unitQuantity_${index}`]}</p>
                         )}
-                        {formErrors[`unitManagementType_${index}`] && (
-                          <p className="text-red-500 text-xs">{formErrors[`unitManagementType_${index}`]}</p>
-                        )}
                       </div>
                     ))}
                     {formErrors.unitTypes && (
@@ -797,7 +785,9 @@ export default function PropertiesPage() {
                         Total Units: {calculateTotalUnits()}
                       </p>
                       <p className="text-sm font-medium text-gray-700">
-                        Management Fee: {getManagementFee(calculateTotalUnits())}
+                        Billing Plan: {billingType === "RentCollection"
+                          ? "Software leasing (3% of expected income)"
+                          : "Full management (admin-set % of expected income)"}
                       </p>
                     </div>
                     <button
@@ -882,6 +872,37 @@ export default function PropertiesPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

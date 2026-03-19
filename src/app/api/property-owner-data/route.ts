@@ -25,6 +25,8 @@ interface Property {
   createdAt: Date;
   updatedAt?: Date;
   managementFee?: number;
+  managementFeePercent?: number;
+  billingType?: "RentCollection" | "FullManagement";
 }
 
 interface TenantFromDB {
@@ -156,6 +158,8 @@ export async function GET(request: NextRequest) {
           createdAt: p.createdAt.toISOString(),
           updatedAt: p.updatedAt?.toISOString(),
           managementFee: p.managementFee,
+          managementFeePercent: p.managementFeePercent,
+          billingType: p.billingType,
         })),
         pendingInvoices,
         page,
@@ -174,3 +178,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

@@ -161,7 +161,6 @@ export default async function PropertyDetailPage({
                           <span>
                             {unit.deposit ? `Deposit: ${unit.deposit.toLocaleString()}` : "No deposit"}
                           </span>
-                          <span>Qty: {unit.quantity}</span>
                           <span className="font-medium text-emerald-600">
                             Vacant: {unit.vacant ?? unit.quantity}
                           </span>

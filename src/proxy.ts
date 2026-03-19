@@ -95,6 +95,8 @@ function rateLimitMiddleware(handler: (req: NextRequest) => Promise<NextResponse
 // Routes that implement their own CSRF validation
 const SELF_HANDLED_CSRF_ROUTES = [
   "/api/tenants/maintenance",
+  "/api/tenants/vacate",
+  "/api/property-owners/vacate",
   "/api/tenant/payments",
   "/api/tenant/change-password",
   "/api/tenant/profile",
@@ -128,6 +130,8 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/tenant/profile": { roles: ["tenant", "propertyOwner", "teamMember"], isApi: true },
   "/api/tenants/check-dues": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: true },
   "/api/tenants/maintenance": { roles: ["tenant", "propertyOwner", "teamMember"], isApi: true },
+  "/api/tenants/vacate": { roles: ["tenant", "propertyOwner"], isApi: true },
+  "/api/property-owners/vacate": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/update-wallet": { roles: ["propertyOwner", "teamMember"], isApi: true },
 
   // Impersonation
@@ -141,6 +145,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   // Page routes (client-side routing protection)
   "/property-owner-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/tenant-dashboard": { roles: ["tenant", "propertyOwner"], isApi: false },
+  "/tenant-dashboard/vacate": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/properties": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: false },
   "/tenants": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/property-listings": { roles: [], isApi: false }, // public
@@ -254,7 +259,8 @@ export async function proxy(request: NextRequest) {
       !isImpersonating &&
       path.startsWith("/api/tenants/") &&
       !path.startsWith("/api/tenants/maintenance") &&
-      !path.startsWith("/api/tenants/profile")
+      !path.startsWith("/api/tenants/profile") &&
+      !path.startsWith("/api/tenants/vacate")
     ) {
       const segments = path.split("/").filter(Boolean);
       if (segments.length >= 3) {

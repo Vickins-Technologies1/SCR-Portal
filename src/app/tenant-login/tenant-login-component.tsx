@@ -420,8 +420,6 @@ export default function TenantLoginPage() {
               </motion.button>
             </form>
           </div>
-
-         
         </motion.div>
       </div>
     </div>

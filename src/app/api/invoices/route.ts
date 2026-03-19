@@ -14,6 +14,11 @@ interface Invoice {
   updatedAt: Date;
   expiresAt: Date;
   description: string;
+  unitType?: string;
+  billingMonth?: string;
+  billingPlan?: string;
+  percentage?: number;
+  expectedIncome?: number;
 }
 
 export async function GET(request: NextRequest) {
@@ -54,7 +59,6 @@ export async function GET(request: NextRequest) {
 
     const { db } = await connectToDatabase();
     console.log("Connected to MongoDB");
-
     if (propertyId) {
       // Validate propertyId
       if (!ObjectId.isValid(propertyId)) {
@@ -65,11 +69,19 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Query for invoices by userId and propertyId
-      const invoices = await db.collection<Invoice>("invoices").find({
-        userId,
-        propertyId,
-      }).toArray();
+      const pendingInvoices = await db
+        .collection<Invoice>("invoices")
+        .find({ userId, propertyId, status: "pending" })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      const invoices = pendingInvoices.length > 0
+        ? pendingInvoices
+        : await db
+          .collection<Invoice>("invoices")
+          .find({ userId, propertyId })
+          .sort({ createdAt: -1 })
+          .toArray();
 
       console.log(
         `Checked invoices for userId: ${userId}, propertyId: ${propertyId}`,
@@ -81,6 +93,7 @@ export async function GET(request: NextRequest) {
           {
             success: true,
             status: "none",
+            pendingInvoices: 0,
             invoices: [],
           },
           { status: 200 }
@@ -98,12 +111,18 @@ export async function GET(request: NextRequest) {
         updatedAt: invoice.updatedAt instanceof Date ? invoice.updatedAt.toISOString() : new Date().toISOString(),
         expiresAt: invoice.expiresAt instanceof Date ? invoice.expiresAt.toISOString() : new Date().toISOString(),
         description: invoice.description,
+        unitType: invoice.unitType,
+        billingMonth: invoice.billingMonth,
+        billingPlan: invoice.billingPlan,
+        percentage: invoice.percentage,
+        expectedIncome: invoice.expectedIncome,
       }));
 
       return NextResponse.json(
         {
           success: true,
-          status: invoices[0].status, // Return the status of the first invoice
+          status: invoices[0].status,
+          pendingInvoices: pendingInvoices.length,
           invoices: formattedInvoices,
         },
         { status: 200 }
@@ -114,9 +133,15 @@ export async function GET(request: NextRequest) {
     const query = role === "admin" ? {} : { userId };
     const invoices = await db
       .collection<Invoice>("invoices")
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
+      .find(query).toArray();
+    const statusOrder: Record<string, number> = { pending: 0, failed: 1, completed: 2 };
+    invoices.sort((a, b) => {
+      const orderA = statusOrder[a.status] ?? 9;
+      const orderB = statusOrder[b.status] ?? 9;
+      if (orderA !== orderB) return orderA - orderB;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    const pendingCount = invoices.filter((inv) => inv.status === "pending").length;
 
     console.log(`Fetched ${invoices.length} invoices for userId: ${userId}, role: ${role}`);
 
@@ -143,6 +168,11 @@ export async function GET(request: NextRequest) {
         updatedAt: updatedAt.toISOString(),
         expiresAt: expiresAt.toISOString(),
         description: invoice.description,
+        unitType: invoice.unitType,
+        billingMonth: invoice.billingMonth,
+        billingPlan: invoice.billingPlan,
+        percentage: invoice.percentage,
+        expectedIncome: invoice.expectedIncome,
       };
     });
 
@@ -151,6 +181,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
+        pendingInvoices: pendingCount,
         invoices: formattedInvoices,
       },
       { status: 200 }
@@ -332,3 +363,12 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+
+
+
+
+
+
+
+

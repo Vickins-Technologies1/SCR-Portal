@@ -32,6 +32,8 @@ interface Property {
   }[];
   totalUnpaidInvoices?: number;
   unpaidInvoiceCount?: number;
+  managementFeePercent?: number;
+  billingType?: string;
 }
 
 interface SortConfig {
@@ -53,6 +55,8 @@ export default function PropertiesPage() {
   const [expanded, setExpanded] = useState<string[]>([]);
   const [editProperty, setEditProperty] = useState<Property | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [feeInputs, setFeeInputs] = useState<Record<string, string>>({});
+  const [feeLoadingId, setFeeLoadingId] = useState<string | null>(null);
 
   // New states for delete confirmation
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -296,7 +300,58 @@ export default function PropertiesPage() {
     }
   };
 
-  // ── Rendering ───────────────────────────────────────────────────────────────
+  
+  const handleSetManagementFee = async (property: Property) => {
+    const rawValue = feeInputs[property._id] ?? (property.managementFeePercent?.toString() ?? "");
+    const percent = Number(rawValue);
+
+    if (!rawValue || Number.isNaN(percent) || percent < 0 || percent > 100) {
+      setError("Management fee percent must be a number between 0 and 100.");
+      return;
+    }
+
+    setFeeLoadingId(property._id);
+    setError(null);
+
+    try {
+      const csrfToken = await fetchCsrfToken();
+      if (!csrfToken) {
+        setError("Failed to get security token. Please refresh the page.");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/properties/${property._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({ managementFeePercent: percent, createInvoice: true }),
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.success) {
+        setProperties(properties.map((p) =>
+          p._id === property._id ? { ...p, managementFeePercent: percent } : p
+        ));
+      } else {
+        setError(data.message || "Failed to create management invoice.");
+      }
+    } catch (err) {
+      console.error("Management invoice error:", err);
+      setError("Failed to create management invoice.");
+    } finally {
+      setFeeLoadingId(null);
+    }
+  };
+// ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -477,6 +532,43 @@ export default function PropertiesPage() {
                                     ))}
                                   </ul>
                                 )}
+
+                                {(p.billingType ? p.billingType === "FullManagement" : p.unitTypes.some((u) => u.managementType === "FullManagement")) ? (
+                                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                                      <div className="flex-1">
+                                        <label className="block text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-2">
+                                          Full Management Fee (% of expected income)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          step="0.01"
+                                          value={feeInputs[p._id] ?? (p.managementFeePercent?.toString() ?? "")}
+                                          onChange={(e) =>
+                                            setFeeInputs({ ...feeInputs, [p._id]: e.target.value })
+                                          }
+                                          className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                        />
+                                        <p className="mt-2 text-xs text-emerald-800/80">
+                                          Creates a monthly invoice based on expected income for this property.
+                                        </p>
+                                      </div>
+                                      <button
+                                        onClick={() => handleSetManagementFee(p)}
+                                        disabled={feeLoadingId === p._id}
+                                        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {feeLoadingId === p._id ? "Saving..." : "Save & Create Invoice"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="mt-4 text-xs text-gray-500">
+                                    Software leasing invoices are 3% of expected monthly income and are auto-generated when tenants are added.
+                                  </p>
+                                )}
                               </td>
                             </tr>
                           )}
@@ -595,3 +687,11 @@ export default function PropertiesPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+

@@ -35,7 +35,9 @@ export interface Property {
   name: string;
   address: string;
   unitTypes: UnitType[];
+  billingType?: "RentCollection" | "FullManagement";
   managementFee?: number;
+  managementFeePercent?: number;
   status: string;
   rentPaymentDate?: number;
   createdAt: Date;
@@ -61,7 +63,7 @@ export interface Listing {
   name: string;
   address: string;
   unitTypes: UnitType[];
-
+  billingType?: "RentCollection" | "FullManagement";
   // Marketing-specific fields
   description?: string;
   facilities?: string[];
@@ -77,3 +79,7 @@ export interface Listing {
   updatedAt?: string;
   availability?: AvailabilitySummary;
 }
+
+
+
+

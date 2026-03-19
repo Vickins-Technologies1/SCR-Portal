@@ -8,6 +8,8 @@ interface Property {
   name: string;
   ownerId: string;
   unitTypes: { type: string; price?: number; deposit?: number; managementType: string; managementFee?: number }[];
+  managementFeePercent?: number;
+  billingType?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -105,6 +107,8 @@ export async function GET(request: NextRequest) {
             ownerId: 1,
             ownerEmail: { $ifNull: ["$owner.email", "N/A"] },
             unitTypes: 1,
+            managementFeePercent: 1,
+            billingType: 1,
             totalUnpaidInvoices: 1,
             unpaidInvoiceCount: 1,           // optional – you can remove if not needed
             createdAt: 1,
@@ -123,4 +127,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
+
+
+
+
+
+
 
