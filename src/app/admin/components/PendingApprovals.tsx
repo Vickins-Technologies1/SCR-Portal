@@ -29,7 +29,7 @@ function SuccessToast({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 10 }}
-      className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-6 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 border border-emerald-500/30"
+      className="fixed bottom-5 right-5 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 border border-emerald-500/30 text-xs"
     >
       <CheckCircle className="h-5 w-5 flex-shrink-0" />
       <span className="font-medium">{message}</span>
@@ -182,20 +182,20 @@ export default function PendingApprovals() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow border p-6 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#03a678] mx-auto mb-3"></div>
-        <p className="text-gray-600">Loading pending approvals...</p>
+      <div className="bg-white rounded-xl shadow border p-4 text-center">
+        <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-b-2 border-[#03a678] mx-auto mb-2"></div>
+        <p className="text-xs text-gray-600">Loading pending approvals...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl">
+      <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-xs">
         <p>{error}</p>
         <button
           onClick={fetchPending}
-          className="mt-3 inline-flex items-center gap-2 text-sm text-red-700 hover:text-red-800 transition-colors"
+          className="mt-2 inline-flex items-center gap-2 text-xs text-red-700 hover:text-red-800 transition-colors"
         >
           <RefreshCw size={16} />
           Try again
@@ -206,10 +206,10 @@ export default function PendingApprovals() {
 
   if (pending.length === 0) {
     return (
-      <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
-        <CheckCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
-        <h3 className="text-lg font-semibold text-green-800">All caught up!</h3>
-        <p className="text-green-700 mt-1">
+      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+        <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+        <h3 className="text-sm font-semibold text-green-800">All caught up!</h3>
+        <p className="text-xs text-green-700 mt-1">
           No pending property owner sign-up approvals at the moment.
         </p>
       </div>
@@ -218,14 +218,14 @@ export default function PendingApprovals() {
 
   return (
     <>
-      <div className="bg-white rounded-2xl shadow border overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-800 to-blue-950 px-6 py-4 text-white">
+      <div className="bg-white rounded-xl shadow border overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-800 to-blue-950 px-4 py-3 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Clock className="h-6 w-6" />
-              <h2 className="text-xl font-semibold">Pending Approvals</h2>
+              <Clock className="h-5 w-5" />
+              <h2 className="text-sm font-semibold">Pending Approvals</h2>
             </div>
-            <span className="bg-indigo-500/30 px-5 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-indigo-400/20">
+            <span className="bg-indigo-500/30 px-3 py-0.5 rounded-full text-xs font-medium backdrop-blur-sm border border-indigo-400/20">
               {pending.length} waiting
             </span>
           </div>
@@ -235,12 +235,12 @@ export default function PendingApprovals() {
           {pending.map((owner) => (
             <div
               key={owner._id}
-              className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+              className="p-4 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
             >
               <div>
-                <h3 className="font-medium text-gray-900">{owner.name}</h3>
-                <p className="text-sm text-gray-600 mt-0.5">{owner.email}</p>
-                <p className="text-xs text-gray-500 mt-1.5">
+                <h3 className="text-sm font-medium text-gray-900">{owner.name}</h3>
+                <p className="text-xs text-gray-600 mt-0.5">{owner.email}</p>
+                <p className="text-[10px] text-gray-500 mt-1">
                   Registered on{" "}
                   {new Date(owner.createdAt).toLocaleDateString("en-US", {
                     year: "numeric",
@@ -256,7 +256,7 @@ export default function PendingApprovals() {
                 onClick={() => openConfirmModal(owner)}
                 disabled={approvingId === owner._id || !csrfToken}
                 className={`
-                  inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium text-sm transition-all shadow-sm min-w-[120px] justify-center
+                  inline-flex items-center gap-2 px-4 py-2 rounded-md font-medium text-xs transition-all shadow-sm min-w-[110px] justify-center
                   ${
                     approvingId === owner._id || !csrfToken
                       ? "bg-gray-300 text-gray-500 cursor-not-allowed"
@@ -280,7 +280,7 @@ export default function PendingApprovals() {
           ))}
         </div>
 
-        <div className="px-6 py-4 bg-gray-50 text-right text-sm text-gray-500">
+        <div className="px-4 py-3 bg-gray-50 text-right text-xs text-gray-500">
           Showing all pending property owner signups
         </div>
       </div>
@@ -288,19 +288,19 @@ export default function PendingApprovals() {
       {/* Confirmation Modal */}
       <AnimatePresence>
         {showConfirmModal && selectedOwner && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3">
             <motion.div
               ref={modalRef}
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden focus:outline-none"
+              className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden focus:outline-none"
               tabIndex={-1}
             >
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-5">
-                  <h3 className="text-xl font-semibold text-gray-900">
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-gray-900">
                     Confirm Approval
                   </h3>
                   <button
@@ -315,25 +315,25 @@ export default function PendingApprovals() {
                   </button>
                 </div>
 
-                <div className="mb-6 space-y-3">
+                <div className="mb-5 space-y-2 text-xs">
                   <p className="text-gray-700">
                     You are about to approve <strong>{selectedOwner.name}</strong>.
                   </p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-xs text-gray-600">
                     Email: {selectedOwner.email}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs text-gray-500">
                     They will gain immediate access to manage their properties and dashboard.
                   </p>
                 </div>
 
-                <div className="flex items-center justify-end gap-4">
+                <div className="flex items-center justify-end gap-3">
                   <button
                     onClick={() => {
                       setShowConfirmModal(false);
                       setSelectedOwner(null);
                     }}
-                    className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+                    className="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
                   >
                     Cancel
                   </button>
@@ -341,7 +341,7 @@ export default function PendingApprovals() {
                     onClick={handleApprove}
                     disabled={approvingId === selectedOwner._id}
                     className={`
-                      inline-flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm text-white min-w-[140px] justify-center transition-all
+                      inline-flex items-center gap-2 px-4 py-2 rounded-md font-medium text-xs text-white min-w-[120px] justify-center transition-all
                       ${
                         approvingId === selectedOwner._id
                           ? "bg-gray-400 cursor-not-allowed"

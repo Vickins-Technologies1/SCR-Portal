@@ -131,14 +131,14 @@ export default function AdminLogin() {
           </motion.div>
         </div>
 
-        <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
+        <div className="relative z-10 max-w-lg text-center space-y-4 xl:space-y-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
             <Image
               src="/logo.png"
               alt="Sorana Admin Portal"
               width={400}
               height={140}
-              className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
+              className="mx-auto drop-shadow-xl max-w-[220px] sm:max-w-[260px] xl:max-w-[300px]"
               priority
             />
           </motion.div>
@@ -147,7 +147,7 @@ export default function AdminLogin() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.9 }}
-            className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 bg-clip-text text-transparent"
+            className="text-2xl sm:text-3xl xl:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-600 bg-clip-text text-transparent"
           >
             Admin Control Center
           </motion.h2>
@@ -156,7 +156,7 @@ export default function AdminLogin() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.9 }}
-            className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+            className="text-sm sm:text-base xl:text-lg font-light text-gray-700 leading-relaxed max-w-md mx-auto"
           >
             System oversight • User management • Property moderation • Analytics & configuration
           </motion.p>
@@ -165,7 +165,7 @@ export default function AdminLogin() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.55 }}
-            className="text-sm sm:text-base xl:text-lg font-medium text-indigo-700 tracking-wide"
+            className="text-xs sm:text-sm xl:text-base font-medium text-indigo-700 tracking-wide"
           >
             Secure. Powerful. Administrative access only.
           </motion.p>
@@ -173,12 +173,12 @@ export default function AdminLogin() {
       </div>
 
       {/* RIGHT: Form */}
-      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
+      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-8 md:py-10 bg-gradient-to-b from-white/70 to-slate-50/50">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: "easeOut" }}
-          className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
+          className="w-full max-w-sm sm:max-w-md bg-white/80 backdrop-blur-2xl rounded-xl shadow-2xl border border-slate-200/60 overflow-hidden"
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
@@ -192,23 +192,23 @@ export default function AdminLogin() {
             />
           </div>
 
-          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
+          <div className="px-4 xs:px-5 sm:px-6 md:px-7 pt-4 sm:pt-5 pb-5 sm:pb-6 space-y-3.5 sm:space-y-4">
             <div className="text-center space-y-1">
-              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-indigo-700 to-blue-600 bg-clip-text text-transparent">
+              <h1 className="text-lg xs:text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-indigo-700 to-blue-600 bg-clip-text text-transparent">
                 Admin Portal
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 font-medium">
+              <p className="text-[10px] sm:text-xs text-slate-600 font-medium">
                 Restricted access – administrators only
               </p>
             </div>
 
             {error && (
-              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
+              <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg text-center">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-3.5 pt-1">
               <div>
                 <input
                   type="email"
@@ -225,12 +225,12 @@ export default function AdminLogin() {
                         : "Email is required",
                     }));
                   }}
-                  className={`w-full px-3.5 xs:px-4 py-3 bg-white/70 border rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner ${
+                  className={`w-full px-3 py-2.5 bg-white/70 border rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200/40 transition-all placeholder:text-slate-400 text-xs shadow-inner ${
                     formErrors.email ? "border-red-400" : "border-slate-200"
                   }`}
                 />
                 {formErrors.email && (
-                  <p className="mt-1.5 text-xs text-red-600">{formErrors.email}</p>
+                  <p className="mt-1.5 text-[10px] text-red-600">{formErrors.email}</p>
                 )}
               </div>
 
@@ -246,19 +246,19 @@ export default function AdminLogin() {
                       password: e.target.value.trim() ? undefined : "Password is required",
                     }));
                   }}
-                  className={`w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner ${
+                  className={`w-full px-3 py-2.5 pr-9 bg-white/70 border rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200/40 transition-all placeholder:text-slate-400 text-xs shadow-inner ${
                     formErrors.password ? "border-red-400" : "border-slate-200"
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-600 transition-colors"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-600 transition-colors"
                 >
                   {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
                 </button>
                 {formErrors.password && (
-                  <p className="mt-1.5 text-xs text-red-600">{formErrors.password}</p>
+                  <p className="mt-1.5 text-[10px] text-red-600">{formErrors.password}</p>
                 )}
               </div>
 
@@ -267,7 +267,7 @@ export default function AdminLogin() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isLoading || !!formErrors.email || !!formErrors.password}
-                className={`w-full py-3 xs:py-3.5 font-semibold text-white rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-sm xs:text-base ${
+                className={`w-full py-2.5 font-semibold text-white rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 text-xs ${
                   isLoading || formErrors.email || formErrors.password
                     ? "bg-slate-400 cursor-not-allowed"
                     : "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"

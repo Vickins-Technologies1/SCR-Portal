@@ -248,28 +248,28 @@ export default function AdminDashboard() {
       <Navbar />
       <Sidebar />
 
-      <div className="md:ml-72 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="md:ml-60 pt-14 pb-10 px-4 sm:px-5 lg:px-6">
         <main className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex items-center gap-3 sm:gap-4 mb-8 sm:mb-10 mt-6 sm:mt-8">
-            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
-              <Shield size={24} className="sm:size-[28px]" />
+          <div className="flex items-center gap-3 mb-6 mt-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
+              <Shield size={20} />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Admin Dashboard</h1>
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="mb-8 sm:mb-10 bg-red-50 border border-red-200 text-red-700 px-5 py-4 sm:px-6 sm:py-5 rounded-2xl flex items-start gap-3 sm:gap-4">
-              <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0 mt-0.5" />
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-medium text-sm sm:text-base">{error}</p>
+                <p className="font-medium text-xs sm:text-sm">{error}</p>
                 <button
                   onClick={() => {
                     setError(null);
                     fetchDashboardData();
                   }}
-                  className="mt-2 sm:mt-3 inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-red-700 hover:text-red-800 transition-colors"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-red-700 hover:text-red-800 transition-colors"
                 >
                   <RefreshCw size={14} />
                   Try again
@@ -279,34 +279,34 @@ export default function AdminDashboard() {
           )}
 
           {isLoading ? (
-            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
               {[...Array(10)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg h-36 animate-pulse"
+                  className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg h-28 animate-pulse"
                 />
               ))}
             </div>
           ) : (
             <>
               {/* Single unified grid – original + new cards together */}
-              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5 lg:gap-6 mb-10 sm:mb-12">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-5 mb-8">
                 {allCards.map((item, i) => (
                   <motion.div
                     key={i}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05, duration: 0.45 }}
-                    className="group relative bg-white/95 backdrop-blur-sm rounded-2xl p-5 sm:p-6 shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100/80 flex flex-col"
+                    className="group relative bg-white/95 backdrop-blur-sm rounded-xl p-4 sm:p-5 shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100/80 flex flex-col"
                   >
-                    <div className="flex items-center justify-between mb-3 sm:mb-4">
-                      <p className="text-xs sm:text-sm font-medium text-gray-600 uppercase tracking-wide">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] sm:text-xs font-medium text-gray-600 uppercase tracking-wide">
                         {item.title}
                       </p>
                       <div className="relative group/info">
                         <Info
                           className="text-[#03a678]/70 hover:text-[#03a678] transition-colors cursor-help"
-                          size={16}
+                          size={14}
                         />
                         <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block z-50 pointer-events-none">
                           <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[200px] leading-relaxed shadow-xl">
@@ -317,11 +317,11 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="flex items-center justify-between mt-auto">
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900">
+                      <p className="text-xl sm:text-2xl font-semibold text-gray-900">
                         {item.value}
                       </p>
-                      <div className={`p-3 sm:p-4 rounded-xl bg-${item.color}-50/70`}>
-                        <item.icon className={`h-7 w-7 sm:h-8 sm:w-8 text-${item.color}-600`} />
+                      <div className={`p-2.5 sm:p-3 rounded-lg bg-${item.color}-50/70`}>
+                        <item.icon className={`h-5 w-5 sm:h-6 sm:w-6 text-${item.color}-600`} />
                       </div>
                     </div>
                   </motion.div>
@@ -329,7 +329,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Pending Approvals */}
-              <div className="mt-8 sm:mt-10">
+              <div className="mt-6">
                 <PendingApprovals />
               </div>
             </>
