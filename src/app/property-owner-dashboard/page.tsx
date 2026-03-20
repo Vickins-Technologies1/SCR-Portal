@@ -4,7 +4,7 @@ import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import MaintenanceRequests from "./components/MaintenanceRequests";
 import VacateRequests from "./components/VacateRequests";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -287,6 +287,15 @@ export default function PropertyOwnerDashboard() {
     setInvoicePaymentPropertyId(propertyId || "");
     setIsInvoicePaymentOpen(true);
   };
+
+  const paymentModalProperties = useMemo(
+    () =>
+      properties.map((property) => ({
+        ...property,
+        _id: typeof property._id === "string" ? property._id : property._id.toString(),
+      })),
+    [properties]
+  );
 
   const statColorStyles = {
     green: { bg: "bg-primary/10", text: "text-primary" },
@@ -742,7 +751,7 @@ export default function PropertyOwnerDashboard() {
           fetchData();
         }}
         onError={(message) => setError(message)}
-        properties={properties}
+        properties={paymentModalProperties}
         initialPropertyId={invoicePaymentPropertyId}
         initialPhone={invoicePaymentPhone}
         userId={effectiveOwnerId}
