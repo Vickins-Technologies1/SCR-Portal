@@ -35,7 +35,7 @@ export default function Navbar() {
             alt="Sorana Property Managers Logo"
             width={200}
             height={80}
-            className="md:hidden h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm"
+            className="h-8 w-auto max-w-[120px] sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none rounded-md object-contain drop-shadow-sm"
             priority
           />
         </div>
