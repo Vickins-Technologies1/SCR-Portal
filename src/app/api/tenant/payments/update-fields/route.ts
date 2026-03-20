@@ -4,6 +4,7 @@ import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
+import { calculateRentDueToDate } from "../../../../../lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -122,10 +123,13 @@ export async function POST(request: NextRequest) {
     });
 
     const today = new Date();
-    const leaseStartDate = new Date(tenant.leaseStartDate);
-    const monthsStayed = Math.max(0, Math.floor((today.getTime() - leaseStartDate.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+    const { rentDue: totalRentDue } = calculateRentDueToDate({
+      leaseStartDate: tenant.leaseStartDate,
+      monthlyRent: tenant.price,
+      today,
+    });
 
-    const rentDue = Math.max(0, tenant.price * monthsStayed - (tenant.totalRentPaid || 0));
+    const rentDue = Math.max(0, totalRentDue - (tenant.totalRentPaid || 0));
     const depositDue = Math.max(0, (tenant.deposit || 0) - (tenant.totalDepositPaid || 0));
     const utilityDue = 0;
 

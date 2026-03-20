@@ -2,14 +2,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";
-import { Db, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { sendWelcomeEmail } from "../../../lib/email";
 import { sendWelcomeSms } from "../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 import { TenantRequest, ResponseTenant, Tenant } from "../../../types/tenant";
 import { Property } from "../../../types/property";
-import { computeExpectedMonthlyIncome, getGracePeriodEndDate, getOwnerDueStatus, resolveBillingPlan, SOFTWARE_LEASING_PERCENT, upsertPercentageInvoice } from "../../../lib/billing";
+import { getOwnerDueStatus } from "../../../lib/billing";
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -287,25 +287,6 @@ export async function POST(request: NextRequest) {
       { arrayFilters: [{ "elem.uniqueType": unitConfigWithUnique.uniqueType }] }
     );
 
-    const billingPlan = resolveBillingPlan(property);
-    if (billingPlan === "RentCollection") {
-      const now = new Date();
-      const expectedIncome = await computeExpectedMonthlyIncome(db, property._id.toString(), now);
-      const dueDate = getGracePeriodEndDate(property.createdAt as Date, now);
-      const description = `Software leasing fee (${SOFTWARE_LEASING_PERCENT}% of expected monthly income Ksh ${expectedIncome.toFixed(2)}) for ${now.toLocaleString("default", { month: "long", year: "numeric" })}`;
-
-      await upsertPercentageInvoice({
-        db,
-        userId,
-        propertyId: property._id.toString(),
-        billingPlan: "RentCollection",
-        percentage: SOFTWARE_LEASING_PERCENT,
-        expectedIncome,
-        description,
-        expiresAt: dueDate,
-        now,
-      });
-    }
     // ────────────────────────────────────────────────
     //          Welcome notifications with password
     // ────────────────────────────────────────────────

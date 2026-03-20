@@ -73,6 +73,97 @@ export interface WalletAutoApplyResult {
   walletCoverageRemainder: number;
 }
 
+export interface RentDueResult {
+  rentDue: number;
+  monthsStayed: number;
+  daysInMonth: number;
+  daysElapsedInMonth: number;
+  dailyRent: number;
+}
+
+const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
+
+export const calculateRentDueToDate = ({
+  leaseStartDate,
+  monthlyRent,
+  today = new Date(),
+}: {
+  leaseStartDate?: string;
+  monthlyRent: number;
+  today?: Date;
+}): RentDueResult => {
+  const safeMonthlyRent = Math.max(0, monthlyRent || 0);
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const currentDailyRent = safeMonthlyRent > 0 ? safeMonthlyRent / daysInCurrentMonth : 0;
+
+  if (!leaseStartDate || safeMonthlyRent <= 0) {
+    return {
+      rentDue: 0,
+      monthsStayed: 0,
+      daysInMonth: daysInCurrentMonth,
+      daysElapsedInMonth: 0,
+      dailyRent: currentDailyRent,
+    };
+  }
+
+  const start = new Date(leaseStartDate);
+  if (Number.isNaN(start.getTime()) || today < start) {
+    return {
+      rentDue: 0,
+      monthsStayed: 0,
+      daysInMonth: daysInCurrentMonth,
+      daysElapsedInMonth: 0,
+      dailyRent: currentDailyRent,
+    };
+  }
+
+  const startMonthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+  const startMonthEnd = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  const daysInStartMonth = startMonthEnd.getDate();
+  const startDailyRent = safeMonthlyRent > 0 ? safeMonthlyRent / daysInStartMonth : 0;
+
+  const monthDiff =
+    (currentMonthStart.getFullYear() - startMonthStart.getFullYear()) * 12 +
+    (currentMonthStart.getMonth() - startMonthStart.getMonth());
+
+  const monthsStayed = Math.max(1, monthDiff + 1);
+
+  if (monthDiff === 0) {
+    const daysElapsedInMonth = Math.min(
+      daysInCurrentMonth,
+      Math.max(0, today.getDate() - start.getDate() + 1)
+    );
+    const rentDue = roundCurrency(currentDailyRent * daysElapsedInMonth);
+    return {
+      rentDue,
+      monthsStayed,
+      daysInMonth: daysInCurrentMonth,
+      daysElapsedInMonth,
+      dailyRent: currentDailyRent,
+    };
+  }
+
+  const startMonthDaysCharged = Math.min(
+    daysInStartMonth,
+    Math.max(0, daysInStartMonth - start.getDate() + 1)
+  );
+  const proratedStart = startDailyRent * startMonthDaysCharged;
+
+  const fullMonthsBetween = Math.max(0, monthDiff - 1);
+  const proratedCurrent = currentDailyRent * today.getDate();
+
+  const rentDue = roundCurrency(proratedStart + fullMonthsBetween * safeMonthlyRent + proratedCurrent);
+
+  return {
+    rentDue,
+    monthsStayed,
+    daysInMonth: daysInCurrentMonth,
+    daysElapsedInMonth: Math.min(daysInCurrentMonth, today.getDate()),
+    dailyRent: currentDailyRent,
+  };
+};
+
 export const applyWalletToRent = ({
   rentDue,
   rentPaidFromPayments,
@@ -111,33 +202,11 @@ export const applyWalletToRent = ({
   };
 };
 export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = new Date()): Promise<TenantDues> => {
-  let monthsStayed = 0;
-  if (tenant.leaseStartDate) {
-    const result = await db
-      .collection('tenants')
-      .aggregate([
-        { $match: { _id: tenant._id } },
-        {
-          $project: {
-            monthsStayed: {
-              $dateDiff: {
-                startDate: { $toDate: '$leaseStartDate' },
-                endDate: today,
-                unit: 'month',
-              },
-            },
-          },
-        },
-      ])
-      .toArray();
-    monthsStayed = result[0]?.monthsStayed || 0;
-    // Include current month if lease has started
-    if (new Date(tenant.leaseStartDate) <= today) {
-      monthsStayed += 1;
-    }
-  }
-
-  const totalRentDue = tenant.price * monthsStayed;
+  const { rentDue: totalRentDue, monthsStayed } = calculateRentDueToDate({
+    leaseStartDate: tenant.leaseStartDate,
+    monthlyRent: tenant.price,
+    today,
+  });
   const totalDepositDue = tenant.deposit || 0;
   const totalUtilityDue = 0;
 

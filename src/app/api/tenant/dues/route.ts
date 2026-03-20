@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
+import { calculateRentDueToDate } from "@/lib/utils";
 
 interface Property {
   _id: string;
@@ -211,138 +212,49 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalPayments = paymentsResult[0]?.totalPayments || 0;
 
-    // Overdue payments aggregation
-    const overdueResult = await db
+    const activeTenants = await db
       .collection("tenants")
-      .aggregate<{
-        tenantId: string;
-        totalRentDue: number;
-        totalDepositDue: number;
-        totalUtilityDue: number;
-        totalOverdueAmount: number;
-        paymentStatus: string;
-      }>([
-        { $match: { propertyId: { $in: propertyIds } } },
-        {
-          $match: {
-            leaseStartDate: { $ne: null, $lte: today.toISOString() },
-            leaseEndDate: { $ne: null, $gte: today.toISOString() },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            tenantId: "$_id",
-            totalRentDue: {
-              $cond: {
-                if: { $and: [{ $ne: ["$price", null] }, { $ne: ["$leaseStartDate", null] }] },
-                then: {
-                  $multiply: [
-                    "$price",
-                    {
-                      $add: [
-                        {
-                          $dateDiff: {
-                            startDate: { $toDate: "$leaseStartDate" },
-                            endDate: today,
-                            unit: "month",
-                          },
-                        },
-                        {
-                          $cond: {
-                            if: {
-                              $lte: [{ $toDate: "$leaseStartDate" }, today],
-                            },
-                            then: 1, // Add 1 to include the current month
-                            else: 0,
-                          },
-                        },
-                      ],
-                    },
-                  ],
-                },
-                else: 0,
-              },
-            },
-            totalDepositDue: { $ifNull: ["$deposit", 0] },
-            totalUtilityDue: { $literal: 0 },
-            totalOverdueAmount: {
-              $max: [
-                0,
-                {
-                  $subtract: [
-                    {
-                      $add: [
-                        {
-                          $cond: {
-                            if: { $and: [{ $ne: ["$price", null] }, { $ne: ["$leaseStartDate", null] }] },
-                            then: {
-                              $multiply: [
-                                "$price",
-                                {
-                                  $add: [
-                                    {
-                                      $dateDiff: {
-                                        startDate: { $toDate: "$leaseStartDate" },
-                                        endDate: today,
-                                        unit: "month",
-                                      },
-                                    },
-                                    {
-                                      $cond: {
-                                        if: {
-                                          $lte: [{ $toDate: "$leaseStartDate" }, today],
-                                        },
-                                        then: 1, // Add 1 to include the current month
-                                        else: 0,
-                                      },
-                                    },
-                                  ],
-                                },
-                              ],
-                            },
-                            else: 0,
-                          },
-                        },
-                        { $ifNull: ["$deposit", 0] },
-                        { $literal: 0 },
-                      ],
-                    },
-                    {
-                      $add: [
-                        { $ifNull: ["$totalRentPaid", 0] },
-                        { $ifNull: ["$totalUtilityPaid", 0] },
-                        { $ifNull: ["$totalDepositPaid", 0] },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-            paymentStatus: "$paymentStatus",
-          },
-        },
-        {
-          $match: { totalOverdueAmount: { $gt: 0 } },
-        },
-      ])
+      .find({
+        propertyId: { $in: propertyIds },
+        leaseStartDate: { $ne: null, $lte: today.toISOString() },
+        leaseEndDate: { $ne: null, $gte: today.toISOString() },
+      })
       .toArray();
 
-    const overduePayments = overdueResult.length;
-    const totalOverdueAmount = overdueResult.reduce((sum, tenant) => sum + tenant.totalOverdueAmount, 0);
+    let overduePayments = 0;
+    let totalOverdueAmount = 0;
 
-    // Update tenant paymentStatus
-    const bulkOps = overdueResult.map((tenant) => ({
-      updateOne: {
-        filter: { _id: new ObjectId(tenant.tenantId) },
-        update: {
-          $set: {
-            paymentStatus: tenant.totalOverdueAmount > 0 ? "overdue" : "up-to-date",
-            updatedAt: today.toISOString(),
+    const bulkOps = activeTenants.map((tenant) => {
+      const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
+      const { rentDue } = calculateRentDueToDate({
+        leaseStartDate: tenant.leaseStartDate,
+        monthlyRent: tenant.price || 0,
+        today,
+      });
+      const totalDue = rentDue + (tenant.deposit || 0);
+      const totalPaid =
+        (tenant.totalRentPaid || 0) +
+        (tenant.totalUtilityPaid || 0) +
+        (tenant.totalDepositPaid || 0);
+      const totalOverdue = Math.max(0, totalDue - totalPaid);
+
+      if (totalOverdue > 0) {
+        overduePayments += 1;
+        totalOverdueAmount += totalOverdue;
+      }
+
+      return {
+        updateOne: {
+          filter: { _id: tenantObjectId },
+          update: {
+            $set: {
+              paymentStatus: totalOverdue > 0 ? "overdue" : "up-to-date",
+              updatedAt: today.toISOString(),
+            },
           },
         },
-      },
-    }));
+      };
+    });
 
     if (bulkOps.length > 0) {
       await db.collection("tenants").bulkWrite(bulkOps);
@@ -416,46 +328,11 @@ export async function POST(request: NextRequest) {
 
     const today = new Date(); // Use current date
 
-    // Calculate months stayed, including the current month, using MongoDB aggregation
-    let monthsStayed = 0;
-    if (tenant.leaseStartDate) {
-      const result = await db
-        .collection("tenants")
-        .aggregate([
-          {
-            $match: { _id: new ObjectId(tenantId) },
-          },
-          {
-            $project: {
-              monthsStayed: {
-                $add: [
-                  {
-                    $dateDiff: {
-                      startDate: { $toDate: "$leaseStartDate" },
-                      endDate: today,
-                      unit: "month",
-                    },
-                  },
-                  {
-                    $cond: {
-                      if: {
-                        $lte: [{ $toDate: "$leaseStartDate" }, today],
-                      },
-                      then: 1, // Include the current month
-                      else: 0,
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        ])
-        .toArray();
-      monthsStayed = result[0]?.monthsStayed || 0;
-    }
-
-    // Calculate dues
-    const totalRentDue = tenant.leaseStartDate ? tenant.price * monthsStayed : 0;
+    const { rentDue: totalRentDue, monthsStayed } = calculateRentDueToDate({
+      leaseStartDate: tenant.leaseStartDate || undefined,
+      monthlyRent: tenant.price || 0,
+      today,
+    });
     const totalDepositDue = tenant.deposit || 0;
     const totalUtilityDue = 0; // Not tracked, as per GET handler
     const totalPaid = (tenant.totalRentPaid || 0) + (tenant.totalUtilityPaid || 0) + (tenant.totalDepositPaid || 0);

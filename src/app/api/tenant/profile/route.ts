@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
-import { applyWalletToRent } from "../../../../lib/utils";
+import { applyWalletToRent, calculateRentDueToDate } from "../../../../lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -34,39 +34,6 @@ interface Payment {
   status: string;
   amount: number;
   createdAt: Date | string;
-}
-
-async function calculateMonthsStayed(db: Db, tenant: Tenant, today: Date): Promise<number> {
-  if (!tenant.leaseStartDate) return 0;
-
-  try {
-    const result = await db.collection("tenants").aggregate([
-      { $match: { _id: tenant._id } },
-      {
-        $project: {
-          months: {
-            $floor: {
-              $add: [
-                {
-                  $dateDiff: {
-                    startDate: { $dateFromString: { dateString: "$leaseStartDate" } },
-                    endDate: today,
-                    unit: "month",
-                  },
-                },
-                1, // include current partial month
-              ],
-            },
-          },
-        },
-      },
-    ]).toArray();
-
-    return result[0]?.months ?? 0;
-  } catch (err) {
-    console.error("Months calculation failed:", err);
-    return 0;
-  }
 }
 
 async function getMonthlyPayments(
@@ -234,7 +201,11 @@ export async function GET(request: NextRequest) {
 
     if (shouldCalculateDues) {
       const today = new Date();
-      const monthsStayed = await calculateMonthsStayed(db, tenantDoc, today);
+      const { rentDue, monthsStayed } = calculateRentDueToDate({
+        leaseStartDate: tenantDoc.leaseStartDate,
+        monthlyRent: tenantDoc.price,
+        today,
+      });
 
       const payments = await db
         .collection<Payment>("payments")
@@ -251,7 +222,6 @@ export async function GET(request: NextRequest) {
         else if (p.type === "Utility") utilityPaid += p.amount;
       }
 
-      const rentDue = tenantDoc.price * monthsStayed;
       const depositDue = tenantDoc.deposit || 0;
 
       const walletResult = applyWalletToRent({

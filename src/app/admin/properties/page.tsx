@@ -570,7 +570,7 @@ export default function PropertiesPage() {
                                   </div>
                                 ) : (
                                   <p className="mt-3 text-[10px] text-gray-500">
-                                    Software leasing invoices are 1.5% of expected monthly income and are auto-generated when tenants are added.
+                                    Software leasing invoices are 1.5% of expected monthly income and are auto-generated monthly based on the last invoice date.
                                   </p>
                                 )}
                               </td>

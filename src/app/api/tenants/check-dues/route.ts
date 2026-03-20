@@ -2,10 +2,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId, WithId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { applyWalletToRent } from "@/lib/utils";
+import { applyWalletToRent, calculateRentDueToDate } from "@/lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -46,38 +46,6 @@ interface Payment {
   status: string;
   amount: number;
   paymentDate?: string;
-}
-
-// Helper: Calculate number of complete months from lease start to today (inclusive current month if started)
-async function calculateMonthsStayed(db: any, tenant: Tenant, today: Date): Promise<number> {
-  if (!tenant.leaseStartDate) return 0;
-
-  const result = await db
-    .collection("tenants")
-    .aggregate([
-      { $match: { _id: tenant._id } },
-      {
-        $project: {
-          months: {
-            $floor: {
-              $add: [
-                {
-                  $dateDiff: {
-                    startDate: { $dateFromString: { dateString: "$leaseStartDate" } },
-                    endDate: today,
-                    unit: "month",
-                  },
-                },
-                1, // Always include current month if lease has started
-              ],
-            },
-          },
-        },
-      },
-    ])
-    .toArray();
-
-  return result[0]?.months || 0;
 }
 
 export async function GET(request: NextRequest) {
@@ -191,9 +159,11 @@ export async function GET(request: NextRequest) {
     for (const tenant of activeTenants) {
       const tenantIdStr = tenant._id.toString();
       const paid = paidMap[tenantIdStr] || { rentPaid: 0, depositPaid: 0 };
-      const monthsStayed = await calculateMonthsStayed(db, tenant, today);
-
-      const rentDue = tenant.price * monthsStayed;
+      const { rentDue, monthsStayed } = calculateRentDueToDate({
+        leaseStartDate: tenant.leaseStartDate,
+        monthlyRent: tenant.price,
+        today,
+      });
       const depositDue = tenant.deposit || 0;
       const totalDue = rentDue + depositDue;
       const totalPaid = paid.rentPaid + paid.depositPaid;
@@ -299,8 +269,11 @@ export async function POST(request: NextRequest) {
       .filter(p => p.type === "Utility")
       .reduce((sum, p) => sum + p.amount, 0);
 
-    const monthsStayed = await calculateMonthsStayed(db, tenant, today);
-    const rentDue = tenant.price * monthsStayed;
+    const { rentDue, monthsStayed } = calculateRentDueToDate({
+      leaseStartDate: tenant.leaseStartDate,
+      monthlyRent: tenant.price,
+      today,
+    });
     const depositDue = tenant.deposit || 0;
 
     const walletResult = applyWalletToRent({

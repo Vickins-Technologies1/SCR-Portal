@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
+import { calculateRentDueToDate } from "@/lib/utils";
 
 interface Property {
   _id: string;
@@ -281,78 +282,46 @@ export async function GET(request: NextRequest) {
     const totalUtilityPaid = utilityPaymentsResult[0]?.totalUtilityPaid || 0;
 
     // === Overdue Logic ===
-    const tenantDuesResult = await db
-      .collection("tenants")
-      .aggregate<{
-        _id: ObjectId;
-        totalOverdueAmount: number;
-      }>([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            leaseStartDate: { $ne: null, $lte: todayISO },
-            leaseEndDate: { $ne: null, $gte: todayISO },
-          },
-        },
-        {
-          $addFields: {
-            monthsStayed: {
-              $add: [
-                {
-                  $dateDiff: {
-                    startDate: { $toDate: "$leaseStartDate" },
-                    endDate: today,
-                    unit: "month",
-                  },
-                },
-                1,
-              ],
-            },
-          },
-        },
-        {
-          $project: {
-            totalDue: {
-              $add: [
-                { $multiply: [{ $ifNull: ["$price", 0] }, "$monthsStayed"] },
-                { $ifNull: ["$deposit", 0] },
-              ],
-            },
-            totalPaid: {
-              $add: [
-                { $ifNull: ["$totalRentPaid", 0] },
-                { $ifNull: ["$totalDepositPaid", 0] },
-                { $ifNull: ["$totalUtilityPaid", 0] },
-              ],
-            },
-          },
-        },
-        {
-          $project: {
-            _id: 1,
-            totalOverdueAmount: {
-              $max: [0, { $subtract: ["$totalDue", "$totalPaid"] }],
-            },
-          },
-        },
-      ])
-      .toArray();
+    const activeTenantsForDues = await db.collection("tenants").find({
+      propertyId: { $in: propertyIds },
+      leaseStartDate: { $ne: null, $lte: todayISO },
+      leaseEndDate: { $ne: null, $gte: todayISO },
+    }).toArray();
 
-    const overduePayments = tenantDuesResult.filter(t => t.totalOverdueAmount > 0).length;
-    const totalOverdueAmount = tenantDuesResult.reduce((sum, t) => sum + t.totalOverdueAmount, 0);
+    let overduePayments = 0;
+    let totalOverdueAmount = 0;
 
-    // Update tenant paymentStatus
-    const bulkOps = tenantDuesResult.map((tenant) => ({
-      updateOne: {
-        filter: { _id: tenant._id },
-        update: {
-          $set: {
-            paymentStatus: tenant.totalOverdueAmount > 0 ? "overdue" : "up-to-date",
-            updatedAt: todayISO,
+    const bulkOps = activeTenantsForDues.map((tenant) => {
+      const { rentDue } = calculateRentDueToDate({
+        leaseStartDate: tenant.leaseStartDate,
+        monthlyRent: tenant.price || 0,
+        today,
+      });
+
+      const totalDue = rentDue + (tenant.deposit || 0);
+      const totalPaid =
+        (tenant.totalRentPaid || 0) +
+        (tenant.totalDepositPaid || 0) +
+        (tenant.totalUtilityPaid || 0);
+      const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid);
+
+      if (totalOverdueAmountForTenant > 0) {
+        overduePayments += 1;
+        totalOverdueAmount += totalOverdueAmountForTenant;
+      }
+
+      return {
+        updateOne: {
+          filter: { _id: tenant._id },
+          update: {
+            $set: {
+              paymentStatus: totalOverdueAmountForTenant > 0 ? "overdue" : "up-to-date",
+              updatedAt: todayISO,
+            },
           },
         },
-      },
-    }));
+      };
+    });
 
     if (bulkOps.length > 0) {
       await db.collection("tenants").bulkWrite(bulkOps);
