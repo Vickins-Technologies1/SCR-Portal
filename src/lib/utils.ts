@@ -178,15 +178,23 @@ export const applyWalletToRent = ({
   monthlyRent: number;
 }): WalletAutoApplyResult => {
   const safeMonthlyRent = Math.max(0, monthlyRent || 0);
+  const safeRentDue = Math.max(0, rentDue || 0);
   const safeWallet = Math.max(0, walletBalance || 0);
   const paidFromPayments = Math.max(0, rentPaidFromPayments || 0);
   const recordedPaid = Math.max(0, rentPaidRecorded || 0);
 
-  const walletAppliedAlready = Math.max(0, recordedPaid - paidFromPayments);
-  const outstandingRent = Math.max(0, rentDue - paidFromPayments - walletAppliedAlready);
-  const walletAppliedNow = Math.min(safeWallet, outstandingRent);
-  const walletRemaining = Math.max(0, safeWallet - walletAppliedNow);
-  const rentPaidTotal = paidFromPayments + walletAppliedAlready + walletAppliedNow;
+  const paidFromPaymentsCapped = Math.min(paidFromPayments, safeRentDue);
+  const recordedPaidCapped = Math.min(recordedPaid, safeRentDue);
+  const basePaid = Math.min(safeRentDue, Math.max(recordedPaidCapped, paidFromPaymentsCapped));
+
+  const overRecorded = Math.max(0, recordedPaid - safeRentDue);
+  const walletAvailable = safeWallet + overRecorded;
+
+  const outstandingRent = Math.max(0, safeRentDue - basePaid);
+  const walletAppliedNow = Math.min(walletAvailable, outstandingRent);
+  const walletRemaining = Math.max(0, walletAvailable - walletAppliedNow);
+  const walletAppliedAlready = Math.max(0, basePaid - paidFromPaymentsCapped);
+  const rentPaidTotal = Math.min(safeRentDue, basePaid + walletAppliedNow);
 
   const walletCoverageMonths = safeMonthlyRent > 0 ? Math.floor(walletRemaining / safeMonthlyRent) : 0;
   const walletCoverageRemainder =

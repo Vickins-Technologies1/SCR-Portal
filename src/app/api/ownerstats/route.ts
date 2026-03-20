@@ -303,7 +303,8 @@ export async function GET(request: NextRequest) {
         (tenant.totalRentPaid || 0) +
         (tenant.totalDepositPaid || 0) +
         (tenant.totalUtilityPaid || 0);
-      const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid);
+      const walletCredit = tenant.walletBalance || 0;
+      const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid - walletCredit);
 
       if (totalOverdueAmountForTenant > 0) {
         overduePayments += 1;

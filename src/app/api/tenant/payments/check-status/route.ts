@@ -6,6 +6,7 @@ import { validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { sendConfirmationEmail } from "../../../../../lib/email";
 import { sendWelcomeSms } from "../../../../../lib/sms";
+import { calculateRentDueToDate } from "../../../../../lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -14,6 +15,7 @@ interface Tenant {
   phone: string;
   propertyId: string;
   price: number;
+  deposit?: number;
   status: string;
   paymentStatus: string;
   leaseStartDate: string;
@@ -225,40 +227,81 @@ export async function POST(request: NextRequest) {
     );
 
     if (status === "completed") {
-      const updateFields: { [key: string]: number } = {};
-      let overpayment = 0;
       const amount = Number(umsPayData.TransactionAmount);
-      const requiredDepositAmount = tenant.requiredDeposit || tenant.price;
+      const paymentDate = umsPayData.TransactionDate ? new Date(umsPayData.TransactionDate) : new Date();
+
+      const { rentDue: totalRentDue } = calculateRentDueToDate({
+        leaseStartDate: tenant.leaseStartDate,
+        monthlyRent: tenant.price || 0,
+        today: paymentDate,
+      });
+
+      const rentDue = Math.max(0, totalRentDue - (tenant.totalRentPaid || 0));
+      const depositTotal = tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0;
+      const depositDue = Math.max(0, depositTotal - (tenant.totalDepositPaid || 0));
+      const utilityDue = 0;
+
+      let walletBalance = tenant.walletBalance || 0;
+      let remainingAmount = amount;
+
+      const updateFields: Partial<Tenant> = {
+        totalRentPaid: tenant.totalRentPaid || 0,
+        totalUtilityPaid: tenant.totalUtilityPaid || 0,
+        totalDepositPaid: tenant.totalDepositPaid || 0,
+      };
+
+      const applyPayment = (due: number, currentPaid: number, maxPay: number) => {
+        const applied = Math.min(due, maxPay);
+        return { applied, remaining: maxPay - applied };
+      };
 
       if (payment.type === "Rent") {
-        const requiredRentAmount = tenant.price;
-        if (amount >= requiredRentAmount) {
-          updateFields.totalRentPaid = tenant.totalRentPaid + requiredRentAmount;
-          overpayment = amount - requiredRentAmount;
-        } else {
-          updateFields.totalRentPaid = tenant.totalRentPaid + amount;
-        }
+        const { applied, remaining } = applyPayment(rentDue, updateFields.totalRentPaid!, remainingAmount);
+        updateFields.totalRentPaid! += applied;
+        remainingAmount = remaining;
       } else if (payment.type === "Utility") {
-        updateFields.totalUtilityPaid = tenant.totalUtilityPaid + amount;
+        const { applied, remaining } = applyPayment(utilityDue, updateFields.totalUtilityPaid!, remainingAmount);
+        updateFields.totalUtilityPaid! += applied;
+        remainingAmount = remaining;
       } else if (payment.type === "Deposit") {
-        if (tenant.totalDepositPaid < requiredDepositAmount) {
-          const remainingDepositNeeded = requiredDepositAmount - tenant.totalDepositPaid;
-          if (amount >= remainingDepositNeeded) {
-            updateFields.totalDepositPaid = tenant.totalDepositPaid + remainingDepositNeeded;
-            overpayment = amount - remainingDepositNeeded;
-          } else {
-            updateFields.totalDepositPaid = tenant.totalDepositPaid + amount;
-          }
-        } else {
-          overpayment = amount;
-        }
-      } else {
-        overpayment = amount;
+        const { applied, remaining } = applyPayment(depositDue, updateFields.totalDepositPaid!, remainingAmount);
+        updateFields.totalDepositPaid! += applied;
+        remainingAmount = remaining;
       }
 
-      if (overpayment > 0) {
-        updateFields.walletBalance = (tenant.walletBalance || 0) + overpayment;
+      walletBalance += remainingAmount;
+
+      if (walletBalance > 0 && rentDue > updateFields.totalRentPaid!) {
+        const { applied, remaining } = applyPayment(
+          rentDue - updateFields.totalRentPaid!,
+          updateFields.totalRentPaid!,
+          walletBalance
+        );
+        updateFields.totalRentPaid! += applied;
+        walletBalance = remaining;
       }
+
+      if (walletBalance > 0 && utilityDue > updateFields.totalUtilityPaid!) {
+        const { applied, remaining } = applyPayment(
+          utilityDue - updateFields.totalUtilityPaid!,
+          updateFields.totalUtilityPaid!,
+          walletBalance
+        );
+        updateFields.totalUtilityPaid! += applied;
+        walletBalance = remaining;
+      }
+
+      if (walletBalance > 0 && depositDue > updateFields.totalDepositPaid!) {
+        const { applied, remaining } = applyPayment(
+          depositDue - updateFields.totalDepositPaid!,
+          updateFields.totalDepositPaid!,
+          walletBalance
+        );
+        updateFields.totalDepositPaid! += applied;
+        walletBalance = remaining;
+      }
+
+      updateFields.walletBalance = walletBalance;
 
       await db.collection<Tenant>("tenants").updateOne(
         { _id: new ObjectId(tenantId) },

@@ -4,7 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
-import { calculateRentDueToDate } from "@/lib/utils";
+import { calculateRentDueToDate, calculateTenantDues } from "@/lib/utils";
 
 interface Property {
   _id: string;
@@ -236,7 +236,8 @@ export async function GET(request: NextRequest) {
         (tenant.totalRentPaid || 0) +
         (tenant.totalUtilityPaid || 0) +
         (tenant.totalDepositPaid || 0);
-      const totalOverdue = Math.max(0, totalDue - totalPaid);
+      const walletCredit = tenant.walletBalance || 0;
+      const totalOverdue = Math.max(0, totalDue - totalPaid - walletCredit);
 
       if (totalOverdue > 0) {
         overduePayments += 1;
@@ -327,37 +328,25 @@ export async function POST(request: NextRequest) {
     }
 
     const today = new Date(); // Use current date
+    const dues = await calculateTenantDues(db, tenant as any, today);
 
-    const { rentDue: totalRentDue, monthsStayed } = calculateRentDueToDate({
-      leaseStartDate: tenant.leaseStartDate || undefined,
-      monthlyRent: tenant.price || 0,
-      today,
-    });
-    const totalDepositDue = tenant.deposit || 0;
-    const totalUtilityDue = 0; // Not tracked, as per GET handler
-    const totalPaid = (tenant.totalRentPaid || 0) + (tenant.totalUtilityPaid || 0) + (tenant.totalDepositPaid || 0);
-    const totalRemainingDues = Math.max(0, totalRentDue + totalDepositDue + totalUtilityDue - totalPaid);
-
-    // Update tenant paymentStatus
     await db.collection("tenants").updateOne(
       { _id: new ObjectId(tenantId) },
       {
         $set: {
-          paymentStatus: totalRemainingDues > 0 ? "overdue" : "up-to-date",
+          paymentStatus: dues.totalRemainingDues > 0 ? "overdue" : "up-to-date",
           updatedAt: today.toISOString(),
         },
       }
     );
 
-    const dues = {
-      rentDues: Math.max(0, totalRentDue - (tenant.totalRentPaid || 0)),
-      utilityDues: totalUtilityDue,
-      depositDues: Math.max(0, totalDepositDue - (tenant.totalDepositPaid || 0)),
-      totalRemainingDues,
-    };
-
-    logger.debug("Successfully calculated tenant dues", { tenantId, userId, dues, monthsStayed });
-    return NextResponse.json({ success: true, dues, monthsStayed });
+    logger.debug("Successfully calculated tenant dues", {
+      tenantId,
+      userId,
+      dues,
+      monthsStayed: dues.monthsStayed,
+    });
+    return NextResponse.json({ success: true, dues, monthsStayed: dues.monthsStayed });
   } catch (error) {
     logger.error("Error processing tenant dues", {
       tenantId: (await request.json())?.tenantId || "unknown",
