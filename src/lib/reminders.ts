@@ -138,7 +138,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
   const ownerIds = new Set<string>();
   for (const property of properties) {
     propertyMap.set(property._id.toString(), property);
-    ownerIds.add(property.ownerId);
+    ownerIds.add(String(property.ownerId));
   }
 
   const tenantFilter: Record<string, unknown> = ownerId
