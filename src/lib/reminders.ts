@@ -188,7 +188,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     const dueDateKey = dueDate.toISOString().slice(0, 10);
 
     const existingReminder = await db.collection<ReminderNotification>("notifications").findOne({
-      ownerId: property.ownerId,
+      ownerId: String(property.ownerId),
       tenantId,
       type: "payment",
       reminderType,
@@ -339,7 +339,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       status: "unread",
       tenantId,
       tenantName: tenant.name,
-      ownerId: property.ownerId,
+        ownerId: String(property.ownerId),
       deliveryMethod,
       deliveryStatus,
       errorDetails,
