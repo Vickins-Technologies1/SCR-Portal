@@ -180,9 +180,9 @@ export default function SettingsPage() {
         {notifications.map((n) => (
           <div
             key={n.id}
-            className={`flex items-center gap-3 p-4 rounded-xl shadow-xl border text-sm font-medium animate-in slide-in-from-right ${
+            className={`flex items-center gap-3 p-3 sm:p-4 rounded-xl shadow-xl border text-xs sm:text-sm font-medium animate-in slide-in-from-right ${
               n.type === "success"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                ? "bg-primary/10 border-primary/20 text-primary"
                 : "bg-red-50 border-red-200 text-red-800"
             }`}
           >
@@ -195,22 +195,25 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      <div className="min-h-screen bg-gray-50 pt-16 px-4 pb-10">
-        <div className="max-w-2xl mx-auto space-y-6">
+      <div className="relative min-h-screen pt-16 px-4 pb-10 text-[13px] sm:text-sm">
+        <div className="pointer-events-none absolute -top-24 right-[-12%] h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-[-8%] h-72 w-72 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
+        <div className="max-w-2xl mx-auto space-y-6 relative z-10">
 
           {/* Header */}
-          <div className="bg-gradient-to-r from-[#1E3A8A] to-[#1E40AF] text-white rounded-2xl p-6 text-center">
-            <h1 className="text-2xl font-bold">Account Settings</h1>
-            <p className="text-blue-100 text-sm mt-1">Update your profile & password</p>
+          <div className="glass-panel rounded-3xl p-5 sm:p-6 text-center">
+            <p className="eyebrow">Account</p>
+            <h1 className="text-xl sm:text-2xl font-semibold text-display text-foreground">Account Settings</h1>
+            <p className="text-muted-foreground text-xs sm:text-sm mt-1">Update your profile & password</p>
           </div>
 
           {/* Profile Card */}
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 space-y-6">
+          <div className="surface-card rounded-3xl p-5 sm:p-6 space-y-6">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-[#6EE7B7]/20 rounded-xl">
-                <User className="w-5 h-5 text-[#1E3A8A]" />
+              <div className="p-2.5 bg-primary/10 rounded-xl">
+                <User className="w-5 h-5 text-primary" />
               </div>
-              <h2 className="text-xl font-bold">Profile Information</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-foreground">Profile Information</h2>
             </div>
 
             <div className="space-y-4">
@@ -219,28 +222,28 @@ export default function SettingsPage() {
                 placeholder="Full Name"
                 value={tenant.name}
                 onChange={(e) => setTenant({ ...tenant, name: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] transition"
+                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] transition text-sm bg-white/70"
               />
               <input
                 type="email"
                 placeholder="Email"
                 value={tenant.email}
                 onChange={(e) => setTenant({ ...tenant, email: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] transition"
+                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] transition text-sm bg-white/70"
               />
               <input
                 type="tel"
                 placeholder="Phone (+254...)"
                 value={tenant.phone}
                 onChange={(e) => setTenant({ ...tenant, phone: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-4 focus:ring-[#6EE7B7]/30 focus:border-[#1E3A8A] transition"
+                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] transition text-sm bg-white/70"
               />
             </div>
 
             <button
               onClick={saveProfile}
               disabled={saving || !hasChanges()}
-              className="w-full sm:w-auto px-8 py-3 bg-[#1E3A8A] text-white font-bold rounded-xl hover:bg-[#1E40AF] disabled:bg-gray-300 transition flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-7 py-2.5 text-sm bg-[#1E3A8A] text-white font-bold rounded-xl hover:bg-[#1E40AF] disabled:bg-gray-300 transition flex items-center justify-center gap-2"
             >
               <Save size={18} />
               {saving ? "Saving..." : "Save Changes"}
@@ -248,12 +251,12 @@ export default function SettingsPage() {
           </div>
 
           {/* Password Card */}
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 space-y-6">
+          <div className="surface-card rounded-3xl p-5 sm:p-6 space-y-6">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-red-100 rounded-xl">
                 <Lock className="w-5 h-5 text-red-600" />
               </div>
-              <h2 className="text-xl font-bold">Change Password</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-foreground">Change Password</h2>
             </div>
 
             <div className="space-y-4">
@@ -263,7 +266,7 @@ export default function SettingsPage() {
                   placeholder="New Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-300 focus:ring-4 focus:ring-red-500/20 focus:border-red-500 transition"
+                  className="w-full px-4 py-2.5 pr-12 rounded-xl border border-border focus:ring-4 focus:ring-red-500/20 focus:border-red-500 transition text-sm bg-white/70"
                 />
                 <button
                   type="button"
@@ -280,7 +283,7 @@ export default function SettingsPage() {
                   placeholder="Confirm Password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-12 rounded-xl border border-gray-300 focus:ring-4 focus:ring-red-500/20 focus:border-red-500 transition"
+                  className="w-full px-4 py-2.5 pr-12 rounded-xl border border-border focus:ring-4 focus:ring-red-500/20 focus:border-red-500 transition text-sm bg-white/70"
                 />
                 <button
                   type="button"
@@ -295,7 +298,7 @@ export default function SettingsPage() {
             <button
               onClick={changePassword}
               disabled={changing || !password || password !== confirmPassword}
-              className="w-full sm:w-auto px-8 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:bg-gray-300 transition"
+              className="w-full sm:w-auto px-7 py-2.5 text-sm bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:bg-gray-300 transition"
             >
               {changing ? "Changing..." : "Change Password"}
             </button>

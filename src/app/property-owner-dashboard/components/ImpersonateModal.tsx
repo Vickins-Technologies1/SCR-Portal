@@ -47,28 +47,28 @@ export default function ImpersonateModal({
         </div>
 
         {/* What Happens Next */}
-        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-6 border border-emerald-200">
-          <h4 className="font-semibold text-emerald-900 mb-4 flex items-center gap-2">
+        <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl p-6 border border-primary/30">
+          <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
             <Eye className="h-5 w-5" />
             What happens when you impersonate:
           </h4>
-          <ul className="space-y-3 text-emerald-800">
+          <ul className="space-y-3 text-primary">
             <li className="flex items-start gap-3">
-              <span className="text-emerald-600 mt-1">✓</span>
+              <span className="text-primary mt-1">✓</span>
               <span>Your current session will switch to the tenant's dashboard</span>
             </li>
             <li className="flex items-start gap-3">
-              <span className="text-emerald-600 mt-1">✓</span>
+              <span className="text-primary mt-1">✓</span>
               <span>You'll see their exact view, payments, dues, and requests</span>
             </li>
             <li className="flex items-start gap-3">
-              <span className="text-emerald-600 mt-1">✓</span>
+              <span className="text-primary mt-1">✓</span>
               <span>
                 A <strong>clear red banner</strong> will appear at the top showing you're in impersonation mode
               </span>
             </li>
             <li className="flex items-start gap-3">
-              <span className="text-emerald-600 mt-1">✓</span>
+              <span className="text-primary mt-1">✓</span>
               <span>
                 Click <strong>"Exit Impersonation"</strong> at any time to instantly return here
               </span>
@@ -119,3 +119,6 @@ export default function ImpersonateModal({
     </Modal>
   );
 }
+
+
+

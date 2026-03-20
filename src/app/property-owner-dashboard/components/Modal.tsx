@@ -33,11 +33,11 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 animate-fade-in px-2 sm:px-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in px-2 sm:px-4 overflow-y-auto"
       onClick={disableClose ? undefined : onClose}
     >
       <div
-        className={`bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full lg:w-auto min-w-[90vw] lg:min-w-[50vw] max-w-[95vw] lg:max-w-5xl mx-auto transform transition-all duration-300 max-h-[90vh] overflow-y-auto ${className}`}
+        className={`bg-white rounded-3xl border border-border p-4 sm:p-6 w-full lg:w-auto min-w-[92vw] lg:min-w-[48vw] max-w-[96vw] lg:max-w-5xl mx-auto transform transition-all duration-300 max-h-[90vh] overflow-y-auto text-foreground shadow-2xl ${className}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="modal-title"
@@ -45,13 +45,13 @@ export default function Modal({
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 id="modal-title" className="text-lg sm:text-xl font-semibold text-gray-900">
+          <h2 id="modal-title" className="text-base sm:text-lg font-semibold text-foreground">
             {title}
           </h2>
           {!disableClose && (
             <button
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 transition-colors duration-200"
+              className="text-muted-foreground hover:text-foreground transition-colors duration-200"
               aria-label="Close modal"
             >
               <svg
@@ -89,3 +89,6 @@ export default function Modal({
     </div>
   );
 }
+
+
+

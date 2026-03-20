@@ -123,8 +123,8 @@ export default function VacateRequestsPage() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className={`fixed top-20 right-4 z-50 px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 ${
-              error ? "bg-red-50 border border-red-200 text-red-700" : "bg-green-50 border border-green-200 text-green-700"
+          className={`fixed top-20 right-4 z-50 px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 text-xs sm:text-sm ${
+              error ? "bg-red-50 border border-red-200 text-red-700" : "bg-primary/10 border border-primary/20 text-primary"
             }`}
           >
             <AlertCircle size={18} />
@@ -136,12 +136,14 @@ export default function VacateRequestsPage() {
         )}
       </AnimatePresence>
 
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white pt-16 px-4">
-        <div className="max-w-4xl mx-auto">
+      <div className="relative min-h-screen pt-16 px-4 text-[13px] sm:text-sm pb-10">
+        <div className="pointer-events-none absolute -top-24 right-[-12%] h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-[-8%] h-72 w-72 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
+        <div className="max-w-4xl mx-auto relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl shadow-xl p-6 mb-6"
+            className="glass-panel rounded-3xl p-5 sm:p-6 mb-6"
           >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex items-center gap-4">
@@ -149,13 +151,14 @@ export default function VacateRequestsPage() {
                   <DoorOpen className="w-7 h-7 text-amber-600" />
                 </div>
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Vacate Notice</h1>
-                  <p className="text-sm text-gray-600">Notify your property owner about moving out</p>
+                  <p className="eyebrow">Move-Out</p>
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-display text-foreground">Vacate Notice</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Notify your property owner about moving out</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 px-6 py-3 bg-amber-600 text-white font-semibold rounded-xl hover:bg-amber-700 shadow-lg transition"
+                className="flex items-center gap-2 px-5 py-2.5 text-sm bg-amber-600 text-white font-semibold rounded-full hover:bg-amber-700 shadow-lg transition"
               >
                 New Request
               </button>
@@ -172,10 +175,10 @@ export default function VacateRequestsPage() {
               ))}
             </div>
           ) : requests.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-2xl shadow">
+            <div className="text-center py-16 surface-card rounded-3xl">
               <DoorOpen className="w-20 h-20 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg font-medium">No vacate requests yet</p>
-              <p className="text-sm text-gray-400 mt-2">Click "New Request" to notify your owner</p>
+              <p className="text-gray-500 text-base sm:text-lg font-medium">No vacate requests yet</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-2">Click "New Request" to notify your owner</p>
             </div>
           ) : (
             <div className="space-y-5">
@@ -184,13 +187,13 @@ export default function VacateRequestsPage() {
                   key={req._id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition"
+                  className="surface-card rounded-3xl p-4 sm:p-6 hover:shadow-md transition"
                 >
                   <div className="flex flex-wrap items-center gap-3">
                     <span
                       className={`px-3 py-1.5 text-xs font-bold rounded-full ${
                         req.status === "Approved"
-                          ? "bg-green-100 text-green-700"
+                          ? "bg-primary/10 text-primary"
                           : req.status === "Rejected"
                           ? "bg-red-100 text-red-700"
                           : "bg-yellow-100 text-yellow-700"
@@ -206,8 +209,8 @@ export default function VacateRequestsPage() {
                       })}
                     </span>
                   </div>
-                  <p className="text-gray-600 mt-3">{req.message}</p>
-                  <div className="mt-4 flex items-center gap-2 text-sm text-gray-700">
+                  <p className="text-muted-foreground mt-3 text-xs sm:text-sm">{req.message}</p>
+                  <div className="mt-4 flex items-center gap-2 text-xs sm:text-sm text-foreground">
                     <Calendar size={16} className="text-amber-600" />
                     Preferred move-out: <strong>{req.requestedMoveOutDate ? new Date(req.requestedMoveOutDate).toLocaleDateString("en-KE") : "Not specified"}</strong>
                   </div>
@@ -231,34 +234,34 @@ export default function VacateRequestsPage() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg"
+              className="surface-card rounded-3xl shadow-2xl p-5 sm:p-6 w-full max-w-lg"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Submit Vacate Request</h2>
+                <h2 className="text-xl sm:text-2xl font-semibold text-foreground">Submit Vacate Request</h2>
                 <button onClick={() => setIsModalOpen(false)}>
                   <X size={24} />
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Move-out Date</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Preferred Move-out Date</label>
                   <input
                     type="date"
                     value={form.moveOutDate}
                     onChange={(e) => setForm({ ...form, moveOutDate: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border focus:ring-4 focus:ring-amber-500/20 outline-none transition"
+                    className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-amber-500/20 outline-none transition text-sm bg-white/70"
                   />
                   {formErrors.moveOutDate && <p className="text-red-500 text-xs mt-1">{formErrors.moveOutDate}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Message to Owner</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Message to Owner</label>
                   <textarea
                     rows={4}
                     value={form.message}
                     onChange={(e) => setForm({ ...form, message: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border focus:ring-4 focus:ring-amber-500/20 resize-none outline-none transition"
+                    className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-amber-500/20 resize-none outline-none transition text-sm bg-white/70"
                     placeholder="Briefly explain your move-out request..."
                   />
                   {formErrors.message && <p className="text-red-500 text-xs mt-1">{formErrors.message}</p>}
@@ -268,14 +271,14 @@ export default function VacateRequestsPage() {
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-6 py-3 border rounded-xl hover:bg-gray-50 transition"
+                    className="px-5 py-2.5 text-sm border rounded-xl hover:bg-gray-50 transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-8 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2 transition"
+                    className="px-6 py-2.5 text-sm bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2 transition"
                   >
                     {submitting ? (
                       <>

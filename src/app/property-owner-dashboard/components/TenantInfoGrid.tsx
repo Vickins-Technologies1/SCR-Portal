@@ -44,11 +44,11 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
       case "paid":
-        return "text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full";
+        return "text-primary font-semibold bg-primary/10 px-3 py-1 rounded-full text-[11px]";
       case "current":
-        return "text-emerald-600 font-bold";
+        return "text-primary font-semibold";
       case "overdue":
-        return "text-red-600 font-bold bg-red-50 px-3 py-1 rounded-full";
+        return "text-red-600 font-semibold bg-red-50 px-3 py-1 rounded-full text-[11px]";
       default:
         return "text-gray-600";
     }
@@ -57,13 +57,13 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
   const getTenantStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "text-green-600 font-bold";
+        return "text-primary font-semibold";
       case "inactive":
-        return "text-gray-600 font-medium";
+        return "text-muted-foreground font-medium";
       case "evicted":
-        return "text-red-700 font-bold bg-red-100 px-3 py-1 rounded-full";
+        return "text-red-700 font-semibold bg-red-100 px-3 py-1 rounded-full text-[11px]";
       default:
-        return "text-gray-600";
+        return "text-muted-foreground";
     }
   };
 
@@ -96,12 +96,12 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     {
       label: "Total Rent Paid",
       value: formatCurrency(tenant.totalRentPaid),
-      className: "text-blue-600 font-bold",
+      className: "text-primary font-semibold",
     },
     {
       label: "Total Deposit Paid",
       value: formatCurrency(tenant.totalDepositPaid),
-      className: "text-orange-600 font-bold",
+      className: "text-amber-600 font-semibold",
       note: tenant.totalDepositPaid >= tenant.deposit
         ? "Deposit Fully Paid"
         : `${formatCurrency(tenant.deposit - tenant.totalDepositPaid)} remaining`,
@@ -109,17 +109,17 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     {
       label: "Total Utility Paid",
       value: formatCurrency(tenant.totalUtilityPaid),
-      className: "text-purple-600 font-bold",
+      className: "text-indigo-600 font-semibold",
     },
     {
       label: "Wallet Balance",
       value: formatCurrency(tenant.walletBalance),
-      className: "text-emerald-600 font-bold",
+      className: "text-primary font-semibold",
     },
     {
       label: "Wallet Runway",
       value: getWalletRunway(),
-      className: tenant.walletBalance > 0 ? "text-emerald-700 font-bold" : "text-slate-700",
+      className: tenant.walletBalance > 0 ? "text-primary font-semibold" : "text-muted-foreground",
       note: tenant.walletBalance > 0 ? "Auto-applies to upcoming rent" : undefined,
     },
 
@@ -130,40 +130,42 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
             label: "Rent Arrears",
             value: formatCurrency(tenant.dues.rentDues),
             className: tenant.dues.rentDues > 0
-              ? "text-red-600 font-bold"
-              : "text-green-600",
+              ? "text-red-600 font-semibold"
+              : "text-primary font-semibold",
           },
           {
             label: "Deposit Due",
             value: formatCurrency(tenant.dues.depositDues),
             className: tenant.dues.depositDues > 0
-              ? "text-red-600 font-bold"
-              : "text-green-600",
+              ? "text-red-600 font-semibold"
+              : "text-primary font-semibold",
           },
           {
             label: "Total Outstanding",
             value: formatCurrency(tenant.dues.totalRemainingDues),
             className: tenant.dues.totalRemainingDues > 0
-              ? "text-red-700 font-bold text-xl bg-red-50 px-4 py-2 rounded-xl"
-              : "text-green-700 font-bold text-xl bg-green-50 px-4 py-2 rounded-xl",
+              ? "text-red-700 font-semibold text-base sm:text-lg bg-red-50/80 px-3 py-2 rounded-xl"
+              : "text-primary font-semibold text-base sm:text-lg bg-primary/10 px-3 py-2 rounded-xl",
           },
         ]
       : []),
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {infoItems.map((item, index) => (
         <div
           key={index}
-          className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-5 border border-slate-200 shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col"
+          className="surface-card rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col"
         >
-          <p className="text-sm font-medium text-slate-600 mb-2">{item.label}</p>
-          <p className={`text-lg font-semibold break-words ${item.className || "text-slate-900"}`}>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-2">
+            {item.label}
+          </p>
+          <p className={`text-sm sm:text-base font-semibold break-words ${item.className || "text-foreground"}`}>
             {item.value}
           </p>
           {item.note && (
-            <span className="text-xs text-green-600 font-semibold mt-2 italic">
+            <span className="text-[11px] text-primary font-semibold mt-2">
               {item.note}
             </span>
           )}
@@ -172,3 +174,7 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     </div>
   );
 }
+
+
+
+

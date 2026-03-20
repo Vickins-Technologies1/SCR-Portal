@@ -538,8 +538,8 @@ function ReportsAndInvoicesPageInner() {
       {
         label: `Revenue (Ksh) - ${paymentType === "all" ? "All Types" : paymentType}`,
         data: chartValues,
-        backgroundColor: "rgba(1, 42, 74, 0.8)",
-        borderColor: "#012a4a",
+        backgroundColor: "rgba(66, 199, 117, 0.8)",
+        borderColor: "#42c775",
         borderWidth: 1,
       },
     ],
@@ -557,20 +557,20 @@ function ReportsAndInvoicesPageInner() {
 
   if (hasAccess === false) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+      <div className="min-h-screen">
         <Navbar />
         <Sidebar />
-        <div className="sm:ml-64 mt-16">
-          <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-              <Lock className="h-16 w-16 text-amber-500 mb-6" />
-              <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">Access Restricted</h2>
-              <p className="text-gray-600 max-w-md mb-6">
+        <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+          <main className="max-w-7xl mx-auto">
+            <div className="glass-panel rounded-3xl p-8 sm:p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">
+              <Lock className="h-12 w-12 text-amber-500 mb-5" />
+              <h2 className="text-xl sm:text-2xl font-semibold text-foreground mb-3">Access Restricted</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground max-w-md mb-6">
                 Your account does not have permission to view reports and invoices.
               </p>
               <button
                 onClick={() => router.push("/property-owner-dashboard")}
-                className="px-6 py-3 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition"
+                className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-hover transition"
               >
                 Back to Dashboard
               </button>
@@ -583,13 +583,13 @@ function ReportsAndInvoicesPageInner() {
 
   if (hasAccess === null) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+      <div className="min-h-screen">
         <Navbar />
         <Sidebar />
-        <div className="sm:ml-64 mt-16">
-          <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
+        <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+          <main className="max-w-7xl mx-auto">
             <div className="flex justify-center items-center min-h-[60vh]">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#012a4a]"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             </div>
           </main>
         </div>
@@ -597,39 +597,44 @@ function ReportsAndInvoicesPageInner() {
     );
   }
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen">
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
+          <section className="glass-panel rounded-3xl p-6 sm:p-8">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
                 {activeTab === "reports" ? (
-                  <BarChart2 className="text-[#012a4a]" />
+                  <BarChart2 className="h-5 w-5 text-primary" />
                 ) : (
-                  <FileText className="text-[#012a4a]" />
+                  <FileText className="h-5 w-5 text-primary" />
                 )}
-                {activeTab === "reports" ? "Financial Reports" : "Invoices"}
-              </h1>
-              {role === "teamMember" && ownerName && (
-                <p className="text-sm text-gray-600 mt-1">
-                  for {ownerName}
-                </p>
-              )}
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
+                  {activeTab === "reports" ? "Financial Reports" : "Invoices"}
+                </h1>
+                {role === "teamMember" && ownerName && (
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                    for {ownerName}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          </section>
 
           {/* Tabs */}
-          <div className="mb-6">
-            <div className="flex border-b border-gray-200">
+          <div className="surface-card rounded-2xl px-4 py-3">
+            <div className="flex flex-wrap gap-2">
               {!isDue && (
                 <button
                   onClick={() => handleTabSwitch("reports")}
-                  className={`px-4 py-2 text-sm font-medium ${
+                  className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold transition ${
                     activeTab === "reports"
-                      ? "border-b-2 border-[#012a4a] text-[#012a4a]"
-                      : "text-gray-500 hover:text-[#012a4a]"
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-primary"
                   }`}
                 >
                   Reports
@@ -637,10 +642,10 @@ function ReportsAndInvoicesPageInner() {
               )}
               <button
                 onClick={() => handleTabSwitch("invoices")}
-                className={`px-4 py-2 text-sm font-medium ${
+                className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold transition ${
                   activeTab === "invoices"
-                    ? "border-b-2 border-[#012a4a] text-[#012a4a]"
-                    : "text-gray-500 hover:text-[#012a4a]"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-primary"
                 }`}
               >
                 Invoices
@@ -650,13 +655,13 @@ function ReportsAndInvoicesPageInner() {
 
           {/* Filters (Reports only) */}
           {activeTab === "reports" && (
-            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="surface-card rounded-2xl p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Property</label>
+                <label className="block text-xs font-medium text-gray-600">Property</label>
                 <select
                   value={selectedPropertyId}
                   onChange={handlePropertyChange}
-                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm border-gray-300"
+                  className="mt-2 w-full border border-gray-200 px-3 py-2.5 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition"
                 >
                   <option value="all">All Properties</option>
                   {properties.map((p) => (
@@ -667,11 +672,11 @@ function ReportsAndInvoicesPageInner() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Payment Type</label>
+                <label className="block text-xs font-medium text-gray-600">Payment Type</label>
                 <select
                   value={paymentType}
                   onChange={handlePaymentTypeChange}
-                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm border-gray-300"
+                  className="mt-2 w-full border border-gray-200 px-3 py-2.5 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition"
                 >
                   <option value="all">All Types</option>
                   <option value="Rent">Rent</option>
@@ -681,23 +686,23 @@ function ReportsAndInvoicesPageInner() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Start Date</label>
+                <label className="block text-xs font-medium text-gray-600">Start Date</label>
                 <input
                   type="date"
                   name="startDate"
                   value={startDate}
                   onChange={handleDateChange}
-                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm border-gray-300"
+                  className="mt-2 w-full border border-gray-200 px-3 py-2.5 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">End Date</label>
+                <label className="block text-xs font-medium text-gray-600">End Date</label>
                 <input
                   type="date"
                   name="endDate"
                   value={endDate}
                   onChange={handleDateChange}
-                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm border-gray-300"
+                  className="mt-2 w-full border border-gray-200 px-3 py-2.5 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition"
                 />
               </div>
             </div>
@@ -705,12 +710,12 @@ function ReportsAndInvoicesPageInner() {
 
           {/* Messages */}
           {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+            <div className="bg-red-100 text-red-700 p-3 rounded-xl shadow text-xs sm:text-sm animate-pulse">
               {error}
             </div>
           )}
           {successMessage && (
-            <div className="bg-green-100 text-green-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+            <div className="bg-primary/10 text-primary p-3 rounded-xl shadow text-xs sm:text-sm animate-pulse">
               {successMessage}
             </div>
           )}
@@ -719,12 +724,12 @@ function ReportsAndInvoicesPageInner() {
           {activeTab === "reports" && (
             <>
               {/* Total Revenue */}
-              <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-md">
-                <h2 className="text-lg font-semibold text-gray-800">Total Revenue</h2>
-                <p className="text-2xl font-bold text-[#012a4a]">
+              <div className="surface-card rounded-2xl p-5 sm:p-6">
+                <h2 className="text-base sm:text-lg font-semibold text-foreground">Total Revenue</h2>
+                <p className="text-xl sm:text-2xl font-semibold text-primary">
                   Ksh {totalRevenue.toFixed(2)}
                 </p>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   {selectedPropertyId === "all" ? "All properties" : "Selected property"} •{" "}
                   {paymentType === "all" ? "All types" : paymentType}
                   {startDate && endDate ? ` • ${startDate} to ${endDate}` : ""}
@@ -736,19 +741,19 @@ function ReportsAndInvoicesPageInner() {
                 <button
                   onClick={exportToExcel}
                   disabled={!canExportReports || isExporting || reports.length === 0}
-                  className={`flex items-center gap-2 px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#013a6a] transition ${
+                  className={`flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-hover transition ${
                     !canExportReports || isExporting || reports.length === 0 ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                 >
-                  <Download className="h-5 w-5" />
+                  <Download className="h-4 w-4" />
                   {isExporting ? "Exporting..." : "Export Monthly Report (Excel)"}
                 </button>
               </div>
 
               {/* Chart */}
               {chartLabels.length > 0 && (
-                <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-md h-80">
-                  <h2 className="text-lg font-semibold text-gray-800 mb-4">Revenue Trends</h2>
+                <div className="surface-card rounded-2xl p-5 sm:p-6 h-80">
+                  <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4">Revenue Trends</h2>
                   <div className="h-full">
                     <Bar data={barChartData} options={barChartOptions} />
                   </div>
@@ -759,65 +764,66 @@ function ReportsAndInvoicesPageInner() {
 
           {/* Invoices Tab */}
           {activeTab === "invoices" && (
-            <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6 shadow-md">
-              <h2 className="text-lg font-semibold text-gray-800">Wallet Balance</h2>
-              <p className="text-2xl font-bold text-[#012a4a]">
+            <div className="surface-card rounded-2xl p-5 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-foreground">Wallet Balance</h2>
+              <p className="text-xl sm:text-2xl font-semibold text-primary">
                 Ksh {walletBalance !== null ? walletBalance.toFixed(2) : "Loading..."}
               </p>
-              <p className="text-sm text-gray-600">Available for property management</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Available for property management</p>
             </div>
           )}
 
           {/* Loading */}
           {isLoading ? (
-            <div className="text-center text-gray-600 py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
+            <div className="text-center text-muted-foreground text-xs sm:text-sm py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
               <span className="ml-2">Loading {activeTab}...</span>
             </div>
           ) : activeTab === "reports" ? (
             reports.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
+              <div className="surface-card rounded-2xl p-6 text-muted-foreground text-center text-xs sm:text-sm">
                 No reports found.
               </div>
             ) : (
-              <div className="overflow-x-auto bg-white shadow rounded-lg">
-                <table className="min-w-full table-auto text-sm md:text-base">
-                  <thead className="bg-gray-200">
+              <div className="table-shell">
+                <div className="table-scroll">
+                <table className="min-w-full table-auto">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("propertyName")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("propertyName")}>
                         Property {getSortIcon("propertyName", reportSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("tenantName")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("tenantName")}>
                         Tenant {getSortIcon("tenantName", reportSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("revenue")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("revenue")}>
                         Revenue (Ksh) {getSortIcon("revenue", reportSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("date")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("date")}>
                         Date {getSortIcon("date", reportSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("status")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("status")}>
                         Status {getSortIcon("status", reportSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("reference")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("reference")}>
                         Reference {getSortIcon("reference", reportSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("type")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("type")}>
                         Type {getSortIcon("type", reportSortConfig)}
                       </th>
                       {selectedPropertyId !== "all" && (
-                        <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("unitType")}>
+                        <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("unitType")}>
                           Unit Type {getSortIcon("unitType", reportSortConfig)}
                         </th>
                       )}
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleReportSort("tenantPaymentStatus")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleReportSort("tenantPaymentStatus")}>
                         Payment Status {getSortIcon("tenantPaymentStatus", reportSortConfig)}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {reports.map((r) => (
-                      <tr key={r._id} className="border-t hover:bg-gray-50">
+                      <tr key={r._id} className="hover:bg-primary/5">
                         <td className="px-4 py-3">{r.propertyName}</td>
                         <td className="px-4 py-3">{r.tenantName}</td>
                         <td className="px-4 py-3">Ksh {r.revenue.toFixed(2)}</td>
@@ -831,6 +837,7 @@ function ReportsAndInvoicesPageInner() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )
           ) : (
@@ -839,30 +846,31 @@ function ReportsAndInvoicesPageInner() {
                 No invoices found.
               </div>
             ) : (
-              <div className="overflow-x-auto bg-white shadow rounded-lg">
-                <table className="min-w-full table-auto text-sm md:text-base">
-                  <thead className="bg-gray-200">
+              <div className="table-shell">
+                <div className="table-scroll">
+                <table className="min-w-full table-auto">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleInvoiceSort("reference")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleInvoiceSort("reference")}>
                         Reference {getSortIcon("reference", invoiceSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleInvoiceSort("description")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleInvoiceSort("description")}>
                         Description {getSortIcon("description", invoiceSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleInvoiceSort("amount")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleInvoiceSort("amount")}>
                         Amount (Ksh) {getSortIcon("amount", invoiceSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleInvoiceSort("createdAt")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleInvoiceSort("createdAt")}>
                         Created {getSortIcon("createdAt", invoiceSortConfig)}
                       </th>
-                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300" onClick={() => handleInvoiceSort("status")}>
+                      <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleInvoiceSort("status")}>
                         Status {getSortIcon("status", invoiceSortConfig)}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {invoices.map((i) => (
-                      <tr key={i._id} className="border-t hover:bg-gray-50">
+                      <tr key={i._id} className="hover:bg-primary/5">
                         <td className="px-4 py-3">{i.reference}</td>
                         <td className="px-4 py-3">{i.description}</td>
                         <td className="px-4 py-3">Ksh {i.amount.toFixed(2)}</td>
@@ -872,6 +880,7 @@ function ReportsAndInvoicesPageInner() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )
           )}
@@ -890,13 +899,13 @@ export default function ReportsAndInvoicesPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+        <div className="min-h-screen">
           <Navbar />
           <Sidebar />
-          <div className="sm:ml-64 mt-16">
-            <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
+          <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+            <main className="max-w-7xl mx-auto">
               <div className="flex justify-center items-center min-h-[60vh]">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#012a4a]"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
               </div>
             </main>
           </div>
@@ -907,6 +916,10 @@ export default function ReportsAndInvoicesPage() {
     </Suspense>
   );
 }
+
+
+
+
 
 
 

@@ -135,7 +135,7 @@ export default function ManualPaymentModal({
             placeholder="Enter phone number (e.g., +254123456789)"
             value={phoneNumber}
             onChange={(e) => setPhoneNumber(e.target.value)}
-            className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition"
+            className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
             required
           />
         </div>
@@ -148,7 +148,7 @@ export default function ManualPaymentModal({
               setSelectedUnitType("");
               setAmount("");
             }}
-            className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition"
+            className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
             required
           >
             <option value="">Select Property</option>
@@ -170,7 +170,7 @@ export default function ManualPaymentModal({
                 const unit = selectedProperty?.unitTypes.find((u) => u.uniqueType === e.target.value);
                 setAmount(unit ? unit.managementFee.toString() : "");
               }}
-              className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition"
+              className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
               required
             >
               <option value="">Select Unit Type</option>
@@ -203,7 +203,7 @@ export default function ManualPaymentModal({
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] transition flex items-center gap-2"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition flex items-center gap-2"
             disabled={isLoading}
           >
             {isLoading && (
@@ -216,3 +216,6 @@ export default function ManualPaymentModal({
     </Modal>
   );
 }
+
+
+

@@ -231,143 +231,151 @@ export default function OwnerSettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
-      <Toaster position="top-right" toastOptions={{ duration: 3000 }} /> {/* Add Toaster component */}
+    <div className="min-h-screen">
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen overflow-y-auto transition-all duration-300">
-          <motion.h1
-            className="text-2xl sm:text-3xl font-semibold text-gray-800 mb-8 flex items-center gap-2"
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6 overflow-y-auto transition-all duration-300">
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <Settings size={28} className="text-[#03a678]" />
-            Settings
-          </motion.h1>
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <Settings size={20} className="text-primary" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Settings</h1>
+                <p className="text-xs sm:text-sm text-muted-foreground">Manage your profile and security preferences.</p>
+              </div>
+            </div>
+          </motion.section>
 
           <motion.div
-            className="bg-white rounded-xl shadow-sm border p-6 mb-8"
+            className="surface-card rounded-2xl p-5 sm:p-6"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
           >
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800">
-              <User className="text-[#012a4a]" />
+            <h2 className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 text-foreground">
+              <User className="text-primary" />
               Profile Information
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
-                <label className="text-sm font-medium text-gray-600">Full Name</label>
+                <label className="text-xs font-medium text-gray-600">Full Name</label>
                 <input
                   type="text"
                   value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                   disabled={isReadOnly}
-                  className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                  className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                   placeholder="Enter your full name"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Email</label>
+                <label className="text-xs font-medium text-gray-600">Email</label>
                 <input
                   type="email"
                   value={profile.email}
                   onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                   disabled={isReadOnly}
-                  className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                  className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                   placeholder="Enter your email"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Phone</label>
+                <label className="text-xs font-medium text-gray-600">Phone</label>
                 <input
                   type="tel"
                   value={profile.phone}
                   onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
                   disabled={isReadOnly}
-                  className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                  className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                   placeholder="Enter your phone number"
                 />
               </div>
             </div>
             <button
               onClick={updateProfile}
-              className="mt-6 bg-[#03a678] hover:bg-[#02956a] text-white px-5 py-2 rounded-lg flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
+              className="mt-6 bg-primary hover:bg-primary-hover text-white px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
               disabled={loading || isReadOnly}
             >
-              <Save size={16} />
+              <Save size={14} />
               {loading ? "Saving..." : "Save Changes"}
             </button>
           </motion.div>
 
           <motion.div
-            className="bg-white rounded-xl shadow-sm border p-6 mb-8"
+            className="surface-card rounded-2xl p-5 sm:p-6"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
           >
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800">
-              <Lock className="text-[#012a4a]" />
+            <h2 className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 text-foreground">
+              <Lock className="text-primary" />
               Change Password
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
-                <label className="text-sm font-medium text-gray-600">New Password</label>
+                <label className="text-xs font-medium text-gray-600">New Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isReadOnly}
-                  className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                  className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                   placeholder="Enter new password"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">Confirm Password</label>
+                <label className="text-xs font-medium text-gray-600">Confirm Password</label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   disabled={isReadOnly}
-                  className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                  className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                   placeholder="Confirm new password"
                 />
               </div>
             </div>
             <button
               onClick={changePassword}
-              className="mt-6 bg-[#012a4a] hover:bg-[#011d34] text-white px-5 py-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
+              className="mt-6 bg-primary hover:bg-primary-hover text-white px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors duration-200 disabled:opacity-50"
             >
               Change Password
             </button>
           </motion.div>
 
           <motion.div
-            className="bg-white rounded-xl shadow-sm border p-6"
+            className="surface-card rounded-2xl p-5 sm:p-6"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.3 }}
           >
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800">
-              <CreditCard className="text-[#012a4a]" />
+            <h2 className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 text-foreground">
+              <CreditCard className="text-primary" />
               Payment & Communication Settings
             </h2>
             <div className="space-y-4">
               {/* UMS Pay Settings */}
-              <div className="border rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
+              <div className="border border-gray-200 rounded-2xl p-4 sm:p-5 bg-white/70 hover:shadow-md transition-shadow duration-200">
                 <div
                   className="flex items-center justify-between cursor-pointer"
                   onClick={() => toggleGateway("umsPay")}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-gray-700">UMS Pay (M-Pesa)</span>
+                    <span className="text-xs sm:text-sm font-semibold text-gray-700">UMS Pay (M-Pesa)</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-                        paymentSettings.umsPayEnabled ? "bg-[#03a678]" : "bg-gray-300"
+                        paymentSettings.umsPayEnabled ? "bg-primary" : "bg-gray-300"
                       }`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -402,7 +410,7 @@ export default function OwnerSettingsPage() {
                             setPaymentSettings({ ...paymentSettings, umsPayApiKey: e.target.value })
                           }
                           placeholder="Enter UMS Pay API Key"
-                          className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                           disabled={!paymentSettings.umsPayEnabled}
                         />
                       </div>
@@ -415,7 +423,7 @@ export default function OwnerSettingsPage() {
                             setPaymentSettings({ ...paymentSettings, umsPayEmail: e.target.value })
                           }
                           placeholder="Enter UMS Pay Email"
-                          className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                           disabled={!paymentSettings.umsPayEnabled}
                         />
                       </div>
@@ -428,7 +436,7 @@ export default function OwnerSettingsPage() {
                             setPaymentSettings({ ...paymentSettings, umsPayAccountId: e.target.value })
                           }
                           placeholder="Enter UMS Pay Account ID"
-                          className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                           disabled={!paymentSettings.umsPayEnabled}
                         />
                       </div>
@@ -438,7 +446,7 @@ export default function OwnerSettingsPage() {
                           href="https://umspay.co.ke/dashboard"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[#03a678] hover:underline"
+                          className="text-primary hover:underline"
                         >
                           UMS Pay Dashboard
                         </a>.
@@ -449,18 +457,18 @@ export default function OwnerSettingsPage() {
               </div>
 
               {/* UMSComms Settings */}
-              <div className="border rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
+              <div className="border border-gray-200 rounded-2xl p-4 sm:p-5 bg-white/70 hover:shadow-md transition-shadow duration-200">
                 <div
                   className="flex items-center justify-between cursor-pointer"
                   onClick={() => toggleGateway("umsComms")}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-gray-700">UMSComms (SMS)</span>
+                    <span className="text-xs sm:text-sm font-semibold text-gray-700">UMSComms (SMS)</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-                        paymentSettings.umsCommsEnabled ? "bg-[#03a678]" : "bg-gray-300"
+                        paymentSettings.umsCommsEnabled ? "bg-primary" : "bg-gray-300"
                       }`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -495,7 +503,7 @@ export default function OwnerSettingsPage() {
                             setPaymentSettings({ ...paymentSettings, umsCommsApiKey: e.target.value })
                           }
                           placeholder="Enter UMSComms API Key"
-                          className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                           disabled={!paymentSettings.umsCommsEnabled}
                         />
                       </div>
@@ -508,7 +516,7 @@ export default function OwnerSettingsPage() {
                             setPaymentSettings({ ...paymentSettings, umsCommsAppId: e.target.value })
                           }
                           placeholder="Enter UMSComms App ID"
-                          className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                           disabled={!paymentSettings.umsCommsEnabled}
                         />
                       </div>
@@ -521,7 +529,7 @@ export default function OwnerSettingsPage() {
                             setPaymentSettings({ ...paymentSettings, umsCommsSenderId: e.target.value })
                           }
                           placeholder="Enter UMSComms Sender ID (e.g., UMS_SMS)"
-                          className="mt-1 w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#03a678] focus:border-transparent transition-colors"
+                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                           disabled={!paymentSettings.umsCommsEnabled}
                         />
                       </div>
@@ -531,7 +539,7 @@ export default function OwnerSettingsPage() {
                           href="https://comms.umeskiasoftwares.com"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[#03a678] hover:underline"
+                          className="text-[#42c775] hover:underline"
                         >
                           UMSComms Dashboard
                         </a>.
@@ -543,7 +551,7 @@ export default function OwnerSettingsPage() {
             </div>
             <button
               onClick={updatePaymentSettings}
-              className="mt-6 bg-[#03a678] hover:bg-[#02956a] text-white px-5 py-2 rounded-lg flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
+              className="mt-6 bg-[#42c775] hover:bg-[#34b46d] text-white px-5 py-2 rounded-lg flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
               disabled={paymentLoading || isReadOnly}
             >
               <Save size={16} />
@@ -561,6 +569,10 @@ export default function OwnerSettingsPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

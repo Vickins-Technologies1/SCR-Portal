@@ -55,25 +55,25 @@ export default function RecordPaymentModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Record Tenant Payment">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-5">
-          <p className="text-sm text-emerald-700 font-medium">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="surface-card rounded-2xl p-4">
+          <p className="text-xs sm:text-sm text-primary font-semibold">
             Tenant: <span className="font-bold">{tenant?.name || "N/A"}</span>
           </p>
           {tenant?.unit && (
-            <p className="text-xs text-emerald-600 mt-1">
+            <p className="text-[11px] text-primary mt-1">
               Unit: {tenant.unit.type} @ {tenant.property?.name}
             </p>
           )}
           {tenant?.dues && (
-            <p className="text-xs text-emerald-600 mt-1">
+            <p className="text-[11px] text-primary mt-1">
               Total Outstanding: Ksh {tenant.dues.totalRemainingDues.toFixed(2)}
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
+          <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
             Amount (Ksh)
           </label>
           <div className="relative">
@@ -85,24 +85,24 @@ export default function RecordPaymentModal({
               onChange={(e) =>
                 setPaymentData({ ...paymentData, amount: e.target.value })
               }
-              className="w-full px-4 py-3 pl-10 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+              className="w-full px-4 py-2.5 sm:py-3 pl-10 border border-border rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none transition"
               placeholder="0.00"
               required
             />
-            <span className="absolute left-3 top-3.5 text-slate-500">Ksh</span>
+            <span className="absolute left-3 top-2.5 sm:top-3.5 text-muted-foreground text-xs sm:text-sm">Ksh</span>
           </div>
           {paymentErrors.amount && (
-            <p className="mt-2 text-sm text-red-600">{paymentErrors.amount}</p>
+            <p className="mt-2 text-xs sm:text-sm text-red-600">{paymentErrors.amount}</p>
           )}
           {tenant?.dues && paymentData.type !== "Other" && (
-            <p className="mt-2 text-sm text-emerald-600">
+            <p className="mt-2 text-xs sm:text-sm text-primary">
               Suggested: Ksh {suggestedAmount()?.toFixed(2) || "0.00"}
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
+          <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
             Payment Type
           </label>
           <select
@@ -113,7 +113,7 @@ export default function RecordPaymentModal({
                 type: e.target.value as any,
               })
             }
-            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+            className="w-full px-4 py-2.5 sm:py-3 border border-border rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
           >
             <option value="Rent">Rent</option>
             <option value="Utility">Utility / Water / Electricity</option>
@@ -123,7 +123,7 @@ export default function RecordPaymentModal({
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
+          <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
             Reference (e.g. M-Pesa Code)
           </label>
           <input
@@ -132,17 +132,17 @@ export default function RecordPaymentModal({
             onChange={(e) =>
               setPaymentData({ ...paymentData, reference: e.target.value })
             }
-            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+            className="w-full px-4 py-2.5 sm:py-3 border border-border rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none transition"
             placeholder="e.g. R45XYZ1234"
             required
           />
           {paymentErrors.reference && (
-            <p className="mt-2 text-sm text-red-600">{paymentErrors.reference}</p>
+            <p className="mt-2 text-xs sm:text-sm text-red-600">{paymentErrors.reference}</p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
+          <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
             Payment Date
           </label>
           <input
@@ -152,31 +152,31 @@ export default function RecordPaymentModal({
             onChange={(e) =>
               setPaymentData({ ...paymentData, paymentDate: e.target.value })
             }
-            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+            className="w-full px-4 py-2.5 sm:py-3 border border-border rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none transition"
             required
           />
         </div>
 
         {paymentErrors.general && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs sm:text-sm">
             {paymentErrors.general}
           </div>
         )}
 
-        <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
+        <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-border/70">
           <button
             type="button"
             onClick={onClose}
-            className="px-8 py-3 bg-slate-200 text-slate-800 rounded-xl hover:bg-slate-300 transition font-medium"
+            className="px-5 py-2.5 bg-white/80 text-foreground border border-border rounded-xl hover:bg-white transition text-xs sm:text-sm font-semibold"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isLoading}
-            className="px-10 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:from-emerald-600 hover:to-emerald-700 transition font-semibold shadow-lg disabled:opacity-60 flex items-center gap-3"
+            className="px-6 py-2.5 bg-gradient-to-r from-primary to-emerald-500 text-white rounded-xl hover:from-primary-hover hover:to-emerald-500/90 transition font-semibold shadow-lg shadow-primary/30 disabled:opacity-60 flex items-center gap-2 text-xs sm:text-sm"
           >
-            <DollarSign className="h-5 w-5" />
+            <DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />
             {isLoading ? "Recording..." : "Record Payment"}
           </button>
         </div>
@@ -184,3 +184,6 @@ export default function RecordPaymentModal({
     </Modal>
   );
 }
+
+
+

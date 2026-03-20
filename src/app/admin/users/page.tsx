@@ -56,6 +56,7 @@ export default function PropertyOwnersPage() {
     password: "",
   });
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [status, setStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [error, setError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -269,8 +270,11 @@ export default function PropertyOwnersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <Sidebar />
+      <Navbar
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
+      />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <div className="md:ml-60 pt-14 pb-12 px-4 sm:px-5 lg:px-6">
         <main className="max-w-7xl mx-auto">

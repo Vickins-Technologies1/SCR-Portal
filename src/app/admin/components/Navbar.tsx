@@ -4,10 +4,15 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { LogOut } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import Cookies from "js-cookie";
 
-export default function Navbar() {
+type NavbarProps = {
+  isSidebarOpen: boolean;
+  onToggleSidebar: () => void;
+};
+
+export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) {
   const router = useRouter();
 
   const handleSignOut = () => {
@@ -18,16 +23,24 @@ export default function Navbar() {
   };
 
   return (
-    <header className="fixed top-0 z-40 h-14 w-full border-b border-gray-100 bg-white/90 backdrop-blur-md shadow-sm md:pl-60 lg:pl-60">
-      <div className="flex h-full items-center justify-between px-4 sm:px-5 lg:px-8">
-        {/* Left: Logo */}
-        <div className="flex items-center">
+    <header className="fixed top-0 z-40 h-14 w-full border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-60 lg:pl-60">
+      <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-5 lg:px-8">
+        {/* Left: Menu + Logo */}
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            onClick={onToggleSidebar}
+            aria-label="Toggle sidebar"
+            title="Menu"
+            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-gray-200 bg-white/90 text-gray-700 shadow-sm transition hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#03a678]/30"
+          >
+            {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
           <Image
             src="/logo.png"
             alt="Sorana Property Managers Logo"
             width={180}
             height={64}
-            className="h-10 w-28 sm:h-11 sm:w-32 object-contain drop-shadow-sm rounded-md"
+            className="h-9 w-auto max-w-[140px] sm:h-10 sm:max-w-[160px] lg:h-11 lg:max-w-none object-contain drop-shadow-sm rounded-md"
             priority
           />
         </div>

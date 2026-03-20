@@ -57,29 +57,30 @@ export default function NotificationsTable({
   };
 
   return (
-    <div className="overflow-x-auto bg-white rounded-2xl shadow-lg">
-      <table className="w-full table-fixed md:table-auto">
-        <thead className="bg-gradient-to-r from-[#03a678]/10 to-[#02956a]/10">
+    <div className="table-shell">
+      <div className="table-scroll">
+        <table className="w-full table-fixed md:table-auto">
+        <thead>
           <tr>
             {viewMode === "sent" ? (
               <>
-                <th className="text-left p-4 font-semibold text-[#012a4a] w-3/12">Message</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a] w-1/12">Type</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a] w-2/12">Tenant</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a] w-1/12">Date</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a] w-2/12">Delivery</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a] w-1/12">Status</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a] w-2/12">Actions</th>
+                <th className="w-3/12">Message</th>
+                <th className="w-1/12">Type</th>
+                <th className="w-2/12">Tenant</th>
+                <th className="w-1/12">Date</th>
+                <th className="w-2/12">Delivery</th>
+                <th className="w-1/12">Status</th>
+                <th className="w-2/12">Actions</th>
               </>
             ) : (
               <>
-                <th className="text-left p-4 font-semibold text-[#012a4a]">Tenant</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a]">Property</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a]">Rent Due</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a]">Utilities</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a]">Deposit</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a]">Total Due</th>
-                <th className="text-left p-4 font-semibold text-[#012a4a]">Due Date</th>
+                <th>Tenant</th>
+                <th>Property</th>
+                <th>Rent Due</th>
+                <th>Utilities</th>
+                <th>Deposit</th>
+                <th>Total Due</th>
+                <th>Due Date</th>
               </>
             )}
           </tr>
@@ -95,27 +96,27 @@ export default function NotificationsTable({
             return (
               <tr
                 key={uniqueKey}
-                className="border-t border-gray-100 hover:bg-[#03a678]/5 transition-colors cursor-pointer"
+                className="hover:bg-primary/5 transition-colors cursor-pointer"
                 onClick={() => onViewDetails(item)}
               >
                 {viewMode === "sent" ? (
                   <>
-                    <td className="p-4 text-sm align-top">
+                    <td className="align-top text-xs sm:text-sm">
                       <div className="truncate max-w-full" title={item.message}>
                         {item.message?.slice(0, 50)}...
                       </div>
                     </td>
-                    <td className="p-4 text-sm capitalize align-top">{item.type || "—"}</td>
-                    <td className="p-4 text-sm align-top">{item.tenantName}</td>
-                    <td className="p-4 text-sm align-top">
+                    <td className="capitalize align-top text-xs sm:text-sm">{item.type || "—"}</td>
+                    <td className="align-top text-xs sm:text-sm">{item.tenantName}</td>
+                    <td className="align-top text-xs sm:text-sm">
                       {item.createdAt ? format(new Date(item.createdAt), "MMM d, yyyy") : "—"}
                     </td>
-                    <td className="p-4 text-sm align-top">{getDeliveryText(item)}</td>
-                    <td className="p-4 align-top">
+                    <td className="align-top text-xs sm:text-sm">{getDeliveryText(item)}</td>
+                    <td className="align-top">
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        className={`px-3 py-1 rounded-full text-[11px] font-semibold ${
                           item.status === "read"
-                            ? "bg-green-100 text-green-800"
+                            ? "bg-primary/10 text-primary"
                             : "bg-yellow-100 text-yellow-800"
                         }`}
                       >
@@ -124,35 +125,32 @@ export default function NotificationsTable({
                           : "—"}
                       </span>
                     </td>
-                    <td
-                      className="p-4 text-sm align-top"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex items-center gap-3">
+                    <td className="align-top" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-3 text-[11px] sm:text-xs font-semibold">
                         <button
                           onClick={() => item.id && onMarkAsRead?.(item.id)}
-                          className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                          className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 transition-colors"
                           title="Mark as read"
                         >
-                          <Eye className="w-5 h-5" />
+                          <Eye className="w-4 h-4" />
                           <span className="hidden md:inline">Mark Read</span>
                         </button>
 
                         <button
                           onClick={() => item.id && onRetry?.(item.id)}
-                          className="flex items-center gap-1.5 text-yellow-600 hover:text-yellow-700 font-medium transition-colors"
+                          className="flex items-center gap-1.5 text-yellow-600 hover:text-yellow-700 transition-colors"
                           title="Retry sending"
                         >
-                          <RefreshCw className="w-5 h-5" />
+                          <RefreshCw className="w-4 h-4" />
                           <span className="hidden md:inline">Retry</span>
                         </button>
 
                         <button
                           onClick={() => item.id && onDelete?.(item.id)}
-                          className="flex items-center gap-1.5 text-red-600 hover:text-red-800 font-medium transition-colors"
+                          className="flex items-center gap-1.5 text-red-600 hover:text-red-800 transition-colors"
                           title="Delete notification"
                         >
-                          <Trash2 className="w-5 h-5" />
+                          <Trash2 className="w-4 h-4" />
                           <span className="hidden md:inline">Delete</span>
                         </button>
                       </div>
@@ -160,21 +158,21 @@ export default function NotificationsTable({
                   </>
                 ) : (
                   <>
-                    <td className="p-4 text-sm">{item.tenantName}</td>
-                    <td className="p-4 text-sm">{item.propertyName || "—"}</td>
-                    <td className="p-4 text-sm font-medium">
+                    <td className="text-xs sm:text-sm">{item.tenantName}</td>
+                    <td className="text-xs sm:text-sm">{item.propertyName || "—"}</td>
+                    <td className="text-xs sm:text-sm font-semibold">
                       Ksh. {item.rentDue?.toFixed(2) ?? "0.00"}
                     </td>
-                    <td className="p-4 text-sm font-medium">
+                    <td className="text-xs sm:text-sm font-semibold">
                       Ksh. {item.utilityDue?.toFixed(2) ?? "0.00"}
                     </td>
-                    <td className="p-4 text-sm font-medium">
+                    <td className="text-xs sm:text-sm font-semibold">
                       Ksh. {item.depositDue?.toFixed(2) ?? "0.00"}
                     </td>
-                    <td className="p-4 text-sm font-bold text-[#03a678]">
+                    <td className="text-xs sm:text-sm font-bold text-primary">
                       Ksh. {item.totalDue?.toFixed(2) ?? "0.00"}
                     </td>
-                    <td className="p-4 text-sm">{item.dueDate || "—"}</td>
+                    <td className="text-xs sm:text-sm">{item.dueDate || "—"}</td>
                   </>
                 )}
               </tr>
@@ -182,6 +180,11 @@ export default function NotificationsTable({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
+
+
+
+

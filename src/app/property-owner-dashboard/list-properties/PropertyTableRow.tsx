@@ -23,28 +23,28 @@ export default function PropertyTableRow({
   const showActions = canManage ?? true;
   return (
     <tr
-      className="hover:bg-slate-50 transition cursor-pointer"
+      className="hover:bg-primary/5 transition cursor-pointer"
       onClick={onView}
     >
-      <td className="px-6 py-4 font-medium text-slate-800">{property.name}</td>
-      <td className="px-6 py-4 text-slate-600 max-w-xs truncate">{property.address}</td>
+      <td className="px-6 py-4 font-medium text-gray-900">{property.name}</td>
+      <td className="px-6 py-4 text-gray-600 max-w-xs truncate">{property.address}</td>
       <td className="px-6 py-4">
         <span
-          className={`px-3 py-1 rounded-full text-xs font-medium ${
-            property.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+          className={`px-3 py-1 rounded-full text-[11px] font-semibold ${
+            property.status === "Active" ? "bg-primary/10 text-primary" : "bg-gray-100 text-gray-700"
           }`}
         >
           {property.status}
         </span>
       </td>
-      <td className="px-6 py-4 text-slate-600">{new Date(property.createdAt).toLocaleDateString()}</td>
-      <td className="px-6 py-4 text-sm text-slate-700 space-y-2">
+      <td className="px-6 py-4 text-gray-600">{new Date(property.createdAt).toLocaleDateString()}</td>
+      <td className="px-6 py-4 text-xs sm:text-sm text-gray-700 space-y-2">
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-slate-500">Vacant units: {availability.totalVacant}</span>
+          <span className="text-[11px] text-slate-500">Vacant units: {availability.totalVacant}</span>
           <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
             <span
               style={{ width: `${Math.min(100, availability.occupancyRate)}%` }}
-              className="block h-full rounded-full bg-gradient-to-r from-cyan-400 to-indigo-500"
+              className="block h-full rounded-full bg-gradient-to-r from-primary via-emerald-400 to-teal-400"
             />
           </div>
           <span className="text-[10px] text-slate-500">
@@ -57,7 +57,7 @@ export default function PropertyTableRow({
           <div className="flex gap-3">
             <button
               onClick={onEdit}
-              className="text-[#012a4a] hover:text-[#014a7a] transition p-2 rounded-lg hover:bg-blue-50"
+              className="text-primary hover:text-primary-hover transition p-2 rounded-lg hover:bg-blue-50"
               title="Edit"
             >
               <Pencil className="h-5 w-5" />
@@ -77,3 +77,7 @@ export default function PropertyTableRow({
     </tr>
   );
 }
+
+
+
+

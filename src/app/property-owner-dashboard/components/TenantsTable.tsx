@@ -80,15 +80,6 @@ export default function TenantsTable({
 }: TenantsTableProps) {
   const router = useRouter();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
-  const [expandedTenants, setExpandedTenants] = useState<Set<string>>(new Set());
-
-  const toggleTenant = useCallback((tenantId: string) => {
-    setExpandedTenants((prev) => {
-      const newSet = new Set(prev);
-      newSet.has(tenantId) ? newSet.delete(tenantId) : newSet.add(tenantId);
-      return newSet;
-    });
-  }, []);
 
   const getUnitDisplayName = (tenant: ResponseTenant): string => {
     if (!tenant.unitIdentifier) return "—";
@@ -218,49 +209,31 @@ export default function TenantsTable({
     </tr>
   );
 
-  // Skeleton Card (Mobile)
-  const SkeletonCard = () => (
-    <div className="bg-white border rounded-lg p-4 shadow-sm animate-pulse">
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <div className="h-5 bg-gray-200 rounded w-3/4 mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-        </div>
-        <div className="h-5 w-5 bg-gray-200 rounded"></div>
-      </div>
-      <div className="mt-4 space-y-3">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-4 bg-gray-200 rounded"></div>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Filters */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Filter Tenants</h2>
+      <div className="surface-card rounded-2xl p-5 sm:p-6">
+        <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4">Filter Tenants</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <input
             name="tenantName"
             value={filters.tenantName}
             onChange={handleFilterChange}
             placeholder="Name"
-            className="p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
           />
           <input
             name="tenantEmail"
             value={filters.tenantEmail}
             onChange={handleFilterChange}
             placeholder="Email"
-            className="p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
           />
           <select
             name="propertyId"
             value={filters.propertyId}
             onChange={handleFilterChange}
-            className="p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
           >
             <option value="">All Properties</option>
             {properties.map((p) => (
@@ -273,7 +246,7 @@ export default function TenantsTable({
             name="unitType"
             value={filters.unitType}
             onChange={handleFilterChange}
-            className="p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
           >
             <option value="">All Unit Types</option>
             {uniqueUnitIdentifiers.map((uniqueType) => {
@@ -294,7 +267,7 @@ export default function TenantsTable({
         </div>
         <button
           onClick={clearFilters}
-          className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-lg text-sm hover:bg-[#013a63] transition"
+          className="mt-4 px-4 py-2 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-hover transition"
         >
           Clear Filters
         </button>
@@ -305,7 +278,7 @@ export default function TenantsTable({
         <select
           value={limit}
           onChange={handleLimitChange}
-          className="p-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          className="px-3 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
         >
           {[10, 25, 50, 100].map((v) => (
             <option key={v} value={v}>
@@ -317,45 +290,38 @@ export default function TenantsTable({
 
       {/* Loading State */}
       {isLoading ? (
-        <>
-          {/* Desktop Skeleton */}
-          <div className="hidden lg:block overflow-x-auto rounded-xl border">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {[...Array(11)].map((_, i) => (
-                    <th key={i} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <div className="h-4 bg-gray-200 rounded w-20"></div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {[...Array(6)].map((_, i) => (
-                  <SkeletonRow key={i} />
+        <div className="table-shell table-compact">
+          <div className="table-scroll">
+            <table>
+              <thead>
+              <tr>
+                {[...Array(11)].map((_, i) => (
+                  <th key={i}>
+                    <div className="h-4 bg-gray-200 rounded w-20"></div>
+                  </th>
                 ))}
-              </tbody>
-            </table>
+              </tr>
+            </thead>
+            <tbody>
+              {[...Array(6)].map((_, i) => (
+                <SkeletonRow key={i} />
+              ))}
+            </tbody>
+          </table>
           </div>
-
-          {/* Mobile Skeleton */}
-          <div className="lg:hidden space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
-        </>
+        </div>
       ) : displayedTenants.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 bg-white rounded-xl border">
-          <p className="text-lg">No tenants found.</p>
-          <p className="text-sm mt-2">Try adjusting your filters.</p>
+        <div className="text-center py-12 surface-card rounded-2xl text-gray-600">
+          <p className="text-base font-semibold">No tenants found.</p>
+          <p className="text-xs sm:text-sm mt-2 text-muted-foreground">Try adjusting your filters.</p>
         </div>
       ) : (
         <>
-          {/* Desktop Table */}
-          <div className="hidden lg:block overflow-x-auto rounded-xl border">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          {/* Tenants Table */}
+          <div className="table-shell table-compact">
+            <div className="table-scroll">
+              <table>
+                <thead>
                 <tr>
                   {[
                     { key: "name", label: "Name" },
@@ -372,7 +338,7 @@ export default function TenantsTable({
                     <th
                       key={key}
                       onClick={() => { if (key !== "overdueBalance") debouncedHandleSort(key as any); }}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                      className="cursor-pointer hover:bg-gray-100/70 transition"
                     >
                       <span className="flex items-center">
                         {label} {key === "overdueBalance" ? (
@@ -383,60 +349,60 @@ export default function TenantsTable({
                       </span>
                     </th>
                   ))}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {displayedTenants.map((tenant) => {
                   const property = properties.find((p) => p._id === tenant.propertyId);
                   const paymentSnapshot = getPaymentSnapshot(tenant);
                   return (
                     <tr
                       key={tenant._id}
-                      className="hover:bg-gray-50 cursor-pointer transition"
+                      className="hover:bg-primary/5 cursor-pointer transition"
                       onClick={() => handleTenantClick(tenant._id)}
                     >
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{tenant.name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{tenant.email}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{property?.name || "—"}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{getUnitDisplayName(tenant)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">Ksh {tenant.price.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{tenant.houseNumber || "—"}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="font-medium text-gray-900">{tenant.name}</td>
+                      <td className="text-gray-600">{tenant.email}</td>
+                      <td className="text-gray-600">{property?.name || "—"}</td>
+                      <td className="text-gray-600">{getUnitDisplayName(tenant)}</td>
+                      <td className="text-gray-600">Ksh {tenant.price.toLocaleString()}</td>
+                      <td className="text-gray-600">{tenant.houseNumber || "—"}</td>
+                      <td className="text-gray-600">
                         {new Date(tenant.leaseStartDate).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 text-sm">
+                      <td>
                         <span
-                          className={`px-2 py-1 text-xs rounded-full font-medium ${
+                          className={`px-2.5 py-1 text-[11px] rounded-full font-semibold ${
                             paymentSnapshot.isOverdue
                               ? "bg-red-100 text-red-800"
-                              : "bg-green-100 text-green-800"
+                              : "bg-primary/10 text-primary"
                           }`}
                         >
                           {paymentSnapshot.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm">
+                      <td>
                         <span
                           className={`font-medium ${
-                            paymentSnapshot.isOverdue ? "text-red-700" : "text-green-700"
+                            paymentSnapshot.isOverdue ? "text-red-700" : "text-primary"
                           }`}
                         >
                           {formatCurrency(paymentSnapshot.overdueBalance)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm">
+                      <td>
                         <span
-                          className={`px-2 py-1 text-xs rounded-full font-medium ${
+                          className={`px-2.5 py-1 text-[11px] rounded-full font-semibold ${
                             tenant.status === "active"
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-primary/10 text-primary"
                               : "bg-red-100 text-red-800"
                           }`}
                         >
                           {tenant.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm">
+                      <td>
                         {(canManageTenants || canSendNotifications) ? (
                           <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
                             {canManageTenants && (
@@ -452,7 +418,7 @@ export default function TenantsTable({
                             {canSendNotifications && (
                               <button
                                 onClick={() => onResendWelcome(tenant)}
-                                className="text-green-600 hover:text-green-800 transition"
+                                className="text-primary hover:text-primary transition"
                                 title="Resend welcome notification"
                               >
                                 <Send className="h-5 w-5" />
@@ -470,7 +436,7 @@ export default function TenantsTable({
                             )}
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400">View only</span>
+                          <span className="text-[11px] text-gray-400">View only</span>
                         )}
                       </td>
                     </tr>
@@ -478,142 +444,26 @@ export default function TenantsTable({
                 })}
               </tbody>
             </table>
-          </div>
-
-          {/* Mobile Cards */}
-          <div className="lg:hidden space-y-4">
-            {displayedTenants.map((tenant) => {
-              const property = properties.find((p) => p._id === tenant.propertyId);
-              const isExpanded = expandedTenants.has(tenant._id);
-
-              return (
-                <div
-                  key={tenant._id}
-                  className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition"
-                  onClick={() => handleTenantClick(tenant._id)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{tenant.name}</h3>
-                      <p className="text-sm text-gray-600">{property?.name || "Unknown Property"}</p>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleTenant(tenant._id);
-                      }}
-                      className="ml-3"
-                    >
-                      {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                    </button>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="mt-4 pt-4 border-t space-y-3 text-sm">
-                      <p><strong>Email:</strong> {tenant.email}</p>
-                      <p><strong>Unit:</strong> {getUnitDisplayName(tenant)}</p>
-                      <p><strong>Rent:</strong> Ksh {tenant.price.toLocaleString()}/mo</p>
-                      <p><strong>House No:</strong> {tenant.houseNumber || "—"}</p>
-                      <p>
-                        <strong>Lease:</strong> {new Date(tenant.leaseStartDate).toLocaleDateString()} →{" "}
-                        {new Date(tenant.leaseEndDate).toLocaleDateString()}
-                      </p>
-                      <p><strong>Payment Status:</strong>{" "}
-                        <span
-                          className={`px-2 py-1 text-xs rounded-full font-medium ${
-                            getPaymentSnapshot(tenant).isOverdue
-                              ? "bg-red-100 text-red-800"
-                              : "bg-green-100 text-green-800"
-                          }`}
-                        >
-                          {getPaymentSnapshot(tenant).label}
-                        </span>
-                      </p>
-                      <p><strong>Overdue Balance:</strong>{" "}
-                        <span
-                          className={`font-semibold ${
-                            getPaymentSnapshot(tenant).isOverdue ? "text-red-700" : "text-green-700"
-                          }`}
-                        >
-                          {formatCurrency(getPaymentSnapshot(tenant).overdueBalance)}
-                        </span>
-                      </p>
-                      <p><strong>Status:</strong>{" "}
-                        <span
-                          className={`px-2 py-1 text-xs rounded-full font-medium ${
-                            tenant.status === "active"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {tenant.status}
-                        </span>
-                      </p>
-
-                      <div className="flex gap-8 pt-3">
-                        {canManageTenants && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEdit(tenant);
-                            }}
-                            className="text-blue-600 hover:text-blue-800"
-                            title="Edit tenant"
-                          >
-                            <Pencil className="h-5 w-5" />
-                          </button>
-                        )}
-
-                        {canSendNotifications && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onResendWelcome(tenant);
-                            }}
-                            className="text-green-600 hover:text-green-800"
-                            title="Resend welcome notification"
-                          >
-                            <Send className="h-5 w-5" />
-                          </button>
-                        )}
-
-                        {canManageTenants && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDelete(tenant._id);
-                            }}
-                            className="text-red-600 hover:text-red-800"
-                            title="Delete tenant"
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            </div>
           </div>
 
           {/* Pagination */}
           <div className="flex flex-col sm:flex-row justify-between items-center py-4 gap-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Showing {(page - 1) * limit + 1}–{Math.min(page * limit, totalTenants)} of {totalTenants} tenants
             </p>
             <div className="flex gap-2">
               <button
                 disabled={page === 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="px-5 py-2 bg-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 transition"
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition"
               >
                 Previous
               </button>
               <button
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="px-5 py-2 bg-[#012a4a] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#013a63] transition"
+                className="px-4 py-2 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-hover transition"
               >
                 Next
               </button>
@@ -624,6 +474,10 @@ export default function TenantsTable({
     </div>
   );
 }
+
+
+
+
 
 
 

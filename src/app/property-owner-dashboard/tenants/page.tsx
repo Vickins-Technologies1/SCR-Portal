@@ -425,46 +425,50 @@ export default function TenantsPage() {
   // Determine if user can add tenants (simple check — you can tie to permissions later)
   const canAddTenants = canManageTenants && !dueStatus?.isDue;
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen">
       <Navbar />
       <Sidebar />
 
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          {/* Header */}
-          <motion.div
-            className="flex justify-between items-center mb-6"
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
-                <Users className="text-[#012a4a]" />
-                Manage Tenants
-              </h1>
-              {role === "teamMember" && ownerName && (
-                <p className="text-sm text-gray-600 mt-1">
-                  for {ownerName}
-                </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Manage Tenants</h1>
+                  {role === "teamMember" && ownerName && (
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                      for {ownerName}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {canAddTenants && (
+                <button
+                  onClick={openAddModal}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition text-white ${
+                    isLoading || !csrfToken || !effectiveOwnerId
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-primary hover:bg-primary-hover"
+                  }`}
+                  disabled={isLoading || !csrfToken || !effectiveOwnerId}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Tenant
+                </button>
               )}
             </div>
-
-            {canAddTenants && (
-              <button
-                onClick={openAddModal}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${
-                  isLoading || !csrfToken || !effectiveOwnerId
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#012a4a] hover:bg-[#014a7a]"
-                }`}
-                disabled={isLoading || !csrfToken || !effectiveOwnerId}
-              >
-                <Plus className="h-5 w-5" />
-                Add Tenant
-              </button>
-            )}
-          </motion.div>
+          </motion.section>
 
           {/* Alerts */}
           <AnimatePresence>
@@ -473,7 +477,7 @@ export default function TenantsPage() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="bg-green-100 border border-green-300 text-green-800 p-4 mb-4 rounded-lg"
+                className="bg-primary/10 border border-primary/40 text-primary p-3 rounded-2xl text-xs sm:text-sm"
               >
                 {successMessage}
               </motion.div>
@@ -483,24 +487,24 @@ export default function TenantsPage() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="bg-red-100 border border-red-300 text-red-800 p-4 mb-4 rounded-lg"
+                className="bg-red-100 border border-red-300 text-red-800 p-3 rounded-2xl text-xs sm:text-sm"
               >
                 {error}
               </motion.div>
             )}
             {pendingInvoices > 0 && (
-              <div className="bg-blue-100 border border-blue-300 text-blue-800 p-4 mb-6 rounded-lg">
+              <div className="bg-blue-100 border border-blue-300 text-blue-800 p-3 rounded-2xl text-xs sm:text-sm">
                 You have {pendingInvoices} pending invoice{pendingInvoices > 1 ? "s" : ""}.
               </div>
             )}
             {dueStatus?.isDue && (
-              <div className="bg-amber-100 border border-amber-300 text-amber-900 p-4 mb-6 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="bg-amber-100 border border-amber-300 text-amber-900 p-3 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs sm:text-sm">
                 <span>
                   Payment required: Your grace period has ended. Please pay your invoice to add tenants.
                 </span>
                 <Link
                   href="/property-owner-dashboard/reports?tab=invoices"
-                  className="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-700"
+                  className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
                 >
                   Go to Invoices
                 </Link>
@@ -511,8 +515,8 @@ export default function TenantsPage() {
           {/* Tenants Table */}
           {isLoading ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#012a4a]"></div>
-              <p className="mt-4 text-gray-600">Loading tenants...</p>
+              <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+              <p className="mt-4 text-muted-foreground text-xs sm:text-sm">Loading tenants...</p>
             </div>
           ) : effectiveOwnerId ? (
             <TenantsTable
@@ -536,7 +540,7 @@ export default function TenantsPage() {
               onResendWelcome={handleResendWelcome}
             />
           ) : (
-            <div className="text-center py-12 text-gray-600">
+            <div className="text-center py-12 text-muted-foreground text-xs sm:text-sm">
               Loading account information...
             </div>
           )}
@@ -627,7 +631,7 @@ export default function TenantsPage() {
                     className={`px-5 py-2 text-white rounded-lg transition ${
                       isResending
                         ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-green-600 hover:bg-green-700"
+                        : "bg-primary hover:bg-primary-hover"
                     }`}
                   >
                     {isResending ? "Resending..." : "Resend Notification"}
@@ -672,6 +676,10 @@ export default function TenantsPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

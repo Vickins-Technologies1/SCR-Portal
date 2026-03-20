@@ -21,28 +21,34 @@ export default function NotificationsHeader({
   csrfToken,
 }: NotificationsHeaderProps) {
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#012a4a]">Notifications</h1>
+    <div className="glass-panel rounded-3xl p-6 sm:p-7">
+      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Notifications</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Send reminders, track delivery, and manage tenant comms.
+          </p>
+        </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <div className="flex bg-gray-100 rounded-xl p-1">
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          <div className="flex bg-white/70 border border-white/60 rounded-full p-1">
             <button
               onClick={() => setViewMode("sent")}
-              className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              className={`flex-1 px-4 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all ${
                 viewMode === "sent"
-                  ? "bg-[#03a678] text-white shadow-md"
-                  : "text-[#012a4a] hover:bg-gray-200"
+                  ? "bg-primary text-white shadow-md"
+                  : "text-muted-foreground hover:bg-gray-100"
               }`}
             >
               Sent Reminders
             </button>
             <button
               onClick={() => setViewMode("upcoming")}
-              className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+              className={`flex-1 px-4 py-2 text-xs sm:text-sm font-semibold rounded-full transition-all ${
                 viewMode === "upcoming"
-                  ? "bg-[#03a678] text-white shadow-md"
-                  : "text-[#012a4a] hover:bg-gray-200"
+                  ? "bg-primary text-white shadow-md"
+                  : "text-muted-foreground hover:bg-gray-100"
               }`}
             >
               Upcoming Reminders
@@ -53,9 +59,9 @@ export default function NotificationsHeader({
             <button
               onClick={onCreateNotification}
               disabled={tenantsCount === 0 || !csrfToken}
-              className="bg-gradient-to-r from-[#03a678] to-[#02956a] text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 hover:scale-105 transition-transform shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-gradient-to-r from-primary to-emerald-500 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold hover:scale-105 transition-transform shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
               Create Notification
             </button>
 
@@ -63,7 +69,7 @@ export default function NotificationsHeader({
               <button
                 onClick={onSendReminders}
                 disabled={isLoading}
-                className="bg-[#012a4a] text-white px-5 py-2.5 rounded-xl hover:bg-[#012a4a]/90 transition-colors shadow-md disabled:opacity-50"
+                className="bg-[#1e3a8a] text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold hover:bg-[#1e3a8a]/90 transition-colors shadow-md disabled:opacity-50"
               >
                 {isLoading ? "Sending..." : "Send Reminders Now"}
               </button>
@@ -74,3 +80,7 @@ export default function NotificationsHeader({
     </div>
   );
 }
+
+
+
+

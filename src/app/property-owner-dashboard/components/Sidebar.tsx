@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import {
-  Menu,
-  X,
   LayoutDashboard,
   Users,
   Building2,
@@ -20,6 +18,7 @@ import {
   UserCog,
 } from "lucide-react";
 import Cookies from "js-cookie";
+import { useSidebar } from "./SidebarContext";
 
 const useAuth = () => {
   if (typeof window === "undefined") {
@@ -46,7 +45,7 @@ type NavLink = {
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
+  const { isOpen, close } = useSidebar();
   const { userId, role, permissions } = useAuth();
   const perm = usePermissions();
   const [name, setName] = useState("User");
@@ -146,32 +145,25 @@ export default function Sidebar() {
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed right-4 top-20 z-50 rounded-xl bg-white/80 backdrop-blur-lg p-3 shadow-lg ring-1 ring-gray-200 transition-all hover:shadow-xl md:hidden"
-      >
-        {isOpen ? <X size={24} className="text-gray-700" /> : <Menu size={24} className="text-gray-700" />}
-      </button>
-
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white/90 backdrop-blur-xl shadow-2xl border-r border-gray-100 transition-transform duration-300 ease-out ${
+        className={`fixed left-0 top-16 bottom-0 z-40 w-72 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)] border-r border-gray-200/70 transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 flex flex-col`}
+        } md:translate-x-0 md:inset-y-0 flex flex-col`}
       >
         <div className="flex h-full flex-col">
-          <div className="border-b border-gray-200/60 bg-gradient-to-b from-[#03a678]/5 to-transparent px-6 py-6">
+          <div className="border-b border-white/40 bg-gradient-to-b from-[#42c775]/10 to-transparent px-6 py-6">
             <div className="flex flex-col items-center text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#42c775] to-[#34b46d] text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
                 {initials}
               </div>
 
               <p className="text-xs tracking-widest uppercase text-gray-500">Welcome back</p>
-              <h2 className="mt-1 text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+              <h2 className="mt-1 text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
                 {name.split(" ")[0]}
               </h2>
 
-              <span className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-full bg-[#03a678]/10 text-[#03a678]">
-                <span className="h-2 w-2 rounded-full bg-[#03a678] animate-pulse"></span>
+              <span className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-full bg-[#42c775]/10 text-[#42c775]">
+                <span className="h-2 w-2 rounded-full bg-[#42c775] animate-pulse"></span>
                 {roleLabel}
               </span>
             </div>
@@ -184,14 +176,14 @@ export default function Sidebar() {
                 <Link
                   key={key}
                   href={href}
-                  onClick={() => setIsOpen(false)}
-                  className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-sm font-medium transition-all duration-200 ${
+                  onClick={close}
+                  className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
                     isActive
-                      ? "bg-[#03a678]/10 text-[#03a678] shadow-sm ring-1 ring-[#03a678]/20"
-                      : "text-gray-600 hover:bg-[#03a678]/5 hover:text-[#03a678]"
+                      ? "bg-[#42c775]/10 text-[#42c775] shadow-sm ring-1 ring-[#42c775]/20"
+                      : "text-gray-600 hover:bg-[#42c775]/5 hover:text-[#42c775]"
                   }`}
                 >
-                  <span className={isActive ? "text-[#03a678]" : "text-gray-500 group-hover:text-[#03a678]"}>
+                  <span className={isActive ? "text-[#42c775]" : "text-gray-500 group-hover:text-[#42c775]"}>
                     {icon}
                   </span>
                   <span>{label}</span>
@@ -213,7 +205,7 @@ export default function Sidebar() {
             )}
           </nav>
 
-          <div className="mt-auto border-t border-gray-200/40 px-6 py-4 bg-gradient-to-t from-gray-50/60 to-transparent">
+          <div className="mt-auto border-t border-white/40 px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
             <div className="text-center space-y-1">
               <p className="text-[10px] text-gray-400/80 font-light tracking-wide">
                 © {new Date().getFullYear()} Sorana Property Managers Limited
@@ -224,7 +216,7 @@ export default function Sidebar() {
                   href="https://vickins-technologies.vercel.app/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-gray-400/80 hover:text-[#03a678] transition-colors duration-200 underline underline-offset-2 decoration-gray-300/50 hover:decoration-[#03a678]/60"
+                  className="text-gray-400/80 hover:text-[#42c775] transition-colors duration-200 underline underline-offset-2 decoration-gray-300/50 hover:decoration-[#42c775]/60"
                 >
                   Vickins Technologies
                 </a>
@@ -236,13 +228,17 @@ export default function Sidebar() {
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
-          onClick={() => setIsOpen(false)}
+          className="fixed inset-x-0 bottom-0 top-16 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+          onClick={close}
         />
       )}
     </>
   );
 }
+
+
+
+
 
 
 

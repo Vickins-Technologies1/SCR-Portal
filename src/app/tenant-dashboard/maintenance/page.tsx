@@ -194,7 +194,7 @@ export default function MaintenanceRequestsPage() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="fixed top-20 right-4 z-50 bg-red-50 border border-red-200 text-red-700 px-5 py-3 rounded-xl shadow-lg flex items-center gap-2"
+            className="fixed top-20 right-4 z-50 bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 text-xs sm:text-sm"
           >
             <AlertCircle size={18} />
             {error}
@@ -205,26 +205,29 @@ export default function MaintenanceRequestsPage() {
         )}
       </AnimatePresence>
 
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white pt-16 px-4">
-        <div className="max-w-4xl mx-auto">
+      <div className="relative min-h-screen pt-16 px-4 text-[13px] sm:text-sm pb-10">
+        <div className="pointer-events-none absolute -top-24 right-[-12%] h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-[-8%] h-72 w-72 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
+        <div className="max-w-4xl mx-auto relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl shadow-xl p-6 mb-6"
+            className="glass-panel rounded-3xl p-5 sm:p-6 mb-6"
           >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-emerald-100 rounded-xl">
-                  <Wrench className="w-7 h-7 text-emerald-600" />
+                <div className="p-3 bg-primary/10 rounded-2xl">
+                  <Wrench className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Maintenance Requests</h1>
-                  <p className="text-sm text-gray-600">Report and track repair issues</p>
+                  <p className="eyebrow">Maintenance</p>
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-display text-foreground">Maintenance Requests</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Report and track repair issues</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 shadow-lg transition"
+                className="flex items-center gap-2 px-5 py-2.5 text-sm bg-primary text-white font-semibold rounded-full hover:bg-primary-hover shadow-lg transition"
               >
                 <Plus size={20} /> New Request
               </button>
@@ -233,10 +236,10 @@ export default function MaintenanceRequestsPage() {
 
           <div className="space-y-5">
             {requests.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-2xl shadow">
+              <div className="text-center py-16 surface-card rounded-3xl">
                 <Wrench className="w-20 h-20 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg font-medium">No maintenance requests yet</p>
-                <p className="text-sm text-gray-400 mt-2">Click "New Request" to report an issue</p>
+                <p className="text-gray-500 text-base sm:text-lg font-medium">No maintenance requests yet</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-2">Click "New Request" to report an issue</p>
               </div>
             ) : (
               requests.map((req) => (
@@ -244,10 +247,10 @@ export default function MaintenanceRequestsPage() {
                   key={req._id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition"
+                  className="surface-card rounded-3xl p-4 sm:p-6 hover:shadow-md transition"
                 >
-                  <h3 className="font-bold text-lg text-gray-900">{req.title}</h3>
-                  <p className="text-gray-600 mt-2">{req.description}</p>
+                  <h3 className="font-semibold text-base sm:text-lg text-foreground">{req.title}</h3>
+                  <p className="text-muted-foreground mt-2 text-xs sm:text-sm">{req.description}</p>
                   <div className="flex flex-wrap gap-3 mt-4">
                     <span
                       className={`px-3 py-1.5 text-xs font-bold rounded-full ${
@@ -255,7 +258,7 @@ export default function MaintenanceRequestsPage() {
                           ? "bg-red-100 text-red-700"
                           : req.urgency === "medium"
                           ? "bg-yellow-100 text-yellow-700"
-                          : "bg-green-100 text-green-700"
+                          : "bg-primary/10 text-primary"
                       }`}
                     >
                       {req.urgency.toUpperCase()}
@@ -266,12 +269,12 @@ export default function MaintenanceRequestsPage() {
                           ? "bg-yellow-100 text-yellow-700"
                           : req.status === "In Progress"
                           ? "bg-blue-100 text-blue-700"
-                          : "bg-green-100 text-green-700"
+                          : "bg-primary/10 text-primary"
                       }`}
                     >
                       {req.status}
                     </span>
-                    <span className="text-xs text-gray-500 ml-auto">
+                    <span className="text-xs text-muted-foreground ml-auto">
                       {new Date(req.date).toLocaleDateString("en-KE", {
                         day: "numeric",
                         month: "short",
@@ -285,21 +288,21 @@ export default function MaintenanceRequestsPage() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex justify-center gap-4 mt-10 pb-10">
+            <div className="flex justify-center gap-4 mt-10 pb-4">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-5 py-2.5 bg-white border rounded-xl disabled:opacity-50 hover:bg-gray-50 transition"
+                className="px-4 py-2 text-xs sm:text-sm bg-white border border-border rounded-xl disabled:opacity-50 hover:bg-primary/5 transition"
               >
                 <ChevronLeft size={18} /> Prev
               </button>
-              <span className="text-sm font-medium self-center">
+              <span className="text-xs sm:text-sm font-medium self-center text-muted-foreground">
                 Page {page} of {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-5 py-2.5 bg-white border rounded-xl disabled:opacity-50 hover:bg-gray-50 transition"
+                className="px-4 py-2 text-xs sm:text-sm bg-white border border-border rounded-xl disabled:opacity-50 hover:bg-primary/5 transition"
               >
                 Next <ChevronRight size={18} />
               </button>
@@ -322,11 +325,11 @@ export default function MaintenanceRequestsPage() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg"
+              className="surface-card rounded-3xl shadow-2xl p-5 sm:p-6 w-full max-w-lg"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">New Maintenance Request</h2>
+                <h2 className="text-xl sm:text-2xl font-semibold text-foreground">New Maintenance Request</h2>
                 <button onClick={() => setIsModalOpen(false)}>
                   <X size={24} />
                 </button>
@@ -337,7 +340,7 @@ export default function MaintenanceRequestsPage() {
                     type="text"
                     value={form.title}
                     onChange={e => setForm({ ...form, title: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border focus:ring-4 focus:ring-emerald-500/20 outline-none transition"
+                    className="w-full px-4 py-3 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 outline-none transition text-sm bg-white/70"
                     placeholder="e.g. Leaking kitchen tap"
                   />
                   {formErrors.title && <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>}
@@ -348,7 +351,7 @@ export default function MaintenanceRequestsPage() {
                     rows={4}
                     value={form.description}
                     onChange={e => setForm({ ...form, description: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border focus:ring-4 focus:ring-emerald-500/20 resize-none outline-none transition"
+                    className="w-full px-4 py-3 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 resize-none outline-none transition text-sm bg-white/70"
                     placeholder="Describe the problem in detail..."
                   />
                   {formErrors.description && <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>}
@@ -357,7 +360,7 @@ export default function MaintenanceRequestsPage() {
                 <select
                   value={form.urgency}
                   onChange={e => setForm({ ...form, urgency: e.target.value as any })}
-                  className="w-full px-4 py-3 rounded-xl border outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-border outline-none text-sm bg-white/70"
                 >
                   <option value="low">Low – Can wait</option>
                   <option value="medium">Medium – Soon</option>
@@ -368,14 +371,14 @@ export default function MaintenanceRequestsPage() {
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-6 py-3 border rounded-xl hover:bg-gray-50 transition"
+                    className="px-5 py-2.5 text-sm border rounded-xl hover:bg-gray-50 transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-8 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition"
+                    className="px-6 py-2.5 text-sm bg-primary text-white font-bold rounded-xl hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2 transition"
                   >
                     {submitting ? (
                       <>

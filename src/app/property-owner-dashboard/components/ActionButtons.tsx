@@ -29,13 +29,13 @@ export default function ActionButtons({
   canDelete,
 }: ActionButtonsProps) {
   return (
-    <div className="flex flex-wrap gap-4 pt-8 border-t border-slate-200 mt-10">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-5 border-t border-border/70 mt-6">
       {canRecordPayment && (
         <button
           onClick={onRecordPayment}
-          className="flex items-center gap-3 px-7 py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-semibold rounded-xl hover:from-emerald-600 hover:to-emerald-700 transform hover:scale-105 transition-all shadow-lg"
+          className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 sm:px-5 sm:py-3 bg-gradient-to-r from-primary to-emerald-500 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-lg shadow-primary/30 hover:from-primary-hover hover:to-emerald-500/90 transition-all"
         >
-          <DollarSign className="h-6 w-6" />
+          <DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />
           Record Payment
         </button>
       )}
@@ -43,9 +43,9 @@ export default function ActionButtons({
       {canGenerateReport && (
         <button
           onClick={onGenerateReport}
-          className="flex items-center gap-3 px-7 py-4 bg-gradient-to-r from-indigo-500 to-slate-900 text-white font-semibold rounded-xl hover:from-indigo-600 hover:to-slate-950 transform hover:scale-105 transition-all shadow-lg"
+          className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 sm:px-5 sm:py-3 bg-white/80 text-foreground border border-border rounded-xl text-xs sm:text-sm font-semibold shadow-sm hover:bg-white transition"
         >
-          <FileText className="h-6 w-6" />
+          <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
           Generate Report
         </button>
       )}
@@ -53,9 +53,9 @@ export default function ActionButtons({
       {canImpersonate && (
         <button
           onClick={onImpersonate}
-          className="flex items-center gap-3 px-7 py-4 bg-amber-600 text-white font-semibold rounded-xl hover:bg-amber-700 transform hover:scale-105 transition-all shadow-lg"
+          className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 sm:px-5 sm:py-3 bg-amber-500/90 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm hover:bg-amber-600 transition"
         >
-          <LogIn className="h-6 w-6" />
+          <LogIn className="h-4 w-4 sm:h-5 sm:w-5" />
           Impersonate
         </button>
       )}
@@ -63,9 +63,9 @@ export default function ActionButtons({
       {canDelete && (
         <button
           onClick={onDelete}
-          className="flex items-center gap-3 px-7 py-4 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 transform hover:scale-105 transition-all shadow-lg"
+          className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 sm:px-5 sm:py-3 bg-red-600/90 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm hover:bg-red-700 transition"
         >
-          <Trash2 className="h-6 w-6" />
+          <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
           Delete Tenant
         </button>
       )}
@@ -83,3 +83,6 @@ export default function ActionButtons({
     </div>
   );
 }
+
+
+

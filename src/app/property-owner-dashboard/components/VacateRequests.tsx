@@ -85,14 +85,14 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
       transition={{ duration: 0.6 }}
       className="mb-12"
     >
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-amber-100 rounded-xl">
-            <Home className="w-8 h-8 text-amber-600" />
+          <div className="p-2.5 bg-amber-100 rounded-xl">
+            <Home className="w-6 h-6 text-amber-600" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Vacate Requests</h2>
-            <p className="text-gray-600">Approve or reject tenant move-out requests</p>
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground">Vacate Requests</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">Approve or reject tenant move-out requests</p>
           </div>
         </div>
       </div>
@@ -103,7 +103,7 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3"
+            className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center gap-3 text-sm"
           >
             <AlertCircle size={20} />
             {error}
@@ -114,7 +114,7 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center gap-3"
+            className="mb-5 p-3 bg-primary/10 border border-primary/30 text-primary rounded-2xl flex items-center gap-3 text-sm"
           >
             <CheckCircle2 size={20} />
             {success}
@@ -123,9 +123,9 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
       </AnimatePresence>
 
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 animate-pulse">
+            <div key={i} className="surface-card rounded-2xl p-4 sm:p-5 animate-pulse">
               <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
               <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
               <div className="h-4 bg-gray-200 rounded w-5/6"></div>
@@ -135,15 +135,15 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
       )}
 
       {!isLoading && requests.length === 0 && (
-        <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
-          <Home className="w-20 h-20 text-gray-300 mx-auto mb-4" />
-          <p className="text-xl font-medium text-gray-500">No vacate requests yet</p>
-          <p className="text-gray-400 mt-2">Tenant move-out requests will appear here</p>
+        <div className="text-center py-16 surface-card rounded-2xl">
+          <Home className="w-14 h-14 text-gray-300 mx-auto mb-4" />
+          <p className="text-base font-semibold text-gray-600">No vacate requests yet</p>
+          <p className="text-xs text-gray-400 mt-2">Tenant move-out requests will appear here</p>
         </div>
       )}
 
       {!isLoading && requests.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {requests.map((req) => (
             <motion.div
               key={req._id}
@@ -151,14 +151,14 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-xl transition-all duration-300"
+              className="surface-card rounded-2xl p-4 sm:p-5 hover:shadow-lg transition-all duration-300"
             >
               <div className="flex justify-between items-start mb-4">
-                <h3 className="font-bold text-lg text-gray-900 line-clamp-2">{req.tenantName || "Tenant"}</h3>
+                <h3 className="font-semibold text-base text-gray-900 line-clamp-2">{req.tenantName || "Tenant"}</h3>
                 <span
-                  className={`px-3 py-1 text-xs font-bold rounded-full ${
+                  className={`px-3 py-1 text-[11px] font-semibold rounded-full ${
                     req.status === "Approved"
-                      ? "bg-green-100 text-green-700"
+                      ? "bg-primary/10 text-primary"
                       : req.status === "Rejected"
                       ? "bg-red-100 text-red-700"
                       : "bg-yellow-100 text-yellow-700"
@@ -168,7 +168,7 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
                 </span>
               </div>
 
-              <div className="space-y-2 text-sm text-gray-700">
+              <div className="space-y-2 text-xs sm:text-sm text-gray-700">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Property</span>
                   <span className="font-medium text-gray-900 truncate max-w-32">{req.propertyName || "—"}</span>
@@ -185,19 +185,19 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
                 </div>
               </div>
 
-              <p className="mt-4 text-sm text-gray-600 line-clamp-3">{req.message}</p>
+              <p className="mt-4 text-xs sm:text-sm text-gray-600 line-clamp-3">{req.message}</p>
 
               {req.status === "Pending" && (
-                <div className="mt-5 flex gap-2">
+                <div className="mt-4 flex gap-2">
                   <button
                     onClick={() => updateStatus(req._id, "Approved")}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-[11px] sm:text-xs font-semibold text-white hover:bg-primary-hover transition"
                   >
                     <CheckCircle2 size={14} /> Approve
                   </button>
                   <button
                     onClick={() => updateStatus(req._id, "Rejected")}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 transition"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-3 py-2 text-[11px] sm:text-xs font-semibold text-white hover:bg-red-700 transition"
                   >
                     <XCircle size={14} /> Reject
                   </button>
@@ -210,3 +210,7 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
     </motion.section>
   );
 }
+
+
+
+

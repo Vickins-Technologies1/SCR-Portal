@@ -12,6 +12,10 @@ import {
   Loader2,
   Shield,
   PieChart as PieChartIcon,
+  Wallet,
+  CalendarClock,
+  BadgeCheck,
+  Sparkles,
 } from "lucide-react";
 import {
   BarChart,
@@ -42,7 +46,8 @@ interface Tenant {
   paymentStatus: string;
   createdAt: string;
   updatedAt?: string;
-  wallet: number;
+  wallet?: number;
+  walletBalance?: number;
   leaseStartDate?: string;
   leaseEndDate?: string;
   totalRentPaid?: number;
@@ -73,7 +78,7 @@ interface Analytics {
 
 function SkeletonCard() {
   return (
-    <div className="bg-white/70 rounded-xl p-4 animate-pulse border border-gray-200">
+    <div className="bg-white/70 rounded-2xl p-4 animate-pulse border border-gray-200">
       <div className="flex items-center gap-2 mb-2.5">
         <div className="w-4 h-4 bg-gray-200 rounded-full"></div>
         <div className="h-4 w-28 bg-gray-200 rounded"></div>
@@ -99,13 +104,16 @@ function InfoCard({
   isLoading: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200/70 p-4 sm:p-5 hover:shadow-md transition-shadow">
-      <h3 className="flex items-center gap-2.5 text-base sm:text-lg font-semibold text-gray-800 mb-3">
-        {icon}
-        {title}
-      </h3>
-      <div className="text-gray-700 text-xs sm:text-sm space-y-1.5 leading-relaxed">
-        {isLoading ? <SkeletonCard /> : children}
+    <div className="surface-card rounded-2xl p-5 sm:p-6 relative overflow-hidden">
+      <div className="absolute -top-10 right-0 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+      <div className="relative">
+        <h3 className="flex items-center gap-2.5 text-sm sm:text-base font-semibold text-gray-800 mb-3">
+          {icon}
+          {title}
+        </h3>
+        <div className="text-gray-700 text-xs sm:text-sm space-y-1.5 leading-relaxed">
+          {isLoading ? <SkeletonCard /> : children}
+        </div>
       </div>
     </div>
   );
@@ -113,18 +121,18 @@ function InfoCard({
 
 function Badge({ status, children }: { status?: string; children: React.ReactNode }) {
   const styles: Record<string, string> = {
-    paid: "bg-green-100 text-green-800 border-green-200",
+    paid: "bg-primary/10 text-primary border-primary/30",
     overdue: "bg-red-100 text-red-800 border-red-200",
     pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    Active: "bg-green-100 text-green-800 border-green-200",
+    Active: "bg-primary/10 text-primary border-primary/30",
     Inactive: "bg-gray-100 text-gray-800 border-gray-200",
     Pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    "up-to-date": "bg-green-100 text-green-800 border-green-200",
+    "up-to-date": "bg-primary/10 text-primary border-primary/30",
   };
 
   const color = styles[status || ""] || "bg-gray-100 text-gray-800 border-gray-200";
   return (
-    <span className={`inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full border ${color}`}>
+    <span className={`inline-flex px-2.5 py-0.5 text-[11px] sm:text-xs font-medium rounded-full border ${color}`}>
       {children}
     </span>
   );
@@ -146,14 +154,14 @@ function PaymentTrendChart({
   }
 
   return (
-    <InfoCard icon={<DollarSign className="w-5 h-5 text-emerald-600" />} title="Monthly Payments" isLoading={false}>
-      <div className="h-64 sm:h-72 md:h-80 pt-3">
+    <InfoCard icon={<DollarSign className="w-5 h-5 text-primary" />} title="Monthly Payments" isLoading={false}>
+      <div className="h-52 sm:h-60 md:h-72 pt-3">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 12, right: 16, left: -12, bottom: 16 }}>
             <defs>
               <linearGradient id="rentGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.9} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0.2} />
+                <stop offset="5%" stopColor="#42c775" stopOpacity={0.9} />
+                <stop offset="95%" stopColor="#42c775" stopOpacity={0.2} />
               </linearGradient>
               <linearGradient id="utilityGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#6366f1" stopOpacity={0.85} />
@@ -185,7 +193,7 @@ function PaymentTrendChart({
               labelStyle={{ color: "#e5e7eb", fontSize: "0.85rem", fontWeight: 500 }}
             />
             <Legend wrapperStyle={{ fontSize: "0.8rem", paddingTop: 4 }} iconSize={8} />
-            <Area type="monotone" dataKey="rent" name="Rent" stackId="1" stroke="#10b981" fill="url(#rentGradient)" strokeWidth={2} />
+            <Area type="monotone" dataKey="rent" name="Rent" stackId="1" stroke="#42c775" fill="url(#rentGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="utility" name="Utility" stackId="1" stroke="#6366f1" fill="url(#utilityGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="deposit" name="Deposit" stackId="1" stroke="#f59e0b" fill="url(#depositGradient)" strokeWidth={2} />
             <Line type="monotone" dataKey="total" name="Total Paid" stroke="#111827" strokeWidth={2} dot={{ r: 2, strokeWidth: 2, fill: "white" }} activeDot={{ r: 4 }} />
@@ -205,7 +213,7 @@ function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string;
 
   return (
     <InfoCard icon={<PieChartIcon className="w-5 h-5 text-purple-600" />} title="Payment Mix" isLoading={false}>
-      <div className="h-64 sm:h-72 md:h-80 pt-4">
+      <div className="h-52 sm:h-60 md:h-72 pt-4">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={breakdown} layout="vertical" margin={{ top: 6, right: 24, left: 10, bottom: 6 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
@@ -235,7 +243,7 @@ function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string;
                 fontSize: "0.8rem",
               }}
             />
-            <Bar dataKey="value" name="Paid" radius={[6, 6, 6, 6]} fill="#8b5cf6" />
+            <Bar dataKey="value" name="Paid" radius={[6, 6, 6, 6]} fill="#1E3A8A" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -466,8 +474,78 @@ export default function TenantDashboardPage() {
       ? new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
       : "—";
 
+  const walletBalance = tenant?.walletBalance ?? tenant?.wallet ?? 0;
+  const totalPaid =
+    (tenant?.totalRentPaid ?? 0) +
+    (tenant?.totalUtilityPaid ?? 0) +
+    (tenant?.totalDepositPaid ?? 0);
+  const totalDue = tenant?.dues?.totalRemainingDues ?? 0;
+  const hasDues = totalDue > 0;
+  const paymentStatusLabel = tenant?.paymentStatus || "—";
+
+  const statThemes = {
+    primary: {
+      ring: "ring-primary/20",
+      icon: "text-primary",
+      bg: "bg-primary/10",
+      glow: "shadow-[0_18px_40px_-28px_rgba(66,199,117,0.65)]",
+    },
+    blue: {
+      ring: "ring-[#1e3a8a]/15",
+      icon: "text-[#1e3a8a]",
+      bg: "bg-[#1e3a8a]/10",
+      glow: "shadow-[0_18px_40px_-28px_rgba(30,58,138,0.55)]",
+    },
+    amber: {
+      ring: "ring-amber-200/70",
+      icon: "text-amber-600",
+      bg: "bg-amber-100/70",
+      glow: "shadow-[0_18px_40px_-28px_rgba(245,158,11,0.5)]",
+    },
+    red: {
+      ring: "ring-red-200/70",
+      icon: "text-red-600",
+      bg: "bg-red-100/70",
+      glow: "shadow-[0_18px_40px_-28px_rgba(239,68,68,0.45)]",
+    },
+  } as const;
+
+  const quickStats = [
+    {
+      label: "Wallet Balance",
+      value: formatCurrency(walletBalance),
+      icon: Wallet,
+      tone: "primary",
+      helper: "Ready to use",
+    },
+    {
+      label: "Total Paid",
+      value: formatCurrency(totalPaid),
+      icon: BadgeCheck,
+      tone: "blue",
+      helper: "All time",
+    },
+    {
+      label: "Total Due",
+      value: formatCurrency(totalDue),
+      icon: AlertCircle,
+      tone: hasDues ? "red" : "primary",
+      helper: hasDues ? "Pending" : "Clear",
+    },
+    {
+      label: "Lease Ends",
+      value: fmt(tenant?.leaseEndDate),
+      icon: CalendarClock,
+      tone: "amber",
+      helper: fmt(tenant?.leaseStartDate),
+    },
+  ] as const;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-6 sm:pb-10">
+    <div className="relative min-h-screen pb-10 text-[13px] sm:text-sm">
+      <div className="pointer-events-none absolute -top-24 right-[-12%] h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 left-[-10%] h-80 w-80 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
+
       {isImpersonated && (
         <div className="fixed top-0 inset-x-0 z-50 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg">
           <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between text-sm">
@@ -499,25 +577,49 @@ export default function TenantDashboardPage() {
         </div>
       )}
 
-      <div className={`${isImpersonated ? "pt-16 sm:pt-20" : "pt-10 sm:pt-14"}`}>
-        <section
-          className="
-            mx-4 sm:mx-6 lg:mx-8
-            mt-3 sm:mt-6
-            bg-gradient-to-r from-emerald-600 to-emerald-700
-            text-white
-            rounded-xl sm:rounded-2xl
-            p-5 sm:p-7 md:p-8
-            shadow-xl
-          "
-        >
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">
-            Welcome{tenant?.name ? `, ${tenant.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="mt-1.5 text-sm sm:text-base opacity-90">Rental overview – real-time</p>
-        </section>
+      <div className={`${isImpersonated ? "pt-16 sm:pt-20" : "pt-10 sm:pt-14"} relative z-10`}>
+        <div className="mx-4 sm:mx-6 lg:mx-8">
+          <section className="glass-panel rounded-3xl p-6 sm:p-8 md:p-9 relative overflow-hidden">
+            <div className="absolute -top-24 right-6 h-48 w-48 rounded-full bg-primary/25 blur-3xl" />
+            <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-[#1e3a8a]/10 blur-2xl" />
 
-        <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 sm:mt-5 space-y-3">
+            <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-muted-foreground">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Tenant Command Center
+                </div>
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-display text-foreground">
+                  Welcome{tenant?.name ? `, ${tenant.name.split(" ")[0]}` : ""}
+                </h1>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Track your lease, payments, and requests with a real-time view built for clarity.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                    {property?.name || "Your Property"}
+                  </span>
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                    Unit {tenant?.houseNumber || "—"}
+                  </span>
+                  <Badge status={paymentStatusLabel}>{paymentStatusLabel}</Badge>
+                </div>
+              </div>
+
+              <div className="bg-white/70 border border-white/50 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Lease window</p>
+                <p className="text-sm sm:text-base font-semibold text-foreground mt-1">
+                  {fmt(tenant?.leaseStartDate)} – {fmt(tenant?.leaseEndDate)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Months stayed: <span className="font-semibold text-foreground">{tenant?.monthsStayed ?? "—"}</span>
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 space-y-3">
           {error && (
             <div className="flex items-center gap-2.5 p-3 bg-red-50 text-red-800 rounded-lg border border-red-200 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -525,117 +627,167 @@ export default function TenantDashboardPage() {
             </div>
           )}
           {successMessage && (
-            <div className="p-3 bg-green-50 text-green-800 rounded-lg border border-green-200 text-sm">
+            <div className="p-3 bg-primary/10 text-primary rounded-lg border border-primary/20 text-sm">
               {successMessage}
             </div>
           )}
         </div>
 
-        <div className="mx-4 sm:mx-6 lg:mx-8 mt-5 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-          <InfoCard icon={<Home className="w-5 h-5 text-blue-600" />} title="Property" isLoading={isLoading}>
-            {property && tenant ? (
-              <div className="space-y-1 text-xs sm:text-sm">
-                <p className="font-medium text-gray-900">{property.name}</p>
-                <p className="text-gray-600 truncate">{property.address}</p>
-                <div className="mt-2 space-y-0.5">
-                  <p>
-                    Unit: <strong>{tenant.houseNumber}</strong> ({tenant.unitType})
-                  </p>
-                  <p>
-                    Rent: <strong>Ksh {tenant.price.toLocaleString()}</strong>/mo
-                  </p>
-                  <p>
-                    Deposit: <strong>Ksh {tenant.deposit.toLocaleString()}</strong>
-                  </p>
-                  <p>
-                    Lease:{" "}
-                    <strong className="whitespace-nowrap">
-                      {fmt(tenant.leaseStartDate)} – {fmt(tenant.leaseEndDate)}
-                    </strong>
-                  </p>
-                  <p>
-                    Months stayed: <strong>{tenant.monthsStayed ?? "—"}</strong>
-                  </p>
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {quickStats.map((stat) => {
+            const tone = statThemes[stat.tone];
+            const Icon = stat.icon;
+            return (
+              <div
+                key={stat.label}
+                className={`surface-card rounded-2xl p-4 sm:p-5 ring-1 ${tone.ring} ${tone.glow}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                      {stat.label}
+                    </p>
+                    <p className="text-base sm:text-lg font-semibold text-foreground">{stat.value}</p>
+                    <p className="text-[11px] text-muted-foreground">{stat.helper}</p>
+                  </div>
+                  <div className={`h-11 w-11 rounded-2xl flex items-center justify-center ${tone.bg}`}>
+                    <Icon className={`h-5 w-5 ${tone.icon}`} />
+                  </div>
                 </div>
               </div>
-            ) : isLoading ? (
-              <div className="text-gray-500 text-sm">Loading property details...</div>
-            ) : (
-              <div className="text-amber-700 text-sm">
-                Property information not available
-                {tenant?.propertyId && (
-                  <div className="text-xs mt-1 opacity-80">
-                    (Property ID: {tenant.propertyId.slice(-8)}...)
-                  </div>
-                )}
-              </div>
-            )}
-          </InfoCard>
-
-          <InfoCard icon={<DollarSign className="w-5 h-5 text-emerald-600" />} title="Payments" isLoading={isLoading}>
-            {tenant ? (
-              <div className="space-y-1.5 text-xs sm:text-sm">
-                <p>
-                  Status: <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "?"}</Badge>
-                </p>
-                <p>
-                  Rent paid: <strong>{formatCurrency(tenant.totalRentPaid)}</strong>
-                </p>
-                <p>
-                  Utility paid: <strong>{formatCurrency(tenant.totalUtilityPaid)}</strong>
-                </p>
-                <p>
-                  Deposit paid: <strong>{formatCurrency(tenant.totalDepositPaid)}</strong>
-                </p>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">No payment data available</p>
-            )}
-          </InfoCard>
-
-          <InfoCard icon={<AlertCircle className="w-5 h-5 text-red-600" />} title="Dues" isLoading={isDuesLoading}>
-            {tenant?.dues ? (
-              <div className="space-y-1 text-xs sm:text-sm">
-                <p>
-                  Rent due: <strong className="text-red-700">{formatCurrency(tenant.dues.rentDues)}</strong>
-                </p>
-                <p>
-                  Utility due: <strong className="text-orange-700">{formatCurrency(tenant.dues.utilityDues)}</strong>
-                </p>
-                <p>
-                  Deposit due: <strong className="text-purple-700">{formatCurrency(tenant.dues.depositDues)}</strong>
-                </p>
-                <p className="mt-2 pt-2 border-t font-semibold text-red-800 text-sm sm:text-base">
-                  Total remaining: {formatCurrency(tenant.dues.totalRemainingDues)}
-                </p>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">Loading dues…</p>
-            )}
-          </InfoCard>
-
-          <InfoCard icon={<User className="w-5 h-5 text-indigo-600" />} title="Profile" isLoading={isLoading}>
-            {tenant ? (
-              <div className="space-y-1 text-xs sm:text-sm">
-                <p className="font-medium text-gray-900">{tenant.name}</p>
-                <p className="text-gray-600 break-all">{tenant.email}</p>
-                <p>{tenant.phone || "—"}</p>
-                <p className="mt-1.5">
-                  Status: <Badge status={tenant.status}>{tenant.status}</Badge>
-                </p>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">Loading profile…</p>
-            )}
-          </InfoCard>
+            );
+          })}
         </div>
 
-        <section className="mx-4 sm:mx-6 lg:mx-8 mt-7 sm:mt-9 lg:mt-10 space-y-6 sm:space-y-8">
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 surface-card rounded-3xl p-6 sm:p-7 relative overflow-hidden">
+            <div className="absolute -top-12 right-10 h-40 w-40 rounded-full bg-primary/15 blur-3xl" />
+            <div className="relative space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-[#1e3a8a]/10 flex items-center justify-center">
+                  <Home className="h-5 w-5 text-[#1e3a8a]" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Residency</p>
+                  <h2 className="text-lg sm:text-xl font-semibold text-foreground">Property Snapshot</h2>
+                </div>
+              </div>
+
+              {property && tenant ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-foreground">{property.name}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground">{property.address}</p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                        {tenant.unitType}
+                      </span>
+                      <span className="px-3 py-1 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-xs font-semibold">
+                        Unit {tenant.houseNumber}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
+                    <p>
+                      Rent: <span className="font-semibold text-foreground">Ksh {tenant.price.toLocaleString()}</span>
+                    </p>
+                    <p>
+                      Deposit: <span className="font-semibold text-foreground">Ksh {tenant.deposit.toLocaleString()}</span>
+                    </p>
+                    <p>
+                      Lease: <span className="font-semibold text-foreground">{fmt(tenant.leaseStartDate)} – {fmt(tenant.leaseEndDate)}</span>
+                    </p>
+                    <p>
+                      Months stayed: <span className="font-semibold text-foreground">{tenant.monthsStayed ?? "—"}</span>
+                    </p>
+                  </div>
+                </div>
+              ) : isLoading ? (
+                <SkeletonCard />
+              ) : (
+                <div className="text-amber-700 text-sm">
+                  Property information not available
+                  {tenant?.propertyId && (
+                    <div className="text-xs mt-1 opacity-80">
+                      (Property ID: {tenant.propertyId.slice(-8)}...)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="surface-card rounded-3xl p-6 sm:p-7">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Payment Health</p>
+                  <h2 className="text-lg font-semibold text-foreground">Dues & Status</h2>
+                </div>
+              </div>
+
+              {tenant ? (
+                <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
+                  <p>
+                    Status: <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "?"}</Badge>
+                  </p>
+                  <p>
+                    Rent paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalRentPaid)}</span>
+                  </p>
+                  <p>
+                    Utility paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalUtilityPaid)}</span>
+                  </p>
+                  <p>
+                    Deposit paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalDepositPaid)}</span>
+                  </p>
+                  <div className="pt-3 mt-3 border-t border-border text-sm font-semibold text-foreground flex items-center justify-between">
+                    <span>Total due</span>
+                    <span className={hasDues ? "text-red-600" : "text-primary"}>
+                      {formatCurrency(totalDue)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">No payment data available</p>
+              )}
+            </div>
+
+            <div className="surface-card rounded-3xl p-6 sm:p-7">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-2xl bg-[#1e3a8a]/10 flex items-center justify-center">
+                  <User className="h-5 w-5 text-[#1e3a8a]" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Tenant Profile</p>
+                  <h2 className="text-lg font-semibold text-foreground">Contact Details</h2>
+                </div>
+              </div>
+
+              {tenant ? (
+                <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
+                  <p className="text-base font-semibold text-foreground">{tenant.name}</p>
+                  <p className="break-all">{tenant.email}</p>
+                  <p>{tenant.phone || "—"}</p>
+                  <div className="pt-3 mt-3 border-t border-border">
+                    Status: <Badge status={tenant.status}>{tenant.status}</Badge>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">Loading profile…</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <section className="mx-4 sm:mx-6 lg:mx-8 mt-8 sm:mt-10 space-y-6 sm:space-y-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
             <PaymentTrendChart data={paymentTrendData} />
             <PaymentBreakdownChart breakdown={paymentBreakdown} />
           </div>
-          
         </section>
       </div>
     </div>

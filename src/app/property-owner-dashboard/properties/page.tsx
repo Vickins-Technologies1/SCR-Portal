@@ -466,36 +466,46 @@ export default function PropertiesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen">
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <motion.div
-            className="flex justify-between items-center mb-6"
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
-              <Home className="text-[#012a4a]" />
-              Manage Properties
-            </h1>
-            {canListProperties && (
-              <button
-                onClick={openAddModal}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-white font-medium ${isLoading || !csrfToken ? "bg-gray-400 cursor-not-allowed" : "bg-[#012a4a] hover:bg-[#014a7a]"}`}
-                disabled={isLoading || !csrfToken}
-                aria-label="Add new property"
-              >
-                <Plus className="h-5 w-5" />
-                Add Property
-              </button>
-            )}
-          </motion.div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Home className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Manage Properties</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Organize listings, unit types, and rent schedules in one place.
+                  </p>
+                </div>
+              </div>
+              {canListProperties && (
+                <button
+                  onClick={openAddModal}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition text-white ${isLoading || !csrfToken ? "bg-gray-300 cursor-not-allowed" : "bg-primary hover:bg-primary-hover"}`}
+                  disabled={isLoading || !csrfToken}
+                  aria-label="Add new property"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Property
+                </button>
+              )}
+            </div>
+          </motion.section>
           {error && (
             <motion.div
-              className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow"
+              className="bg-red-100 text-red-700 p-3 rounded-xl shadow text-xs sm:text-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
@@ -505,17 +515,17 @@ export default function PropertiesPage() {
           )}
           {isLoading ? (
             <motion.div
-              className="text-center text-gray-600"
+              className="text-center text-muted-foreground text-xs sm:text-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
               <span className="ml-2">Loading properties...</span>
             </motion.div>
           ) : sortedProperties.length === 0 ? (
             <motion.div
-              className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center"
+              className="surface-card rounded-2xl p-6 text-muted-foreground text-center text-xs sm:text-sm"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
@@ -523,28 +533,29 @@ export default function PropertiesPage() {
               No properties found. Add a property to get started.
             </motion.div>
           ) : (
-            <div className="overflow-x-auto bg-white shadow rounded-lg">
-              <table className="min-w-full table-auto text-sm md:text-base">
-                <thead className="bg-gray-200">
+            <div className="table-shell">
+              <div className="table-scroll">
+              <table className="min-w-full table-auto">
+                <thead>
                   <tr>
                     {["name", "address", "status", "rentPaymentDate", "createdAt"].map((key) => (
                       <th
                         key={key}
-                        className="px-4 py-3 text-left cursor-pointer hover:bg-gray-300"
+                        className="cursor-pointer hover:bg-gray-100/70 transition"
                         onClick={() => handleSort(key as "name" | "address" | "createdAt" | "status" | "rentPaymentDate")}
                       >
                         {key === "rentPaymentDate" ? "Rent Due Day" : key[0].toUpperCase() + key.slice(1)} {getSortIcon(key as "name" | "address" | "createdAt" | "status" | "rentPaymentDate")}
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-left">Unit Types</th>
-                    <th className="px-4 py-3 text-left">Actions</th>
+                    <th>Unit Types</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedProperties.map((p, index) => (
                     <motion.tr
                       key={p._id}
-                      className="border-t hover:bg-gray-50 transition cursor-pointer"
+                      className="hover:bg-primary/5 transition cursor-pointer"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.4, delay: index * 0.1 }}
@@ -554,7 +565,7 @@ export default function PropertiesPage() {
                       <td className="px-4 py-3">{p.address}</td>
                       <td className="px-4 py-3">
                         <span
-                          className={`px-2 py-1 text-xs font-medium rounded-full ${p.status === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-full ${p.status === "Active" ? "bg-primary/10 text-primary" : "bg-gray-100 text-gray-700"
                             }`}
                         >
                           {p.status}
@@ -571,13 +582,13 @@ export default function PropertiesPage() {
                       >
                         {canEditProperties && (
                           <>
-                            <button
-                              onClick={() => openEditModal(p)}
-                              className="text-[#012a4a] hover:text-[#014a7a] transition"
-                              title="Edit Property"
-                              aria-label={`Edit property ${p.name}`}
-                            >
-                              <Pencil className="h-5 w-5" />
+                          <button
+                            onClick={() => openEditModal(p)}
+                            className="text-primary hover:text-primary-hover transition"
+                            title="Edit Property"
+                            aria-label={`Edit property ${p.name}`}
+                          >
+                            <Pencil className="h-5 w-5" />
                             </button>
                             <button
                               onClick={() => handleDelete(p._id)}
@@ -594,6 +605,7 @@ export default function PropertiesPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
           <AnimatePresence>
@@ -620,7 +632,7 @@ export default function PropertiesPage() {
                         }));
                       }}
                       required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors.propertyName ? "border-red-500" : "border-gray-300"
+                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.propertyName ? "border-red-500" : "border-gray-300"
                         } text-sm sm:text-base`}
                     />
                     {formErrors.propertyName && (
@@ -640,7 +652,7 @@ export default function PropertiesPage() {
                         }));
                       }}
                       required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors.address ? "border-red-500" : "border-gray-300"
+                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.address ? "border-red-500" : "border-gray-300"
                         } text-sm sm:text-base`}
                     />
                     {formErrors.address && (
@@ -666,7 +678,7 @@ export default function PropertiesPage() {
                       min="1"
                       max="28"
                       required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors.rentPaymentDate ? "border-red-500" : "border-gray-300"
+                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.rentPaymentDate ? "border-red-500" : "border-gray-300"
                         } text-sm sm:text-base`}
                     />
                     {formErrors.rentPaymentDate && (
@@ -678,7 +690,7 @@ export default function PropertiesPage() {
                     <select
                       value={status}
                       onChange={(e) => setStatus(e.target.value as "Active" | "Inactive")}
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition border-gray-300 text-sm sm:text-base"
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition border-gray-300 text-sm sm:text-base"
                     >
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
@@ -689,7 +701,7 @@ export default function PropertiesPage() {
                     <select
                       value={billingType}
                       onChange={(e) => setBillingType(e.target.value as "RentCollection" | "FullManagement")}
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition border-gray-300 text-sm sm:text-base"
+                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition border-gray-300 text-sm sm:text-base"
                     >
                       <option value="RentCollection">Software Leasing (1.5% of expected income)</option>
                       <option value="FullManagement">Full Property Management</option>
@@ -706,7 +718,7 @@ export default function PropertiesPage() {
                           <select
                             value={unit.type}
                             onChange={(e) => updateUnitType(index, "type", e.target.value)}
-                            className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors[`unitType_${index}`] ? "border-red-500" : "border-gray-300"
+                            className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitType_${index}`] ? "border-red-500" : "border-gray-300"
                               } text-sm sm:text-base`}
                           >
                             <option value="" disabled>
@@ -726,7 +738,7 @@ export default function PropertiesPage() {
                           type="number"
                           min="0"
                           step="0.01"
-                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors[`unitPrice_${index}`] ? "border-red-500" : "border-gray-300"
+                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitPrice_${index}`] ? "border-red-500" : "border-gray-300"
                             } text-sm sm:text-base`}
                         />
                         <input
@@ -736,7 +748,7 @@ export default function PropertiesPage() {
                           type="number"
                           min="0"
                           step="0.01"
-                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors[`unitDeposit_${index}`] ? "border-red-500" : "border-gray-300"
+                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitDeposit_${index}`] ? "border-red-500" : "border-gray-300"
                             } text-sm sm:text-base`}
                         />
                         <input
@@ -746,7 +758,7 @@ export default function PropertiesPage() {
                           type="number"
                           min="0"
                           step="1"
-                          className={`w-full sm:w-20 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition ${formErrors[`unitQuantity_${index}`] ? "border-red-500" : "border-gray-300"
+                          className={`w-full sm:w-20 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitQuantity_${index}`] ? "border-red-500" : "border-gray-300"
                             } text-sm sm:text-base`}
                         />
                         {unitTypes.length > 1 && (
@@ -793,7 +805,7 @@ export default function PropertiesPage() {
                     <button
                       type="button"
                       onClick={addUnitType}
-                      className="text-[#012a4a] hover:text-[#014a7a] transition text-sm"
+                      className="text-primary hover:text-primary-hover transition text-sm"
                       aria-label="Add another unit type"
                     >
                       + Add Unit Type
@@ -816,7 +828,7 @@ export default function PropertiesPage() {
                       disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken}
                       className={`px-4 py-2 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base ${isLoading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken
                           ? "bg-gray-400 cursor-not-allowed"
-                          : "bg-[#012a4a] hover:bg-[#014a7a]"
+                          : "bg-primary hover:bg-primary-hover"
                         }`}
                       aria-label={modalMode === "add" ? "Add property" : "Update property"}
                     >
@@ -872,6 +884,10 @@ export default function PropertiesPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

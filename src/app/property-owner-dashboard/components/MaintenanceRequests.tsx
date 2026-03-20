@@ -132,21 +132,21 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
       className="mb-12"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-emerald-100 rounded-xl">
-            <Wrench className="w-8 h-8 text-emerald-600" />
+          <div className="p-2.5 bg-primary/10 rounded-xl">
+            <Wrench className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Maintenance Requests</h2>
-            <p className="text-gray-600">Manage and resolve tenant issues</p>
+            <h2 className="text-lg sm:text-xl font-semibold text-foreground">Maintenance Requests</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">Manage and resolve tenant issues</p>
           </div>
         </div>
 
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as any)}
-          className="px-5 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+          className="px-4 py-2 text-xs sm:text-sm border border-gray-200 rounded-xl bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary transition"
         >
           <option value="All">All Requests</option>
           <option value="Pending">Pending</option>
@@ -162,7 +162,7 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3"
+            className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center gap-3 text-sm"
           >
             <AlertCircle size={20} />
             {error}
@@ -173,7 +173,7 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center gap-3"
+            className="mb-5 p-3 bg-primary/10 border border-primary/30 text-primary rounded-2xl flex items-center gap-3 text-sm"
           >
             <CheckCircle2 size={20} />
             {success}
@@ -183,9 +183,9 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
 
       {/* Loading & Empty States */}
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 animate-pulse">
+            <div key={i} className="surface-card rounded-2xl p-4 sm:p-5 animate-pulse">
               <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
               <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
               <div className="h-4 bg-gray-200 rounded w-5/6"></div>
@@ -195,18 +195,18 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
       )}
 
       {!isLoading && filteredRequests.length === 0 && (
-        <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
-          <Wrench className="w-20 h-20 text-gray-300 mx-auto mb-4" />
-          <p className="text-xl font-medium text-gray-500">
+        <div className="text-center py-16 surface-card rounded-2xl">
+          <Wrench className="w-14 h-14 text-gray-300 mx-auto mb-4" />
+          <p className="text-base font-semibold text-gray-600">
             {filter === "All" ? "No maintenance requests yet" : `No ${filter.toLowerCase()} requests`}
           </p>
-          <p className="text-gray-400 mt-2">All clear! Your tenants are happy</p>
+          <p className="text-xs text-gray-400 mt-2">All clear! Your tenants are happy</p>
         </div>
       )}
 
       {/* Requests Grid */}
       {!isLoading && filteredRequests.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredRequests.map((req) => (
             <motion.div
               key={req._id}
@@ -214,22 +214,22 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-xl transition-all duration-300 group"
+              className="surface-card rounded-2xl p-4 sm:p-5 hover:shadow-lg transition-all duration-300 group"
             >
               <div className="flex justify-between items-start mb-4">
-                <h3 className="font-bold text-lg text-gray-900 line-clamp-2">{req.title}</h3>
-                <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+                <h3 className="font-semibold text-base text-gray-900 line-clamp-2">{req.title}</h3>
+                <span className={`px-3 py-1 text-[11px] font-semibold rounded-full ${
                   req.urgency === "high" ? "bg-red-100 text-red-700" :
                   req.urgency === "medium" ? "bg-yellow-100 text-yellow-700" :
-                  "bg-green-100 text-green-700"
+                  "bg-primary/10 text-primary"
                 }`}>
                   {req.urgency.toUpperCase()}
                 </span>
               </div>
 
-              <p className="text-gray-600 text-sm mb-5 line-clamp-3">{req.description}</p>
+              <p className="text-gray-600 text-xs sm:text-sm mb-4 line-clamp-3">{req.description}</p>
 
-              <div className="space-y-3 text-sm border-t border-gray-100 pt-4">
+              <div className="space-y-2 text-xs sm:text-sm border-t border-gray-100 pt-4">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Tenant</span>
                   <span className="font-medium text-gray-900">{req.tenantName}</span>
@@ -248,11 +248,11 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+              <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
                 <select
                   value={req.status}
                   onChange={(e) => updateStatus(req._id, e.target.value as any)}
-                  className="text-sm px-4 py-2 border border-gray-300 rounded-xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+                  className="text-xs sm:text-sm px-3 py-2 border border-gray-200 rounded-xl focus:ring-4 focus:ring-primary/30 focus:border-primary transition bg-white/80"
                 >
                   <option value="Pending">Pending</option>
                   <option value="In Progress">In Progress</option>
@@ -261,7 +261,7 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
 
                 <button
                   onClick={() => deleteRequest(req._id)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition group-hover:scale-110"
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition group-hover:scale-105"
                   title="Delete request"
                 >
                   <Trash2 size={18} />
@@ -274,3 +274,6 @@ export default function MaintenanceRequests({ userId, csrfToken, properties }: M
     </motion.section>
   );
 }
+
+
+

@@ -62,19 +62,19 @@ export default function Modal({ title, isOpen, onClose, children }: ModalProps) 
         >
           <motion.div
             ref={modalRef}
-            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 sm:mx-6 md:mx-8 max-h-[90vh] overflow-y-auto border border-gray-100"
+            className="surface-card rounded-3xl shadow-2xl max-w-lg w-full mx-4 sm:mx-6 md:mx-8 max-h-[90vh] overflow-y-auto"
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
           >
-            <div className="flex justify-between items-center p-5 border-b border-gray-200 bg-gray-50/50">
-              <h2 className="text-xl md:text-2xl font-semibold text-gray-900 tracking-tight">
+            <div className="flex justify-between items-center p-5 border-b border-border bg-white/60">
+              <h2 className="text-lg md:text-xl font-semibold text-foreground tracking-tight">
                 {title}
               </h2>
               <button
                 onClick={onClose}
-                className="text-gray-500 hover:text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 rounded-full p-1"
+                className="text-gray-500 hover:text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-full p-1"
                 aria-label="Close modal"
               >
                 <svg
@@ -93,7 +93,7 @@ export default function Modal({ title, isOpen, onClose, children }: ModalProps) 
                 </svg>
               </button>
             </div>
-            <div className="p-6 bg-white">{children}</div>
+            <div className="p-6 bg-white/80">{children}</div>
           </motion.div>
         </motion.div>
       )}

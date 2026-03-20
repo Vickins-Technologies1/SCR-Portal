@@ -30,11 +30,9 @@ import {
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
-import { Inter } from "next/font/google";
 import { format, startOfMonth, startOfYear } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
 interface Expense {
   _id: string;
@@ -58,7 +56,7 @@ interface Report {
 }
 
 const categoryConfig: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-  maintenance: { icon: Wrench, color: "#10b981", bg: "#ecfdf5" },
+  maintenance: { icon: Wrench, color: "#42c775", bg: "#ecfdf5" },
   utilities: { icon: Lightbulb, color: "#3b82f6", bg: "#eff6ff" },
   repairs: { icon: Hammer, color: "#ef4444", bg: "#fef2f2" },
   taxes: { icon: FileText, color: "#8b5cf6", bg: "#f3e8ff" },
@@ -269,6 +267,41 @@ export default function ExpensesPage() {
 
   const maxMonthly = Math.max(...monthlyTrend.map(([, v]) => v), 1);
 
+  const summaryColorStyles = {
+    emerald: {
+      text: "text-primary",
+      icon: "text-primary",
+      bg: "bg-primary/10",
+      hoverBg: "group-hover:bg-primary/20",
+    },
+    amber: {
+      text: "text-amber-600",
+      icon: "text-amber-600",
+      bg: "bg-amber-50/70",
+      hoverBg: "group-hover:bg-amber-100",
+    },
+    red: {
+      text: "text-red-600",
+      icon: "text-red-600",
+      bg: "bg-red-50/70",
+      hoverBg: "group-hover:bg-red-100",
+    },
+    blue: {
+      text: "text-blue-600",
+      icon: "text-blue-600",
+      bg: "bg-blue-50/70",
+      hoverBg: "group-hover:bg-blue-100",
+    },
+  } as const;
+
+  const getSummaryColors = (color: string) =>
+    summaryColorStyles[color as keyof typeof summaryColorStyles] ?? {
+      text: "text-gray-600",
+      icon: "text-gray-600",
+      bg: "bg-gray-50/70",
+      hoverBg: "group-hover:bg-gray-100",
+    };
+
   // ─── Action Handlers ────────────────────────────────────────────────────────
   const handleApplyFilters = async () => {
     setIsApplyingFilters(true);
@@ -398,7 +431,7 @@ export default function ExpensesPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (hasAccess === false) {
     return (
-      <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
+      <div className="min-h-[100svh] bg-background text-foreground">
         <Navbar />
         <Sidebar />
         <div className="md:ml-72 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
@@ -425,35 +458,37 @@ export default function ExpensesPage() {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
+    <div className="min-h-[100svh] bg-background text-foreground">
       <Navbar />
       <Sidebar />
 
       <div className="md:ml-72 pt-16 pb-16 px-4 sm:px-6 lg:px-8">
         <main className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-10 mt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center shadow-sm">
-                <Receipt className="h-7 w-7 text-emerald-600" />
+          <section className="glass-panel rounded-3xl p-6 sm:p-8 mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 bg-primary/10 rounded-2xl flex items-center justify-center shadow-sm">
+                  <Receipt className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Expenses</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">Track, categorize and optimize property costs</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">Expenses</h1>
-                <p className="text-gray-600 mt-1">Track, categorize and optimize property costs</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3">
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleExportCSV}
                 disabled={isExporting || filteredExpenses.length === 0 || !canExportExpenses}
-                className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-sm transition-all text-xs sm:text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isExporting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Download size={18} />
+                  <Download size={16} />
                 )}
                 {isExporting ? "Exporting..." : "Export CSV"}
               </motion.button>
@@ -463,20 +498,21 @@ export default function ExpensesPage() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200/30 hover:bg-emerald-700 transition-all font-medium"
+                  className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold"
                 >
-                  <PlusCircle size={20} />
+                  <PlusCircle size={16} />
                   Add Expense
                 </motion.button>
               )}
             </div>
           </div>
+          </section>
 
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-8 bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-2xl flex items-center gap-3"
+              className="mb-6 bg-red-50 border border-red-200 text-red-700 px-5 py-3 rounded-2xl flex items-center gap-3 text-xs sm:text-sm"
             >
               <AlertCircle className="h-5 w-5 flex-shrink-0" />
               <span>{error}</span>
@@ -484,7 +520,7 @@ export default function ExpensesPage() {
           )}
 
           {/* Filters */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-10 shadow-sm">
+          <div className="surface-card rounded-2xl p-5 sm:p-6 mb-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5">
               {/* Period, custom dates, property, search – same as before */}
               <div>
@@ -494,8 +530,8 @@ export default function ExpensesPage() {
                     <button
                       key={p}
                       onClick={() => setPeriod(p)}
-                      className={`px-4 py-2 text-sm rounded-lg transition-all ${period === p
-                          ? "bg-emerald-600 text-white shadow-md"
+                      className={`px-4 py-2 text-xs sm:text-sm rounded-xl transition-all ${period === p
+                          ? "bg-primary text-white shadow-md"
                           : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                         }`}
                     >
@@ -513,7 +549,7 @@ export default function ExpensesPage() {
                       type="date"
                       value={customStart}
                       onChange={e => setCustomStart(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                     />
                   </div>
                   <div>
@@ -522,7 +558,7 @@ export default function ExpensesPage() {
                       type="date"
                       value={customEnd}
                       onChange={e => setCustomEnd(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                     />
                   </div>
                 </>
@@ -533,7 +569,7 @@ export default function ExpensesPage() {
                 <select
                   value={selectedProperty}
                   onChange={e => setSelectedProperty(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white transition-all"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-primary bg-white transition-all"
                 >
                   <option value="all">All Properties</option>
                   {properties.map(p => (
@@ -551,7 +587,7 @@ export default function ExpensesPage() {
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                     placeholder="Description or property..."
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                   />
                 </div>
               </div>
@@ -562,7 +598,7 @@ export default function ExpensesPage() {
                   whileTap={{ scale: 0.97 }}
                   onClick={handleApplyFilters}
                   disabled={isApplyingFilters}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition shadow-sm font-medium flex items-center justify-center gap-2 disabled:opacity-70"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary-hover transition shadow-sm font-medium flex items-center justify-center gap-2 disabled:opacity-70"
                 >
                   {isApplyingFilters ? (
                     <>
@@ -609,7 +645,9 @@ export default function ExpensesPage() {
                     subtitle: `Income: Ksh ${totalIncome.toLocaleString()}`
                   },
                   { title: "Active Months", value: `${monthlyTrend.length}`, icon: Calendar, color: "blue", subtitle: "in selected period" },
-                ].map((item, i) => (
+                ].map((item, i) => {
+                  const summaryColors = getSummaryColors(item.color);
+                  return (
                   <motion.div
                     key={i}
                     variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
@@ -618,17 +656,17 @@ export default function ExpensesPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-gray-600 font-medium">{item.title}</p>
-                        <p className={`text-3xl font-bold mt-2 ${item.color === "red" ? "text-red-600" : `text-${item.color}-600`}`}>
+                        <p className={`text-3xl font-bold mt-2 ${summaryColors.text}`}>
                           {item.value}
                         </p>
                         {item.subtitle && <p className="text-xs text-gray-500 mt-1">{item.subtitle}</p>}
                       </div>
-                      <div className={`p-3 rounded-xl bg-${item.color}-50/70 group-hover:bg-${item.color}-100 transition-colors`}>
-                        <item.icon className={`h-8 w-8 text-${item.color}-600`} />
+                      <div className={`p-3 rounded-xl ${summaryColors.bg} ${summaryColors.hoverBg} transition-colors`}>
+                        <item.icon className={`h-8 w-8 ${summaryColors.icon}`} />
                       </div>
                     </div>
                   </motion.div>
-                ))}
+                )})}
               </motion.div>
 
               {/* Charts & Breakdowns – same as before */}
@@ -642,7 +680,7 @@ export default function ExpensesPage() {
                   className="lg:col-span-8 bg-white rounded-2xl p-7 shadow-sm border border-gray-100 overflow-hidden"
                 >
                   <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-emerald-600" />
+                    <TrendingUp className="h-5 w-5 text-primary" />
                     Monthly Expense Trend
                   </h2>
 
@@ -667,7 +705,7 @@ export default function ExpensesPage() {
                             >
                               {/* The actual bar */}
                               <div
-                                className="w-full bg-emerald-500 rounded-t-lg transition-all duration-300 group-hover:bg-emerald-600 group-hover:shadow-md relative overflow-hidden"
+                                className="w-full bg-primary rounded-t-lg transition-all duration-300 group-hover:bg-primary group-hover:shadow-md relative overflow-hidden"
                                 style={{
                                   height: '100%',
                                   minHeight: '4px', // prevent zero-height collapse
@@ -785,7 +823,7 @@ export default function ExpensesPage() {
                               <Icon className="h-5 w-5 transition-colors" style={{ color: cfg.color }} />
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium text-gray-900 truncate group-hover:text-emerald-700 transition-colors">
+                              <p className="font-medium text-gray-900 truncate group-hover:text-primary transition-colors">
                                 {exp.description}
                               </p>
                               {exp.propertyName && (
@@ -803,7 +841,7 @@ export default function ExpensesPage() {
                               {format(new Date(exp.date), "dd MMM yyyy")}
                             </p>
                             {exp.receiptUrl && (
-                              <div className="text-xs text-emerald-600 flex items-center gap-1 mt-1">
+                              <div className="text-xs text-primary flex items-center gap-1 mt-1">
                                 <FileUp size={14} />
                                 Receipt available
                               </div>
@@ -816,7 +854,7 @@ export default function ExpensesPage() {
                 )}
 
                 {filteredExpenses.length > 25 && (
-                  <div className="px-6 py-5 text-center text-sm text-emerald-600 border-t border-gray-100 bg-gray-50/50">
+                  <div className="px-6 py-5 text-center text-sm text-primary border-t border-gray-100 bg-gray-50/50">
                     Showing first 25 of {filteredExpenses.length} expenses • refine filters for more
                   </div>
                 )}
@@ -864,7 +902,7 @@ export default function ExpensesPage() {
                       required
                       value={formData.description}
                       onChange={e => setFormData({ ...formData, description: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none transition-all"
                       placeholder="e.g. Plumbing repair - Apt 4B"
                     />
                   </div>
@@ -877,7 +915,7 @@ export default function ExpensesPage() {
                         type="number"
                         value={formData.amount}
                         onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none transition-all"
                         placeholder="14500"
                       />
                     </div>
@@ -889,7 +927,7 @@ export default function ExpensesPage() {
                         type="date"
                         value={formData.date}
                         onChange={e => setFormData({ ...formData, date: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -900,7 +938,7 @@ export default function ExpensesPage() {
                       <select
                         value={formData.category}
                         onChange={e => setFormData({ ...formData, category: e.target.value as any })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white transition-all"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none bg-white transition-all"
                       >
                         {Object.keys(categoryConfig).map(c => (
                           <option key={c} value={c}>
@@ -915,7 +953,7 @@ export default function ExpensesPage() {
                       <select
                         value={formData.propertyId}
                         onChange={e => setFormData({ ...formData, propertyId: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white transition-all"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none bg-white transition-all"
                       >
                         <option value="">Unassigned / General</option>
                         {properties.map(p => (
@@ -930,7 +968,7 @@ export default function ExpensesPage() {
                     <textarea
                       value={formData.notes}
                       onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none min-h-[100px] transition-all"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none min-h-[100px] transition-all"
                       placeholder="Payment method, receipt reference, notes..."
                     />
                   </div>
@@ -942,7 +980,7 @@ export default function ExpensesPage() {
                     </label>
 
                     {!receiptFile ? (
-                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-emerald-400 transition-colors">
+                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-primary/40 transition-colors">
                         <label className="cursor-pointer">
                           <input
                             type="file"
@@ -985,7 +1023,7 @@ export default function ExpensesPage() {
                         )}
                         <div className="p-3 flex items-center justify-between bg-white/80 backdrop-blur-sm">
                           <div className="flex items-center gap-2">
-                            <FileUp className="h-5 w-5 text-emerald-600" />
+                            <FileUp className="h-5 w-5 text-primary" />
                             <span className="text-sm font-medium truncate max-w-[180px]">
                               {receiptFile.name}
                             </span>
@@ -1018,7 +1056,7 @@ export default function ExpensesPage() {
                       whileTap={{ scale: 0.98 }}
                       type="submit"
                       disabled={isSavingExpense || uploading}
-                      className="flex-1 bg-emerald-600 text-white py-3.5 rounded-xl hover:bg-emerald-700 transition-all shadow-md disabled:opacity-70 flex items-center justify-center gap-2 font-medium"
+                      className="flex-1 bg-primary text-white py-3.5 rounded-xl hover:bg-primary-hover transition-all shadow-md disabled:opacity-70 flex items-center justify-center gap-2 font-medium"
                     >
                       {isSavingExpense || uploading ? (
                         <>
@@ -1138,7 +1176,7 @@ export default function ExpensesPage() {
                           href={selectedExpense.receiptUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition font-medium"
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-lg hover:bg-primary-hover transition font-medium"
                         >
                           <Eye size={18} />
                           View Full Receipt
@@ -1165,6 +1203,10 @@ export default function ExpensesPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

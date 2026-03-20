@@ -340,7 +340,7 @@ export default function PaymentsPage() {
   const getStatusStyles = (status: Payment["status"]) => {
     switch (status) {
       case "completed":
-        return "text-green-600 bg-green-100";
+        return "text-primary bg-primary/10";
       case "pending":
         return "text-yellow-600 bg-yellow-100";
       case "failed":
@@ -389,23 +389,33 @@ export default function PaymentsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white font-sans">
+    <div className="min-h-screen">
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 min-h-screen">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2 text-gray-800">
-              <CreditCard className="text-[#012a4a]" />
-              Payments
-            </h1>
-          </div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Select Property</label>
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
+          <section className="glass-panel rounded-3xl p-6 sm:p-8">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <CreditCard className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Payments</h1>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Track rent, utility, deposit, and manual payments across your portfolio.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <div className="surface-card rounded-2xl p-5 sm:p-6 space-y-5">
+            <div>
+              <label className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Select Property</label>
             <select
               value={selectedPropertyId}
               onChange={handlePropertyChange}
-              className="w-full sm:w-64 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition text-sm sm:text-base border-gray-300"
+              className="mt-2 w-full sm:w-72 border border-gray-200 px-3 py-2.5 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition"
               disabled={isLoading}
             >
               <option value="all">All Properties</option>
@@ -415,17 +425,17 @@ export default function PaymentsPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="mb-6 bg-white p-4 rounded-lg shadow">
-            <h2 className="text-lg font-semibold mb-4">Filter Payments</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4">Filter Payments</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tenant Name</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Tenant Name</label>
                 <select
                   name="tenantName"
                   value={filters.tenantName}
                   onChange={handleFilterChange}
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
                 >
                   <option value="">All Tenants</option>
                   {[...new Set(payments.map((payment) => payment.tenantName).filter((tn): tn is string => tn !== "Unknown"))].map((tenantName) => (
@@ -437,12 +447,12 @@ export default function PaymentsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
                 <select
                   name="type"
                   value={filters.type}
                   onChange={handleFilterChange}
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
                 >
                   <option value="">All Types</option>
                   <option value="Rent">Rent</option>
@@ -452,12 +462,12 @@ export default function PaymentsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
                 <select
                   name="status"
                   value={filters.status}
                   onChange={handleFilterChange}
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
                 >
                   <option value="">All Statuses</option>
                   <option value="completed">Completed</option>
@@ -466,12 +476,12 @@ export default function PaymentsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Unit Type</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Unit Type</label>
                 <select
                   name="unitType"
                   value={filters.unitType}
                   onChange={handleFilterChange}
-                  className="w-full p-2 border rounded-md focus:ring-[#012a4a] focus:border-[#012a4a]"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
                 >
                   <option value="">All Unit Types</option>
                   {uniqueUnitTypes.map((unitType) => (
@@ -481,33 +491,35 @@ export default function PaymentsPage() {
                   ))}
                 </select>
               </div>
+              </div>
+              <button
+                onClick={clearFilters}
+                className="mt-4 px-4 py-2 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-hover transition"
+                disabled={isLoading}
+              >
+                Clear Filters
+              </button>
             </div>
-            <button
-              onClick={clearFilters}
-              className="mt-4 px-4 py-2 bg-[#012a4a] text-white rounded-md hover:bg-[#024a7a] transition"
-              disabled={isLoading}
-            >
-              Clear Filters
-            </button>
           </div>
           {error && (
-            <div className="bg-red-100 text-red-700 p-4 mb-4 rounded-lg shadow animate-pulse">
+            <div className="bg-red-100 text-red-700 p-3 rounded-xl shadow text-xs sm:text-sm animate-pulse">
               {error}
             </div>
           )}
           {isLoading ? (
-            <div className="text-center text-gray-600">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#012a4a]"></div>
+            <div className="text-center text-muted-foreground text-xs sm:text-sm">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
               <span className="ml-2">Loading payments...</span>
             </div>
           ) : payments.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-md text-gray-600 text-center">
+            <div className="surface-card rounded-2xl p-6 text-muted-foreground text-center text-xs sm:text-sm">
               No payments found for {selectedPropertyId === "all" ? "any properties" : "selected property"}.
             </div>
           ) : (
-            <div className="overflow-x-auto bg-white shadow rounded-lg">
-              <table className="min-w-full table-auto text-sm md:text-base">
-                <thead className="bg-gray-200">
+            <div className="table-shell">
+              <div className="table-scroll">
+              <table className="min-w-full table-auto">
+                <thead>
                   <tr>
                     <th className="px-4 py-3 text-left">#</th>
                     <th className="px-4 py-3 text-left">Transaction / MPesa ID</th>
@@ -525,7 +537,7 @@ export default function PaymentsPage() {
                     const [baseUnitType] = payment.unitType?.split('-') || ['N/A'];
                     const transactionDisplay = formatTransactionDisplay(payment);
                     return (
-                      <tr key={payment._id} className="border-t hover:bg-gray-50 transition">
+                      <tr key={payment._id} className="hover:bg-primary/5 transition">
                         <td className="px-4 py-3">{index + 1 + (currentPage - 1) * itemsPerPage}</td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
@@ -555,7 +567,7 @@ export default function PaymentsPage() {
                           })}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusStyles(payment.status)}`}>
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${getStatusStyles(payment.status)}`}>
                             {payment.status}
                           </span>
                         </td>
@@ -564,9 +576,10 @@ export default function PaymentsPage() {
                   })}
                 </tbody>
               </table>
+              </div>
               {totalPayments > 0 && (
                 <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-4 p-4">
-                  <div className="text-sm text-gray-600">
+                  <div className="text-xs sm:text-sm text-muted-foreground">
                     Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
                     {Math.min(currentPage * itemsPerPage, totalPayments)} of {totalPayments} payments
                   </div>
@@ -575,7 +588,7 @@ export default function PaymentsPage() {
                       <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1 || isLoading}
-                        className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
                         aria-label="Previous page"
                       >
                         <ChevronLeft className="h-5 w-5" />
@@ -585,11 +598,11 @@ export default function PaymentsPage() {
                           key={index}
                           onClick={() => typeof page === "number" && handlePageChange(page)}
                           disabled={page === "..." || page === currentPage || isLoading}
-                          className={`px-3 py-1 rounded-lg transition ${page === currentPage
-                              ? "bg-[#012a4a] text-white"
+                          className={`px-3 py-1 rounded-lg transition text-xs sm:text-sm ${page === currentPage
+                              ? "bg-primary text-white"
                               : page === "..."
                                 ? "bg-gray-100 text-gray-500 cursor-default"
-                                : "bg-gray-200 hover:bg-gray-300"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                             }`}
                           aria-label={typeof page === "number" ? `Page ${page}` : "Ellipsis"}
                         >
@@ -599,7 +612,7 @@ export default function PaymentsPage() {
                       <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage >= totalPages || isLoading}
-                        className="px-3 py-1 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
                         aria-label="Next page"
                       >
                         <ChevronRight className="h-5 w-5" />
@@ -612,15 +625,13 @@ export default function PaymentsPage() {
           )}
         </main>
       </div>
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body {
-          font-family: 'Inter', sans-serif;
-        }
-      `}</style>
     </div>
   );
 }
+
+
+
+
 
 
 

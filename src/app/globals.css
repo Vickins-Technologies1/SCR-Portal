@@ -198,6 +198,67 @@ body {
   .animate-fade-up {
     animation: fadeUp 0.9s ease-out both;
   }
+  .table-shell {
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 1.5rem;
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+  }
+  .table-shell .table-scroll {
+    overflow-x: auto;
+  }
+  .table-shell table {
+    width: 100%;
+    min-width: 640px;
+    font-size: 0.78rem;
+  }
+  @media (min-width: 640px) {
+    .table-shell table {
+      font-size: 0.86rem;
+    }
+  }
+  .table-shell thead {
+    background: rgba(248, 250, 252, 0.9);
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    font-size: 0.62rem;
+    color: var(--color-muted-foreground);
+  }
+  .table-shell th {
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    text-align: left;
+  }
+  .table-shell tbody tr {
+    border-top: 1px solid rgba(226, 232, 240, 0.6);
+  }
+  .table-shell tbody tr:hover {
+    background: rgba(66, 199, 117, 0.06);
+  }
+  .table-shell td {
+    padding: 0.75rem 1rem;
+    color: #1f2937;
+  }
+  .table-shell .table-muted {
+    color: var(--color-muted-foreground);
+  }
+
+  .table-shell.table-compact table {
+    min-width: 880px;
+    font-size: 0.74rem;
+  }
+  @media (min-width: 640px) {
+    .table-shell.table-compact table {
+      font-size: 0.82rem;
+    }
+  }
+  @media (max-width: 639px) {
+    .table-shell.table-compact th,
+    .table-shell.table-compact td {
+      padding: 0.55rem 0.65rem;
+    }
+  }
 }
 
 @keyframes fadeIn {

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Cookies from "js-cookie";
 import Image from "next/image";
+import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -103,32 +104,30 @@ export default function TenantDashboardLayout({
     .slice(0, 2);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
+    <PublicThemeWrapper>
+    <div className="min-h-[100svh] flex flex-col bg-background text-foreground">
       {/* ─── Navbar ─── */}
-      <header className="fixed top-0 left-0 right-0 z-20 bg-white/80 backdrop-blur-xl border-b border-white/30 shadow-sm">
-        <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
+      <header className="fixed top-0 left-0 right-0 z-20 h-16 border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)]">
+        <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
           {/* Left side – logo + mobile toggle */}
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <button
-              className="lg:hidden p-2 rounded-xl hover:bg-slate-100/80 text-gray-700 transition-colors"
+              className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-gray-200 bg-white/90 text-gray-700 shadow-sm transition hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#42c775]/30"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               aria-label="Toggle menu"
+              title="Menu"
             >
-              {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
+              {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-
-            
           </div>
 
           {/* Right side – logo image + user info + logout */}
           <div className="flex items-center gap-5 sm:gap-7">
-
-            {/* Logout */}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#03a678] transition-colors px-3 py-2 rounded-xl hover:bg-slate-100/70"
+              className="group flex items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
             >
-              <LogOut size={16} />
+              <LogOut size={16} className="transition-transform group-hover:rotate-6" />
               <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
@@ -137,11 +136,11 @@ export default function TenantDashboardLayout({
 
       {/* ─── Sidebar ─── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/85 backdrop-blur-2xl border-r border-white/30 shadow-2xl transform transition-transform duration-300 ease-out
-          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
+        className={`fixed left-0 top-16 bottom-0 z-40 w-72 bg-white border-r border-gray-200/70 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition-transform duration-300 ease-out
+          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:inset-y-0`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-slate-100/80 bg-gradient-to-b from-[#03a678]/5 to-transparent">
+          <div className="p-6 border-b border-white/40 bg-gradient-to-b from-[#42c775]/10 to-transparent">
             <div className="flex justify-center mb-5">
               <Image
                 src="/logo.png"
@@ -161,7 +160,7 @@ export default function TenantDashboardLayout({
             </div>
           </div>
 
-          <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
+          <nav className="flex-1 px-4 py-5 space-y-1.5 overflow-y-auto">
             {links.map(({ href, label, icon }) => {
               const isActive = pathname === href;
               return (
@@ -169,13 +168,13 @@ export default function TenantDashboardLayout({
                   key={href}
                   href={href}
                   onClick={() => setIsSidebarOpen(false)}
-                  className={`group flex items-center gap-3 px-5 py-3 rounded-xl text-sm font-medium transition-all duration-200
+                  className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-xs sm:text-sm font-medium transition-all duration-200
                     ${isActive
-                      ? "bg-[#03a678]/10 text-[#03a678] shadow-sm ring-1 ring-[#03a678]/20"
-                      : "text-gray-700 hover:bg-[#03a678]/5 hover:text-[#03a678]"
+                      ? "bg-[#42c775]/10 text-[#42c775] shadow-sm ring-1 ring-[#42c775]/20"
+                      : "text-gray-600 hover:bg-[#42c775]/5 hover:text-[#42c775]"
                     }`}
                 >
-                  <span className={isActive ? "text-[#03a678]" : "text-gray-500 group-hover:text-[#03a678]"}>
+                  <span className={isActive ? "text-[#42c775]" : "text-gray-500 group-hover:text-[#42c775]"}>
                     {icon}
                   </span>
                   <span>{label}</span>
@@ -184,7 +183,7 @@ export default function TenantDashboardLayout({
             })}
           </nav>
 
-          <div className="mt-auto border-t border-slate-100/80 px-6 py-4 bg-gradient-to-t from-slate-50/60 to-transparent">
+          <div className="mt-auto border-t border-white/40 px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
             <p className="text-center text-[10px] text-gray-400/70 font-light tracking-wide">
               © {new Date().getFullYear()} Sorana Property Managers Limited
             </p>
@@ -194,7 +193,7 @@ export default function TenantDashboardLayout({
                 href="https://vickins-technologies.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-[#03a678] transition-colors underline underline-offset-2 decoration-gray-300/40 hover:decoration-[#03a678]/50"
+                className="hover:text-primary transition-colors underline underline-offset-2 decoration-gray-300/40 hover:decoration-primary/50"
               >
                 Vickins Technologies
               </a>
@@ -210,10 +209,11 @@ export default function TenantDashboardLayout({
 
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
+          className="fixed inset-x-0 bottom-0 top-16 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
     </div>
+    </PublicThemeWrapper>
   );
 }

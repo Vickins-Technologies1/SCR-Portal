@@ -90,9 +90,9 @@ export default function MaintenanceRequests({ userId, role, csrfToken, propertie
   const getPropertyName = (id: string) => properties.find(p => p._id === id)?.name || "Unknown";
 
   return (
-    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
-        <Wrench className="h-5 w-5 text-teal-600" /> Maintenance Requests
+    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-[13px] sm:text-sm">
+      <h2 className="text-lg sm:text-xl font-semibold mb-4 flex items-center gap-2">
+        <Wrench className="h-5 w-5 text-primary" /> Maintenance Requests
       </h2>
 
       {error && <div className="p-4 bg-red-50 text-red-700 rounded-lg mb-4">{error}</div>}
@@ -102,38 +102,38 @@ export default function MaintenanceRequests({ userId, role, csrfToken, propertie
           <thead className="bg-gray-50">
             <tr>
               {["Title", "Description", "Status", "Urgency", "Property", "Date", ...(role === "propertyOwner" ? ["Actions"] : [])].map(h => (
-                <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                <th key={h} className="px-4 sm:px-6 py-3 text-left text-[11px] sm:text-xs font-medium text-gray-500 uppercase">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {requests.map(r => (
               <tr key={r._id}>
-                <td className="px-6 py-4 text-sm text-gray-900">{r.title}</td>
-                <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{r.description}</td>
-                <td className="px-6 py-4">
+                <td className="px-4 sm:px-6 py-4 text-xs sm:text-sm text-gray-900">{r.title}</td>
+                <td className="px-4 sm:px-6 py-4 text-xs sm:text-sm text-gray-500 max-w-xs truncate">{r.description}</td>
+                <td className="px-4 sm:px-6 py-4">
                   <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                     r.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
                     r.status === "In Progress" ? "bg-blue-100 text-blue-800" :
-                    "bg-green-100 text-green-800"
+                    "bg-primary/10 text-primary"
                   }`}>{r.status}</span>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-4 sm:px-6 py-4">
                   <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                    r.urgency === "low" ? "bg-green-100 text-green-800" :
+                    r.urgency === "low" ? "bg-primary/10 text-primary" :
                     r.urgency === "medium" ? "bg-yellow-100 text-yellow-800" :
                     "bg-red-100 text-red-800"
                   }`}>{r.urgency}</span>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{getPropertyName(r.propertyId)}</td>
-                <td className="px-6 py-4 text-sm text-gray-500">{new Date(r.date).toLocaleDateString()}</td>
+                <td className="px-4 sm:px-6 py-4 text-xs sm:text-sm text-gray-500">{getPropertyName(r.propertyId)}</td>
+                <td className="px-4 sm:px-6 py-4 text-xs sm:text-sm text-gray-500">{new Date(r.date).toLocaleDateString()}</td>
                 {role === "propertyOwner" && (
-                  <td className="px-6 py-4">
+                  <td className="px-4 sm:px-6 py-4">
                     <div className="flex gap-2">
                       <select
                         value={r.status}
                         onChange={(e) => handleStatusUpdate(r._id, e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
+                        className="border rounded px-2 py-1 text-xs sm:text-sm"
                       >
                         <option>Pending</option>
                         <option>In Progress</option>
@@ -152,10 +152,10 @@ export default function MaintenanceRequests({ userId, role, csrfToken, propertie
       </div>
 
       <div className="mt-6 flex justify-between">
-        <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
+        <span className="text-xs sm:text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
         <div className="flex gap-2">
-          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 bg-teal-600 text-white rounded disabled:bg-gray-300">Prev</button>
-          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 bg-teal-600 text-white rounded disabled:bg-gray-300">Next</button>
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 text-xs sm:text-sm bg-primary text-white rounded disabled:bg-gray-300 hover:bg-primary-hover transition">Prev</button>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 text-xs sm:text-sm bg-primary text-white rounded disabled:bg-gray-300 hover:bg-primary-hover transition">Next</button>
         </div>
       </div>
     </motion.section>

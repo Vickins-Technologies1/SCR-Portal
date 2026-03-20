@@ -231,83 +231,90 @@ export default function ListPropertiesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 font-sans">
+    <div className="min-h-screen">
       <Navbar />
       <Sidebar />
-      <div className="sm:ml-64 mt-16">
-        <main className="px-6 py-10 lg:px-12">
-          <motion.div
-            className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8"
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
-              <Home className="text-[#012a4a]" />
-              Property Listings
-            </h1>
-            {showListButton && (
-            <button
-              onClick={openListModal}
-              className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#012a4a] to-[#014a7a] text-white rounded-xl shadow-md hover:shadow-lg transition-all font-medium"
-            >
-              <Plus className="h-5 w-5" />
-              List Property
-            </button>
-            )}
-          </motion.div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Home className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Property Listings</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Publish listings and track availability across your portfolio.
+                  </p>
+                </div>
+              </div>
+              {showListButton && (
+                <button
+                  onClick={openListModal}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-emerald-500 text-white rounded-xl shadow-md hover:shadow-lg transition-all text-xs sm:text-sm font-semibold"
+                >
+                  <Plus className="h-4 w-4" />
+                  List Property
+                </button>
+              )}
+            </div>
+          </motion.section>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {listingStatCards.map((stat) => (
-              <div key={stat.label} className="rounded-2xl border border-slate-200/20 bg-white/80 p-5 shadow-sm">
-                <p className="text-xs uppercase tracking-widest text-slate-500">{stat.label}</p>
-                <p className="text-2xl font-semibold text-slate-900 mt-2">{stat.value}</p>
-                <p className="text-xs text-slate-500">{stat.detail}</p>
+              <div key={stat.label} className="surface-card rounded-2xl p-5">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">{stat.label}</p>
+                <p className="text-lg sm:text-xl font-semibold text-foreground mt-2">{stat.value}</p>
+                <p className="text-xs text-muted-foreground">{stat.detail}</p>
               </div>
             ))}
           </div>
 
           {error && (
-            <motion.div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 shadow-sm">
+            <motion.div className="bg-red-50 text-red-700 p-3 rounded-2xl shadow-sm text-xs sm:text-sm">
               {error}
             </motion.div>
           )}
           {successMessage && (
-            <motion.div className="bg-green-50 text-green-700 p-4 rounded-xl mb-6 shadow-sm flex items-center gap-2">
-              <CheckCircle className="h-5 w-5" />
+            <motion.div className="bg-primary/10 text-primary p-3 rounded-2xl shadow-sm flex items-center gap-2 text-xs sm:text-sm">
+              <CheckCircle className="h-4 w-4" />
               {successMessage}
             </motion.div>
           )}
 
           {isLoading ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-[#012a4a]"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-primary"></div>
             </div>
           ) : sortedListings.length === 0 ? (
-            <motion.div className="text-center py-20 text-slate-500">
-              <Building2 className="h-16 w-16 mx-auto mb-4 text-slate-300" />
-              <p className="text-lg">No listings yet. Start by listing a property!</p>
+            <motion.div className="text-center py-20 surface-card rounded-2xl text-muted-foreground">
+              <Building2 className="h-14 w-14 mx-auto mb-4 text-slate-300" />
+              <p className="text-base sm:text-lg font-semibold">No listings yet. Start by listing a property!</p>
             </motion.div>
           ) : (
             <>
               {/* Desktop Table */}
-              <div className="hidden lg:block bg-white rounded-2xl shadow-lg overflow-hidden">
+              <div className="hidden lg:block table-shell">
+                <div className="table-scroll">
                 <table className="w-full">
-                  <thead className="bg-gradient-to-r from-slate-100 to-slate-50">
+                  <thead>
                     <tr>
                       {(["name", "address", "status", "createdAt"] as const).map((k) => (
                         <th
                           key={k}
-                          className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-200 transition"
+                          className="cursor-pointer hover:bg-gray-100/70 transition"
                           onClick={() => handleSort(k)}
                         >
                           {k === "name" ? "Property" : k === "address" ? "Location" : k === "status" ? "Status" : "Listed On"}
                         </th>
                       ))}
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">
-                        Available Units
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">
-                        Actions
-                      </th>
+                      <th>Available Units</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -323,6 +330,7 @@ export default function ListPropertiesPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {/* Mobile Cards */}
@@ -393,6 +401,10 @@ export default function ListPropertiesPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

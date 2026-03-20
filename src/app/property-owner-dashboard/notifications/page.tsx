@@ -598,13 +598,12 @@ export default function NotificationsPage() {
   };
 
   return (
-    <>
+    <div className="min-h-screen">
       <Navbar />
       <Sidebar />
 
-      {/* Main Content - Perfectly aligned with fixed Navbar & Sidebar */}
-      <main className="min-h-screen bg-gray-50 pt-20 pb-10 md:ml-64 transition-all duration-300">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8 transition-all duration-300">
+        <main className="mx-auto max-w-7xl space-y-6">
           <NotificationsHeader
             viewMode={viewMode}
             setViewMode={setViewMode}
@@ -622,23 +621,23 @@ export default function NotificationsPage() {
           />
 
           {error && (
-            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 shadow-md">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-red-700 shadow-md text-xs sm:text-sm">
               {error}
             </div>
           )}
 
           {isLoading && paginatedItems.length === 0 ? (
             <div className="flex flex-col items-center py-20">
-              <Bell className="mb-4 h-16 w-16 animate-pulse text-[#03a678]" />
-              <p className="text-lg text-gray-600">Loading notifications...</p>
+              <Bell className="mb-4 h-16 w-16 animate-pulse text-[#42c775]" />
+              <p className="text-xs sm:text-sm text-muted-foreground">Loading notifications...</p>
             </div>
           ) : paginatedItems.length === 0 ? (
-            <div className="flex flex-col items-center rounded-2xl bg-white py-20 shadow-lg">
-              <Bell className="mb-6 h-20 w-20 text-gray-300" />
-              <p className="text-xl font-semibold text-[#012a4a]">
+            <div className="flex flex-col items-center rounded-2xl surface-card py-20">
+              <Bell className="mb-6 h-16 w-16 text-gray-300" />
+              <p className="text-base sm:text-lg font-semibold text-foreground">
                 {viewMode === "sent" ? "No sent reminders yet" : "No upcoming reminders"}
               </p>
-              <p className="mt-3 max-w-md text-center text-gray-500">
+              <p className="mt-3 max-w-md text-center text-xs sm:text-sm text-muted-foreground">
                 {viewMode === "sent"
                   ? "Start communicating with your tenants by creating a new notification."
                   : "Automatic reminders will appear here when rent or utilities are due."}
@@ -646,20 +645,18 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-                <NotificationsTable
-                  items={paginatedItems}
-                  viewMode={viewMode}
-                  onViewDetails={(item: any) =>
-                    viewMode === "sent"
-                      ? openNotificationDetails(item as Notification)
-                      : openReminderDetails(item as UpcomingReminder)
-                  }
-                  onMarkAsRead={viewMode === "sent" && canViewNotifications ? markAsRead : undefined}
-                  onRetry={viewMode === "sent" && canSendNotifications ? retryNotification : undefined}
-                  onDelete={viewMode === "sent" && canManageNotifications ? openDeleteConfirmation : undefined}
-                />
-              </div>
+              <NotificationsTable
+                items={paginatedItems}
+                viewMode={viewMode}
+                onViewDetails={(item: any) =>
+                  viewMode === "sent"
+                    ? openNotificationDetails(item as Notification)
+                    : openReminderDetails(item as UpcomingReminder)
+                }
+                onMarkAsRead={viewMode === "sent" && canViewNotifications ? markAsRead : undefined}
+                onRetry={viewMode === "sent" && canSendNotifications ? retryNotification : undefined}
+                onDelete={viewMode === "sent" && canManageNotifications ? openDeleteConfirmation : undefined}
+              />
 
               <div className="mt-8">
                 <PaginationControls
@@ -716,7 +713,7 @@ export default function NotificationsPage() {
                   {selectedNotification.status !== "read" && canViewNotifications && (
                     <button
                       onClick={() => markAsRead(selectedNotification._id)}
-                      className="bg-[#03a678] text-white px-5 py-2.5 rounded-xl hover:bg-[#02956a] transition-colors shadow-md"
+                      className="bg-[#42c775] text-white px-5 py-2.5 rounded-xl hover:bg-[#34b46d] transition-colors shadow-md"
                       disabled={isLoading}
                     >
                       {isLoading ? "Processing..." : "Mark as Read"}
@@ -742,7 +739,7 @@ export default function NotificationsPage() {
                 <div><p className="font-medium text-gray-600">Rent Due</p><p>Ksh. {selectedReminder.rentDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Utilities Due</p><p>Ksh. {selectedReminder.utilityDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Deposit Due</p><p>Ksh. {selectedReminder.depositDue.toFixed(2)}</p></div>
-                <div><p className="font-medium text-gray-600">Total Due</p><p className="font-bold text-[#03a678]">Ksh. {selectedReminder.totalDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Total Due</p><p className="font-bold text-[#42c775]">Ksh. {selectedReminder.totalDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Due Date</p><p>{selectedReminder.dueDate}</p></div>
               </div>
             )}
@@ -752,11 +749,11 @@ export default function NotificationsPage() {
           <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Notification">
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-[#012a4a] mb-2">Recipients</label>
+                <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Recipients</label>
                 <div className="relative">
                   <button
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-left flex justify-between items-center hover:bg-gray-50 transition-colors"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-left text-xs sm:text-sm flex justify-between items-center bg-white/80 hover:bg-gray-50 transition-colors"
                   >
                     <span>
                       {newNotification.tenantIds.length === 0
@@ -768,18 +765,18 @@ export default function NotificationsPage() {
                     <ChevronDown className={`w-5 h-5 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
                   {isDropdownOpen && (
-                    <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto">
-                      <label className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                    <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                      <label className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs sm:text-sm">
                         <input
                           type="checkbox"
                           checked={newNotification.tenantIds.includes("all")}
                           onChange={(e) => setNewNotification({ ...newNotification, tenantIds: e.target.checked ? ["all"] : [] })}
-                          className="w-5 h-5 text-[#03a678] rounded focus:ring-[#03a678]"
+                          className="w-4 h-4 text-primary rounded focus:ring-primary/40"
                         />
-                        <span className="font-medium">All Tenants</span>
+                        <span className="font-semibold">All Tenants</span>
                       </label>
                       {tenants.map((tenant) => (
-                        <label key={tenant._id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                        <label key={tenant._id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs sm:text-sm">
                           <input
                             type="checkbox"
                             checked={newNotification.tenantIds.includes(tenant._id)}
@@ -792,7 +789,7 @@ export default function NotificationsPage() {
                                   : newNotification.tenantIds.filter((id) => id !== tenant._id),
                               })
                             }
-                            className="w-5 h-5 text-[#03a678] rounded focus:ring-[#03a678]"
+                            className="w-4 h-4 text-primary rounded focus:ring-primary/40"
                           />
                           <span>{tenant.name} ({tenant.houseNumber})</span>
                         </label>
@@ -803,11 +800,11 @@ export default function NotificationsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#012a4a] mb-2">Notification Type</label>
+                <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Notification Type</label>
                 <select
                   value={newNotification.type}
                   onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
                 >
                   <option value="payment">Payment</option>
                   <option value="maintenance">Maintenance</option>
@@ -817,11 +814,11 @@ export default function NotificationsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#012a4a] mb-2">Delivery Method</label>
+                <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Delivery Method</label>
                 <select
                   value={newNotification.deliveryMethod}
                   onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
                 >
                   <option value="app">In-App</option>
                   <option value="sms">SMS</option>
@@ -833,13 +830,13 @@ export default function NotificationsPage() {
 
               {newNotification.type !== "payment" && (
                 <div>
-                  <label className="block text-sm font-medium text-[#012a4a] mb-2">Message</label>
+                  <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Message</label>
                   <textarea
                     value={newNotification.message}
                     onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
                     rows={5}
                     placeholder="Enter your message..."
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-[#03a678] focus:border-transparent"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
                   />
                 </div>
               )}
@@ -847,14 +844,14 @@ export default function NotificationsPage() {
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-[#012a4a] hover:bg-gray-50 transition-colors"
+                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-primary text-xs sm:text-sm font-semibold hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={createNotification}
                   disabled={isLoading || newNotification.tenantIds.length === 0}
-                  className="px-6 py-2.5 bg-gradient-to-r from-[#03a678] to-[#02956a] text-white rounded-xl hover:scale-105 transition-transform shadow-md disabled:opacity-50"
+                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold hover:scale-105 transition-transform shadow-md disabled:opacity-50"
                 >
                   {isLoading ? "Sending..." : "Send Notification"}
                 </button>
@@ -869,25 +866,29 @@ export default function NotificationsPage() {
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-[#012a4a] hover:bg-gray-50 transition-colors"
+                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-primary text-xs sm:text-sm font-semibold hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => notificationToDelete && deleteNotification(notificationToDelete)}
                   disabled={isLoading}
-                  className="px-6 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50"
+                  className="px-6 py-2.5 bg-red-600 text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
                   {isLoading ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>
           </Modal>
-        </div>
-      </main>
-    </>
+        </main>
+      </div>
+    </div>
   );
 }
+
+
+
+
 
 
 

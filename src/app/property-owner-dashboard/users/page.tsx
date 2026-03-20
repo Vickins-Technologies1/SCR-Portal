@@ -21,9 +21,6 @@ import {
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { motion } from "framer-motion";
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
 interface TeamMember {
   _id: string;
@@ -554,7 +551,7 @@ export default function UsersPage() {
   const getRoleBadge = (teamRole: string) => {
     const colors: Record<string, string> = {
       "Owner": "bg-purple-100 text-purple-800 border-purple-300",
-      "Co-Owner": "bg-emerald-100 text-emerald-800 border-emerald-300",
+      "Co-Owner": "bg-primary/10 text-primary border-primary/40",
       "Property Manager": "bg-blue-100 text-blue-800 border-blue-300",
       "Portfolio Manager": "bg-indigo-100 text-indigo-800 border-indigo-300",
       "Leasing Manager": "bg-cyan-100 text-cyan-800 border-cyan-300",
@@ -583,43 +580,53 @@ export default function UsersPage() {
   };
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${inter.className}`}>
+    <div className="min-h-[100svh] bg-background text-foreground">
       <Navbar />
       <Sidebar />
       <div className="md:ml-72 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
-        <main className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-8 mt-6">
-            <div className="flex items-center gap-3">
-              <Users className="h-8 w-8 text-emerald-600" />
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Team Members</h1>
+        <main className="max-w-7xl mx-auto space-y-6">
+          <section className="glass-panel rounded-3xl p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Team Members</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Invite staff and assign roles with the right permissions.
+                  </p>
+                </div>
+              </div>
+              {canManageUsers ? (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setAddForm({
+                      name: "",
+                      email: "",
+                      phone: "",
+                      teamRole: "Administrative Assistant",
+                      permissions: getRolePreset("Administrative Assistant"),
+                      password: "",
+                      confirmPassword: "",
+                    });
+                    setIsAddModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-lg transition-all"
+                >
+                  <UserPlus size={16} />
+                  Add Member
+                </motion.button>
+              ) : (
+                <span className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                  View-only access
+                </span>
+              )}
             </div>
-            {canManageUsers ? (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                setAddForm({
-                  name: "",
-                  email: "",
-                  phone: "",
-                  teamRole: "Administrative Assistant",
-                  permissions: getRolePreset("Administrative Assistant"),
-                  password: "",
-                  confirmPassword: "",
-                });
-                setIsAddModalOpen(true);
-              }}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-lg transition-all"
-            >
-              <UserPlus size={18} />
-              Add Member
-            </motion.button>
-          ) : (
-            <span className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-              View-only access
-            </span>
-          )}
-          </div>
+          </section>
 
           {error && (
             <div className="mb-6 bg-red-50 text-red-700 px-5 py-4 rounded-2xl flex items-center gap-3">
@@ -654,18 +661,18 @@ export default function UsersPage() {
                       <div>
                         <h3 className="text-lg font-bold text-gray-900">{member.name}</h3>
                         <p className="text-sm text-gray-600 mt-1 flex items-center gap-2">
-                          <Mail size={16} className="text-emerald-600" />
+                          <Mail size={16} className="text-primary" />
                           {member.email}
                         </p>
                         {member.phone && (
                           <p className="text-sm text-gray-600 mt-1 flex items-center gap-2">
-                            <Phone size={16} className="text-emerald-600" />
+                            <Phone size={16} className="text-primary" />
                             {member.phone}
                           </p>
                         )}
                       </div>
                       {member.active ? (
-                        <ShieldCheck className="h-6 w-6 text-emerald-500" />
+                        <ShieldCheck className="h-6 w-6 text-primary" />
                       ) : (
                         <ShieldOff className="h-6 w-6 text-gray-400" />
                       )}
@@ -693,7 +700,7 @@ export default function UsersPage() {
                       <div className="mt-6 flex items-center justify-end gap-3">
                         <button
                           onClick={() => openEditModal(member)}
-                          className="p-2.5 hover:bg-emerald-50 rounded-lg transition-colors text-emerald-600"
+                          className="p-2.5 hover:bg-primary/10 rounded-lg transition-colors text-primary"
                           title="Edit member"
                         >
                           <Edit size={18} />
@@ -745,7 +752,7 @@ export default function UsersPage() {
                   value={addForm.name}
                   onChange={e => setAddForm({ ...addForm, name: e.target.value })}
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
                   placeholder="John Doe"
                 />
               </div>
@@ -757,7 +764,7 @@ export default function UsersPage() {
                   value={addForm.email}
                   onChange={e => setAddForm({ ...addForm, email: e.target.value })}
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
                   placeholder="john@example.com"
                 />
               </div>
@@ -768,7 +775,7 @@ export default function UsersPage() {
                   type="tel"
                   value={addForm.phone}
                   onChange={e => setAddForm({ ...addForm, phone: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
                   placeholder="+254 712 345 678"
                 />
               </div>
@@ -782,7 +789,7 @@ export default function UsersPage() {
                     onChange={e => setAddForm({ ...addForm, password: e.target.value })}
                     required
                     minLength={8}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none pr-10"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none pr-10"
                     placeholder="At least 8 characters"
                   />
                   <button
@@ -803,7 +810,7 @@ export default function UsersPage() {
                     value={addForm.confirmPassword}
                     onChange={e => setAddForm({ ...addForm, confirmPassword: e.target.value })}
                     required
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none pr-10"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none pr-10"
                     placeholder="Re-enter password"
                   />
                   <button
@@ -824,7 +831,7 @@ export default function UsersPage() {
                     const newRole = e.target.value as TeamMember["teamRole"];
                     applyRolePresetToAdd(newRole);
                   }}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none bg-white"
                 >
                   {TEAM_ROLE_OPTIONS.map((role) => (
                     <option key={role.value} value={role.value}>{role.label}</option>
@@ -846,7 +853,7 @@ export default function UsersPage() {
                             : addForm.permissions.filter(p => p !== perm.id);
                           setAddForm({ ...addForm, permissions: newPerms });
                         }}
-                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/40"
                       />
                       <span className="text-sm text-gray-700">{perm.label}</span>
                     </label>
@@ -866,7 +873,7 @@ export default function UsersPage() {
                   type="submit"
                   disabled={addSubmitting}
                   className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-xl shadow-md transition-all ${
-                    addSubmitting ? "bg-emerald-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
+                    addSubmitting ? "bg-primary/70 cursor-not-allowed" : "bg-primary hover:bg-primary-hover"
                   }`}
                 >
                   {addSubmitting ? "Adding..." : (
@@ -917,7 +924,7 @@ export default function UsersPage() {
                   value={editForm.name ?? ""}
                   onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
                   placeholder="John Doe"
                 />
               </div>
@@ -929,7 +936,7 @@ export default function UsersPage() {
                   value={editForm.email ?? ""}
                   onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
                   placeholder="john@example.com"
                 />
               </div>
@@ -940,7 +947,7 @@ export default function UsersPage() {
                   type="tel"
                   value={editForm.phone ?? ""}
                   onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
                   placeholder="+254 712 345 678"
                 />
               </div>
@@ -953,7 +960,7 @@ export default function UsersPage() {
                     const newRole = e.target.value as TeamMember["teamRole"];
                     applyRolePresetToEdit(newRole);
                   }}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none bg-white"
                 >
                   {TEAM_ROLE_OPTIONS.map((role) => (
                     <option key={role.value} value={role.value}>{role.label}</option>
@@ -966,7 +973,7 @@ export default function UsersPage() {
                   type="checkbox"
                   checked={!!editForm.active}
                   onChange={e => setEditForm(prev => ({ ...prev, active: e.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/40"
                 />
                 <span className="text-sm text-gray-700">Active account</span>
               </label>
@@ -985,7 +992,7 @@ export default function UsersPage() {
                             : editPermissions.filter(p => p !== perm.id);
                           setEditForm(prev => ({ ...prev, permissions: newPerms }));
                         }}
-                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/40"
                       />
                       <span className="text-sm text-gray-700">{perm.label}</span>
                     </label>
@@ -1008,7 +1015,7 @@ export default function UsersPage() {
                   type="submit"
                   disabled={editSubmitting}
                   className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-xl shadow-md transition-all ${
-                    editSubmitting ? "bg-emerald-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
+                    editSubmitting ? "bg-primary/70 cursor-not-allowed" : "bg-primary hover:bg-primary-hover"
                   }`}
                 >
                   {editSubmitting ? "Saving..." : (
@@ -1057,6 +1064,10 @@ export default function UsersPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

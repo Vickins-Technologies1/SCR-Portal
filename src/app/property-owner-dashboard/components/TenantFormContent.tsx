@@ -159,7 +159,7 @@ export default function TenantFormContent({
           type="text"
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
             errors.name ? "border-red-500" : "border-gray-300"
           }`}
           placeholder="John Doe"
@@ -177,7 +177,7 @@ export default function TenantFormContent({
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
               errors.email ? "border-red-500" : "border-gray-300"
             }`}
             placeholder="john@example.com"
@@ -193,7 +193,7 @@ export default function TenantFormContent({
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
             placeholder="+254712345678"
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
               errors.phone ? "border-red-500" : "border-gray-300"
             }`}
           />
@@ -212,7 +212,7 @@ export default function TenantFormContent({
               type={showPassword ? "text" : "password"}
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className={`w-full px-4 py-2.5 pr-12 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+              className={`w-full px-4 py-2.5 pr-12 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
                 errors.password ? "border-red-500" : "border-gray-300"
               }`}
             />
@@ -239,7 +239,7 @@ export default function TenantFormContent({
             setFormData({ ...formData, propertyId: e.target.value, unitIdentifier: "" });
             setErrors((prev) => ({ ...prev, propertyId: "", unitIdentifier: "" }));
           }}
-          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
             errors.propertyId ? "border-red-500" : "border-gray-300"
           }`}
         >
@@ -262,7 +262,7 @@ export default function TenantFormContent({
           <select
             value={formData.unitIdentifier}
             onChange={(e) => setFormData({ ...formData, unitIdentifier: e.target.value })}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
               errors.unitIdentifier ? "border-red-500" : "border-gray-300"
             }`}
           >
@@ -300,23 +300,23 @@ export default function TenantFormContent({
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-600">Type:</span>
-              <p className="font-bold text-lg text-[#012a4a]">{selectedUnitConfig.type}</p>
+              <p className="font-bold text-lg text-primary">{selectedUnitConfig.type}</p>
             </div>
             <div>
               <span className="text-gray-600">Config:</span>
-              <p className="font-bold text-lg text-[#012a4a]">
+              <p className="font-bold text-lg text-primary">
                 {selectedUnitConfig.uniqueType.split("-").pop()}
               </p>
             </div>
             <div>
               <span className="text-gray-600">Rent:</span>
-              <p className="font-bold text-xl text-green-600">
+              <p className="font-bold text-xl text-primary">
                 Ksh {selectedUnitConfig.price.toLocaleString()}/mo
               </p>
             </div>
             <div>
               <span className="text-gray-600">Deposit:</span>
-              <p className="font-bold text-xl text-green-600">
+              <p className="font-bold text-xl text-primary">
                 Ksh {selectedUnitConfig.deposit.toLocaleString()}
               </p>
             </div>
@@ -337,7 +337,7 @@ export default function TenantFormContent({
           value={formData.houseNumber}
           onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
           placeholder="e.g. A12, 101, Villa 5"
-          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
             errors.houseNumber ? "border-red-500" : "border-gray-300"
           }`}
         />
@@ -354,7 +354,7 @@ export default function TenantFormContent({
             type="date"
             value={formData.leaseStartDate}
             onChange={(e) => setFormData({ ...formData, leaseStartDate: e.target.value })}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
               errors.leaseStartDate ? "border-red-500" : "border-gray-300"
             }`}
           />
@@ -368,7 +368,7 @@ export default function TenantFormContent({
             type="date"
             value={formData.leaseEndDate}
             onChange={(e) => setFormData({ ...formData, leaseEndDate: e.target.value })}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#012a4a] transition ${
+            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
               errors.leaseEndDate ? "border-red-500" : "border-gray-300"
             }`}
           />
@@ -389,7 +389,7 @@ export default function TenantFormContent({
         <button
           type="submit"
           disabled={isLoading || !selectedUnitConfig}
-          className="px-8 py-2.5 bg-[#012a4a] text-white rounded-lg hover:bg-[#014a7a] disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex items-center gap-2"
+          className="px-8 py-2.5 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex items-center gap-2"
         >
           {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>}
           {mode === "add" ? "Add Tenant" : "Update Tenant"}
@@ -398,3 +398,6 @@ export default function TenantFormContent({
     </form>
   );
 }
+
+
+

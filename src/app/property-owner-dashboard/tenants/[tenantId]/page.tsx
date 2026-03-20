@@ -666,10 +666,10 @@ export default function TenantDetailsPage() {
 
   if (isPageLoading || !tenant) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading tenant...</p>
+      <div className="min-h-[100svh] bg-background text-foreground flex items-center justify-center p-4">
+        <div className="glass-panel rounded-2xl px-6 py-5 text-center">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-xs sm:text-sm text-muted-foreground">Loading tenant...</p>
         </div>
       </div>
     );
@@ -688,7 +688,7 @@ export default function TenantDetailsPage() {
               {[...Array(9)].map((_, i) => (
                 <div
                   key={i}
-                  className="w-16 h-16 bg-emerald-500 rounded-xl animate-pulse"
+                  className="w-16 h-16 bg-primary rounded-xl animate-pulse"
                   style={{ animationDelay: `${i * 0.1}s` }}
                 />
               ))}
@@ -697,16 +697,17 @@ export default function TenantDetailsPage() {
         </div>
       )}
 
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50 to-white">
+      <div className="min-h-[100svh] bg-background text-foreground">
         <Navbar />
         <Sidebar />
 
-        <div className="pt-16 pb-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-6">
+        <div className="md:ml-72 pt-16 pb-16 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl space-y-6">
           {/* Back Button */}
           <div className="flex items-center justify-between mt-4">
             <button
               onClick={() => router.push("/property-owner-dashboard/tenants")}
-              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:border-emerald-200 hover:text-slate-900 transition"
+              className="flex items-center gap-2 rounded-full border border-border bg-white/70 px-4 py-2 text-xs sm:text-sm font-semibold text-foreground shadow-sm hover:border-primary/40 hover:text-primary transition"
             >
               <ArrowLeft className="w-5 h-5" />
               Back
@@ -714,52 +715,53 @@ export default function TenantDetailsPage() {
           </div>
 
           {/* Tenant Header */}
-          <div className="bg-white/80 backdrop-blur rounded-2xl border border-emerald-100 shadow-sm p-5 sm:p-6">
+          <section className="glass-panel rounded-3xl p-5 sm:p-6">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg flex-shrink-0">
+                <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary text-xl font-bold shadow-sm flex-shrink-0">
                   {tenant.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{tenant.name}</h1>
-                  <p className="text-gray-600 text-sm">
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Tenant Profile</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">{tenant.name}</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                     {property?.name ? `${property.name} • ${tenant.houseNumber}` : "Property"}
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-[11px] text-muted-foreground mt-1">
                     Lease {new Date(tenant.leaseStartDate).toLocaleDateString()} →{" "}
                     {new Date(tenant.leaseEndDate).toLocaleDateString()}
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  className={`px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold ${
                     paymentSnapshot.isOverdue
                       ? "bg-red-100 text-red-700"
-                      : "bg-emerald-100 text-emerald-700"
+                      : "bg-primary/10 text-primary"
                   }`}
                 >
                   {paymentSnapshot.label}
                 </span>
                 <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  className={`px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold ${
                     paymentSnapshot.isOverdue
                       ? "bg-red-50 text-red-600"
-                      : "bg-emerald-50 text-emerald-600"
+                      : "bg-primary/10 text-primary"
                   }`}
                 >
                   Overdue: {formatCurrency(paymentSnapshot.overdueBalance)}
                 </span>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                <span className="px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-muted text-foreground/70">
                   Wallet: {formatCurrency(tenant.walletBalance || 0)}
                 </span>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Success Message */}
           {successMessage && (
-            <div className="mb-5 bg-emerald-100 text-emerald-800 px-4 py-3 rounded-lg text-sm font-medium flex justify-between items-center">
+            <div className="glass-panel rounded-2xl px-4 py-3 text-xs sm:text-sm font-semibold text-primary flex justify-between items-center">
               <span>{successMessage}</span>
               <button onClick={() => setSuccessMessage(null)} className="text-xl">
                 ×
@@ -767,36 +769,51 @@ export default function TenantDetailsPage() {
             </div>
           )}
 
-          {/* Main Card */}
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white p-5">
-              <h2 className="text-xl font-bold">Tenant Overview</h2>
-            </div>
-
-            <div className="p-6 sm:p-8 space-y-8">
+          {/* Main Content */}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+            <section className="surface-card rounded-3xl p-5 sm:p-6 space-y-6">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">Overview</p>
+                <h2 className="text-lg sm:text-xl font-semibold text-foreground">Tenant Overview</h2>
+              </div>
               <TenantInfoGrid tenant={tenant} property={property} />
-              <DuesSection tenant={tenant} isDuesLoading={isDuesLoading} />
-              <ActionButtons
-                onRecordPayment={() => {
-                  if (!canRecordPayments) return;
-                  setShowPaymentModal(true);
-                }}
-                onEdit={() => alert("Coming soon")}
-                onImpersonate={() => {
-                  if (!canImpersonate) return;
-                  setShowImpersonateModal(true);
-                }}
-                onDelete={() => {
-                  if (!canManageTenants) return;
-                  alert("Coming soon");
-                }}
-                onGenerateReport={handleGenerateReport}
-                canRecordPayment={canRecordPayments}
-                canGenerateReport={canViewReports}
-                canImpersonate={canImpersonate}
-                canDelete={canManageTenants}
-              />
-            </div>
+              <div className="glass-panel rounded-2xl p-4 sm:p-5">
+                <DuesSection tenant={tenant} isDuesLoading={isDuesLoading} />
+              </div>
+            </section>
+
+            <section className="glass-panel rounded-3xl p-5 sm:p-6">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">Actions</p>
+                <h3 className="text-lg sm:text-xl font-semibold text-foreground">Manage Tenant</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                  Record payments, export reports, or impersonate securely.
+                </p>
+              </div>
+              <div className="mt-5">
+                <ActionButtons
+                  onRecordPayment={() => {
+                    if (!canRecordPayments) return;
+                    setShowPaymentModal(true);
+                  }}
+                  onEdit={() => alert("Coming soon")}
+                  onImpersonate={() => {
+                    if (!canImpersonate) return;
+                    setShowImpersonateModal(true);
+                  }}
+                  onDelete={() => {
+                    if (!canManageTenants) return;
+                    alert("Coming soon");
+                  }}
+                  onGenerateReport={handleGenerateReport}
+                  canRecordPayment={canRecordPayments}
+                  canGenerateReport={canViewReports}
+                  canImpersonate={canImpersonate}
+                  canDelete={canManageTenants}
+                />
+              </div>
+            </section>
+          </div>
           </div>
         </div>
 
@@ -833,7 +850,7 @@ export default function TenantDetailsPage() {
         >
           {reportData ? (
             <div className="space-y-6">
-              <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-900 to-emerald-700 text-white p-6">
+              <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-900 to-primary-hover text-white p-6">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Payment Health Snapshot</p>
@@ -846,7 +863,7 @@ export default function TenantDetailsPage() {
                     className={`px-4 py-2 rounded-full text-sm font-semibold ${
                       reportData.paymentStatusLabel === "Overdue"
                         ? "bg-red-500/30 text-red-100"
-                        : "bg-emerald-500/30 text-emerald-100"
+                        : "bg-primary/30 text-white/90"
                     }`}
                   >
                     {reportData.paymentStatusLabel}
@@ -927,27 +944,28 @@ export default function TenantDetailsPage() {
                     <span className="text-xs text-slate-500">Refreshing...</span>
                   )}
                 </div>
-                <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="text-xs uppercase text-slate-500">
+                <div className="mt-4 table-shell">
+                  <div className="table-scroll">
+                  <table className="min-w-full">
+                    <thead>
                       <tr>
-                        <th className="text-left py-2 px-2">Date</th>
-                        <th className="text-left py-2 px-2">Type</th>
-                        <th className="text-left py-2 px-2">Amount</th>
-                        <th className="text-left py-2 px-2">Status</th>
-                        <th className="text-left py-2 px-2">Reference</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Reference</th>
                       </tr>
                     </thead>
                     <tbody className="text-slate-700">
                       {reportData.statements.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-4 px-2 text-slate-500">
+                          <td colSpan={5} className="py-4 px-2 text-slate-500 text-xs sm:text-sm">
                             No payment statements available yet.
                           </td>
                         </tr>
                       ) : (
                         reportData.statements.map((statement) => (
-                          <tr key={statement._id} className="border-t">
+                          <tr key={statement._id} className="hover:bg-primary/5">
                             <td className="py-2 px-2 whitespace-nowrap">
                               {new Date(statement.paymentDate).toLocaleDateString()}
                             </td>
@@ -964,6 +982,7 @@ export default function TenantDetailsPage() {
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </div>
 
@@ -995,6 +1014,8 @@ export default function TenantDetailsPage() {
     </>
   );
 }
+
+
 
 
 

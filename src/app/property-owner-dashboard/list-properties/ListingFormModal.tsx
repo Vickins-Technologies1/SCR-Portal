@@ -287,7 +287,7 @@ export default function ListingFormModal({
             <select
               value={selectedPropertyId}
               onChange={(e) => setSelectedPropertyId(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition bg-white disabled:opacity-60"
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white disabled:opacity-60"
               required
               disabled={isSubmitting || isUploading}
             >
@@ -320,7 +320,7 @@ export default function ListingFormModal({
             placeholder="Highlight key features, location benefits, nearby amenities..."
             maxLength={500}
             rows={5}
-            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#012a4a] focus:border-[#012a4a] transition resize-none disabled:opacity-60"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary/30 focus:border-primary transition resize-none disabled:opacity-60"
             disabled={isSubmitting || isUploading}
           />
           <p className="text-xs text-slate-500 mt-1 text-right">
@@ -344,7 +344,7 @@ export default function ListingFormModal({
                 Array.from(e.target.selectedOptions, (option) => option.value)
               )
             }
-            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#012a4a] h-40 bg-white disabled:opacity-60"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary/30 h-40 bg-white disabled:opacity-60"
             disabled={isSubmitting || isUploading}
           >
             {FACILITIES.map((facility) => (
@@ -451,7 +451,7 @@ export default function ListingFormModal({
             type="checkbox"
             checked={isAdvertised}
             onChange={(e) => setIsAdvertised(e.target.checked)}
-            className="h-5 w-5 mt-0.5 text-[#012a4a] border-slate-300 rounded focus:ring-[#012a4a] disabled:opacity-50"
+            className="h-5 w-5 mt-0.5 text-primary border-slate-300 rounded focus:ring-primary/30 disabled:opacity-50"
             disabled={isSubmitting || isUploading}
           />
           <label htmlFor="advertise" className="ml-3 text-sm font-medium text-slate-700">
@@ -476,7 +476,7 @@ export default function ListingFormModal({
             className={`min-w-[140px] flex items-center justify-center gap-2 px-6 py-3 text-white rounded-xl shadow-md transition-all font-medium ${
               isSubmitting || isUploading || Object.keys(formErrors).length > 0
                 ? "bg-gray-400 cursor-not-allowed"
-                : "bg-gradient-to-r from-[#012a4a] to-[#014a7a] hover:shadow-lg active:scale-95"
+                : "bg-gradient-to-r from-primary to-emerald-500 hover:shadow-lg active:scale-95"
             }`}
           >
             {isSubmitting || isUploading ? (
@@ -495,3 +495,6 @@ export default function ListingFormModal({
     </Modal>
   );
 }
+
+
+
