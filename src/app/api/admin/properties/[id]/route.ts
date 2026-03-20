@@ -148,7 +148,7 @@ export async function PUT(
 
       invoiceResult = await upsertPercentageInvoice({
         db,
-        userId: property.ownerId?.toString ? property.ownerId.toString() : property.ownerId,
+        userId: String(property.ownerId),
         propertyId: property._id.toString(),
         billingPlan: "FullManagement",
         percentage: percentToUse,
