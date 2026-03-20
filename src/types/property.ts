@@ -31,7 +31,7 @@ export interface Tenant {
 // ────────────────────────────────────────────────
 export interface Property {
   _id: ObjectId | string;
-  ownerId: string;
+  ownerId: ObjectId | string;
   name: string;
   address: string;
   unitTypes: UnitType[];
