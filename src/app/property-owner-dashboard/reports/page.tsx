@@ -699,7 +699,7 @@ function ReportsAndInvoicesPageInner() {
 
           {/* Filters (Reports only) */}
           {activeTab === "reports" && (
-            <div className="surface-card rounded-2xl p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="surface-card rounded-2xl p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="owner-report-filters">
               <div>
                 <label className="block text-xs font-medium text-gray-600">Property</label>
                 <select
@@ -817,7 +817,7 @@ function ReportsAndInvoicesPageInner() {
                 <p className="text-xs sm:text-sm text-muted-foreground">Available for property management</p>
               </div>
 
-              <div className="surface-card rounded-2xl p-5 sm:p-6 lg:col-span-2">
+              <div className="surface-card rounded-2xl p-5 sm:p-6 lg:col-span-2" data-tour="owner-invoice-estimate">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <h2 className="text-base sm:text-lg font-semibold text-foreground">Next Month Invoice Estimate</h2>
@@ -875,7 +875,7 @@ function ReportsAndInvoicesPageInner() {
                 No reports found.
               </div>
             ) : (
-              <div className="table-shell">
+              <div className="table-shell" data-tour="owner-invoice-table">
                 <div className="table-scroll">
                 <table className="min-w-full table-auto">
                   <thead>

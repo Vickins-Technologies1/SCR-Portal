@@ -398,7 +398,7 @@ export default function PaymentsPage() {
       <div className="max-w-7xl mx-auto space-y-6 px-4 sm:px-6 lg:px-8 pt-16 sm:pt-20 lg:pt-24 relative z-10">
 
         {/* Header Section */}
-        <section className="glass-panel rounded-3xl p-6 sm:p-7">
+        <section className="glass-panel rounded-3xl p-6 sm:p-7" data-tour="tenant-payments-header">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
             <div className="space-y-3">
               <p className="eyebrow">Payments</p>
@@ -422,6 +422,7 @@ export default function PaymentsPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button
+              data-tour="tenant-payments-action"
               onClick={() => setIsModalOpen(true)}
               className="w-full sm:w-auto bg-primary text-white font-semibold px-6 py-3 rounded-full shadow-lg hover:bg-primary-hover transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
               disabled={!tenantId || !tenant?.propertyId || !csrfToken}
@@ -432,7 +433,7 @@ export default function PaymentsPage() {
         </section>
 
         {/* Payments Table */}
-        <div className="surface-card rounded-3xl overflow-hidden">
+        <div className="surface-card rounded-3xl overflow-hidden" data-tour="tenant-payments-table">
           <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300">
             <table className="w-full min-w-[800px] divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-primary/10 to-primary/5 text-foreground sticky top-0 z-10">

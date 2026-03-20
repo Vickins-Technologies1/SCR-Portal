@@ -455,6 +455,7 @@ export default function TenantsPage() {
 
               {canAddTenants && (
                 <button
+                  data-tour="owner-add-tenant"
                   onClick={openAddModal}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition text-white ${
                     isLoading || !csrfToken || !effectiveOwnerId

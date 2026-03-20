@@ -6,14 +6,6 @@ import { ObjectId } from "mongodb";
 import { MaintenanceRequest } from "@/types/maintenance";
 
 export async function GET(req: NextRequest) {
-  const csrfHeader = req.headers.get("x-csrf-token");
-  if (!csrfHeader || !(await validateCsrfToken(req, csrfHeader))) {
-    return NextResponse.json(
-      { success: false, message: "Invalid CSRF token" },
-      { status: 403 }
-    );
-  }
-
   const userId = req.cookies.get("userId")?.value;
   const role = req.cookies.get("role")?.value;
 

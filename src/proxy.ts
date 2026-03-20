@@ -205,14 +205,26 @@ export async function proxy(request: NextRequest) {
     }
 
     // Find matching route config (support dynamic segments)
-    let matchedRouteKey = Object.keys(routeAccessMap).find((r) => {
-      if (path === r) return true;
-      if (r.endsWith("/:tenantId") && path.startsWith(r.replace("/:tenantId", ""))) {
-        return true;
-      }
-      if (path.startsWith(r + "/")) return true;
-      return false;
-    });
+    // Prefer the most specific (longest) matching path to avoid generic overlaps.
+    const matchedRouteKey = Object.keys(routeAccessMap)
+      .filter((r) => {
+        if (path === r) return true;
+        if (r.endsWith("/:tenantId") && path.startsWith(r.replace("/:tenantId", ""))) {
+          return true;
+        }
+        if (path.startsWith(r + "/")) return true;
+        return false;
+      })
+      .sort((a, b) => {
+        const score = (route: string) => {
+          if (path === route) return 3; // exact match wins
+          if (route.endsWith("/:tenantId")) return 1; // dynamic match is lowest
+          return 2; // static prefix match
+        };
+        const scoreDiff = score(b) - score(a);
+        if (scoreDiff !== 0) return scoreDiff;
+        return b.length - a.length;
+      })[0];
 
     const config = matchedRouteKey ? routeAccessMap[matchedRouteKey] : null;
 
@@ -261,7 +273,8 @@ export async function proxy(request: NextRequest) {
       path.startsWith("/api/tenants/") &&
       !path.startsWith("/api/tenants/maintenance") &&
       !path.startsWith("/api/tenants/profile") &&
-      !path.startsWith("/api/tenants/vacate")
+      !path.startsWith("/api/tenants/vacate") &&
+      !path.startsWith("/api/tenants/check-dues")
     ) {
       const segments = path.split("/").filter(Boolean);
       if (segments.length >= 3) {

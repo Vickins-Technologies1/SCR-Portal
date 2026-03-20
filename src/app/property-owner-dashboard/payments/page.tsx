@@ -409,7 +409,7 @@ export default function PaymentsPage() {
             </div>
           </section>
 
-          <div className="surface-card rounded-2xl p-5 sm:p-6 space-y-5">
+          <div className="surface-card rounded-2xl p-5 sm:p-6 space-y-5" data-tour="owner-payments-filters">
             <div>
               <label className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Select Property</label>
             <select
@@ -516,7 +516,7 @@ export default function PaymentsPage() {
               No payments found for {selectedPropertyId === "all" ? "any properties" : "selected property"}.
             </div>
           ) : (
-            <div className="table-shell">
+            <div className="table-shell" data-tour="owner-payments-table">
               <div className="table-scroll">
               <table className="min-w-full table-auto">
                 <thead>

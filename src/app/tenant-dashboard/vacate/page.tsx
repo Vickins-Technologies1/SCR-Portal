@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DoorOpen, AlertCircle, X, Loader2, Calendar } from "lucide-react";
 import { VacateRequest } from "../../../types/vacate";
@@ -13,6 +13,7 @@ export default function VacateRequestsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const authRetryRef = useRef(0);
 
   const [form, setForm] = useState({
     moveOutDate: "",
@@ -54,8 +55,17 @@ export default function VacateRequestsPage() {
         throw new Error(data.message || "Failed to load vacate requests");
       }
       setRequests(data.data.requests || []);
+      setError("");
     } catch (err: any) {
-      setError(err.message || "Network error");
+      const message = err?.message || "Network error";
+      const isAuthTransient =
+        /unauthorized|forbidden|invalid csrf/i.test(message) && authRetryRef.current < 1;
+      if (isAuthTransient) {
+        authRetryRef.current += 1;
+        setTimeout(() => fetchRequests(), 400);
+        return;
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }

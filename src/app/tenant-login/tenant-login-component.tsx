@@ -153,10 +153,10 @@ export default function TenantLoginPage() {
           lg:shadow-[-30px_0_40px_-20px_rgba(30,58,138,0.10)]
         "
       >
-        {/* Floating bubbles to fill the section */}
+        {/* Floating bubbles */}
         <div className="absolute inset-0 pointer-events-none">
           <motion.div
-            className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-primary/12 border border-primary/20 backdrop-blur-md"
+            className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/12 border border-blue-300/15 backdrop-blur-md"
             animate={{
               y: ["0%", "-35%", "15%", "-20%", "0%"],
               x: ["0%", "12%", "-8%", "5%", "0%"],
@@ -166,7 +166,7 @@ export default function TenantLoginPage() {
             transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-blue-400/15 border border-blue-300/20 backdrop-blur-sm"
+            className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-emerald-400/15 border border-emerald-300/20 backdrop-blur-sm"
             animate={{
               y: ["0%", "30%", "-25%", "10%", "0%"],
               x: ["0%", "-10%", "15%", "-5%", "0%"],
@@ -175,7 +175,7 @@ export default function TenantLoginPage() {
             transition={{ duration: 19, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 3 }}
           />
           <motion.div
-            className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-primary/10"
+            className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-300/10"
             animate={{
               y: ["0%", "-45%", "0%", "-30%", "0%"],
               x: ["0%", "8%", "-12%", "0%", "0%"],
@@ -184,7 +184,7 @@ export default function TenantLoginPage() {
             transition={{ duration: 26, repeat: Infinity, repeatType: "reverse", delay: 1.5 }}
           />
           <motion.div
-            className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-primary/12 backdrop-blur-sm"
+            className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-blue-500/12 backdrop-blur-sm"
             animate={{
               y: ["0%", "40%", "-15%", "25%", "0%"],
               scale: [1, 1.2, 1, 1.1, 1],
@@ -192,7 +192,7 @@ export default function TenantLoginPage() {
             transition={{ duration: 17, repeat: Infinity, repeatType: "reverse", delay: 6 }}
           />
           <motion.div
-            className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-blue-500/10"
+            className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-emerald-500/10"
             animate={{
               y: ["0%", "-50%", "10%", "-35%", "0%"],
               x: ["0%", "-15%", "10%", "0%", "0%"],
@@ -200,7 +200,7 @@ export default function TenantLoginPage() {
             transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", delay: 8 }}
           />
           <motion.div
-            className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-primary/10 border border-primary/20 backdrop-blur-lg"
+            className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-teal-400/8 border border-teal-200/10 backdrop-blur-lg"
             animate={{
               y: ["0%", "20%", "-40%", "5%", "0%"],
               scale: [1, 1.15, 0.95, 1.05, 1],
@@ -208,13 +208,13 @@ export default function TenantLoginPage() {
             transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", delay: 4.5 }}
           />
 
-          {/* Smaller filler bubbles */}
+          {/* Smaller decorative bubbles */}
           <motion.div className="absolute inset-0 opacity-40">
-            <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-primary/20" />
-            <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-blue-400/25" />
-            <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-primary/20" />
-            <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-primary/18" />
-            <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-blue-300/12" />
+            <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-blue-400/20" />
+            <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-emerald-400/25" />
+            <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-teal-300/15" />
+            <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-blue-300/18" />
+            <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-emerald-300/12" />
           </motion.div>
         </div>
 

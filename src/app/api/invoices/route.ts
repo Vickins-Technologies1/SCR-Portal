@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     const { db } = await connectToDatabase();
     console.log("Connected to MongoDB");
 
-    let effectiveOwnerId: string | null = null;
+    let effectiveOwnerId: string | undefined;
 
     if (role === "propertyOwner") {
       if (requestedOwnerId && requestedOwnerId !== userId) {
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-      effectiveOwnerId = requestedOwnerId || null;
+      effectiveOwnerId = requestedOwnerId || undefined;
     }
 
     if (propertyId) {
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
     // For admins, fetch all invoices (or filter by owner if provided); otherwise fetch owner's invoices
     const query = role === "admin"
       ? (effectiveOwnerId ? { userId: effectiveOwnerId } : {})
-      : { userId: effectiveOwnerId };
+      : { userId: effectiveOwnerId as string };
     const invoices = await db
       .collection<Invoice>("invoices")
       .find(query).toArray();

@@ -12,9 +12,11 @@ import {
   LogOut,
   Wrench,
   DoorOpen,
+  Sparkles,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import TourGuide, { TourStep } from "@/components/tour/TourGuide";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -56,11 +58,11 @@ export default function TenantDashboardLayout({
   const [error, setError] = useState<string | null>(null);
 
   const links = [
-    { href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
-    { href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
-    { href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
-    { href: "/tenant-dashboard/vacate", label: "Vacate Notice", icon: <DoorOpen size={18} /> },
-    { href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
+    { key: "overview", href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
+    { key: "payments", href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
+    { key: "maintenance", href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
+    { key: "vacate", href: "/tenant-dashboard/vacate", label: "Vacate Notice", icon: <DoorOpen size={18} /> },
+    { key: "settings", href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
   ];
 
   useEffect(() => {
@@ -102,11 +104,98 @@ export default function TenantDashboardLayout({
     .toUpperCase()
     .slice(0, 2);
 
+  const tenantSteps: TourStep[] = [
+    {
+      title: "Navigation Sidebar",
+      body: "Use this menu to switch between your overview, payments, maintenance, and settings.",
+      selector: '[data-tour="tenant-sidebar"]',
+      placement: "right",
+    },
+    {
+      title: "Overview",
+      body: "Your main dashboard with balance, dues, and recent activity.",
+      selector: '[data-tour="tenant-nav-overview"]',
+      placement: "right",
+    },
+    {
+      title: "Payments",
+      body: "Review payment history and make new payments.",
+      selector: '[data-tour="tenant-nav-payments"]',
+      placement: "right",
+    },
+    {
+      title: "Maintenance",
+      body: "Report issues and track maintenance updates.",
+      selector: '[data-tour="tenant-nav-maintenance"]',
+      placement: "right",
+    },
+    {
+      title: "Vacate Notice",
+      body: "Submit your move‑out notice and track approvals.",
+      selector: '[data-tour="tenant-nav-vacate"]',
+      placement: "right",
+    },
+    {
+      title: "Settings",
+      body: "Update your profile details and password.",
+      selector: '[data-tour="tenant-nav-settings"]',
+      placement: "right",
+    },
+    {
+      title: "Top Bar",
+      body: "Access the menu on mobile, restart this tour, or sign out securely.",
+      selector: '[data-tour="tenant-navbar"]',
+      placement: "bottom",
+    },
+    {
+      title: "Workspace",
+      body: "Your selected section appears here with cards, tables, and actions.",
+      selector: '[data-tour="tenant-workspace"]',
+      placement: "top",
+    },
+    {
+      title: "Make a Payment",
+      body: "Initiate rent, deposit, or utility payments directly from your dashboard.",
+      selector: '[data-tour="tenant-payments-action"]',
+      placement: "bottom",
+      paths: ["/tenant-dashboard/payments"],
+    },
+    {
+      title: "Payment History",
+      body: "Track payment status and download receipts from this table.",
+      selector: '[data-tour="tenant-payments-table"]',
+      placement: "top",
+      paths: ["/tenant-dashboard/payments"],
+    },
+    {
+      title: "Maintenance Requests",
+      body: "Log repair issues and track progress with your property manager.",
+      selector: '[data-tour="tenant-maintenance-header"]',
+      placement: "bottom",
+      paths: ["/tenant-dashboard/maintenance"],
+    },
+    {
+      title: "New Request",
+      body: "Submit a new maintenance request in seconds.",
+      selector: '[data-tour="tenant-maintenance-action"]',
+      placement: "bottom",
+      paths: ["/tenant-dashboard/maintenance"],
+    },
+    {
+      title: "Need a refresher?",
+      body: "Tap the Tour button in the top bar anytime to replay this guide.",
+      placement: "center",
+    },
+  ];
+
   return (
     <PublicThemeWrapper>
     <div className="min-h-[100svh] flex flex-col bg-background text-foreground overflow-x-hidden">
       {/* ─── Navbar ─── */}
-      <header className="fixed top-0 left-0 right-0 z-20 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)]">
+      <header
+        data-tour="tenant-navbar"
+        className="fixed top-0 left-0 right-0 z-20 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)]"
+      >
         <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
           {/* Left side – logo + mobile toggle */}
           <div className="flex min-w-0 items-center gap-3">
@@ -125,8 +214,16 @@ export default function TenantDashboardLayout({
             />
           </div>
 
-          {/* Right side – logo image + user info + logout */}
-          <div className="flex items-center gap-5 sm:gap-7">
+          {/* Right side – actions */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => window.dispatchEvent(new Event("start-tenant-tour"))}
+              className="group flex shrink-0 items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+              title="Start tour"
+            >
+              <Sparkles size={16} className="transition-transform group-hover:rotate-6" />
+              <span className="hidden sm:inline">Tour</span>
+            </button>
             <button
               onClick={handleLogout}
               className="group flex shrink-0 items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
@@ -140,6 +237,7 @@ export default function TenantDashboardLayout({
 
       {/* ─── Sidebar ─── */}
       <aside
+        data-tour="tenant-sidebar"
         className={`fixed left-0 top-16 bottom-0 z-40 w-72 bg-white border-r border-gray-200/70 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition-transform duration-300 ease-out
           ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:inset-y-0`}
       >
@@ -162,13 +260,14 @@ export default function TenantDashboardLayout({
           </div>
 
           <nav className="flex-1 px-4 py-5 space-y-1.5 overflow-y-auto">
-            {links.map(({ href, label, icon }) => {
+            {links.map(({ key, href, label, icon }) => {
               const isActive = pathname === href;
               return (
                 <Link
                   key={href}
                   href={href}
                   onClick={() => setIsSidebarOpen(false)}
+                  data-tour={`tenant-nav-${key}`}
                   className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-xs sm:text-sm font-medium transition-all duration-200
                     ${isActive
                       ? "bg-[#42c775]/10 text-[#42c775] shadow-sm ring-1 ring-[#42c775]/20"
@@ -204,7 +303,7 @@ export default function TenantDashboardLayout({
       </aside>
 
       {/* ─── Main Content ─── */}
-      <main className="flex-1 pt-16 lg:ml-72 p-5 sm:p-6 lg:p-8">
+      <main className="flex-1 pt-16 lg:ml-72 p-5 sm:p-6 lg:p-8" data-tour="tenant-workspace">
         <div className="max-w-7xl mx-auto">{children}</div>
       </main>
 
@@ -214,6 +313,13 @@ export default function TenantDashboardLayout({
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      <TourGuide
+        steps={tenantSteps}
+        storageKey="tenant-tour-v1"
+        startEventName="start-tenant-tour"
+        currentPath={pathname}
+      />
     </div>
     </PublicThemeWrapper>
   );

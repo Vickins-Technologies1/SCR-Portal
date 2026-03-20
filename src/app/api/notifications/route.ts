@@ -38,7 +38,10 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const authenticateUser = async (req: NextRequest): Promise<{ isValid: boolean; userId: string | null; effectiveOwnerId: string | null; error?: string }> => {
+const authenticateUser = async (
+  req: NextRequest,
+  { requireCsrf = true }: { requireCsrf?: boolean } = {}
+): Promise<{ isValid: boolean; userId: string | null; effectiveOwnerId: string | null; error?: string }> => {
   const cookieStore = await cookies();
   const loggedInUserId = cookieStore.get("userId")?.value;
   const role = cookieStore.get("role")?.value;
@@ -54,7 +57,7 @@ const authenticateUser = async (req: NextRequest): Promise<{ isValid: boolean; u
     return { isValid: false, userId: null, effectiveOwnerId: null, error: "Unauthorized: Invalid role" };
   }
 
-  if (!csrfToken || !(await validateCsrfToken(req, csrfToken))) {
+  if (requireCsrf && (!csrfToken || !(await validateCsrfToken(req, csrfToken)))) {
     logger.warn("Invalid or missing CSRF token", { loggedInUserId });
     return { isValid: false, userId: null, effectiveOwnerId: null, error: "Invalid CSRF token" };
   }
@@ -90,7 +93,7 @@ const validateTenantOwnership = async (db: Db, tenantId: string, effectiveOwnerI
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const auth = await authenticateUser(req);
+    const auth = await authenticateUser(req, { requireCsrf: false });
     if (!auth.isValid || !auth.effectiveOwnerId) {
       return NextResponse.json({ success: false, message: auth.error }, { status: auth.error?.includes("CSRF") ? 403 : 401 });
     }

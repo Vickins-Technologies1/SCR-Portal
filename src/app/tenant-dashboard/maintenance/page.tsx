@@ -1,7 +1,7 @@
 // src/app/tenant-dashboard/maintenance/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wrench, Plus, AlertCircle, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -24,6 +24,7 @@ export default function MaintenanceRequestsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [propertyId, setPropertyId] = useState<string | null>(null);
+  const authRetryRef = useRef(0);
 
   const limit = 10;
 
@@ -95,8 +96,17 @@ export default function MaintenanceRequestsPage() {
 
       setRequests(data.data.requests);
       setTotalPages(data.totalPages || 1);
+      setError("");
     } catch (err: any) {
-      setError(err.message || "Network error");
+      const message = err?.message || "Network error";
+      const isAuthTransient =
+        /unauthorized|forbidden|invalid csrf/i.test(message) && authRetryRef.current < 1;
+      if (isAuthTransient) {
+        authRetryRef.current += 1;
+        setTimeout(() => fetchRequests(), 400);
+        return;
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -213,6 +223,7 @@ export default function MaintenanceRequestsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="glass-panel rounded-3xl p-5 sm:p-6 mb-6"
+            data-tour="tenant-maintenance-header"
           >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex items-center gap-4">
@@ -226,6 +237,7 @@ export default function MaintenanceRequestsPage() {
                 </div>
               </div>
               <button
+                data-tour="tenant-maintenance-action"
                 onClick={() => setIsModalOpen(true)}
                 className="flex items-center gap-2 px-5 py-2.5 text-sm bg-primary text-white font-semibold rounded-full hover:bg-primary-hover shadow-lg transition"
               >

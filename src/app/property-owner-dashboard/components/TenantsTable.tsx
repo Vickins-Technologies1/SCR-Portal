@@ -212,7 +212,7 @@ export default function TenantsTable({
   return (
     <div className="space-y-5">
       {/* Filters */}
-      <div className="surface-card rounded-2xl p-5 sm:p-6">
+      <div className="surface-card rounded-2xl p-5 sm:p-6" data-tour="owner-tenant-filters">
         <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4">Filter Tenants</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <input
@@ -318,7 +318,7 @@ export default function TenantsTable({
       ) : (
         <>
           {/* Tenants Table */}
-          <div className="table-shell table-compact">
+          <div className="table-shell table-compact" data-tour="owner-tenant-table">
             <div className="table-scroll">
               <table>
                 <thead>
@@ -349,7 +349,7 @@ export default function TenantsTable({
                       </span>
                     </th>
                   ))}
-                  <th>Actions</th>
+                  <th data-tour="owner-tenant-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>

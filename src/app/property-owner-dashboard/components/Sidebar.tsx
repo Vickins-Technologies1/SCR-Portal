@@ -146,6 +146,7 @@ export default function Sidebar() {
   return (
     <>
       <aside
+        data-tour="owner-sidebar"
         className={`fixed left-0 top-16 bottom-0 z-40 w-64 sm:w-72 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)] border-r border-gray-200/70 transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:inset-y-0 flex flex-col`}
@@ -177,6 +178,7 @@ export default function Sidebar() {
                   key={key}
                   href={href}
                   onClick={close}
+                  data-tour={`owner-nav-${key}`}
                   className={`group flex items-center gap-3 sm:gap-4 rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
                     isActive
                       ? "bg-[#42c775]/10 text-[#42c775] shadow-sm ring-1 ring-[#42c775]/20"

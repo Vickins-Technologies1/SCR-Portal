@@ -319,7 +319,14 @@ export default function TenantDashboardPage() {
           }),
         });
 
-        if (!res.ok) throw new Error("Failed to fetch dues");
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          console.error("[Dues] request failed", {
+            status: res.status,
+            body: errText,
+          });
+          throw new Error("Failed to fetch dues");
+        }
         const data = await res.json();
 
         if (data.success) {

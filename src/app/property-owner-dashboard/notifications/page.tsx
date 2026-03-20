@@ -257,6 +257,7 @@ export default function NotificationsPage() {
         setIsLoading(false);
         return;
       }
+      setError(null);
       const fetchedProperties = propertiesData.properties;
 
       const tenantsRes = await makeAuthenticatedRequest(
@@ -269,6 +270,7 @@ export default function NotificationsPage() {
         setIsLoading(false);
         return;
       }
+      setError(null);
       const fetchedTenants = tenantsData.tenants;
       setTenants(fetchedTenants);
       setNewNotification((prev) => ({
@@ -286,6 +288,7 @@ export default function NotificationsPage() {
         setIsLoading(false);
         return;
       }
+      setError(null);
       const fetchedPayments = paymentsData.payments;
 
       const reminders: UpcomingReminder[] = [];
@@ -392,6 +395,7 @@ export default function NotificationsPage() {
       const data: ApiResponse<Notification[]> = await response.json();
       if (data.success && data.data) {
         setNotifications(data.data);
+        setError(null);
       } else {
         setError(data.message || "Failed to fetch notifications.");
       }
