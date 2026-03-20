@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { LogOut, Menu, X } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 
@@ -29,6 +30,14 @@ export default function Navbar() {
           >
             {isOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
+          <Image
+            src="/logo.png"
+            alt="Sorana Property Managers Logo"
+            width={200}
+            height={80}
+            className="md:hidden h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm"
+            priority
+          />
         </div>
 
       {/* Right: Logout Button – responsive */}

@@ -14,7 +14,6 @@ import {
   DoorOpen,
 } from "lucide-react";
 import Cookies from "js-cookie";
-import Image from "next/image";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
 const useAuth = () => {
@@ -119,6 +118,11 @@ export default function TenantDashboardLayout({
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
+            <img
+              src="/logo.png"
+              alt="Sorana Property Managers Logo"
+              className="lg:hidden h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm"
+            />
           </div>
 
           {/* Right side – logo image + user info + logout */}
@@ -142,13 +146,10 @@ export default function TenantDashboardLayout({
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-white/40 bg-gradient-to-b from-[#42c775]/10 to-transparent">
             <div className="flex justify-center mb-5">
-              <Image
+              <img
                 src="/logo.png"
                 alt="Smart Choice Logo"
-                width={172}
-                height={72}
-                className="drop-shadow-md"
-                priority
+                className="h-12 w-auto drop-shadow-md"
               />
             </div>
 
