@@ -15,9 +15,9 @@ export default function Navbar() {
   };
 
   return (
-    <header className="fixed top-0 z-40 h-16 w-full border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72">
+    <header className="fixed top-0 left-0 right-0 z-40 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72">
       {/* md:pl-72 = exact width of sidebar (w-72) */}
-      <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-6 lg:px-10">
+      <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-3 sm:px-6 lg:px-10">
         
         {/* Left: Logo + Title */}
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -34,7 +34,7 @@ export default function Navbar() {
       {/* Right: Logout Button – responsive */}
         <button
           onClick={handleSignOut}
-          className="group flex items-center gap-1.5 rounded-full border border-gray-300 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+          className="group flex shrink-0 items-center gap-1.5 rounded-full border border-gray-300 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
           title="Sign out" // tooltip on mobile
         >
           <LogOut size={16} className="transition-transform group-hover:rotate-6 sm:size-[18px]" />

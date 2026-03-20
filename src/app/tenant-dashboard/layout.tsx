@@ -105,10 +105,10 @@ export default function TenantDashboardLayout({
 
   return (
     <PublicThemeWrapper>
-    <div className="min-h-[100svh] flex flex-col bg-background text-foreground">
+    <div className="min-h-[100svh] flex flex-col bg-background text-foreground overflow-x-hidden">
       {/* ─── Navbar ─── */}
-      <header className="fixed top-0 left-0 right-0 z-20 h-16 border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)]">
-        <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
+      <header className="fixed top-0 left-0 right-0 z-20 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)]">
+        <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
           {/* Left side – logo + mobile toggle */}
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -125,7 +125,7 @@ export default function TenantDashboardLayout({
           <div className="flex items-center gap-5 sm:gap-7">
             <button
               onClick={handleLogout}
-              className="group flex items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+              className="group flex shrink-0 items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
             >
               <LogOut size={16} className="transition-transform group-hover:rotate-6" />
               <span className="hidden sm:inline">Sign out</span>
