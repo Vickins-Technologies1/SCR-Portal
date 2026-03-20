@@ -7,6 +7,7 @@ import { FaEye, FaEyeSlash, FaGoogle, FaCheck, FaTimes, FaChevronDown } from "re
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { countries } from "countries-list";
+import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
 interface CountryData {
   name: string;
@@ -71,7 +72,7 @@ export default function SignUp() {
 
   const score = Object.values(criteria).filter(Boolean).length;
   const barColor =
-    score === 5 ? "bg-teal-500" : score >= 3 ? "bg-yellow-500" : "bg-red-500";
+    score === 5 ? "bg-primary" : score >= 3 ? "bg-foreground/30" : "bg-muted";
 
   useEffect(() => {
     fetch("/api/csrf-token", { credentials: "include" })
@@ -178,18 +179,84 @@ export default function SignUp() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
+    <PublicThemeWrapper>
+    <div className="min-h-[100svh] flex flex-col lg:flex-row bg-background text-foreground">
       {/* LEFT: Branding */}
       <div
         className="
           hidden lg:flex lg:w-1/2 
-          bg-gradient-to-br from-white via-slate-50/70 to-white 
-          text-gray-900 items-center justify-center 
+          bg-background 
+          text-foreground items-center justify-center 
           p-6 xl:p-12 relative overflow-hidden
-          shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
-          lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
+          shadow-[-20px_0_30px_-15px_rgba(30,58,138,0.08)] 
+          lg:shadow-[-30px_0_40px_-20px_rgba(30,58,138,0.10)]
         "
       >
+        {/* Floating bubbles */}
+        <div className="absolute inset-0 pointer-events-none">
+          <motion.div
+            className="absolute left-[10%] top-[10%] w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-blue-400/12 border border-blue-300/15 backdrop-blur-md"
+            animate={{
+              y: ["0%", "-35%", "15%", "-20%", "0%"],
+              x: ["0%", "12%", "-8%", "5%", "0%"],
+              scale: [1, 1.12, 0.95, 1.08, 1],
+              opacity: [0.7, 0.9, 0.6, 0.85, 0.7],
+            }}
+            transition={{ duration: 22, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+          />
+          <motion.div
+            className="absolute right-[15%] top-[30%] w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-emerald-400/15 border border-emerald-300/20 backdrop-blur-sm"
+            animate={{
+              y: ["0%", "30%", "-25%", "10%", "0%"],
+              x: ["0%", "-10%", "15%", "-5%", "0%"],
+              scale: [1, 1.18, 1, 1.1, 1],
+            }}
+            transition={{ duration: 19, repeat: Infinity, repeatType: "reverse", ease: "easeInOut", delay: 3 }}
+          />
+          <motion.div
+            className="absolute left-[35%] top-[55%] w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-teal-300/10"
+            animate={{
+              y: ["0%", "-45%", "0%", "-30%", "0%"],
+              x: ["0%", "8%", "-12%", "0%", "0%"],
+              scale: [1, 1.25, 0.9, 1.15, 1],
+            }}
+            transition={{ duration: 26, repeat: Infinity, repeatType: "reverse", delay: 1.5 }}
+          />
+          <motion.div
+            className="absolute right-[25%] bottom-[20%] w-14 h-14 rounded-full bg-blue-500/12 backdrop-blur-sm"
+            animate={{
+              y: ["0%", "40%", "-15%", "25%", "0%"],
+              scale: [1, 1.2, 1, 1.1, 1],
+            }}
+            transition={{ duration: 17, repeat: Infinity, repeatType: "reverse", delay: 6 }}
+          />
+          <motion.div
+            className="absolute left-[60%] bottom-[40%] w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-emerald-500/10"
+            animate={{
+              y: ["0%", "-50%", "10%", "-35%", "0%"],
+              x: ["0%", "-15%", "10%", "0%", "0%"],
+            }}
+            transition={{ duration: 21, repeat: Infinity, repeatType: "reverse", delay: 8 }}
+          />
+          <motion.div
+            className="absolute left-[20%] bottom-[60%] w-18 h-18 rounded-full bg-teal-400/8 border border-teal-200/10 backdrop-blur-lg"
+            animate={{
+              y: ["0%", "20%", "-40%", "5%", "0%"],
+              scale: [1, 1.15, 0.95, 1.05, 1],
+            }}
+            transition={{ duration: 24, repeat: Infinity, repeatType: "reverse", delay: 4.5 }}
+          />
+
+          {/* Smaller decorative bubbles */}
+          <motion.div className="absolute inset-0 opacity-40">
+            <div className="absolute top-[15%] left-[45%] w-6 h-6 rounded-full bg-blue-400/20" />
+            <div className="absolute top-[45%] right-[35%] w-5 h-5 rounded-full bg-emerald-400/25" />
+            <div className="absolute bottom-[25%] left-[70%] w-8 h-8 rounded-full bg-teal-300/15" />
+            <div className="absolute bottom-[50%] right-[50%] w-7 h-7 rounded-full bg-blue-300/18" />
+            <div className="absolute top-[70%] left-[25%] w-9 h-9 rounded-full bg-emerald-300/12" />
+          </motion.div>
+        </div>
+
         <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
             <Image
@@ -206,7 +273,7 @@ export default function SignUp() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.9 }}
-            className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 bg-clip-text text-transparent"
+            className="text-3xl sm:text-4xl xl:text-5xl font-extrabold tracking-tight text-gradient-primary"
           >
             Maximize Your Returns
           </motion.h2>
@@ -215,7 +282,7 @@ export default function SignUp() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.9 }}
-            className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+            className="text-sm sm:text-base xl:text-lg font-light text-muted-foreground leading-relaxed max-w-md mx-auto"
           >
             Smart tools for property owners • Track income & expenses • Optimize occupancy • Grow your portfolio with confidence.
           </motion.p>
@@ -224,7 +291,7 @@ export default function SignUp() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.55 }}
-            className="text-sm sm:text-base xl:text-lg font-medium text-teal-700 tracking-wide"
+            className="text-xs sm:text-sm xl:text-base font-medium text-primary tracking-wide"
           >
             Your properties. Smarter management. Better profits.
           </motion.p>
@@ -232,12 +299,12 @@ export default function SignUp() {
       </div>
 
       {/* RIGHT: Form */}
-      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
+      <div className="flex-1 flex items-center justify-center px-4 py-3 sm:py-6 md:py-8 bg-background/80">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: "easeOut" }}
-          className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
+          className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem]"
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
@@ -251,12 +318,12 @@ export default function SignUp() {
             />
           </div>
 
-          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
+          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-3 sm:pt-4 pb-4 sm:pb-5 space-y-2.5 sm:space-y-3">
             <div className="text-center space-y-1">
-              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-700 to-teal-600 bg-clip-text text-transparent">
+              <h1 className="text-lg xs:text-xl sm:text-2xl md:text-2.5xl font-extrabold text-gradient-primary">
                 Create Owner Account
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 font-medium">
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium">
                 Get started in minutes
               </p>
             </div>
@@ -279,7 +346,7 @@ export default function SignUp() {
               type="button"
               onClick={() => (window.location.href = "/api/auth/google")}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-medium py-3 xs:py-3.5 rounded-xl transition-all shadow-sm disabled:opacity-60 text-sm xs:text-base"
+              className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
             >
               <FaGoogle className="text-red-500 text-lg" />
               Continue with Google
@@ -287,10 +354,10 @@ export default function SignUp() {
 
             <div className="relative my-1 sm:my-2">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
+                <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-white/80 px-3 xs:px-4 text-slate-500 font-medium">or</span>
+                <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
               </div>
             </div>
 
@@ -301,7 +368,7 @@ export default function SignUp() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
               />
 
               {/* Phone with country dropdown */}
@@ -309,7 +376,7 @@ export default function SignUp() {
                 <button
                   type="button"
                   onClick={() => setOpen(!open)}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-slate-600 z-10 pointer-events-auto px-2"
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-muted-foreground z-10 pointer-events-auto px-2"
                 >
                   <span className="font-medium">{countryCode}</span>
                   <FaChevronDown className="text-xs" />
@@ -321,17 +388,17 @@ export default function SignUp() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
                   required
-                  className="w-full pl-24 pr-3.5 xs:pr-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                  className="w-full pl-24 pr-3.5 xs:pr-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
                 />
 
                 {open && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-2xl max-h-64 overflow-y-auto z-30 text-sm">
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl max-h-64 overflow-y-auto z-30 text-sm">
                     <input
                       type="text"
                       placeholder="Search country or code..."
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      className="w-full px-4 py-3 border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur-sm z-10 text-sm placeholder:text-slate-400"
+                      className="w-full px-4 py-3 border-b border-border sticky top-0 bg-card/90 backdrop-blur-sm z-10 text-sm placeholder:text-muted-foreground"
                     />
                     <div className="py-1">
                       {filtered.map((c) => (
@@ -343,11 +410,11 @@ export default function SignUp() {
                             setOpen(false);
                             setSearch("");
                           }}
-                          className="w-full px-4 py-2.5 text-left hover:bg-teal-50/40 transition-colors flex items-center gap-3"
+                          className="w-full px-4 py-2.5 text-left hover:bg-muted/70 transition-colors flex items-center gap-3"
                         >
                           <span className="text-xl">{c.flag}</span>
                           <span className="flex-1">{c.name}</span>
-                          <span className="text-slate-500">+{c.phone}</span>
+                          <span className="text-muted-foreground">+{c.phone}</span>
                         </button>
                       ))}
                     </div>
@@ -362,7 +429,7 @@ export default function SignUp() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
               />
 
               <div className="relative">
@@ -372,12 +439,12 @@ export default function SignUp() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                  className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-teal-600 transition-colors"
+                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
                 >
                   {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
                 </button>
@@ -390,7 +457,7 @@ export default function SignUp() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                  className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
                 />
               </div>
 
@@ -400,11 +467,11 @@ export default function SignUp() {
                   {[...Array(5)].map((_, i) => (
                     <div
                       key={i}
-                      className={`h-1.5 flex-1 rounded-full transition-all ${i < score ? barColor : "bg-slate-200/70"}`}
+                      className={`h-1.5 flex-1 rounded-full transition-all ${i < score ? barColor : "bg-muted/70"}`}
                     />
                   ))}
                 </div>
-                <div className="flex justify-between text-slate-600">
+                <div className="flex justify-between text-muted-foreground">
                   <span>{score === 5 ? "Strong" : score >= 3 ? "Medium" : "Weak"}</span>
                   <span>{score}/5</span>
                 </div>
@@ -418,11 +485,11 @@ export default function SignUp() {
                   ].map((c) => (
                     <div key={c.label} className="flex items-center gap-1.5">
                       {c.ok ? (
-                        <FaCheck className="text-teal-500" size={12} />
+                        <FaCheck className="text-primary" size={12} />
                       ) : (
-                        <FaTimes className="text-slate-400" size={12} />
+                        <FaTimes className="text-muted-foreground" size={12} />
                       )}
-                      <span className={c.ok ? "text-teal-700" : "text-slate-500"}>{c.label}</span>
+                      <span className={c.ok ? "text-primary" : "text-muted-foreground"}>{c.label}</span>
                     </div>
                   ))}
                 </div>
@@ -433,33 +500,33 @@ export default function SignUp() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isLoading || !csrfToken || score < 5}
-                className="w-full bg-gradient-to-r from-blue-600 to-teal-500 hover:from-blue-700 hover:to-teal-600 text-white font-semibold py-3 xs:py-3.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide mt-2"
+                className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide mt-2"
               >
                 {isLoading ? "Creating Account…" : "Create Account"}
               </motion.button>
             </form>
 
-            <p className="text-center text-xs sm:text-sm text-slate-600 pt-1">
+            <p className="text-center text-[10px] sm:text-[11px] text-muted-foreground pt-1">
               Already have an account?{" "}
-              <Link href="/" className="text-teal-600 font-semibold hover:text-teal-700 hover:underline">
+              <Link href="/" className="text-primary font-semibold hover:underline">
                 Sign in
               </Link>
             </p>
           </div>
 
           {/* Quick Demo section */}
-          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-100 bg-slate-50/70">
-            <p className="text-center text-xs text-slate-500 font-medium mb-2.5">Quick Demo Access</p>
+          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-border bg-muted/40">
+            <p className="text-center text-[10px] text-muted-foreground font-medium mb-2">Quick Demo Access</p>
             <div className="grid grid-cols-2 gap-3">
               <a
                 href="/?demo=owner"
-                className="block text-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-xl transition-all shadow-md text-sm"
+                className="block text-center bg-[linear-gradient(110deg,rgba(30,58,138,0.12),rgba(30,58,138,0.04))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 rounded-xl transition-all shadow-md text-xs xs:text-sm sm:text-base"
               >
                 Owner Demo
               </a>
               <a
                 href="/tenant-login?demo=tenant"
-                className="block text-center bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold py-3 rounded-xl transition-all shadow-md text-sm"
+                className="block text-center bg-[linear-gradient(110deg,rgba(30,58,138,0.12),rgba(30,58,138,0.04))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 rounded-xl transition-all shadow-md text-xs xs:text-sm sm:text-base"
               >
                 Tenant Demo
               </a>
@@ -468,5 +535,6 @@ export default function SignUp() {
         </motion.div>
       </div>
     </div>
+    </PublicThemeWrapper>
   );
 }

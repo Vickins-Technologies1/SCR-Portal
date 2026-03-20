@@ -8,6 +8,7 @@ import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } fr
 import Cookies from "js-cookie";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
 export default function TenantLoginPage() {
   const router = useRouter();
@@ -139,16 +140,17 @@ export default function TenantLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-blue-50/40">
+    <PublicThemeWrapper>
+    <div className="min-h-[100svh] flex flex-col lg:flex-row bg-background text-foreground">
       {/* LEFT: Branding – hidden on mobile – bright with floating bubbles */}
       <div
         className="
           hidden lg:flex lg:w-1/2 
-          bg-gradient-to-br from-white via-slate-50/70 to-white 
-          text-gray-900 items-center justify-center 
+          bg-background 
+          text-foreground items-center justify-center 
           p-6 xl:p-12 relative overflow-hidden
-          shadow-[-20px_0_30px_-15px_rgba(0,0,0,0.08)] 
-          lg:shadow-[-30px_0_40px_-20px_rgba(0,0,0,0.10)]
+          shadow-[-20px_0_30px_-15px_rgba(30,58,138,0.08)] 
+          lg:shadow-[-30px_0_40px_-20px_rgba(30,58,138,0.10)]
         "
       >
         {/* Floating bubbles to fill the section */}
@@ -232,7 +234,7 @@ export default function TenantLoginPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.9 }}
-            className="text-4xl sm:text-5xl xl:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-700 via-teal-600 to-blue-600 bg-clip-text text-transparent"
+            className="text-3xl sm:text-4xl xl:text-5xl font-extrabold tracking-tight text-gradient-primary"
           >
             Tenant Portal
           </motion.h2>
@@ -241,7 +243,7 @@ export default function TenantLoginPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.9 }}
-            className="text-base sm:text-lg xl:text-xl font-light text-gray-700 leading-relaxed max-w-md mx-auto"
+            className="text-sm sm:text-base xl:text-lg font-light text-muted-foreground leading-relaxed max-w-md mx-auto"
           >
             Pay rent • Report issues • View statements • Communicate securely
           </motion.p>
@@ -250,7 +252,7 @@ export default function TenantLoginPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.55 }}
-            className="text-sm sm:text-base xl:text-lg font-medium text-teal-700 tracking-wide"
+            className="text-xs sm:text-sm xl:text-base font-medium text-primary tracking-wide"
           >
             Simple. Secure. Always connected.
           </motion.p>
@@ -258,12 +260,12 @@ export default function TenantLoginPage() {
       </div>
 
       {/* RIGHT: Form – compact & consistent with owner */}
-      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 md:py-12 bg-gradient-to-b from-white/70 to-slate-50/50">
+      <div className="flex-1 flex items-center justify-center px-4 py-3 sm:py-6 md:py-8 bg-background/80">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: "easeOut" }}
-          className="w-full max-w-md sm:max-w-lg bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden"
+          className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem]"
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
@@ -277,13 +279,13 @@ export default function TenantLoginPage() {
             />
           </div>
 
-          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-4 sm:pt-5 pb-6 sm:pb-8 space-y-4 sm:space-y-5">
+          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-3 sm:pt-4 pb-4 sm:pb-5 space-y-2.5 sm:space-y-3">
 
             <div className="text-center space-y-1">
-              <h1 className="text-2xl xs:text-3xl sm:text-3.5xl md:text-4xl font-extrabold bg-gradient-to-r from-teal-700 to-blue-600 bg-clip-text text-transparent">
+              <h1 className="text-lg xs:text-xl sm:text-2xl md:text-2.5xl font-extrabold text-gradient-primary">
                 Tenant Portal
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 font-medium">
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium">
                 Secure access to your rental dashboard
               </p>
             </div>
@@ -291,23 +293,36 @@ export default function TenantLoginPage() {
             <div className="relative group">
               <Link
                 href="/"
-                className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-400 text-blue-800 font-semibold py-3 xs:py-3.5 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-sm xs:text-base"
+                className="flex items-center justify-center gap-2 w-full bg-[linear-gradient(110deg,rgba(66,199,117,0.18),rgba(30,58,138,0.08))] hover:bg-[linear-gradient(110deg,rgba(66,199,117,0.24),rgba(30,58,138,0.12))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 xs:py-3 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-xs xs:text-sm sm:text-base"
               >
-                <FaUserTie className="text-blue-600 text-lg" />
+                <FaUserTie className="text-primary text-lg" />
                 <span>I'm a Property Owner</span>
-                <FaArrowRight className="text-blue-600 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                <FaArrowRight className="text-primary opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </Link>
 
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                <div className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help">
-                  <FaInfoCircle className="text-blue-600/70 hover:text-blue-700 text-base xs:text-lg transition-colors" />
-                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10">
-                    <div className="bg-slate-800 text-white text-xs rounded-lg py-1.5 px-2.5 min-w-[160px] shadow-lg leading-snug">
+                <div
+                  tabIndex={0}
+                  className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help outline-none focus:ring-2 focus:ring-primary/50 rounded-full"
+                >
+                  <FaInfoCircle className="text-primary/70 hover:text-primary text-base xs:text-lg transition-colors" />
+                  <div
+                    className="
+                      absolute bottom-full right-0 mb-2 z-20 w-max max-w-[220px]
+                      opacity-0 translate-y-1 scale-95
+                      transition-all duration-200
+                      pointer-events-none
+                      group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100
+                      group-focus-within:opacity-100 group-focus-within:translate-y-0 group-focus-within:scale-100
+                      group-active:opacity-100 group-active:translate-y-0 group-active:scale-100
+                    "
+                  >
+                    <div className="bg-white text-foreground text-xs rounded-lg py-1.5 px-2.5 shadow-lg border border-border leading-snug">
                       For property owners & managers
                       <br />
-                      <span className="text-teal-300">Manage properties, tenants & finances</span>
+                      <span className="text-foreground/70">Manage properties, tenants & finances</span>
                     </div>
-                    <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-slate-800" />
+                    <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-white drop-shadow" />
                   </div>
                 </div>
               </div>
@@ -321,10 +336,10 @@ export default function TenantLoginPage() {
 
             <div className="relative my-1 sm:my-2">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
+                <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-white/80 px-3 xs:px-4 text-slate-500 font-medium">or</span>
+                <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
               </div>
             </div>
 
@@ -335,7 +350,7 @@ export default function TenantLoginPage() {
               type="button"
               onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
               disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-medium py-3 xs:py-3.5 rounded-xl transition-all shadow-sm disabled:opacity-60 text-sm xs:text-base"
+              className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
             >
               <FaGoogle className="text-red-500 text-lg" />
               Continue with Google
@@ -344,15 +359,15 @@ export default function TenantLoginPage() {
             <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
               {/* Property Selection */}
               <div>
-                <label htmlFor="property" className="block text-sm font-medium text-slate-700 mb-1.5">
+                <label htmlFor="property" className="block text-[11px] font-medium text-foreground mb-1.5">
                   Your Property
                 </label>
                 {loadingProperties ? (
-                  <div className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl text-slate-500 text-sm">
+                  <div className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl text-muted-foreground text-sm">
                     Loading properties...
                   </div>
                 ) : properties.length === 0 ? (
-                  <div className="w-full px-3.5 xs:px-4 py-3 bg-yellow-50/70 border border-yellow-200 rounded-xl text-yellow-800 text-sm">
+                  <div className="w-full px-3.5 xs:px-4 py-2.5 bg-muted/70 border border-border rounded-xl text-muted-foreground text-sm">
                     No properties available. Contact support.
                   </div>
                 ) : (
@@ -362,7 +377,7 @@ export default function TenantLoginPage() {
                     onChange={(e) => setPropertyId(e.target.value)}
                     required
                     disabled={isSubmitting || loadingProperties}
-                    className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all disabled:opacity-60 text-sm xs:text-base shadow-inner"
+                    className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 text-xs xs:text-sm sm:text-base shadow-inner"
                   >
                     <option value="">Select your property</option>
                     {properties.map((prop) => (
@@ -384,7 +399,7 @@ export default function TenantLoginPage() {
                 required
                 autoComplete="email"
                 disabled={isSubmitting}
-                className="w-full px-3.5 xs:px-4 py-3 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
               />
 
               {/* Password */}
@@ -397,13 +412,13 @@ export default function TenantLoginPage() {
                   required
                   autoComplete="current-password"
                   disabled={isSubmitting}
-                  className="w-full px-3.5 xs:px-4 py-3 pr-9 xs:pr-10 bg-white/70 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200/40 transition-all placeholder:text-slate-400 text-sm xs:text-base shadow-inner"
+                  className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   disabled={isSubmitting}
-                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-teal-600 transition-colors"
+                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
                 >
                   {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
                 </button>
@@ -414,7 +429,7 @@ export default function TenantLoginPage() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isSubmitting || loadingProperties || !propertyId}
-                className="w-full bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white font-semibold py-3 xs:py-3.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-sm xs:text-base tracking-wide"
+                className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
               >
                 {isSubmitting ? "Authenticating..." : "Sign In"}
               </motion.button>
@@ -423,5 +438,6 @@ export default function TenantLoginPage() {
         </motion.div>
       </div>
     </div>
+    </PublicThemeWrapper>
   );
 }
