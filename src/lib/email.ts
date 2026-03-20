@@ -65,6 +65,12 @@ interface ResetEmailOptions {
   houseNumber?: string;
 }
 
+interface OwnerResetEmailOptions {
+  to: string;
+  name: string;
+  resetLink: string;
+}
+
 // Reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -325,6 +331,51 @@ export async function sendConfirmationEmail({
   } catch (error) {
     console.error(`Error sending confirmation email to ${to}:`, error);
     throw new Error("Failed to send confirmation email");
+  }
+}
+
+export async function sendOwnerPasswordResetEmail({
+  to,
+  name,
+  resetLink,
+}: OwnerResetEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const html = generateStyledTemplate({
+      name,
+      title: "Owner Portal Password Reset",
+      intro: "A secure link has been generated to reset your owner portal password.",
+      details: `
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+          Click the button below to reset your password:
+        </p>
+        <p style="text-align: center; margin: 32px 0;">
+          <a href="${resetLink}" class="button" style="padding: 14px 32px; font-size: 16px;">
+            Reset Owner Password
+          </a>
+        </p>
+        <p style="font-size: 14px; color: #dc2626; margin-top: 16px;">
+          This link will expire in 1 hour for your security.
+        </p>
+        <p style="font-size: 14px; margin-top: 16px;">
+          If you did not request this, please ignore this email or contact support immediately.
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Reset Your Owner Portal Password",
+      html,
+    });
+    console.log(`Owner password reset email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending owner password reset email to ${to}:`, error);
+    throw new Error("Failed to send owner password reset email");
   }
 }
 

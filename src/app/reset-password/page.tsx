@@ -14,6 +14,8 @@ function ResetPasswordContent() {
 
   const token = searchParams.get("token");
   const email = searchParams.get("email");
+  const role = (searchParams.get("role") || "tenant").toLowerCase();
+  const isOwner = role === "owner";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -46,7 +48,7 @@ function ResetPasswordContent() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/tenant/reset-password", {
+      const res = await fetch(isOwner ? "/api/owner/reset-password" : "/api/tenant/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, email, newPassword: password }),
@@ -59,7 +61,11 @@ function ResetPasswordContent() {
       }
 
       setSuccess(true);
-      setMessage("Your password has been successfully reset. You can now log in.");
+      setMessage(
+        `Your password has been successfully reset. You can now log in to the ${
+          isOwner ? "owner" : "tenant"
+        } portal.`
+      );
     } catch (err: any) {
       setError(err.message || "Something went wrong. The link may have expired or is invalid.");
     } finally {
@@ -89,7 +95,7 @@ function ResetPasswordContent() {
             <p className="text-gray-600 text-sm sm:text-base mb-8 px-2">{message}</p>
 
             <Link
-              href="/tenant-login"
+              href={isOwner ? "/" : "/tenant-login"}
               className="inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-2xl shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-teal-700 transition-all transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 text-sm sm:text-base"
             >
               Go to Login
@@ -123,6 +129,7 @@ function ResetPasswordContent() {
           </h2>
           <p className="text-center text-gray-600 text-sm sm:text-base mb-6 sm:mb-10 px-2">
             {email ? `for ${email}` : "Secure your account"}
+            {isOwner ? " • Owner Portal" : " • Tenant Portal"}
           </p>
 
           {error && (
@@ -195,7 +202,7 @@ function ResetPasswordContent() {
 
           <div className="mt-6 sm:mt-8 text-center">
             <Link
-              href="/tenant-login"
+              href={isOwner ? "/" : "/tenant-login"}
               className="inline-flex items-center text-sm sm:text-base text-emerald-600 hover:text-emerald-800 transition-colors"
             >
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />

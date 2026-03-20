@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle, FaTimes } from "react-icons/fa";
 import Cookies from "js-cookie";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
@@ -15,6 +15,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -78,6 +84,71 @@ export default function LoginPage() {
       setError(err.message || "Authentication failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchCsrfToken = async () => {
+    try {
+      const res = await fetch("/api/csrf-token", { credentials: "include" });
+      const data = await res.json();
+      if (res.ok && data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+        return data.csrfToken as string;
+      }
+    } catch (err) {
+      console.error("Failed to fetch CSRF token:", err);
+    }
+    return null;
+  };
+
+  const openResetModal = async () => {
+    setResetEmail((prev) => prev || email);
+    setResetError(null);
+    setResetMessage(null);
+    setShowResetModal(true);
+    if (!csrfToken) {
+      await fetchCsrfToken();
+    }
+  };
+
+  const handleResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    setResetMessage(null);
+    setResetLoading(true);
+
+    try {
+      let token = csrfToken;
+      if (!token) {
+        token = await fetchCsrfToken();
+      }
+
+      if (!token) {
+        throw new Error("Unable to start reset. Please try again.");
+      }
+
+      const res = await fetch("/api/owner/reset-password-request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": token,
+        },
+        credentials: "include",
+        body: JSON.stringify({ email: resetEmail }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to send reset link");
+      }
+
+      setResetMessage(
+        data.message || "If this email is registered, a reset link has been sent."
+      );
+    } catch (err: any) {
+      setResetError(err.message || "Failed to send reset link. Please try again.");
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -332,6 +403,16 @@ export default function LoginPage() {
                 </button>
               </div>
 
+              <div className="flex items-center justify-end text-xs sm:text-sm">
+                <button
+                  type="button"
+                  onClick={openResetModal}
+                  className="text-primary font-semibold hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -364,6 +445,73 @@ export default function LoginPage() {
         </motion.div>
       </div>
     </div>
+
+    <AnimatePresence>
+      {showResetModal && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+            className="w-full max-w-[92vw] sm:max-w-md bg-white border border-border rounded-2xl shadow-2xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-border">
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-foreground">Reset Owner Password</h2>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
+                  We’ll email you a secure reset link.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Close reset modal"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <form onSubmit={handleResetRequest} className="p-4 sm:p-5 space-y-3 sm:space-y-4">
+              {resetError && (
+                <div className="p-2.5 sm:p-3 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl">
+                  {resetError}
+                </div>
+              )}
+              {resetMessage && (
+                <div className="p-2.5 sm:p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs sm:text-sm rounded-xl">
+                  {resetMessage}
+                </div>
+              )}
+
+              <input
+                type="email"
+                placeholder="Owner email address"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+                autoComplete="email"
+                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+              />
+
+              <button
+                type="submit"
+                disabled={resetLoading}
+                className="w-full bg-[linear-gradient(110deg,#1e3a8a,#2c5bd6)] hover:bg-[linear-gradient(110deg,#2c5bd6,#1e3a8a)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+              >
+                {resetLoading ? "Sending..." : "Send Reset Link"}
+              </button>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     </PublicThemeWrapper>
   );
 }

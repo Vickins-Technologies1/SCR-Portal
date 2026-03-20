@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
 
     await db.collection("passwordResets").insertOne({
       tenantId: tenant._id,
+      role: "tenant",
       email: tenant.email,
       token: resetToken,
       expiresAt,

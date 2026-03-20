@@ -1,7 +1,8 @@
-// src/app/api/tenant/reset-password/route.ts
+// src/app/api/owner/reset-password/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import bcrypt from "bcryptjs";
+import { ObjectId } from "mongodb";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,55 +16,42 @@ export async function POST(req: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
-
-    // ── Important: use Date object for comparison ────────────────────────
     const now = new Date();
 
     const resetDoc = await db.collection("passwordResets").findOne({
       token,
       email,
-      expiresAt: { $gt: now },     // ← real Date vs real Date
+      expiresAt: { $gt: now },
       used: false,
-      $or: [{ role: "tenant" }, { tenantId: { $exists: true } }],
+      $or: [{ role: "owner" }, { ownerId: { $exists: true } }],
     });
 
     if (!resetDoc) {
-      // Optional: help yourself debug in development
-      if (process.env.NODE_ENV !== "production") {
-        const existing = await db.collection("passwordResets").findOne({ token, email });
-        if (existing) {
-          console.log("Found token, but:", {
-            used: existing.used,
-            expiresAt: existing.expiresAt,
-            now,
-            stillValidForMs: existing.expiresAt ? existing.expiresAt.getTime() - now.getTime() : -1,
-          });
-        }
-      }
-
       return NextResponse.json(
         { success: false, message: "Invalid or expired reset link" },
         { status: 400 }
       );
     }
 
+    const ownerId =
+      resetDoc.ownerId instanceof ObjectId ? resetDoc.ownerId : new ObjectId(resetDoc.ownerId);
+
     const hashed = await bcrypt.hash(newPassword, 10);
 
     await Promise.all([
-      db.collection("tenants").updateOne(
-        { _id: resetDoc.tenantId },
-        { $set: { password: hashed, updatedAt: now } }
+      db.collection("propertyOwners").updateOne(
+        { _id: ownerId },
+        { $set: { password: hashed, updatedAt: new Date().toISOString() } }
       ),
       db.collection("passwordResets").updateOne(
         { _id: resetDoc._id },
-        { $set: { used: true, usedAt: now } } // ← nice to have
+        { $set: { used: true, usedAt: now } }
       ),
     ]);
 
     return NextResponse.json({ success: true, message: "Password reset successful" });
-
   } catch (err: any) {
-    console.error("Password reset error:", err);
+    console.error("Owner password reset error:", err);
     return NextResponse.json(
       { success: false, message: "Something went wrong" },
       { status: 500 }

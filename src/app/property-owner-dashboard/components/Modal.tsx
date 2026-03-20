@@ -33,11 +33,11 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in px-2 sm:px-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in px-3 sm:px-4 overflow-y-auto"
       onClick={disableClose ? undefined : onClose}
     >
       <div
-        className={`bg-white rounded-3xl border border-border p-4 sm:p-6 w-full lg:w-auto min-w-[92vw] lg:min-w-[48vw] max-w-[96vw] lg:max-w-5xl mx-auto transform transition-all duration-300 max-h-[90vh] overflow-y-auto text-foreground shadow-2xl ${className}`}
+        className={`bg-white rounded-2xl sm:rounded-3xl border border-border p-4 sm:p-6 w-full max-w-[94vw] sm:max-w-lg lg:max-w-5xl mx-auto transform transition-all duration-300 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto text-foreground shadow-2xl ${className}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="modal-title"
