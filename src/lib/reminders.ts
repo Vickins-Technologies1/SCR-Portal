@@ -55,6 +55,12 @@ const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
+const toDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const getDueDateForMonth = (year: number, month: number, paymentDay: number) => {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -95,28 +101,21 @@ const buildReminderMessages = (
   totalDue: number
 ) => {
   const shortTotal = totalDue.toFixed(2);
-  const smsMessage =
-    reminderType === "fiveDaysBefore"
-      ? `Reminder: Ksh ${shortTotal} due by ${formattedDueDate} for ${propertyName} (${houseNumber}).`
-      : `Payment due today: Ksh ${shortTotal} for ${propertyName} (${houseNumber}).`;
+  const whenText = reminderType === "fiveDaysBefore" ? `by ${formattedDueDate}` : "today";
+  const smsMessage = `Payment reminder: Ksh ${shortTotal} due ${whenText} for ${propertyName} (${houseNumber}).`;
 
   const whatsappMessage =
-    `Hello ${tenantName},\n\n` +
-    (reminderType === "fiveDaysBefore"
-      ? `Your payment for ${propertyName} is due on ${formattedDueDate}.`
-      : `Your payment for ${propertyName} is due today.`) +
-    `\n\nBreakdown:\n` +
+    `Dear ${tenantName},\n\n` +
+    `This is an official payment reminder for ${propertyName}, Unit ${houseNumber}.\n` +
+    `Amount due ${whenText}: Ksh ${shortTotal}\n\n` +
+    `Breakdown:\n` +
     `Rent: Ksh ${rentDue.toFixed(2)}\n` +
     `Utilities: Ksh ${utilityDue.toFixed(2)}\n` +
     `Deposit: Ksh ${depositDue.toFixed(2)}\n` +
-    `Total Due: Ksh ${totalDue.toFixed(2)}\n` +
-    `Unit: ${houseNumber}\n\n` +
-    `Please make payment on time. Thank you.`;
+    `Total: Ksh ${totalDue.toFixed(2)}\n\n` +
+    `Kindly settle your payment via the tenant portal. If you have already paid, please ignore this notice.`;
 
-  const appMessage =
-    reminderType === "fiveDaysBefore"
-      ? `Payment reminder: Ksh ${shortTotal} due by ${formattedDueDate} for ${propertyName} (${houseNumber}).`
-      : `Payment due today: Ksh ${shortTotal} for ${propertyName} (${houseNumber}).`;
+  const appMessage = `Payment notice: Ksh ${shortTotal} due ${whenText} for ${propertyName} (${houseNumber}).`;
 
   return { smsMessage, whatsappMessage, appMessage };
 };
@@ -127,7 +126,12 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
 
   const { db } = await connectToDatabase();
 
-  const propertyFilter = ownerId ? { ownerId } : {};
+  const ownerFilter = ownerId
+    ? ObjectId.isValid(ownerId)
+      ? { $in: [ownerId, new ObjectId(ownerId)] }
+      : ownerId
+    : undefined;
+  const propertyFilter = ownerId ? { ownerId: ownerFilter } : {};
   const properties = await db.collection<Property>("properties").find(propertyFilter).toArray();
 
   if (properties.length === 0) {
@@ -142,7 +146,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
   }
 
   const tenantFilter: Record<string, unknown> = ownerId
-    ? { ownerId, status: "active" }
+    ? { ownerId: ownerFilter, status: "active" }
     : { ownerId: { $in: Array.from(ownerIds) }, status: "active" };
 
   const tenants = await db.collection<Tenant>("tenants").find(tenantFilter).toArray();
@@ -173,9 +177,20 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
   for (const tenant of tenants) {
     const tenantId = tenant._id.toString();
     const property = propertyMap.get(tenant.propertyId);
-    if (!property || !property.rentPaymentDate) continue;
+    if (!property) continue;
 
-    const dueDate = getNextDueDate(todayStart, property.rentPaymentDate);
+    const leaseStart = parseDate(tenant.leaseStartDate);
+    const leaseEnd = parseDate(tenant.leaseEndDate);
+    if (leaseStart && todayStart < startOfDay(leaseStart)) continue;
+    if (leaseEnd && todayStart > endOfDay(leaseEnd)) continue;
+
+    const paymentDay = property.rentPaymentDate ?? leaseStart?.getDate();
+    if (!paymentDay) continue;
+
+    let dueDate = getNextDueDate(todayStart, paymentDay);
+    if (leaseStart && dueDate < startOfDay(leaseStart)) {
+      dueDate = getNextDueDate(startOfDay(leaseStart), paymentDay);
+    }
     const reminderDate = addDays(dueDate, -5);
 
     const reminderType: ReminderType | null =
@@ -185,7 +200,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
 
     if (!reminderType) continue;
 
-    const dueDateKey = dueDate.toISOString().slice(0, 10);
+    const dueDateKey = toDateKey(dueDate);
 
     const existingReminder = await db.collection<ReminderNotification>("notifications").findOne({
       ownerId: String(property.ownerId),

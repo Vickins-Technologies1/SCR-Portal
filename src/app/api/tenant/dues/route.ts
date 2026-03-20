@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Tenants fetched for ownerstats", { userId, tenantIds, totalTenants, occupiedUnits });
 
-    // Current month rent
+    // Current month revenue (all completed payments)
     const currentMonthRentResult = await db
       .collection("payments")
       .aggregate<{
@@ -158,7 +158,6 @@ export async function GET(request: NextRequest) {
           $match: {
             propertyId: { $in: propertyIds },
             status: "completed",
-            type: "Rent",
             paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
           },
         },
@@ -177,7 +176,6 @@ export async function GET(request: NextRequest) {
       .find({
         propertyId: { $in: propertyIds },
         status: "completed",
-        type: "Rent",
         paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
       })
       .toArray();

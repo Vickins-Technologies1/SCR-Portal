@@ -259,6 +259,42 @@ body {
       padding: 0.55rem 0.65rem;
     }
   }
+
+  /* Owner portal mobile refinement */
+  .owner-portal .table-shell table {
+    min-width: 600px;
+  }
+  .owner-portal .table-shell.table-compact table {
+    min-width: 720px;
+  }
+  @media (max-width: 640px) {
+    .owner-portal .glass-panel {
+      padding: 1rem;
+      border-radius: 1.25rem;
+    }
+    .owner-portal .surface-card {
+      padding: 0.9rem;
+      border-radius: 1.1rem;
+    }
+    .owner-portal .table-shell {
+      border-radius: 1.25rem;
+    }
+    .owner-portal .table-shell table {
+      min-width: 520px;
+      font-size: 0.72rem;
+    }
+    .owner-portal .table-shell.table-compact table {
+      min-width: 640px;
+    }
+    .owner-portal .table-shell thead {
+      letter-spacing: 0.2em;
+      font-size: 0.58rem;
+    }
+    .owner-portal .table-shell th,
+    .owner-portal .table-shell td {
+      padding: 0.55rem 0.7rem;
+    }
+  }
 }
 
 @keyframes fadeIn {

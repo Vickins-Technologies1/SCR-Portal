@@ -197,12 +197,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           logger.info("Skipping up-to-date tenant", { tenantId: tenant._id.toString() });
           continue;
         }
-        finalMessage = `Dear ${tenant.name}, overdue: Rent Ksh ${dues.rentDues.toFixed(2)}, Deposit Ksh ${dues.depositDues.toFixed(2)}, Utility Ksh ${dues.utilityDues.toFixed(2)}. Total: Ksh ${dues.totalRemainingDues.toFixed(2)}. Pay now!`;
+        finalMessage =
+          `Payment Notice for ${tenant.name}:\n` +
+          `Outstanding balance as of ${today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.\n` +
+          `Rent: Ksh ${dues.rentDues.toFixed(2)}, Deposit: Ksh ${dues.depositDues.toFixed(2)}, Utility: Ksh ${dues.utilityDues.toFixed(2)}.\n` +
+          `Total Due: Ksh ${dues.totalRemainingDues.toFixed(2)}.\n` +
+          `Please settle by your scheduled payment date via the tenant portal. If you have already paid, kindly disregard this notice.`;
       } else {
         const templates: Record<string, string> = {
-          maintenance: `Dear ${tenant.name}, scheduled maintenance soon. Please allow access.`,
-          tenant: `Dear ${tenant.name}, tenancy update: review your agreement.`,
-          other: `Dear ${tenant.name}, important notice from Smart Choice.`,
+          maintenance: `Maintenance Notice: Dear ${tenant.name}, scheduled maintenance is upcoming. Please allow access during the advised window.`,
+          tenant: `Tenancy Update: Dear ${tenant.name}, please review the latest tenancy update in your portal.`,
+          other: `Official Notice: Dear ${tenant.name}, this is an important message from Sorana Property Managers.`,
         };
         finalMessage = message || templates[type] || finalMessage;
       }
@@ -226,12 +231,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // === SEND EMAIL ===
       if (["email", "both"].includes(effectiveMethod) && tenant.email) {
         try {
-          const title = type === "payment" ? "Payment Due" : "Property Notice";
+          const title =
+            type === "payment" ? "Payment Notice" :
+            type === "maintenance" ? "Maintenance Notice" :
+            type === "tenant" ? "Tenancy Update" :
+            "Official Notice";
+          const intro =
+            type === "payment"
+              ? "This is an official payment notice from Sorana Property Managers."
+              : "This is an official notice from Sorana Property Managers.";
           const html = generateStyledTemplate({
             name: tenant.name,
             title,
-            intro: `Hello ${tenant.name},`,
-            details: `<p>${finalMessage}</p>${dues ? `<ul><li>Rent: Ksh ${dues.rentDues}</li><li>Total Due: Ksh ${dues.totalRemainingDues}</li></ul>` : ""}`,
+            intro,
+            details: `
+              <p>${finalMessage.replace(/\n/g, "<br />")}</p>
+              ${
+                dues
+                  ? `<ul>
+                      <li><strong>Rent:</strong> Ksh ${dues.rentDues.toFixed(2)}</li>
+                      <li><strong>Deposit:</strong> Ksh ${dues.depositDues.toFixed(2)}</li>
+                      <li><strong>Utility:</strong> Ksh ${dues.utilityDues.toFixed(2)}</li>
+                      <li><strong>Total Due:</strong> Ksh ${dues.totalRemainingDues.toFixed(2)}</li>
+                    </ul>`
+                  : ""
+              }
+            `,
           });
 
           await transporter.sendMail({

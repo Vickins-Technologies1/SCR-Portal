@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
     const startOfMonthISO = startOfMonth.toISOString();
     const endOfMonthISO = endOfMonth.toISOString();
 
-    // Current month rent (unchanged)
+    // Current month revenue (all completed payments)
     const currentMonthRentResult = await db
       .collection("payments")
       .aggregate([
@@ -181,7 +181,6 @@ export async function GET(request: NextRequest) {
           $match: {
             propertyId: { $in: propertyIds },
             status: "completed",
-            type: "Rent",
             $or: [
               { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
               { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },

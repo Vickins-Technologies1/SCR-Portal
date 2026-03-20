@@ -37,6 +37,7 @@ import {
 import { Property } from "../../types/property";
 import { OwnerStats } from "../../types/stats";
 import { usePermissions } from "@/hooks/usePermissions"; // ← import your permissions hook
+import PaymentModal from "./components/PaymentModal";
 
 ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
@@ -55,6 +56,10 @@ export default function PropertyOwnerDashboard() {
   const loggedInUserId = Cookies.get("userId") ?? null;
   const role = Cookies.get("role") ?? null;
   const ownerIdFromCookie = Cookies.get("ownerId") ?? null;
+  const effectiveOwnerId =
+    role === "propertyOwner"
+      ? loggedInUserId
+      : ownerIdFromCookie || loggedInUserId;
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,6 +67,9 @@ export default function PropertyOwnerDashboard() {
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [hasDashboardAccess, setHasDashboardAccess] = useState<boolean | null>(null); // ← new: permission check
+  const [isInvoicePaymentOpen, setIsInvoicePaymentOpen] = useState(false);
+  const [invoicePaymentPropertyId, setInvoicePaymentPropertyId] = useState<string>("");
+  const [invoicePaymentPhone, setInvoicePaymentPhone] = useState<string>("");
 
   const [stats, setStats] = useState<OwnerStats>({
     activeProperties: 0,
@@ -144,27 +152,22 @@ export default function PropertyOwnerDashboard() {
     fetchCsrfAndData();
   }, [loggedInUserId, role, ownerIdFromCookie, router, perm]);
 
-  useEffect(() => {
+  const fetchDueStatus = useCallback(async () => {
     if (!loggedInUserId || !["propertyOwner", "teamMember"].includes(role ?? "")) return;
-    let cancelled = false;
-
-    const fetchDueStatus = async () => {
-      try {
-        const res = await fetch("/api/owner-dues", { credentials: "include" });
-        const data = await res.json();
-        if (!cancelled && data.success) {
-          setDueStatus(data);
-        }
-      } catch {
-        // ignore
+    try {
+      const res = await fetch("/api/owner-dues", { credentials: "include" });
+      const data = await res.json();
+      if (data.success) {
+        setDueStatus(data);
       }
-    };
-
-    fetchDueStatus();
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      // ignore
+    }
   }, [loggedInUserId, role]);
+
+  useEffect(() => {
+    fetchDueStatus();
+  }, [fetchDueStatus]);
 
   // ─── DATA FETCHING ──────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -278,6 +281,11 @@ export default function PropertyOwnerDashboard() {
         tension: 0.4,
       },
     ],
+  };
+
+  const handleOpenInvoicePayment = (propertyId?: string) => {
+    setInvoicePaymentPropertyId(propertyId || "");
+    setIsInvoicePaymentOpen(true);
   };
 
   const statColorStyles = {
@@ -401,12 +409,22 @@ export default function PropertyOwnerDashboard() {
                         </p>
                       </div>
                     </div>
-                    <Link
-                      href="/property-owner-dashboard/reports?tab=invoices"
-                      className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
-                    >
-                      View Invoices
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {role === "propertyOwner" && (
+                        <button
+                          onClick={() => handleOpenInvoicePayment(dueStatus?.dueProperties?.[0]?.propertyId)}
+                          className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-primary-hover"
+                        >
+                          Pay Now
+                        </button>
+                      )}
+                      <Link
+                        href="/property-owner-dashboard/reports?tab=invoices"
+                        className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+                      >
+                        View Invoices
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
@@ -444,7 +462,7 @@ export default function PropertyOwnerDashboard() {
                           value: formatCurrency(stats.totalMonthlyRent),
                           icon: DollarSign,
                           color: "emerald",
-                          explanation: "Total received rent income from all active tenants for the current month.",
+                          explanation: "Total rent collected in the current month (completed rent payments only).",
                         },
                         {
                           title: "Total Rent Paid",
@@ -715,6 +733,20 @@ export default function PropertyOwnerDashboard() {
           )}
         </main>
       </div>
+      <PaymentModal
+        isOpen={isInvoicePaymentOpen}
+        onClose={() => setIsInvoicePaymentOpen(false)}
+        onSuccess={() => {
+          setIsInvoicePaymentOpen(false);
+          fetchDueStatus();
+          fetchData();
+        }}
+        onError={(message) => setError(message)}
+        properties={properties}
+        initialPropertyId={invoicePaymentPropertyId}
+        initialPhone={invoicePaymentPhone}
+        userId={effectiveOwnerId}
+      />
     </div>
   );
 }

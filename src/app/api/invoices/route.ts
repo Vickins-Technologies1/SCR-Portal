@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
     // Read cookies from client request
     const userId = request.cookies.get("userId")?.value;
     const role = request.cookies.get("role")?.value;
+    const ownerIdCookie = request.cookies.get("ownerId")?.value;
 
     console.log("Cookies from request:", { userId, role });
 
@@ -42,13 +43,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Allow both propertyOwner and admin roles
-    if (!["propertyOwner", "admin"].includes(role || "")) {
+    // Allow propertyOwner, teamMember, and admin roles
+    if (!["propertyOwner", "teamMember", "admin"].includes(role || "")) {
       console.log("Unauthorized role:", role);
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized: Only property owners or admins can access invoices",
+          message: "Unauthorized: Only property owners, team members, or admins can access invoices",
         },
         { status: 401 }
       );
@@ -56,9 +57,54 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get("propertyId");
+    const requestedOwnerId = searchParams.get("userId") || searchParams.get("ownerId");
 
     const { db } = await connectToDatabase();
     console.log("Connected to MongoDB");
+
+    let effectiveOwnerId: string | null = null;
+
+    if (role === "propertyOwner") {
+      if (requestedOwnerId && requestedOwnerId !== userId) {
+        return NextResponse.json(
+          { success: false, message: "Unauthorized: Cannot access another owner's invoices" },
+          { status: 403 }
+        );
+      }
+      effectiveOwnerId = userId;
+    } else if (role === "teamMember") {
+      const ownerIdToUse = requestedOwnerId || ownerIdCookie;
+      if (!ownerIdToUse || !ObjectId.isValid(ownerIdToUse)) {
+        return NextResponse.json(
+          { success: false, message: "Valid owner ID is required" },
+          { status: 400 }
+        );
+      }
+
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(userId),
+        ownerId: new ObjectId(ownerIdToUse),
+        active: true,
+      });
+
+      if (!teamMember) {
+        return NextResponse.json(
+          { success: false, message: "Unauthorized: Team member not assigned to this owner" },
+          { status: 403 }
+        );
+      }
+
+      effectiveOwnerId = ownerIdToUse;
+    } else if (role === "admin") {
+      if (requestedOwnerId && !ObjectId.isValid(requestedOwnerId)) {
+        return NextResponse.json(
+          { success: false, message: "Invalid owner ID" },
+          { status: 400 }
+        );
+      }
+      effectiveOwnerId = requestedOwnerId || null;
+    }
+
     if (propertyId) {
       // Validate propertyId
       if (!ObjectId.isValid(propertyId)) {
@@ -69,9 +115,10 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      const baseQuery = effectiveOwnerId ? { userId: effectiveOwnerId } : {};
       const pendingInvoices = await db
         .collection<Invoice>("invoices")
-        .find({ userId, propertyId, status: "pending" })
+        .find({ ...baseQuery, propertyId, status: "pending" })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -79,7 +126,7 @@ export async function GET(request: NextRequest) {
         ? pendingInvoices
         : await db
           .collection<Invoice>("invoices")
-          .find({ userId, propertyId })
+          .find({ ...baseQuery, propertyId })
           .sort({ createdAt: -1 })
           .toArray();
 
@@ -129,8 +176,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // For admins, fetch all invoices; for property owners, fetch only their invoices
-    const query = role === "admin" ? {} : { userId };
+    // For admins, fetch all invoices (or filter by owner if provided); otherwise fetch owner's invoices
+    const query = role === "admin"
+      ? (effectiveOwnerId ? { userId: effectiveOwnerId } : {})
+      : { userId: effectiveOwnerId };
     const invoices = await db
       .collection<Invoice>("invoices")
       .find(query).toArray();
@@ -218,12 +267,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!["propertyOwner", "admin"].includes(role || "")) {
+    if (!["propertyOwner", "teamMember", "admin"].includes(role || "")) {
       console.log("Unauthorized role:", role);
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized: Only property owners or admins can create or update invoices",
+          message: "Unauthorized: Only property owners, team members, or admins can create or update invoices",
         },
         { status: 401 }
       );
@@ -232,10 +281,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { userId: bodyUserId, propertyId, amount, status, reference, description } = body;
 
-    if (!bodyUserId || !ObjectId.isValid(bodyUserId) || bodyUserId !== userId) {
-      console.log("Invalid or mismatched userId in body:", { bodyUserId, userId });
+    if (!bodyUserId || !ObjectId.isValid(bodyUserId)) {
+      console.log("Invalid or missing userId in body:", { bodyUserId, userId });
       return NextResponse.json(
-        { success: false, message: "Valid and matching user ID is required" },
+        { success: false, message: "Valid user ID is required" },
         { status: 400 }
       );
     }
@@ -283,14 +332,41 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
     console.log("Connected to MongoDB");
 
+    let effectiveOwnerId = bodyUserId;
+
+    if (role === "propertyOwner") {
+      if (bodyUserId !== userId) {
+        console.log("Mismatched owner ID for propertyOwner:", { bodyUserId, userId });
+        return NextResponse.json(
+          { success: false, message: "Owner ID does not match the logged-in user" },
+          { status: 403 }
+        );
+      }
+      effectiveOwnerId = userId;
+    } else if (role === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(userId),
+        ownerId: new ObjectId(bodyUserId),
+        active: true,
+      });
+
+      if (!teamMember) {
+        return NextResponse.json(
+          { success: false, message: "Unauthorized: Team member not assigned to this owner" },
+          { status: 403 }
+        );
+      }
+      effectiveOwnerId = bodyUserId;
+    }
+
     const existingInvoice = await db.collection<Invoice>("invoices").findOne({
-      userId,
+      userId: effectiveOwnerId,
       propertyId,
       reference,
     });
 
     if (!existingInvoice) {
-      console.log("Invoice not found for update:", { userId, propertyId, reference });
+      console.log("Invoice not found for update:", { userId: effectiveOwnerId, propertyId, reference });
       return NextResponse.json(
         { success: false, message: "Invoice not found" },
         { status: 404 }
@@ -338,7 +414,7 @@ export async function POST(request: NextRequest) {
         message: "Invoice updated successfully",
         invoice: {
           _id: existingInvoice._id.toString(),
-          userId,
+          userId: effectiveOwnerId,
           propertyId,
           amount,
           status,

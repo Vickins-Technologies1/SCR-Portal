@@ -225,21 +225,21 @@ export async function sendReminderEmail({
       throw new Error("SMTP credentials are missing");
     }
 
-    const title = reminderType === "fiveDaysBefore" ? "Upcoming Payment Reminder" : "Payment Due Today";
+    const title = reminderType === "fiveDaysBefore" ? "Payment Schedule Reminder" : "Payment Due Notice";
     const intro =
       reminderType === "fiveDaysBefore"
-        ? `This is a reminder that your payment for ${propertyName} is due in 5 days.`
-        : `This is a reminder that your payment for ${propertyName} is due today.`;
+        ? `This is an official reminder that your payment for ${propertyName} is due on ${dueDate}.`
+        : `This is an official notice that your payment for ${propertyName} is due today (${dueDate}).`;
 
     const detailItems = [
       `<li><strong>Property:</strong> ${propertyName}</li>`,
-      `<li><strong>House Number:</strong> ${houseNumber}</li>`,
+      `<li><strong>Unit/House:</strong> ${houseNumber}</li>`,
       rentDue > 0 ? `<li><strong>Rent Due:</strong> Ksh. ${rentDue.toFixed(2)}</li>` : "",
       utilityDue > 0 ? `<li><strong>Utilities Due:</strong> Ksh. ${utilityDue.toFixed(2)}</li>` : "",
       depositDue > 0 ? `<li><strong>Deposit Due:</strong> Ksh. ${depositDue.toFixed(2)}</li>` : "",
       `<li><strong>Total Due:</strong> Ksh. ${totalDue.toFixed(2)}</li>`,
       `<li><strong>Due Date:</strong> ${dueDate}</li>`,
-      `<li><strong>Action:</strong> Please make your payment by the due date.</li>`,
+      `<li><strong>Action:</strong> Please make your payment by the due date to keep your account in good standing.</li>`,
     ].filter(Boolean).join("");
 
     const html = generateStyledTemplate({
@@ -248,9 +248,9 @@ export async function sendReminderEmail({
       intro,
       details: `
         <ul>${detailItems}</ul>
-        <p style="text-align: center; margin-top: 32px;">
+        <p style="text-align: center; margin-top: 28px;">
           <a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/tenant-portal" class="button">
-            Go to Tenant Portal
+            Open Tenant Portal
           </a>
         </p>
       `,

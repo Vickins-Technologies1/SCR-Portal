@@ -16,11 +16,11 @@ interface ClientProperty {
     managementType: "RentCollection" | "FullManagement";
     quantity: number;
   }[];
-  managementFee: number;
+  managementFee?: number;
   createdAt: string;
   updatedAt: string;
-  rentPaymentDate: string;
-  ownerId: string;
+  rentPaymentDate?: string | number;
+  ownerId: string | { toString?: () => string };
   status: string;
 }
 
@@ -240,6 +240,7 @@ export default function PaymentModal({
                   amount: invoice.amount,
                   status: "completed",
                   reference: invoice.reference,
+                  description: invoice.description,
                 }),
               });
               const updateData = await updateRes.json();

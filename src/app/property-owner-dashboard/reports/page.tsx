@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FileText, BarChart2, ArrowUpDown, Download, Lock } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
+import PaymentModal from "../components/PaymentModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Bar } from "react-chartjs-2";
 import {
@@ -43,11 +44,27 @@ interface Report {
 interface Invoice {
   _id: string;
   userId: string;
+  propertyId: string;
   amount: number;
   reference: string;
   status: string;
   createdAt: string;
   description: string;
+}
+
+interface InvoiceEstimateItem {
+  propertyId: string;
+  propertyName: string;
+  billingPlan: string;
+  percentage: number;
+  expectedIncome: number;
+  estimatedAmount: number;
+}
+
+interface InvoiceEstimate {
+  period: { billingMonth: string; label: string };
+  total: number;
+  items: InvoiceEstimateItem[];
 }
 
 interface Property {
@@ -87,6 +104,8 @@ function ReportsAndInvoicesPageInner() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEstimateLoading, setIsEstimateLoading] = useState(false);
+  const [invoiceEstimate, setInvoiceEstimate] = useState<InvoiceEstimate | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
@@ -98,6 +117,9 @@ function ReportsAndInvoicesPageInner() {
   const [reportSortConfig, setReportSortConfig] = useState<SortConfig<Report>>({ key: "date", direction: "desc" });
   const [invoiceSortConfig, setInvoiceSortConfig] = useState<SortConfig<Invoice>>({ key: "createdAt", direction: "desc" });
   const isDue = !!dueStatus?.isDue;
+  const [isInvoicePaymentOpen, setIsInvoicePaymentOpen] = useState(false);
+  const [invoicePaymentPropertyId, setInvoicePaymentPropertyId] = useState<string>("");
+  const [invoicePaymentPhone, setInvoicePaymentPhone] = useState<string>("");
 
   // Helper: Validate and format date
   const isValidDate = (dateString: string): boolean => {
@@ -173,27 +195,22 @@ function ReportsAndInvoicesPageInner() {
     setEffectiveOwnerId(ownerIdToUse);
   }, [router, canViewReports]);
 
-  useEffect(() => {
+  const fetchDueStatus = useCallback(async () => {
     if (!userId || !["propertyOwner", "teamMember"].includes(role ?? "")) return;
-    let cancelled = false;
-
-    const fetchDueStatus = async () => {
-      try {
-        const res = await fetch("/api/owner-dues", { credentials: "include" });
-        const data = await res.json();
-        if (!cancelled && data.success) {
-          setDueStatus(data);
-        }
-      } catch {
-        // ignore
+    try {
+      const res = await fetch("/api/owner-dues", { credentials: "include" });
+      const data = await res.json();
+      if (data.success) {
+        setDueStatus(data);
       }
-    };
-
-    fetchDueStatus();
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      // ignore
+    }
   }, [userId, role]);
+
+  useEffect(() => {
+    fetchDueStatus();
+  }, [fetchDueStatus]);
 
   // Fetch CSRF token
   useEffect(() => {
@@ -325,6 +342,27 @@ function ReportsAndInvoicesPageInner() {
     }
   }, [effectiveOwnerId, csrfToken]);
 
+  const fetchInvoiceEstimate = useCallback(async () => {
+    if (!effectiveOwnerId || !csrfToken) return;
+    setIsEstimateLoading(true);
+    try {
+      const res = await fetch("/api/invoices/estimate", {
+        headers: { "x-csrf-token": csrfToken },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setInvoiceEstimate(data);
+      } else {
+        setInvoiceEstimate(null);
+      }
+    } catch {
+      setInvoiceEstimate(null);
+    } finally {
+      setIsEstimateLoading(false);
+    }
+  }, [effectiveOwnerId, csrfToken]);
+
   // Load data when effectiveOwnerId is ready
   useEffect(() => {
     if (hasAccess && effectiveOwnerId && csrfToken) {
@@ -332,7 +370,7 @@ function ReportsAndInvoicesPageInner() {
         fetchOwnerInfo(),
         fetchProperties(),
         fetchUserData(),
-        activeTab === "reports" ? fetchReports() : fetchInvoices(),
+        activeTab === "reports" ? fetchReports() : Promise.all([fetchInvoices(), fetchInvoiceEstimate()]),
       ]).catch(() => setError("Failed to load initial data."));
     }
   }, [
@@ -349,6 +387,7 @@ function ReportsAndInvoicesPageInner() {
     fetchUserData,
     fetchReports,
     fetchInvoices,
+    fetchInvoiceEstimate,
   ]);
 
   // Tab switch
@@ -435,6 +474,11 @@ function ReportsAndInvoicesPageInner() {
       return { key, direction };
     });
   }, [invoices]);
+
+  const handleOpenInvoicePayment = (propertyId?: string) => {
+    setInvoicePaymentPropertyId(propertyId || "");
+    setIsInvoicePaymentOpen(true);
+  };
 
   const getSortIcon = useCallback(<T extends Report | Invoice>(key: keyof T, config: SortConfig<T>) => {
     if (config.key !== key) return <ArrowUpDown className="inline ml-1 h-4 w-4" />;
@@ -764,12 +808,58 @@ function ReportsAndInvoicesPageInner() {
 
           {/* Invoices Tab */}
           {activeTab === "invoices" && (
-            <div className="surface-card rounded-2xl p-5 sm:p-6">
-              <h2 className="text-base sm:text-lg font-semibold text-foreground">Wallet Balance</h2>
-              <p className="text-xl sm:text-2xl font-semibold text-primary">
-                Ksh {walletBalance !== null ? walletBalance.toFixed(2) : "Loading..."}
-              </p>
-              <p className="text-xs sm:text-sm text-muted-foreground">Available for property management</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="surface-card rounded-2xl p-5 sm:p-6">
+                <h2 className="text-base sm:text-lg font-semibold text-foreground">Wallet Balance</h2>
+                <p className="text-xl sm:text-2xl font-semibold text-primary">
+                  Ksh {walletBalance !== null ? walletBalance.toFixed(2) : "Loading..."}
+                </p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Available for property management</p>
+              </div>
+
+              <div className="surface-card rounded-2xl p-5 sm:p-6 lg:col-span-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-semibold text-foreground">Next Month Invoice Estimate</h2>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      {invoiceEstimate?.period?.label || "Upcoming billing period"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Estimated total</p>
+                    <p className="text-xl sm:text-2xl font-semibold text-primary">
+                      Ksh {invoiceEstimate ? invoiceEstimate.total.toFixed(2) : "—"}
+                    </p>
+                  </div>
+                </div>
+
+                {isEstimateLoading ? (
+                  <div className="mt-4 text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    Calculating estimate...
+                  </div>
+                ) : invoiceEstimate?.items?.length ? (
+                  <div className="mt-4 space-y-2 text-xs sm:text-sm text-muted-foreground">
+                    {invoiceEstimate.items.map((item) => (
+                      <div key={item.propertyId} className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-2">
+                        <div>
+                          <p className="font-semibold text-foreground">{item.propertyName}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {item.billingPlan} • {item.percentage.toFixed(2)}% • Expected income Ksh {item.expectedIncome.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="text-right font-semibold text-foreground">
+                          Ksh {item.estimatedAmount.toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 text-xs sm:text-sm text-muted-foreground">
+                    No estimate available yet.
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -866,6 +956,7 @@ function ReportsAndInvoicesPageInner() {
                       <th className="px-4 py-3 text-left cursor-pointer hover:bg-gray-100/70" onClick={() => handleInvoiceSort("status")}>
                         Status {getSortIcon("status", invoiceSortConfig)}
                       </th>
+                      <th className="px-4 py-3 text-left">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -876,6 +967,18 @@ function ReportsAndInvoicesPageInner() {
                         <td className="px-4 py-3">Ksh {i.amount.toFixed(2)}</td>
                         <td className="px-4 py-3">{new Date(i.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3">{i.status}</td>
+                        <td className="px-4 py-3">
+                          {role === "propertyOwner" && i.status === "pending" ? (
+                            <button
+                              onClick={() => handleOpenInvoicePayment(i.propertyId)}
+                              className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition"
+                            >
+                              Pay Now
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -886,6 +989,24 @@ function ReportsAndInvoicesPageInner() {
           )}
         </main>
       </div>
+
+      <PaymentModal
+        isOpen={isInvoicePaymentOpen}
+        onClose={() => setIsInvoicePaymentOpen(false)}
+        onSuccess={() => {
+          setIsInvoicePaymentOpen(false);
+          fetchInvoices();
+          fetchUserData();
+          fetchInvoiceEstimate();
+          fetchDueStatus();
+          setSuccessMessage("Invoice payment completed successfully.");
+        }}
+        onError={(message) => setError(message)}
+        properties={properties}
+        initialPropertyId={invoicePaymentPropertyId}
+        initialPhone={invoicePaymentPhone}
+        userId={effectiveOwnerId}
+      />
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');

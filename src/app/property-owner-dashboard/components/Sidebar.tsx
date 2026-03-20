@@ -146,12 +146,12 @@ export default function Sidebar() {
   return (
     <>
       <aside
-        className={`fixed left-0 top-16 bottom-0 z-40 w-72 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)] border-r border-gray-200/70 transition-transform duration-300 ease-out ${
+        className={`fixed left-0 top-16 bottom-0 z-40 w-64 sm:w-72 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)] border-r border-gray-200/70 transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:inset-y-0 flex flex-col`}
       >
         <div className="flex h-full flex-col">
-          <div className="border-b border-white/40 bg-gradient-to-b from-[#42c775]/10 to-transparent px-6 py-6">
+          <div className="border-b border-white/40 bg-gradient-to-b from-[#42c775]/10 to-transparent px-5 sm:px-6 py-5 sm:py-6">
             <div className="flex flex-col items-center text-center">
               <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#42c775] to-[#34b46d] text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
                 {initials}
@@ -169,7 +169,7 @@ export default function Sidebar() {
             </div>
           </div>
 
-          <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-1.5">
+          <nav className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 space-y-1.5">
             {navLinks.map(({ key, href, label, icon }) => {
               const isActive = pathname === href || pathname.startsWith(href + "/");
               return (
@@ -177,7 +177,7 @@ export default function Sidebar() {
                   key={key}
                   href={href}
                   onClick={close}
-                  className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
+                  className={`group flex items-center gap-3 sm:gap-4 rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
                     isActive
                       ? "bg-[#42c775]/10 text-[#42c775] shadow-sm ring-1 ring-[#42c775]/20"
                       : "text-gray-600 hover:bg-[#42c775]/5 hover:text-[#42c775]"

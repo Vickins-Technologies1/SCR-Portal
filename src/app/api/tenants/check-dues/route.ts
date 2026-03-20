@@ -108,13 +108,12 @@ export async function GET(request: NextRequest) {
     const totalTenants = activeTenants.length;
     const occupiedUnits = totalTenants;
 
-    // 3. Total Monthly Rent Collected (this month)
+    // 3. Total Monthly Revenue Collected (this month)
     const monthlyRentResult = await db.collection("payments")
       .aggregate([
         {
           $match: {
             propertyId: { $in: propertyIds },
-            type: "Rent",
             status: "completed",
             paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
           },
