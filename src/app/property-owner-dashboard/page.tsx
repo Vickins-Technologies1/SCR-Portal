@@ -293,6 +293,23 @@ export default function PropertyOwnerDashboard() {
       properties.map((property) => ({
         ...property,
         _id: typeof property._id === "string" ? property._id : property._id.toString(),
+        ownerId: typeof property.ownerId === "string" ? property.ownerId : property.ownerId.toString(),
+        createdAt:
+          property.createdAt instanceof Date
+            ? property.createdAt.toISOString()
+            : (property.createdAt as unknown as string),
+        updatedAt:
+          property.updatedAt instanceof Date
+            ? property.updatedAt.toISOString()
+            : (property.updatedAt as unknown as string | undefined),
+        unitTypes: (property.unitTypes || []).map((unit, index) => ({
+          uniqueType: unit.uniqueType ?? `${unit.type}-${index}`,
+          type: unit.type,
+          price: unit.price,
+          deposit: unit.deposit,
+          managementType: unit.managementType ?? property.billingType ?? "RentCollection",
+          quantity: unit.quantity,
+        })),
       })),
     [properties]
   );

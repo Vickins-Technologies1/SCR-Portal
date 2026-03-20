@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Cookies from "js-cookie";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText, BarChart2, ArrowUpDown, Download, Lock } from "lucide-react";
@@ -71,6 +71,22 @@ interface Property {
   _id: string;
   name: string;
   ownerId: string;
+  address: string;
+  unitTypes: {
+    uniqueType?: string;
+    type: string;
+    price: number;
+    deposit: number;
+    managementType?: "RentCollection" | "FullManagement";
+    quantity: number;
+  }[];
+  billingType?: "RentCollection" | "FullManagement";
+  managementFee?: number;
+  managementFeePercent?: number;
+  status: string;
+  rentPaymentDate?: number;
+  createdAt: string | Date;
+  updatedAt?: string | Date;
 }
 
 interface SortConfig<T> {
@@ -362,6 +378,33 @@ function ReportsAndInvoicesPageInner() {
       setIsEstimateLoading(false);
     }
   }, [effectiveOwnerId, csrfToken]);
+
+  const paymentModalProperties = useMemo(
+    () =>
+      properties.map((property) => ({
+        ...property,
+        _id: property._id,
+        ownerId: property.ownerId,
+        address: property.address || "",
+        createdAt:
+          property.createdAt instanceof Date
+            ? property.createdAt.toISOString()
+            : (property.createdAt as string),
+        updatedAt:
+          property.updatedAt instanceof Date
+            ? property.updatedAt.toISOString()
+            : (property.updatedAt as string | undefined),
+        unitTypes: (property.unitTypes || []).map((unit, index) => ({
+          uniqueType: unit.uniqueType ?? `${unit.type}-${index}`,
+          type: unit.type,
+          price: unit.price,
+          deposit: unit.deposit,
+          managementType: unit.managementType ?? property.billingType ?? "RentCollection",
+          quantity: unit.quantity,
+        })),
+      })),
+    [properties]
+  );
 
   // Load data when effectiveOwnerId is ready
   useEffect(() => {
@@ -1002,7 +1045,7 @@ function ReportsAndInvoicesPageInner() {
           setSuccessMessage("Invoice payment completed successfully.");
         }}
         onError={(message) => setError(message)}
-        properties={properties}
+        properties={paymentModalProperties}
         initialPropertyId={invoicePaymentPropertyId}
         initialPhone={invoicePaymentPhone}
         userId={effectiveOwnerId}

@@ -18,7 +18,7 @@ interface ClientProperty {
   }[];
   managementFee?: number;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   rentPaymentDate?: string | number;
   ownerId: string | { toString?: () => string };
   status: string;
