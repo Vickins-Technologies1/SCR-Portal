@@ -5,7 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { applyWalletToRent, calculateRentDueToDate } from "@/lib/utils";
+import { calculateRentDueToDate } from "@/lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalPayments = totalPaymentsResult[0]?.totalPayments || 0;
 
-    // 5. Overdue Calculation (includes wallet credits)
+    // 5. Overdue Calculation
     const paymentsByTenant = await db.collection("payments")
       .aggregate([
         { $match: { propertyId: { $in: propertyIds }, status: "completed" } },
@@ -166,9 +166,7 @@ export async function GET(request: NextRequest) {
       const depositDue = tenant.deposit || 0;
       const totalDue = rentDue + depositDue;
       const totalPaid = paid.rentPaid + paid.depositPaid;
-      const walletCredit = tenant.walletBalance || 0;
-
-      const remaining = Math.max(0, totalDue - totalPaid - walletCredit);
+      const remaining = Math.max(0, totalDue - totalPaid);
 
       if (remaining > 0) {
         overdueCount++;
@@ -275,16 +273,8 @@ export async function POST(request: NextRequest) {
     });
     const depositDue = tenant.deposit || 0;
 
-    const walletResult = applyWalletToRent({
-      rentDue,
-      rentPaidFromPayments: rentPaid,
-      rentPaidRecorded: tenant.totalRentPaid || 0,
-      walletBalance: tenant.walletBalance || 0,
-      monthlyRent: tenant.price || 0,
-    });
-
-    const updatedTotalRentPaid = walletResult.rentPaidTotal;
-    const updatedWalletBalance = walletResult.walletRemaining;
+    const updatedTotalRentPaid = rentPaid;
+    const updatedWalletBalance = tenant.walletBalance || 0;
 
     const rentDues = Math.max(0, rentDue - updatedTotalRentPaid);
     const depositDues = Math.max(0, depositDue - depositPaid);
@@ -313,10 +303,10 @@ export async function POST(request: NextRequest) {
       depositDues,
       utilityDues,
       totalRemainingDues,
-      walletApplied: walletResult.walletAppliedNow,
-      walletRemaining: walletResult.walletRemaining,
-      walletCoverageMonths: walletResult.walletCoverageMonths,
-      walletCoverageRemainder: walletResult.walletCoverageRemainder,
+      walletApplied: 0,
+      walletRemaining: updatedWalletBalance,
+      walletCoverageMonths: tenant.price ? Math.floor(updatedWalletBalance / tenant.price) : 0,
+      walletCoverageRemainder: tenant.price ? updatedWalletBalance % tenant.price : updatedWalletBalance,
     };
 
     logger.info("Tenant dues recalculated and totals synced", {

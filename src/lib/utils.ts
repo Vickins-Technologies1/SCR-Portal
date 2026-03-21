@@ -192,13 +192,15 @@ export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = 
 
   const walletBalance = tenant.walletBalance || 0;
   const rentPaid = tenant.totalRentPaid || 0;
+  const depositPaid = tenant.totalDepositPaid || 0;
+  const utilityPaid = tenant.totalUtilityPaid || 0;
 
-  const walletApplied = roundCurrency(Math.min(walletBalance, Math.max(0, totalRentDue - rentPaid)));
-  const walletRemaining = roundCurrency(Math.max(0, walletBalance - walletApplied));
+  const walletApplied = 0;
+  const walletRemaining = roundCurrency(walletBalance);
 
-  const rentDues = roundCurrency(Math.max(0, totalRentDue - rentPaid - walletApplied));
-  const depositDues = roundCurrency(Math.max(0, totalDepositDue - (tenant.totalDepositPaid || 0)));
-  const utilityDues = roundCurrency(totalUtilityDue);
+  const rentDues = roundCurrency(Math.max(0, totalRentDue - rentPaid));
+  const depositDues = roundCurrency(Math.max(0, totalDepositDue - depositPaid));
+  const utilityDues = roundCurrency(Math.max(0, totalUtilityDue - utilityPaid));
   const totalRemainingDues = roundCurrency(Math.max(0, rentDues + depositDues + utilityDues));
   const paymentStatus = totalRemainingDues > 0 ? 'overdue' : 'up-to-date';
 

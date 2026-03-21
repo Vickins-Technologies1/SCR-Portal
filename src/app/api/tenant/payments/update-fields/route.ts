@@ -5,6 +5,7 @@ import { ObjectId, Db } from "mongodb";
 import { validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { calculateRentDueToDate } from "../../../../../lib/utils";
+import { getTenantPaymentTotals } from "../../../../../lib/payment-totals";
 
 interface Tenant {
   _id: ObjectId;
@@ -129,79 +130,39 @@ export async function POST(request: NextRequest) {
       today,
     });
 
-    const rentDue = Math.max(0, totalRentDue - (tenant.totalRentPaid || 0));
-    const depositDue = Math.max(0, (tenant.deposit || 0) - (tenant.totalDepositPaid || 0));
-    const utilityDue = 0;
+    const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);
 
-    let walletBalance = tenant.walletBalance || 0;
+    const rentPaidBefore =
+      payment.type === "Rent"
+        ? Math.max(0, paymentTotals.rentPaid - payment.amount)
+        : paymentTotals.rentPaid;
+    const depositPaidBefore =
+      payment.type === "Deposit"
+        ? Math.max(0, paymentTotals.depositPaid - payment.amount)
+        : paymentTotals.depositPaid;
+    const rentDueBefore = Math.max(0, totalRentDue - rentPaidBefore);
+    const depositDueBefore = Math.max(0, (tenant.deposit || 0) - depositPaidBefore);
+    const utilityDueBefore = 0;
+
     let remainingAmount = payment.amount;
+    if (payment.type === "Rent") {
+      const applied = Math.min(rentDueBefore, remainingAmount);
+      remainingAmount -= applied;
+    } else if (payment.type === "Deposit") {
+      const applied = Math.min(depositDueBefore, remainingAmount);
+      remainingAmount -= applied;
+    } else if (payment.type === "Utility") {
+      const applied = Math.min(utilityDueBefore, remainingAmount);
+      remainingAmount -= applied;
+    }
+
+    const walletBalance = (tenant.walletBalance || 0) + remainingAmount;
     const updateFields: Partial<Tenant> = {
-      totalRentPaid: tenant.totalRentPaid || 0,
-      totalUtilityPaid: tenant.totalUtilityPaid || 0,
-      totalDepositPaid: tenant.totalDepositPaid || 0,
+      totalRentPaid: paymentTotals.rentPaid,
+      totalUtilityPaid: paymentTotals.utilityPaid,
+      totalDepositPaid: paymentTotals.depositPaid,
+      walletBalance,
     };
-
-    const applyPayment = (due: number, currentPaid: number, maxPay: number) => {
-      const applied = Math.min(due, maxPay);
-      return { applied, remaining: maxPay - applied };
-    };
-
-    switch (payment.type) {
-      case "Rent": {
-        const { applied, remaining } = applyPayment(rentDue, updateFields.totalRentPaid!, remainingAmount);
-        updateFields.totalRentPaid! += applied;
-        remainingAmount = remaining;
-        break;
-      }
-      case "Utility": {
-        const { applied, remaining } = applyPayment(utilityDue, updateFields.totalUtilityPaid!, remainingAmount);
-        updateFields.totalUtilityPaid! += applied;
-        remainingAmount = remaining;
-        break;
-      }
-      case "Deposit": {
-        const { applied, remaining } = applyPayment(depositDue, updateFields.totalDepositPaid!, remainingAmount);
-        updateFields.totalDepositPaid! += applied;
-        remainingAmount = remaining;
-        break;
-      }
-      case "Other":
-        break;
-    }
-
-    walletBalance += remainingAmount;
-
-    if (walletBalance > 0 && rentDue > updateFields.totalRentPaid!) {
-      const { applied, remaining } = applyPayment(
-        rentDue - updateFields.totalRentPaid!,
-        updateFields.totalRentPaid!,
-        walletBalance
-      );
-      updateFields.totalRentPaid! += applied;
-      walletBalance = remaining;
-    }
-
-    if (walletBalance > 0 && utilityDue > updateFields.totalUtilityPaid!) {
-      const { applied, remaining } = applyPayment(
-        utilityDue - updateFields.totalUtilityPaid!,
-        updateFields.totalUtilityPaid!,
-        walletBalance
-      );
-      updateFields.totalUtilityPaid! += applied;
-      walletBalance = remaining;
-    }
-
-    if (walletBalance > 0 && depositDue > updateFields.totalDepositPaid!) {
-      const { applied, remaining } = applyPayment(
-        depositDue - updateFields.totalDepositPaid!,
-        updateFields.totalDepositPaid!,
-        walletBalance
-      );
-      updateFields.totalDepositPaid! += applied;
-      walletBalance = remaining;
-    }
-
-    updateFields.walletBalance = walletBalance;
 
     const updateTime = new Date().toISOString();
     await db.collection<Tenant>("tenants").updateOne(

@@ -5,6 +5,7 @@ import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { calculateRentDueToDate, calculateTenantDues } from "@/lib/utils";
+import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
 
 interface Property {
   _id: string;
@@ -222,6 +223,11 @@ export async function GET(request: NextRequest) {
     let overduePayments = 0;
     let totalOverdueAmount = 0;
 
+    const paymentTotalsByTenant = await getPaymentTotalsByTenantIds(
+      db,
+      activeTenants.map((tenant) => tenant._id)
+    );
+
     const bulkOps = activeTenants.map((tenant) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
       const { rentDue } = calculateRentDueToDate({
@@ -230,12 +236,15 @@ export async function GET(request: NextRequest) {
         today,
       });
       const totalDue = rentDue + (tenant.deposit || 0);
+      const tenantTotals = paymentTotalsByTenant.get(tenantObjectId.toString()) || {
+        rentPaid: 0,
+        depositPaid: 0,
+        utilityPaid: 0,
+        totalPaid: 0,
+      };
       const totalPaid =
-        (tenant.totalRentPaid || 0) +
-        (tenant.totalUtilityPaid || 0) +
-        (tenant.totalDepositPaid || 0);
-      const walletCredit = tenant.walletBalance || 0;
-      const totalOverdue = Math.max(0, totalDue - totalPaid - walletCredit);
+        tenantTotals.rentPaid + tenantTotals.utilityPaid + tenantTotals.depositPaid;
+      const totalOverdue = Math.max(0, totalDue - totalPaid);
 
       if (totalOverdue > 0) {
         overduePayments += 1;
@@ -326,12 +335,23 @@ export async function POST(request: NextRequest) {
     }
 
     const today = new Date(); // Use current date
-    const dues = await calculateTenantDues(db, tenant as any, today);
+    const paymentTotals = await getTenantPaymentTotals(db, tenantId);
+    const tenantWithTotals = {
+      ...tenant,
+      totalRentPaid: paymentTotals.rentPaid,
+      totalDepositPaid: paymentTotals.depositPaid,
+      totalUtilityPaid: paymentTotals.utilityPaid,
+    };
+
+    const dues = await calculateTenantDues(db, tenantWithTotals as any, today);
 
     await db.collection("tenants").updateOne(
       { _id: new ObjectId(tenantId) },
       {
         $set: {
+          totalRentPaid: paymentTotals.rentPaid,
+          totalDepositPaid: paymentTotals.depositPaid,
+          totalUtilityPaid: paymentTotals.utilityPaid,
           paymentStatus: dues.totalRemainingDues > 0 ? "overdue" : "up-to-date",
           updatedAt: today.toISOString(),
         },

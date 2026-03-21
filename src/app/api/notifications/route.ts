@@ -12,6 +12,7 @@ import nodemailer from "nodemailer";
 import logger from "../../../lib/logger";
 import { Tenant } from "../../../types/tenant";
 import { calculateTenantDues, TenantDues } from "../../../lib/utils";
+import { getPaymentTotalsByTenantIds } from "../../../lib/payment-totals";
 
 interface Notification {
   _id: ObjectId;
@@ -185,6 +186,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const notifications: Notification[] = [];
     const today = new Date();
+    const paymentTotalsByTenant = await getPaymentTotalsByTenantIds(
+      db,
+      tenants.map((tenant) => tenant._id)
+    );
 
     // === PROCESS EACH TENANT ===
     for (const tenant of tenants) {
@@ -195,7 +200,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       // Generate payment message
       if (type === "payment") {
-        dues = await calculateTenantDues(db, tenant, today);
+        const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString());
+        const tenantWithTotals = tenantTotals
+          ? {
+              ...tenant,
+              totalRentPaid: tenantTotals.rentPaid,
+              totalDepositPaid: tenantTotals.depositPaid,
+              totalUtilityPaid: tenantTotals.utilityPaid,
+            }
+          : tenant;
+        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today);
         if (dues.paymentStatus === "up-to-date") {
           logger.info("Skipping up-to-date tenant", { tenantId: tenant._id.toString() });
           continue;

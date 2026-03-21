@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { calculateRentDueToDate } from "@/lib/utils";
+import { getPaymentTotalsByTenantIds } from "@/lib/payment-totals";
 
 interface Property {
   _id: string;
@@ -289,6 +290,11 @@ export async function GET(request: NextRequest) {
       leaseEndDate: { $ne: null, $gte: todayISO },
     }).toArray();
 
+    const paymentTotalsByTenant = await getPaymentTotalsByTenantIds(
+      db,
+      activeTenantsForDues.map((tenant) => tenant._id)
+    );
+
     let overduePayments = 0;
     let totalOverdueAmount = 0;
 
@@ -300,12 +306,15 @@ export async function GET(request: NextRequest) {
       });
 
       const totalDue = rentDue + (tenant.deposit || 0);
+      const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString()) || {
+        rentPaid: 0,
+        depositPaid: 0,
+        utilityPaid: 0,
+        totalPaid: 0,
+      };
       const totalPaid =
-        (tenant.totalRentPaid || 0) +
-        (tenant.totalDepositPaid || 0) +
-        (tenant.totalUtilityPaid || 0);
-      const walletCredit = tenant.walletBalance || 0;
-      const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid - walletCredit);
+        tenantTotals.rentPaid + tenantTotals.depositPaid + tenantTotals.utilityPaid;
+      const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid);
       const roundedOverdue = roundMoney(totalOverdueAmountForTenant);
 
       if (roundedOverdue > 0) {

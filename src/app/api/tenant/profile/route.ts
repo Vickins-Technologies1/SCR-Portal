@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
-import { applyWalletToRent, calculateRentDueToDate } from "../../../../lib/utils";
+import { calculateRentDueToDate } from "../../../../lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -224,16 +224,8 @@ export async function GET(request: NextRequest) {
 
       const depositDue = tenantDoc.deposit || 0;
 
-      const walletResult = applyWalletToRent({
-        rentDue,
-        rentPaidFromPayments: rentPaid,
-        rentPaidRecorded: tenantDoc.totalRentPaid ?? 0,
-        walletBalance: tenantDoc.walletBalance ?? 0,
-        monthlyRent: tenantDoc.price || 0,
-      });
-
-      const updatedTotalRentPaid = walletResult.rentPaidTotal;
-      const updatedWalletBalance = walletResult.walletRemaining;
+      const updatedTotalRentPaid = rentPaid;
+      const updatedWalletBalance = tenantDoc.walletBalance ?? 0;
 
       const rentDues = Math.max(0, rentDue - updatedTotalRentPaid);
       const depositDues = Math.max(0, depositDue - depositPaid);
@@ -271,10 +263,10 @@ export async function GET(request: NextRequest) {
           utilityDues,
           depositDues,
           totalRemainingDues,
-          walletApplied: walletResult.walletAppliedNow,
-          walletRemaining: walletResult.walletRemaining,
-          walletCoverageMonths: walletResult.walletCoverageMonths,
-          walletCoverageRemainder: walletResult.walletCoverageRemainder,
+          walletApplied: 0,
+          walletRemaining: updatedWalletBalance,
+          walletCoverageMonths: tenantDoc.price ? Math.floor(updatedWalletBalance / tenantDoc.price) : 0,
+          walletCoverageRemainder: tenantDoc.price ? updatedWalletBalance % tenantDoc.price : updatedWalletBalance,
         },
       });
 
