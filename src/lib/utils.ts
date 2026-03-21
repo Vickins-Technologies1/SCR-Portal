@@ -119,41 +119,13 @@ export const calculateRentDueToDate = ({
   }
 
   const startMonthStart = new Date(start.getFullYear(), start.getMonth(), 1);
-  const startMonthEnd = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-  const daysInStartMonth = startMonthEnd.getDate();
-  const startDailyRent = safeMonthlyRent > 0 ? safeMonthlyRent / daysInStartMonth : 0;
-
   const monthDiff =
     (currentMonthStart.getFullYear() - startMonthStart.getFullYear()) * 12 +
     (currentMonthStart.getMonth() - startMonthStart.getMonth());
 
   const monthsStayed = Math.max(1, monthDiff + 1);
 
-  if (monthDiff === 0) {
-    const daysElapsedInMonth = Math.min(
-      daysInCurrentMonth,
-      Math.max(0, today.getDate() - start.getDate() + 1)
-    );
-    const rentDue = roundCurrency(currentDailyRent * daysElapsedInMonth);
-    return {
-      rentDue,
-      monthsStayed,
-      daysInMonth: daysInCurrentMonth,
-      daysElapsedInMonth,
-      dailyRent: currentDailyRent,
-    };
-  }
-
-  const startMonthDaysCharged = Math.min(
-    daysInStartMonth,
-    Math.max(0, daysInStartMonth - start.getDate() + 1)
-  );
-  const proratedStart = startDailyRent * startMonthDaysCharged;
-
-  const fullMonthsBetween = Math.max(0, monthDiff - 1);
-  const proratedCurrent = currentDailyRent * today.getDate();
-
-  const rentDue = roundCurrency(proratedStart + fullMonthsBetween * safeMonthlyRent + proratedCurrent);
+  const rentDue = roundCurrency(monthsStayed * safeMonthlyRent);
 
   return {
     rentDue,
