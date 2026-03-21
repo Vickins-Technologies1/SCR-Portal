@@ -30,6 +30,8 @@ interface Stats {
   totalUtilityPaid: number;
 }
 
+const roundMoney = (value: number) => Math.round(value || 0);
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const requestedOwnerId = searchParams.get("userId");
@@ -195,7 +197,7 @@ export async function GET(request: NextRequest) {
         },
       ])
       .toArray();
-    const totalMonthlyRent = currentMonthRentResult[0]?.totalMonthlyRent || 0;
+    const totalMonthlyRent = roundMoney(currentMonthRentResult[0]?.totalMonthlyRent || 0);
 
     // Total rent paid (all time)
     const totalRentPaidResult = await db
@@ -216,7 +218,7 @@ export async function GET(request: NextRequest) {
         },
       ])
       .toArray();
-    const totalRentPaid = totalRentPaidResult[0]?.totalRentPaid || 0;
+    const totalRentPaid = roundMoney(totalRentPaidResult[0]?.totalRentPaid || 0);
 
     // Total payments (all time)
     const paymentsResult = await db
@@ -236,7 +238,7 @@ export async function GET(request: NextRequest) {
         },
       ])
       .toArray();
-    const totalPayments = paymentsResult[0]?.totalPayments || 0;
+    const totalPayments = roundMoney(paymentsResult[0]?.totalPayments || 0);
 
     // Deposits
     const depositPaymentsResult = await db
@@ -257,7 +259,7 @@ export async function GET(request: NextRequest) {
         },
       ])
       .toArray();
-    const totalDepositPaid = depositPaymentsResult[0]?.totalDepositPaid || 0;
+    const totalDepositPaid = roundMoney(depositPaymentsResult[0]?.totalDepositPaid || 0);
 
     // Utilities
     const utilityPaymentsResult = await db
@@ -278,7 +280,7 @@ export async function GET(request: NextRequest) {
         },
       ])
       .toArray();
-    const totalUtilityPaid = utilityPaymentsResult[0]?.totalUtilityPaid || 0;
+    const totalUtilityPaid = roundMoney(utilityPaymentsResult[0]?.totalUtilityPaid || 0);
 
     // === Overdue Logic ===
     const activeTenantsForDues = await db.collection("tenants").find({
@@ -304,10 +306,11 @@ export async function GET(request: NextRequest) {
         (tenant.totalUtilityPaid || 0);
       const walletCredit = tenant.walletBalance || 0;
       const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid - walletCredit);
+      const roundedOverdue = roundMoney(totalOverdueAmountForTenant);
 
-      if (totalOverdueAmountForTenant > 0) {
+      if (roundedOverdue > 0) {
         overduePayments += 1;
-        totalOverdueAmount += totalOverdueAmountForTenant;
+        totalOverdueAmount += roundedOverdue;
       }
 
       return {
@@ -315,7 +318,7 @@ export async function GET(request: NextRequest) {
           filter: { _id: tenant._id },
           update: {
             $set: {
-              paymentStatus: totalOverdueAmountForTenant > 0 ? "overdue" : "up-to-date",
+              paymentStatus: roundedOverdue > 0 ? "overdue" : "up-to-date",
               updatedAt: todayISO,
             },
           },
@@ -333,12 +336,12 @@ export async function GET(request: NextRequest) {
       totalTenants,
       totalUnits,
       occupiedUnits,
-      expectedMonthlyRent,
+      expectedMonthlyRent: roundMoney(expectedMonthlyRent),
       totalMonthlyRent,
       totalRentPaid,
       overduePayments,
       totalPayments,
-      totalOverdueAmount,
+      totalOverdueAmount: roundMoney(totalOverdueAmount),
       totalDepositPaid,
       totalUtilityPaid,
     };

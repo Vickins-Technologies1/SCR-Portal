@@ -81,7 +81,7 @@ export interface RentDueResult {
   dailyRent: number;
 }
 
-const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
+const roundCurrency = (value: number): number => Math.round(value);
 
 export const calculateRentDueToDate = ({
   leaseStartDate,
@@ -173,12 +173,12 @@ export const applyWalletToRent = ({
     safeMonthlyRent > 0 ? walletRemaining - walletCoverageMonths * safeMonthlyRent : walletRemaining;
 
   return {
-    walletAppliedNow,
-    walletAppliedAlready,
-    walletRemaining,
-    rentPaidTotal,
+    walletAppliedNow: roundCurrency(walletAppliedNow),
+    walletAppliedAlready: roundCurrency(walletAppliedAlready),
+    walletRemaining: roundCurrency(walletRemaining),
+    rentPaidTotal: roundCurrency(rentPaidTotal),
     walletCoverageMonths,
-    walletCoverageRemainder,
+    walletCoverageRemainder: roundCurrency(walletCoverageRemainder),
   };
 };
 export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = new Date()): Promise<TenantDues> => {
@@ -193,13 +193,13 @@ export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = 
   const walletBalance = tenant.walletBalance || 0;
   const rentPaid = tenant.totalRentPaid || 0;
 
-  const walletApplied = Math.min(walletBalance, Math.max(0, totalRentDue - rentPaid));
-  const walletRemaining = Math.max(0, walletBalance - walletApplied);
+  const walletApplied = roundCurrency(Math.min(walletBalance, Math.max(0, totalRentDue - rentPaid)));
+  const walletRemaining = roundCurrency(Math.max(0, walletBalance - walletApplied));
 
-  const rentDues = Math.max(0, totalRentDue - rentPaid - walletApplied);
-  const depositDues = Math.max(0, totalDepositDue - (tenant.totalDepositPaid || 0));
-  const utilityDues = totalUtilityDue;
-  const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
+  const rentDues = roundCurrency(Math.max(0, totalRentDue - rentPaid - walletApplied));
+  const depositDues = roundCurrency(Math.max(0, totalDepositDue - (tenant.totalDepositPaid || 0)));
+  const utilityDues = roundCurrency(totalUtilityDue);
+  const totalRemainingDues = roundCurrency(Math.max(0, rentDues + depositDues + utilityDues));
   const paymentStatus = totalRemainingDues > 0 ? 'overdue' : 'up-to-date';
 
   return {
@@ -212,7 +212,9 @@ export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = 
     walletApplied,
     walletRemaining,
     walletCoverageMonths: (tenant.price || 0) > 0 ? Math.floor(walletRemaining / (tenant.price || 1)) : 0,
-    walletCoverageRemainder: (tenant.price || 0) > 0 ? walletRemaining % (tenant.price || 1) : walletRemaining,
+    walletCoverageRemainder: roundCurrency(
+      (tenant.price || 0) > 0 ? walletRemaining % (tenant.price || 1) : walletRemaining
+    ),
   };
 };
 
