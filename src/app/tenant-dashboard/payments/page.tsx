@@ -533,33 +533,33 @@ export default function PaymentsPage() {
                       phone={formatPhoneNumber(phoneNumber)}
                       invoiceId={invoiceId || `${Date.now()}`}
                       landlordId={landlordId}
-                      tenantId={tenantId || \"\"}
-                      propertyId={tenant?.propertyId || \"\"}
-                      csrfToken={csrfToken || \"\"}
+                      tenantId={tenantId || ""}
+                      propertyId={tenant?.propertyId || ""}
+                      csrfToken={csrfToken || ""}
                       type={paymentType}
                       shortcode={mpesaShortcode}
                       disabled={isProcessing || amount < 1 || !validatePhoneNumber(phoneNumber) || !landlordId}
                       onStart={() => {
                         setIsProcessing(true);
                         setMessages([
-                          { type: \"success\", text: \"STK Push initiated. Complete the prompt on your phone.\", timestamp: new Date().toISOString() },
+                          { type: "success", text: "STK Push initiated. Complete the prompt on your phone.", timestamp: new Date().toISOString() },
                         ]);
                       }}
                       onSuccess={async () => {
                         setMessages((prev) => [
                           ...prev,
-                          { type: \"success\", text: \"Payment completed successfully!\", timestamp: new Date().toISOString() },
+                          { type: "success", text: "Payment completed successfully!", timestamp: new Date().toISOString() },
                         ]);
                         await fetchData();
                         setIsModalOpen(false);
                         setAmount(0);
-                        setPaymentType(\"Rent\");
+                        setPaymentType("Rent");
                         setIsProcessing(false);
                       }}
                       onError={(message) => {
                         setMessages((prev) => [
                           ...prev,
-                          { type: \"error\", text: message, timestamp: new Date().toISOString() },
+                          { type: "error", text: message, timestamp: new Date().toISOString() },
                         ]);
                         setIsProcessing(false);
                       }}
