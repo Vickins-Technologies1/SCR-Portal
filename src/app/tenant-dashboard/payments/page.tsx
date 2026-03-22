@@ -4,6 +4,8 @@ import React, { useEffect, useState, useCallback } from "react";
 import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import PayWithMpesaButton from "@/components/PayWithMpesaButton";
+import { Toaster } from "react-hot-toast";
 
 interface Payment {
   _id: string;
@@ -25,6 +27,7 @@ interface Tenant {
   propertyId: string;
   walletBalance: number;
   phone: string;
+  ownerId?: string;
 }
 
 interface Message {
@@ -38,6 +41,9 @@ export default function PaymentsPage() {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [displayedPayments, setDisplayedPayments] = useState<Payment[]>([]);
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [landlordId, setLandlordId] = useState<string>("");
+  const [mpesaShortcode, setMpesaShortcode] = useState<string | null>(null);
+  const [invoiceId, setInvoiceId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -124,6 +130,29 @@ export default function PaymentsPage() {
       }
       setTenant(tenantData.tenant);
       setPhoneNumber(tenantData.tenant.phone || "");
+      if (tenantData.tenant.ownerId) {
+        const ownerValue = tenantData.tenant.ownerId;
+        const normalizedOwnerId = typeof ownerValue === "string" ? ownerValue : ownerValue.toString?.();
+        if (normalizedOwnerId) setLandlordId(normalizedOwnerId);
+      }
+
+      if (tenantData.tenant.ownerId) {
+        try {
+          const ownerValue = tenantData.tenant.ownerId;
+          const normalizedOwnerId = typeof ownerValue === "string" ? ownerValue : ownerValue.toString?.();
+          if (!normalizedOwnerId) return;
+          const shortcodeRes = await fetch(`/api/mpesa/shortcode?landlordId=${normalizedOwnerId}`, {
+            headers: { "x-csrf-token": csrfToken },
+            credentials: "include",
+          });
+          const shortcodeData = await shortcodeRes.json();
+          if (shortcodeRes.ok && shortcodeData.success) {
+            setMpesaShortcode(shortcodeData.shortcode || null);
+          }
+        } catch {
+          setMpesaShortcode(null);
+        }
+      }
 
       const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}&page=${page}&limit=${limit}`, {
         method: "GET",
@@ -167,7 +196,7 @@ export default function PaymentsPage() {
   }, [fetchData]);
 
   const validatePhoneNumber = (phone: string): boolean => {
-    const regex = /^(?:\+2547|07)\d{8}$/;
+    const regex = /^(?:\+254[17]|0[17])\d{8}$/;
     return regex.test(phone);
   };
 
@@ -175,157 +204,17 @@ export default function PaymentsPage() {
     const normalized = phone.replace(/\D/g, "");
     if (normalized.startsWith("07")) {
       return `254${normalized.slice(1)}`;
+    } else if (normalized.startsWith("01")) {
+      return `254${normalized.slice(1)}`;
     } else if (normalized.startsWith("+254")) {
       return normalized.slice(1);
     }
     return normalized;
   };
 
-  const checkTransactionStatus = async (transactionRequestId: string): Promise<string> => {
-    if (!csrfToken || !tenantId || !tenant?.propertyId) {
-      setMessages((prev) => [
-        ...prev,
-        { type: "error", text: "Missing CSRF token, tenant ID, or property ID", timestamp: new Date().toISOString() },
-      ]);
-      throw new Error("Missing CSRF token, tenant ID, or property ID");
-    }
-
-    try {
-      const response = await fetch("/api/tenant/payments/check-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
-        credentials: "include",
-        body: JSON.stringify({
-          transaction_request_id: transactionRequestId,
-          tenantId,
-          propertyId: tenant.propertyId,
-          csrfToken,
-        }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        setMessages((prev) => [
-          ...prev,
-          { type: "success", text: data.message || "Transaction status retrieved successfully", timestamp: new Date().toISOString() },
-        ]);
-        return data.status;
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { type: "error", text: data.message || "Failed to check transaction status", timestamp: new Date().toISOString() },
-        ]);
-        throw new Error(data.message || "Failed to check transaction status");
-      }
-    } catch (err) {
-      console.error("Error checking transaction status:", err);
-      setMessages((prev) => [
-        ...prev,
-        { type: "error", text: `Failed to check transaction status: ${err instanceof Error ? err.message : "Unknown error"}`, timestamp: new Date().toISOString() },
-      ]);
-      throw err;
-    }
-  };
-
-  const handlePayment = async () => {
-    if (!tenantId || !tenant?.propertyId || amount < 10 || !validatePhoneNumber(phoneNumber) || !csrfToken) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "error",
-          text: !tenantId
-            ? "Please log in to make a payment."
-            : !tenant?.propertyId
-            ? "Tenant profile incomplete. Missing property ID."
-            : amount < 10
-            ? "Amount must be at least 10 KES."
-            : !validatePhoneNumber(phoneNumber)
-            ? "Please enter a valid phone number (e.g., +2547xxxxxxxx or 07xxxxxxxx)."
-            : "CSRF token not available.",
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-      setIsProcessing(true);
-      return;
-    }
-
-    setIsProcessing(true);
-    setMessages([]);
-
-    try {
-      const reference = `ORDER-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-      const payload = {
-        tenantId,
-        propertyId: tenant.propertyId,
-        type: paymentType,
-        amount,
-        phoneNumber: formatPhoneNumber(phoneNumber),
-        csrfToken,
-        userId: tenantId,
-        reference,
-      };
-      const paymentRes = await fetch("/api/tenant/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      const paymentData = await paymentRes.json();
-
-      if (!paymentData.success) {
-        setMessages((prev) => [
-          ...prev,
-          { type: "error", text: paymentData.message || "Failed to initiate payment. Please check your phone number format (+2547xxxxxxxx or 07xxxxxxxx).", timestamp: new Date().toISOString() },
-        ]);
-        setIsProcessing(false);
-        return;
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        { type: "success", text: paymentData.message || "STK Push initiated successfully. Please check your phone.", timestamp: new Date().toISOString() },
-      ]);
-
-      const { transaction_request_id } = paymentData;
-      let status = "pending";
-      let attempts = 0;
-      const maxAttempts = 10;
-      while (status === "pending" && attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        status = await checkTransactionStatus(transaction_request_id);
-        attempts++;
-      }
-
-      if (status === "completed") {
-        setMessages((prev) => [
-          ...prev,
-          { type: "success", text: "Payment completed successfully! Confirmation sent to your email and phone.", timestamp: new Date().toISOString() },
-        ]);
-        await fetchData();
-        setIsModalOpen(false);
-        setAmount(0);
-        setPaymentType("Rent");
-        setIsProcessing(false);
-      } else {
-        const errorMessage =
-          status === "failed"
-            ? "Payment failed due to insufficient balance."
-            : status === "cancelled"
-            ? "Payment was cancelled by the user."
-            : "Payment timed out. User was not reachable.";
-        setMessages((prev) => [
-          ...prev,
-          { type: "error", text: errorMessage, timestamp: new Date().toISOString() },
-        ]);
-        setIsProcessing(false);
-      }
-    } catch (err) {
-      console.error("Payment error:", err);
-      setMessages((prev) => [
-        ...prev,
-        { type: "error", text: "Failed to process payment. Please check your connection.", timestamp: new Date().toISOString() },
-      ]);
-      setIsProcessing(false);
-    }
+  const handleOpenModal = () => {
+    setInvoiceId(`${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+    setIsModalOpen(true);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -392,6 +281,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="relative min-h-screen pb-10 text-[13px] sm:text-sm">
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       <div className="pointer-events-none absolute -top-24 right-[-10%] h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 left-[-6%] h-72 w-72 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
 
@@ -423,7 +313,7 @@ export default function PaymentsPage() {
           <div className="mt-5 flex flex-wrap gap-3">
             <button
               data-tour="tenant-payments-action"
-              onClick={() => setIsModalOpen(true)}
+              onClick={handleOpenModal}
               className="w-full sm:w-auto bg-primary text-white font-semibold px-6 py-3 rounded-full shadow-lg hover:bg-primary-hover transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
               disabled={!tenantId || !tenant?.propertyId || !csrfToken}
             >
@@ -611,11 +501,11 @@ export default function PaymentsPage() {
                       <span className="text-sm font-semibold text-[#1E3A8A]">Amount (KES)</span>
                       <input
                         type="number"
-                        min="10"
+                        min="1"
                         className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] bg-gray-50 text-sm"
                         value={amount || ""}
                         onChange={(e) => setAmount(Number(e.target.value))}
-                        placeholder="Minimum 10"
+                        placeholder="Minimum 1"
                       />
                     </label>
 
@@ -638,13 +528,42 @@ export default function PaymentsPage() {
                     >
                       Cancel
                     </button>
-                    <button
-                      onClick={handlePayment}
-                      disabled={isProcessing || amount < 10 || !validatePhoneNumber(phoneNumber)}
-                      className="flex-1 py-3 px-6 bg-primary text-white font-bold rounded-xl hover:bg-primary-hover disabled:bg-gray-400 transition text-sm"
-                    >
-                      {isProcessing ? "Processing..." : "Pay Now"}
-                    </button>
+                    <PayWithMpesaButton
+                      amount={amount}
+                      phone={formatPhoneNumber(phoneNumber)}
+                      invoiceId={invoiceId || `${Date.now()}`}
+                      landlordId={landlordId}
+                      tenantId={tenantId || \"\"}
+                      propertyId={tenant?.propertyId || \"\"}
+                      csrfToken={csrfToken || \"\"}
+                      type={paymentType}
+                      shortcode={mpesaShortcode}
+                      disabled={isProcessing || amount < 1 || !validatePhoneNumber(phoneNumber) || !landlordId}
+                      onStart={() => {
+                        setIsProcessing(true);
+                        setMessages([
+                          { type: \"success\", text: \"STK Push initiated. Complete the prompt on your phone.\", timestamp: new Date().toISOString() },
+                        ]);
+                      }}
+                      onSuccess={async () => {
+                        setMessages((prev) => [
+                          ...prev,
+                          { type: \"success\", text: \"Payment completed successfully!\", timestamp: new Date().toISOString() },
+                        ]);
+                        await fetchData();
+                        setIsModalOpen(false);
+                        setAmount(0);
+                        setPaymentType(\"Rent\");
+                        setIsProcessing(false);
+                      }}
+                      onError={(message) => {
+                        setMessages((prev) => [
+                          ...prev,
+                          { type: \"error\", text: message, timestamp: new Date().toISOString() },
+                        ]);
+                        setIsProcessing(false);
+                      }}
+                    />
                   </div>
                 </div>
               </motion.div>

@@ -9,6 +9,7 @@ import toast, { Toaster } from "react-hot-toast"; // Import react-hot-toast
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { usePermissions } from "@/hooks/usePermissions";
+import ConnectMpesaForm from "@/components/ConnectMpesaForm";
 
 export default function OwnerSettingsPage() {
   const router = useRouter();
@@ -21,10 +22,6 @@ export default function OwnerSettingsPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [paymentSettings, setPaymentSettings] = useState({
-    umsPayEnabled: false,
-    umsPayApiKey: "",
-    umsPayEmail: "",
-    umsPayAccountId: "",
     umsCommsEnabled: false,
     umsCommsApiKey: "",
     umsCommsAppId: "",
@@ -75,10 +72,6 @@ export default function OwnerSettingsPage() {
         if (data.success) {
           setProfile(data.owner);
           setPaymentSettings({
-            umsPayEnabled: data.paymentSettings?.umsPayEnabled || false,
-            umsPayApiKey: data.paymentSettings?.umsPayApiKey || "",
-            umsPayEmail: data.paymentSettings?.umsPayEmail || data.owner?.email || "",
-            umsPayAccountId: data.paymentSettings?.umsPayAccountId || "",
             umsCommsEnabled: data.paymentSettings?.umsCommsEnabled || false,
             umsCommsApiKey: data.paymentSettings?.umsCommsApiKey || "",
             umsCommsAppId: data.paymentSettings?.umsCommsAppId || "",
@@ -172,15 +165,6 @@ export default function OwnerSettingsPage() {
     }
     setPaymentLoading(true);
     try {
-      if (
-        paymentSettings.umsPayEnabled &&
-        (!paymentSettings.umsPayApiKey ||
-          !paymentSettings.umsPayEmail ||
-          !paymentSettings.umsPayAccountId)
-      ) {
-        toast.error("Please provide all UMS Pay details (API Key, Email, Account ID).");
-        return;
-      }
       if (
         paymentSettings.umsCommsEnabled &&
         (!paymentSettings.umsCommsApiKey ||
@@ -363,97 +347,15 @@ export default function OwnerSettingsPage() {
               Payment & Communication Settings
             </h2>
             <div className="space-y-4">
-              {/* UMS Pay Settings */}
               <div className="border border-gray-200 rounded-2xl p-4 sm:p-5 bg-white/70 hover:shadow-md transition-shadow duration-200">
-                <div
-                  className="flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleGateway("umsPay")}
-                >
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs sm:text-sm font-semibold text-gray-700">UMS Pay (M-Pesa)</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-                        paymentSettings.umsPayEnabled ? "bg-primary" : "bg-gray-300"
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isReadOnly) return;
-                        setPaymentSettings({ ...paymentSettings, umsPayEnabled: !paymentSettings.umsPayEnabled });
-                      }}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                          paymentSettings.umsPayEnabled ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
-                    </div>
-                    {expandedGateway === "umsPay" ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    <span className="text-xs sm:text-sm font-semibold text-gray-700">Safaricom Daraja (M-Pesa)</span>
                   </div>
                 </div>
-                <AnimatePresence>
-                  {expandedGateway === "umsPay" && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="mt-4 grid gap-4"
-                    >
-                      <div>
-                        <label className="text-xs font-medium text-gray-600">UMS Pay API Key</label>
-                        <input
-                          type="text"
-                          value={paymentSettings.umsPayApiKey}
-                          onChange={(e) =>
-                            setPaymentSettings({ ...paymentSettings, umsPayApiKey: e.target.value })
-                          }
-                          placeholder="Enter UMS Pay API Key"
-                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                          disabled={!paymentSettings.umsPayEnabled}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600">UMS Pay Email</label>
-                        <input
-                          type="email"
-                          value={paymentSettings.umsPayEmail}
-                          onChange={(e) =>
-                            setPaymentSettings({ ...paymentSettings, umsPayEmail: e.target.value })
-                          }
-                          placeholder="Enter UMS Pay Email"
-                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                          disabled={!paymentSettings.umsPayEnabled}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600">UMS Pay Account ID</label>
-                        <input
-                          type="text"
-                          value={paymentSettings.umsPayAccountId}
-                          onChange={(e) =>
-                            setPaymentSettings({ ...paymentSettings, umsPayAccountId: e.target.value })
-                          }
-                          placeholder="Enter UMS Pay Account ID"
-                          className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                          disabled={!paymentSettings.umsPayEnabled}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Find your API key and Account ID in the{" "}
-                        <a
-                          href="https://umspay.co.ke/dashboard"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          UMS Pay Dashboard
-                        </a>.
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <div className="mt-4">
+                  <ConnectMpesaForm disabled={isReadOnly} />
+                </div>
               </div>
 
               {/* UMSComms Settings */}

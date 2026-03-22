@@ -33,10 +33,6 @@ export async function PUT(request: Request) {
       paypalClientId,
       bankTransferEnabled,
       bankAccountDetails,
-      umsPayEnabled,
-      umsPayApiKey,
-      umsPayEmail,
-      umsPayAccountId,
     } = await request.json();
 
     if (!ownerId) {
@@ -50,10 +46,6 @@ export async function PUT(request: Request) {
       paypalClientId: paypalClientId || "",
       bankTransferEnabled: !!bankTransferEnabled,
       bankAccountDetails: bankAccountDetails || "",
-      umsPayEnabled: !!umsPayEnabled,
-      umsPayApiKey: umsPayApiKey || "",
-      umsPayEmail: umsPayEmail || "",
-      umsPayAccountId: umsPayAccountId || "",
     };
 
     const { db } = await connectToDatabase();

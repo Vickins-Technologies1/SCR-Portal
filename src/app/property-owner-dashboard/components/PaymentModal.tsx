@@ -180,7 +180,6 @@ export default function PaymentModal({
             throw new Error("CSRF token is missing");
           }
           const requestBody = { transactionRequestId };
-          console.log("Transaction status request body:", requestBody, { csrfToken });
 
           const statusRes = await fetch("/api/transaction-status", {
             method: "POST",
@@ -191,41 +190,19 @@ export default function PaymentModal({
             body: JSON.stringify(requestBody),
           });
           const statusData = await statusRes.json();
-          console.log("Transaction status response:", statusData);
 
           if (!statusRes.ok || !statusData.success) {
             throw new Error(statusData.message || `HTTP error! Status: ${statusRes.status}`);
           }
 
-          let mpesaErrorCode = "";
-          let mpesaErrorMessage = "";
-          try {
-            const mpesaResponse = JSON.parse(statusData.MpesaResponse || "{}");
-            mpesaErrorCode = mpesaResponse.errorCode || "";
-            mpesaErrorMessage = mpesaResponse.errorMessage || "";
-            console.log("Parsed MpesaResponse:", { mpesaErrorCode, mpesaErrorMessage, rawMpesaResponse: statusData.MpesaResponse });
-          } catch (error) {
-            console.error("Error parsing MpesaResponse:", error, { rawMpesaResponse: statusData.MpesaResponse });
-            mpesaErrorCode = "";
-            mpesaErrorMessage = "";
-          }
+          const normalized = String(statusData.TransactionStatus || "").toLowerCase();
 
-          const isCancelled = mpesaErrorCode === "500.001.1001" && mpesaErrorMessage.includes("user pressed Cancel Button");
-          if (isCancelled) {
-            console.log("Cancellation detected:", { transactionRequestId, mpesaErrorCode, mpesaErrorMessage });
-            setStatusMessage("Payment cancelled on your phone. Please retry or confirm.");
-            onError("Payment cancelled by user");
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            setIsPaymentLoadingModalOpen(false);
-            setIsLoading(false);
-            return true;
-          }
-
-          if (statusData.TransactionStatus === "Pending") {
+          if (normalized === "pending") {
             setStatusMessage("Transaction pending, please complete the payment on your phone.");
+            return false;
           }
 
-          if (statusData.TransactionStatus === "Completed") {
+          if (normalized === "completed") {
             try {
               const updateRes = await fetch("/api/invoices", {
                 method: "POST",
@@ -254,7 +231,6 @@ export default function PaymentModal({
               setIsLoading(false);
               return true;
             } catch (error) {
-              console.error("Error updating invoice:", error);
               setStatusMessage("Failed to update invoice status.");
               onError(error instanceof Error ? error.message : "Failed to update invoice status");
               await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -262,27 +238,22 @@ export default function PaymentModal({
               setIsLoading(false);
               return true;
             }
-          } else if (["Failed", "Cancelled", "Timeout"].includes(statusData.TransactionStatus)) {
-            const errorMessage =
-              statusData.ResultDesc ||
-              (statusData.TransactionStatus === "Failed"
-                ? "Payment failed: Insufficient balance"
-                : statusData.TransactionStatus === "Cancelled"
-                ? "Payment cancelled by user"
-                : "Payment timed out: User not reachable");
-            console.log("Stopping polling due to terminal state:", { transactionRequestId, status: statusData.TransactionStatus, errorMessage });
-            setStatusMessage(errorMessage);
-            onError(errorMessage);
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            setIsPaymentLoadingModalOpen(false);
-            setIsLoading(false);
-            return true;
           }
 
-          console.log("Continuing polling:", { transactionRequestId, status: statusData.TransactionStatus, attempts: attempts + 1 });
-          return false;
+          const errorMessage =
+            statusData.ResultDesc ||
+            (normalized === "failed"
+              ? "Payment failed: Insufficient balance"
+              : normalized === "cancelled"
+              ? "Payment cancelled by user"
+              : "Payment timed out: User not reachable");
+          setStatusMessage(errorMessage);
+          onError(errorMessage);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          setIsPaymentLoadingModalOpen(false);
+          setIsLoading(false);
+          return true;
         } catch (error) {
-          console.error("Error checking transaction status:", error, { transactionRequestId });
           const errorMessage = error instanceof Error ? error.message : "Failed to check transaction status";
           setStatusMessage(errorMessage);
           onError(errorMessage);
@@ -379,14 +350,14 @@ export default function PaymentModal({
         const invoice: Invoice = invoiceData.invoices[0];
 
         const requestBody = {
-          action: "initiate",
           amount: invoice.amount,
-          msisdn: paymentPhone,
-          reference: invoice.reference,
+          phone: paymentPhone,
+          invoiceId: invoice._id,
+          landlordId: userId,
+          type: "Other",
         };
-        console.log("Payment initiate request body:", requestBody, { csrfToken });
 
-        const stkRes = await fetch("/api/payments", {
+        const stkRes = await fetch("/api/mpesa/stk-push", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -395,10 +366,8 @@ export default function PaymentModal({
           body: JSON.stringify(requestBody),
         });
         const stkData = await stkRes.json();
-        console.log("Payment initiate response:", stkData);
-
-        if (stkData.success === "200") {
-          pollTransactionStatus(stkData.transaction_request_id, invoice);
+        if (stkRes.ok && stkData.success) {
+          pollTransactionStatus(stkData.checkoutRequestId, invoice);
         } else {
           onError(stkData.message || "Failed to initiate payment");
           setIsPaymentLoadingModalOpen(false);

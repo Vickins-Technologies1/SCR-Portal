@@ -1,0 +1,269 @@
+// src/app/api/mpesa/stk-callback/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { ObjectId, Db } from "mongodb";
+import { connectToDatabase } from "@/lib/mongodb";
+import logger from "@/lib/logger";
+import { calculateRentDueToDate } from "@/lib/utils";
+import { getTenantPaymentTotals } from "@/lib/payment-totals";
+import { sendConfirmationEmail } from "@/lib/email";
+import { sendWelcomeSms } from "@/lib/sms";
+
+const CallbackSchema = z.object({
+  Body: z.object({
+    stkCallback: z.object({
+      MerchantRequestID: z.string(),
+      CheckoutRequestID: z.string(),
+      ResultCode: z.number(),
+      ResultDesc: z.string(),
+      CallbackMetadata: z
+        .object({
+          Item: z.array(
+            z.object({
+              Name: z.string(),
+              Value: z.union([z.string(), z.number()]).optional(),
+            })
+          ),
+        })
+        .optional(),
+    }),
+  }),
+});
+
+function parseMpesaDate(value?: string | number): Date {
+  if (!value) return new Date();
+  const str = String(value);
+  if (!/^\d{14}$/.test(str)) return new Date();
+  const year = str.slice(0, 4);
+  const month = str.slice(4, 6);
+  const day = str.slice(6, 8);
+  const hour = str.slice(8, 10);
+  const minute = str.slice(10, 12);
+  const second = str.slice(12, 14);
+  return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+03:00`);
+}
+
+function extractMetadata(items?: { Name: string; Value?: string | number }[]) {
+  const map = new Map<string, string | number>();
+  items?.forEach((item) => {
+    if (item?.Name) map.set(item.Name, item.Value ?? "");
+  });
+  return {
+    amount: Number(map.get("Amount") || 0),
+    receipt: String(map.get("MpesaReceiptNumber") || ""),
+    transactionDate: map.get("TransactionDate"),
+    phone: String(map.get("PhoneNumber") || ""),
+  };
+}
+
+export async function POST(request: NextRequest) {
+  let payload: unknown;
+  try {
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid JSON" }, { status: 400 });
+  }
+
+  const parsed = CallbackSchema.safeParse(payload);
+  if (!parsed.success) {
+    return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid payload" }, { status: 400 });
+  }
+
+  const callback = parsed.data.Body.stkCallback;
+  const metadata = extractMetadata(callback.CallbackMetadata?.Item);
+
+  const status =
+    callback.ResultCode === 0
+      ? "completed"
+      : /cancel/i.test(callback.ResultDesc) || callback.ResultCode === 1032
+      ? "cancelled"
+      : "failed";
+
+  try {
+    const { db }: { db: Db } = await connectToDatabase();
+
+    // Match payment by CheckoutRequestID/MerchantRequestID
+    const paymentResult = await db.collection("payments").findOneAndUpdate(
+      {
+        $or: [
+          { checkoutRequestId: callback.CheckoutRequestID },
+          { transactionId: callback.CheckoutRequestID },
+          { merchantRequestId: callback.MerchantRequestID },
+        ],
+      },
+      {
+        $set: {
+          status,
+          mpesaCode: metadata.receipt || null,
+          paymentDate: parseMpesaDate(metadata.transactionDate).toISOString(),
+          phoneNumber: metadata.phone || undefined,
+        },
+      },
+      { returnDocument: "after" }
+    );
+
+    const payment = paymentResult.value;
+    if (!payment) {
+      logger.warn("STK callback received but payment not found", {
+        checkoutRequestId: callback.CheckoutRequestID,
+      });
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
+    // If we have an invoice, mark it paid/failed for reporting
+    if (payment.invoiceId && ObjectId.isValid(payment.invoiceId)) {
+      await db.collection("invoices").updateOne(
+        { _id: new ObjectId(payment.invoiceId) },
+        { $set: { status: status === "completed" ? "completed" : "failed", updatedAt: new Date().toISOString() } }
+      );
+    }
+
+    // Only complete downstream ledger updates for successful tenant payments
+    if (status !== "completed" || !payment.tenantId) {
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
+    const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(payment.tenantId) });
+    if (!tenant) {
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
+    const property = await db.collection("properties").findOne({ _id: new ObjectId(payment.propertyId) });
+    if (!property) {
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
+    const { rentDue: totalRentDue } = calculateRentDueToDate({
+      leaseStartDate: tenant.leaseStartDate,
+      monthlyRent: tenant.price || 0,
+      today: new Date(),
+    });
+
+    const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);
+    const amount = metadata.amount || payment.amount || 0;
+
+    const rentPaidBefore =
+      payment.type === "Rent"
+        ? Math.max(0, paymentTotals.rentPaid - amount)
+        : paymentTotals.rentPaid;
+    const depositPaidBefore =
+      payment.type === "Deposit"
+        ? Math.max(0, paymentTotals.depositPaid - amount)
+        : paymentTotals.depositPaid;
+
+    const rentDueBefore = Math.max(0, totalRentDue - rentPaidBefore);
+    const depositTotal = tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0;
+    const depositDueBefore = Math.max(0, depositTotal - depositPaidBefore);
+
+    let remainingAmount = amount;
+    if (payment.type === "Rent") {
+      const applied = Math.min(rentDueBefore, remainingAmount);
+      remainingAmount -= applied;
+    } else if (payment.type === "Deposit") {
+      const applied = Math.min(depositDueBefore, remainingAmount);
+      remainingAmount -= applied;
+    }
+
+    const walletBalance = (tenant.walletBalance || 0) + remainingAmount;
+    const rentDueAfter = Math.max(0, totalRentDue - paymentTotals.rentPaid);
+    const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
+    const utilityDueAfter = 0;
+    const totalRemainingDues = rentDueAfter + depositDueAfter + utilityDueAfter;
+
+    await db.collection("tenants").updateOne(
+      { _id: new ObjectId(payment.tenantId) },
+      {
+        $set: {
+          totalRentPaid: paymentTotals.rentPaid,
+          totalUtilityPaid: paymentTotals.utilityPaid,
+          totalDepositPaid: paymentTotals.depositPaid,
+          walletBalance,
+          paymentStatus: totalRemainingDues > 0 ? "overdue" : "up-to-date",
+          updatedAt: new Date().toISOString(),
+        },
+      }
+    );
+
+    const ownerId = typeof property.ownerId === "string" ? property.ownerId : property.ownerId?.toString?.();
+    const owner = ownerId
+      ? await db.collection("users").findOne({ _id: new ObjectId(ownerId), role: "propertyOwner" })
+      : null;
+
+    const paymentDateFormatted = new Date().toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+
+    const emailCommon = {
+      amount,
+      paymentType: payment.type || "Other",
+      transactionId: callback.CheckoutRequestID,
+      paymentDate: paymentDateFormatted,
+      mpesaCode: metadata.receipt || undefined,
+    };
+
+    try {
+      await sendConfirmationEmail({
+        to: tenant.email,
+        name: tenant.name,
+        propertyName: property.name,
+        ...emailCommon,
+      });
+    } catch (emailError) {
+      logger.error("Failed to send payment confirmation email to tenant", {
+        tenantId: payment.tenantId,
+        message: emailError instanceof Error ? emailError.message : String(emailError),
+      });
+    }
+
+    if (tenant.phone) {
+      try {
+        const smsText = `Payment of Ksh. ${amount} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
+        await sendWelcomeSms({ phone: tenant.phone, message: smsText.slice(0, 160) });
+      } catch (smsError) {
+        logger.error("Failed to send payment confirmation SMS to tenant", {
+          tenantId: payment.tenantId,
+          message: smsError instanceof Error ? smsError.message : String(smsError),
+        });
+      }
+    }
+
+    if (owner) {
+      try {
+        await sendConfirmationEmail({
+          to: owner.email,
+          name: owner.name,
+          propertyName: property.name,
+          tenantName: tenant.name,
+          ...emailCommon,
+        });
+      } catch (emailError) {
+        logger.error("Failed to send payment confirmation email to owner", {
+          ownerId: property.ownerId,
+          message: emailError instanceof Error ? emailError.message : String(emailError),
+        });
+      }
+
+      if (owner.phone) {
+        try {
+          const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
+          await sendWelcomeSms({ phone: owner.phone, message: smsText.slice(0, 160) });
+        } catch (smsError) {
+          logger.error("Failed to send payment confirmation SMS to owner", {
+            ownerId: property.ownerId,
+            message: smsError instanceof Error ? smsError.message : String(smsError),
+          });
+        }
+      }
+    }
+
+    return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+  } catch (error) {
+    logger.error("STK callback processing error", {
+      message: error instanceof Error ? error.message : String(error),
+      checkoutRequestId: callback.CheckoutRequestID,
+    });
+    return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+  }
+}

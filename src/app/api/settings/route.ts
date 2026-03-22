@@ -39,10 +39,6 @@ export async function GET(request: Request) {
       success: true,
       owner,
       paymentSettings: paymentSettings || {
-        umsPayEnabled: false,
-        umsPayApiKey: "",
-        umsPayEmail: owner.email,
-        umsPayAccountId: "",
         umsCommsEnabled: false,
         umsCommsApiKey: "",
         umsCommsAppId: "",
@@ -138,10 +134,6 @@ export async function POST(request: Request) {
     console.log("[POST] Received payment settings payload:", body);
     const {
       ownerId,
-      umsPayEnabled,
-      umsPayApiKey,
-      umsPayEmail,
-      umsPayAccountId,
       umsCommsEnabled,
       umsCommsApiKey,
       umsCommsAppId,
@@ -166,10 +158,6 @@ export async function POST(request: Request) {
 
     const paymentSettings = {
       ownerId: new ObjectId(ownerId),
-      umsPayEnabled: !!umsPayEnabled,
-      umsPayApiKey: umsPayApiKey || "",
-      umsPayEmail: umsPayEmail || "",
-      umsPayAccountId: umsPayAccountId || "",
       umsCommsEnabled: !!umsCommsEnabled,
       umsCommsApiKey: umsCommsApiKey || "",
       umsCommsAppId: umsCommsAppId || "",

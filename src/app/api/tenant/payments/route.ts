@@ -1,10 +1,18 @@
 // src/app/api/tenant/payments/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { connectToDatabase } from "../../../../lib/mongodb";
+import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId, Db } from "mongodb";
-import { validateCsrfToken } from "../../../../lib/csrf";
-import logger from "../../../../lib/logger";
-import axios, { AxiosError } from "axios";
+import { validateCsrfToken } from "@/lib/csrf";
+import logger from "@/lib/logger";
+import { z } from "zod";
+import { connectMongoose } from "@/lib/mongoose";
+import { LandlordMpesa } from "@/models/LandlordMpesa";
+import {
+  decryptPasskey,
+  initiateStkPush,
+  isValidKenyanMsisdn,
+  normalizePhoneNumber,
+} from "@/lib/mpesa";
 
 interface Payment {
   _id: ObjectId;
@@ -13,7 +21,7 @@ interface Payment {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "failed";
+  status: "completed" | "pending" | "failed" | "cancelled";
   createdAt: string;
   type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;
@@ -32,6 +40,7 @@ interface Tenant {
   paymentStatus: string;
   leaseStartDate: string;
   walletBalance: number;
+  ownerId?: string;
 }
 
 interface Property {
@@ -40,39 +49,15 @@ interface Property {
   name: string;
 }
 
-interface PaymentSettings {
-  ownerId: ObjectId;
-  umsPayEnabled: boolean;
-  umsPayApiKey: string;
-  umsPayEmail: string;
-  umsPayAccountId: string;
-}
-
-interface UmsPayErrorResponse {
-  success: string;
-  errorMessage?: string;
-  transaction_request_id?: string;
-}
-
-interface PaymentRequestBody {
-  tenantId?: string;
-  amount?: number;
-  propertyId?: string;
-  userId?: string;
-  type?: "Rent" | "Utility" | "Deposit" | "Other";
-  phoneNumber?: string;
-  reference?: string;
-}
-
-const normalizePhoneNumber = (phone: string): string => {
-  let normalized = phone.replace(/\D/g, ""); // Remove non-digits
-  if (normalized.startsWith("07")) {
-    normalized = "254" + normalized.slice(1);
-  } else if (normalized.startsWith("+254")) {
-    normalized = normalized.slice(1);
-  }
-  return normalized;
-};
+const PaymentRequestSchema = z.object({
+  tenantId: z.string().trim().min(1),
+  amount: z.preprocess((v) => Number(v), z.number().int().positive()),
+  propertyId: z.string().trim().min(1),
+  userId: z.string().trim().min(1),
+  type: z.enum(["Rent", "Utility", "Deposit", "Other"]),
+  phoneNumber: z.string().trim().min(1),
+  reference: z.string().trim().min(1),
+});
 
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
@@ -91,7 +76,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!validateCsrfToken(request, csrfToken)) {
-    logger.error("Invalid CSRF token", { userId, csrfToken, cookies: request.cookies.getAll() });
+    logger.error("Invalid CSRF token", { userId, csrfToken });
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
@@ -99,10 +84,7 @@ export async function GET(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
     const skip = (page - 1) * limit;
 
-    const query: {
-      tenantId?: string;
-      propertyId?: string | { $in: string[] };
-    } = {};
+    const query: { tenantId?: string; propertyId?: string | { $in: string[] } } = {};
 
     if (role === "propertyOwner") {
       const properties = await db
@@ -112,30 +94,23 @@ export async function GET(request: NextRequest) {
       const propertyIds = properties.map((p) => p._id.toString());
 
       if (!propertyIds.length) {
-        logger.debug("No properties found for user", { userId });
         return NextResponse.json({ success: true, payments: [], total: 0, page, limit, totalPages: 0 }, { status: 200 });
       }
 
       query.propertyId = propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds };
     } else if (role === "tenant") {
       if (!tenantId || tenantId !== userId) {
-        logger.error("Unauthorized tenant access", { userId, tenantId });
         return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
       }
       query.tenantId = tenantId;
     } else if (role === "admin") {
       if (tenantId) query.tenantId = tenantId;
     } else {
-      logger.error("Invalid role", { role });
       return NextResponse.json({ success: false, message: "Invalid role" }, { status: 400 });
     }
 
     const total = await db.collection<Payment>("payments").countDocuments(query);
     const totalPages = Math.ceil(total / limit) || 1;
-
-    // Log query and tenantIds for debugging
-    const paymentDocs = await db.collection<Payment>("payments").find(query).toArray();
-    const tenantIds = paymentDocs.map((p) => p.tenantId);
 
     const payments = await db
       .collection<Payment>("payments")
@@ -182,27 +157,7 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
 
-    logger.debug(`Payments fetched for ${role}`, {
-      userId,
-      propertyId,
-      tenantId,
-      page,
-      limit,
-      total,
-      paymentsCount: payments.length,
-      propertyIds: role === "propertyOwner" ? propertyId : undefined,
-      tenantIds,
-      tenantNames: payments.map((p) => p.tenantName),
-    });
-
-    return NextResponse.json({
-      success: true,
-      payments,
-      total,
-      page,
-      limit,
-      totalPages,
-    });
+    return NextResponse.json({ success: true, payments, total, page, limit, totalPages });
   } catch (error: unknown) {
     logger.error("GET Payments Error", {
       message: error instanceof Error ? error.message : "Unknown error",
@@ -219,149 +174,105 @@ export async function POST(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
-  let body: PaymentRequestBody | null = null;
 
+  // Auth + CSRF guard for payment initiation
   if (!userId || !role || !["tenant", "propertyOwner"].includes(role)) {
     logger.error("Unauthorized access attempt", { userId, role });
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   if (!validateCsrfToken(request, csrfToken)) {
-    logger.error("Invalid CSRF token", { userId, csrfToken, cookies: request.cookies.getAll() });
+    logger.error("Invalid CSRF token", { userId });
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
+  let payload: unknown;
   try {
-    body = await request.json();
-    if (!body) {
-      logger.error("Invalid request body", { userId });
-      return NextResponse.json({ success: false, message: "Invalid request body" }, { status: 400 });
-    }
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ success: false, message: "Invalid request body" }, { status: 400 });
+  }
 
-    const { tenantId, amount, propertyId, userId: submittedUserId, type, phoneNumber, reference } = body;
+  const parsed = PaymentRequestSchema.safeParse(payload);
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, message: "Invalid request data", errors: parsed.error.flatten() }, { status: 400 });
+  }
 
-    // Input validation
-    if (!tenantId) return NextResponse.json({ success: false, message: "Missing tenantId" }, { status: 400 });
-    if (!amount || amount < 10) return NextResponse.json({ success: false, message: "Amount must be at least 10 KES" }, { status: 400 });
-    if (!propertyId) return NextResponse.json({ success: false, message: "Missing propertyId" }, { status: 400 });
-    if (submittedUserId !== userId) return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 400 });
-    if (!type) return NextResponse.json({ success: false, message: "Missing payment type" }, { status: 400 });
-    if (!phoneNumber) return NextResponse.json({ success: false, message: "Missing phone number" }, { status: 400 });
-    if (!reference) return NextResponse.json({ success: false, message: "Missing transaction reference" }, { status: 400 });
+  const { tenantId, amount, propertyId, userId: submittedUserId, type, phoneNumber, reference } = parsed.data;
 
-    // Validate phone number format (supports both 07xxx and 01xxx prefixes)
-    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+  if (submittedUserId !== userId) {
+    return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 400 });
+  }
 
-    // Allow:
-    // +2547xxxxxxxx or +2541xxxxxxxx
-    // 07xxxxxxxx     or 01xxxxxxxx
-    // 7xxxxxxxx      or 1xxxxxxxx   
-    if (!/^\+?254[17]\d{8}$/.test(normalizedPhone)) {
-      logger.error("Invalid phone number format", {
-        phoneNumber: normalizedPhone.replace(/\d{4}$/, "****")
-      });
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid phone number format. Use +2547xxxxxxxx, +2541xxxxxxxx, 07xxxxxxxx, or 01xxxxxxxx"
-        },
-        { status: 400 }
-      );
-    }
+  // Normalize and validate Kenya MSISDN
+  const normalizedPhone = normalizePhoneNumber(phoneNumber);
+  if (!isValidKenyanMsisdn(normalizedPhone)) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Invalid phone number format. Use +2547xxxxxxxx, +2541xxxxxxxx, 07xxxxxxxx, or 01xxxxxxxx",
+      },
+      { status: 400 }
+    );
+  }
 
+  try {
     const { db }: { db: Db } = await connectToDatabase();
 
-    // Validate property and get ownerId
     const property = await db.collection<Property>("properties").findOne({ _id: new ObjectId(propertyId) });
     if (!property) {
-      logger.error("Property not found", { propertyId });
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
-    // Fetch payment settings for the owner
-    const paymentSettings = await db
-      .collection<PaymentSettings>("paymentSettings")
-      .findOne({ ownerId: new ObjectId(property.ownerId) });
-
-    if (!paymentSettings || !paymentSettings.umsPayEnabled) {
-      logger.error(`UMS Pay not enabled for ownerId: ${property.ownerId}`);
-      return NextResponse.json(
-        { success: false, message: "UMS Pay is not enabled for this property owner" },
-        { status: 400 }
-      );
-    }
-
-    const { umsPayApiKey, umsPayEmail, umsPayAccountId } = paymentSettings;
-
-    logger.debug(`UMS Pay credentials for ownerId: ${property.ownerId}`, {
-      umsPayApiKey: umsPayApiKey ? "[REDACTED]" : "MISSING",
-      umsPayEmail: umsPayEmail || "MISSING",
-      umsPayAccountId: umsPayAccountId || "MISSING",
-      phoneNumber: normalizedPhone.replace(/\d{4}$/, "****"),
-      timestamp: "2025-08-07T14:49:00+03:00"
-    });
-
-    if (!umsPayApiKey || !umsPayEmail || !umsPayAccountId) {
-      logger.error(`Incomplete UMS Pay configuration for ownerId: ${property.ownerId}`);
-      return NextResponse.json({ success: false, message: "Incomplete UMS Pay configuration" }, { status: 400 });
-    }
-
-    // Validate tenant exists and fetch tenant name
     const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
     if (!tenant) {
-      logger.error("Tenant not found", { tenantId });
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    // Skip propertyId check for tenants to allow payments to any valid property
     if (role === "propertyOwner") {
       const propertyCheck = await db
         .collection<Property>("properties")
         .findOne({ _id: new ObjectId(propertyId), ownerId: userId });
 
       if (!propertyCheck) {
-        logger.error("Unauthorized: Property not owned", { userId, propertyId });
         return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
       }
     }
 
-    // Initiate STK Push via UMS Pay
-    const umsPayResponse = await axios.post(
-      "https://api.umspay.co.ke/api/v1/initiatestkpush",
-      {
-        api_key: umsPayApiKey,
-        email: umsPayEmail,
-        amount,
-        msisdn: normalizedPhone,
-        reference,
-        account_id: umsPayAccountId,
-      },
-      {
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    // Load landlord-specific shortcode + passkey
+    await connectMongoose();
+    const landlordId = typeof tenant.ownerId === "string" ? tenant.ownerId : property.ownerId;
+    const landlordMpesa = await LandlordMpesa.findOne({ landlord: landlordId }).lean();
+    if (!landlordMpesa) {
+      return NextResponse.json({ success: false, message: "Landlord M-Pesa is not connected" }, { status: 400 });
+    }
 
-    const umsPayData = umsPayResponse.data as UmsPayErrorResponse;
-    logger.debug("UMS Pay STK Push response", {
-      ...umsPayData,
-      phoneNumber: normalizedPhone.replace(/\d{4}$/, "****"),
-      timestamp: "2025-08-07T14:49:00+03:00"
+    const passkey = decryptPasskey(landlordMpesa.passkey);
+    const callbackBase = process.env.MPESA_CALLBACK_BASE_URL || "";
+    if (!callbackBase) {
+      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
+    }
+
+    const accountReference = reference.startsWith("INV-") ? reference : `INV-${reference}`;
+    // Initiate STK push with landlord shortcode
+    const stkResponse = await initiateStkPush({
+      shortcode: landlordMpesa.shortcode,
+      passkey,
+      amount,
+      phone: normalizedPhone,
+      accountReference,
+      transactionDesc: `${type} Payment`,
+      callbackUrl: `${callbackBase}/api/mpesa/stk-callback`,
     });
 
-    if (umsPayData.success !== "200") {
-      logger.error("Failed to initiate STK Push", {
-        errorMessage: umsPayData.errorMessage,
-        phoneNumber: normalizedPhone.replace(/\d{4}$/, "****"),
-        timestamp: "2025-08-07T14:49:00+03:00"
-      });
+    if (stkResponse.ResponseCode !== "0") {
       return NextResponse.json(
-        { success: false, message: umsPayData.errorMessage || "Failed to initiate STK Push" },
+        { success: false, message: stkResponse.ResponseDescription || "Failed to initiate payment" },
         { status: 400 }
       );
     }
 
-    // Store pending payment
-    const transactionId = umsPayData.transaction_request_id!;
+    const transactionId = stkResponse.CheckoutRequestID;
     const nowIso = new Date().toISOString();
     const payment: Payment = {
       _id: new ObjectId(),
@@ -378,7 +289,12 @@ export async function POST(request: NextRequest) {
       mpesaCode: null,
     };
 
-    await db.collection<Payment>("payments").insertOne(payment);
+    await db.collection<Payment>("payments").insertOne({
+      ...payment,
+      checkoutRequestId: stkResponse.CheckoutRequestID,
+      merchantRequestId: stkResponse.MerchantRequestID,
+      landlordId,
+    });
 
     return NextResponse.json({
       success: true,
@@ -398,23 +314,13 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    const axiosError = error as AxiosError<UmsPayErrorResponse>;
     logger.error("POST Payment Error", {
       message: error instanceof Error ? error.message : "Unknown error",
-      response: axiosError.response?.data || null,
-      phoneNumber: body?.phoneNumber ? normalizePhoneNumber(body.phoneNumber).replace(/\d{4}$/, "****") : "MISSING",
-      timestamp: "2025-08-07T14:49:00+03:00"
+      userId,
     });
     return NextResponse.json(
-      {
-        success: false,
-        message: axiosError.response?.data?.errorMessage || "Server error while processing payment",
-      },
-      { status: axiosError.response?.status || 500 }
+      { success: false, message: "Server error while processing payment" },
+      { status: 500 }
     );
   }
 }
-
-
-
-
