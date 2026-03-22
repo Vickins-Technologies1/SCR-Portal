@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       { returnDocument: "after" }
     );
 
-    const payment = paymentResult.value;
+    const payment = paymentResult?.value;
     if (!payment) {
       logger.warn("STK callback received but payment not found", {
         checkoutRequestId: callback.CheckoutRequestID,

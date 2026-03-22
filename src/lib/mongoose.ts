@@ -20,8 +20,13 @@ const globalCache = global._mongooseCache ?? { conn: null, promise: null };
 export async function connectMongoose(): Promise<Mongoose> {
   if (globalCache.conn) return globalCache.conn;
 
+  const mongoUri = MONGODB_URI;
+  if (!mongoUri) {
+    throw new Error("Please define MONGODB_URI in your environment");
+  }
+
   if (!globalCache.promise) {
-    globalCache.promise = mongoose.connect(MONGODB_URI, {
+    globalCache.promise = mongoose.connect(mongoUri, {
       dbName: "rentaldb",
       maxPoolSize: 10,
     });

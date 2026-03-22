@@ -23,7 +23,10 @@ export async function GET(request: NextRequest) {
 
   try {
     await connectMongoose();
-    const doc = await LandlordMpesa.findOne({ landlord: userId }).lean();
+    const doc = await LandlordMpesa.findOne({ landlord: userId })
+      .select({ shortcode: 1, _id: 0 })
+      .lean<{ shortcode: string }>()
+      .exec();
 
     return NextResponse.json({
       success: true,

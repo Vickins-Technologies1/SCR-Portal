@@ -21,6 +21,10 @@ interface Payment {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
+  checkoutRequestId?: string;
+  merchantRequestId?: string;
+  landlordId?: string;
+  invoiceId?: string;
   status: "completed" | "pending" | "failed" | "cancelled";
   createdAt: string;
   type?: "Rent" | "Utility" | "Deposit" | "Other";
@@ -242,7 +246,10 @@ export async function POST(request: NextRequest) {
     // Load landlord-specific shortcode + passkey
     await connectMongoose();
     const landlordId = typeof tenant.ownerId === "string" ? tenant.ownerId : property.ownerId;
-    const landlordMpesa = await LandlordMpesa.findOne({ landlord: landlordId }).lean();
+    const landlordMpesa = await LandlordMpesa.findOne({ landlord: landlordId })
+      .select({ shortcode: 1, passkey: 1, _id: 0 })
+      .lean<{ shortcode: string; passkey: string }>()
+      .exec();
     if (!landlordMpesa) {
       return NextResponse.json({ success: false, message: "Landlord M-Pesa is not connected" }, { status: 400 });
     }
