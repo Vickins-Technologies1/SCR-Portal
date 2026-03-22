@@ -39,7 +39,10 @@ export async function POST(request: NextRequest) {
   try {
     // Use landlord-specific shortcode to register confirmation/validation URLs
     await connectMongoose();
-    const landlordMpesa = await LandlordMpesa.findOne({ landlord: userId }).lean();
+    const landlordMpesa = await LandlordMpesa.findOne({ landlord: userId })
+      .select({ shortcode: 1, _id: 0 })
+      .lean<{ shortcode: string }>()
+      .exec();
     if (!landlordMpesa) {
       return NextResponse.json({ success: false, message: "Landlord M-Pesa is not connected" }, { status: 400 });
     }
