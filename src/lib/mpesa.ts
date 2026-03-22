@@ -8,6 +8,8 @@ const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || "";
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET || "";
 const MPESA_ENVIRONMENT = (process.env.MPESA_ENVIRONMENT || "sandbox") as MpesaEnvironment;
 const MPESA_ENCRYPTION_SECRET = process.env.MPESA_ENCRYPTION_SECRET || "";
+const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || "";
+const MPESA_PASSKEY = process.env.MPESA_PASSKEY || "";
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -35,6 +37,16 @@ export function generateTimestamp(date = new Date()): string {
 
 export function generatePassword(shortcode: string, passkey: string, timestamp: string): string {
   return Buffer.from(`${shortcode}${passkey}${timestamp}`).toString("base64");
+}
+
+export function getMpesaShortcode(): string {
+  requireEnv("MPESA_SHORTCODE", MPESA_SHORTCODE);
+  return MPESA_SHORTCODE;
+}
+
+export function getMpesaPasskey(): string {
+  requireEnv("MPESA_PASSKEY", MPESA_PASSKEY);
+  return MPESA_PASSKEY;
 }
 
 export function encryptPasskey(text: string): string {

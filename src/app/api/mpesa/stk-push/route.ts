@@ -3,10 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { connectMongoose } from "@/lib/mongoose";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
 import {
-  decryptPasskey,
+  getMpesaPasskey,
+  getMpesaShortcode,
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
@@ -118,17 +117,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
     }
 
-    // Load landlord-specific shortcode + passkey
-    await connectMongoose();
-    const landlordMpesa = await LandlordMpesa.findOne({ landlord: parsed.data.landlordId })
-      .select({ shortcode: 1, passkey: 1, _id: 0 })
-      .lean<{ shortcode: string; passkey: string }>()
-      .exec();
-    if (!landlordMpesa) {
-      return NextResponse.json({ success: false, message: "Landlord M-Pesa is not connected" }, { status: 400 });
-    }
-
-    const passkey = decryptPasskey(landlordMpesa.passkey);
+    // Use platform-level M-Pesa credentials
+    const shortcode = getMpesaShortcode();
+    const passkey = getMpesaPasskey();
     const accountReference = parsed.data.invoiceId.startsWith("INV-")
       ? parsed.data.invoiceId
       : `INV-${parsed.data.invoiceId}`;
@@ -139,7 +130,7 @@ export async function POST(request: NextRequest) {
 
     // Initiate Daraja STK push
     const stkResponse = await initiateStkPush({
-      shortcode: landlordMpesa.shortcode,
+      shortcode,
       passkey,
       amount: parsed.data.amount,
       phone: normalizedPhone,
@@ -182,7 +173,7 @@ export async function POST(request: NextRequest) {
         checkoutRequestId: stkResponse.CheckoutRequestID,
         merchantRequestId: stkResponse.MerchantRequestID,
         customerMessage: stkResponse.CustomerMessage,
-        shortcode: landlordMpesa.shortcode,
+        shortcode,
       },
       { status: 200 }
     );

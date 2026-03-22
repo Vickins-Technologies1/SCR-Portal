@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { connectMongoose } from "@/lib/mongoose";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
+import { getMpesaShortcode } from "@/lib/mpesa";
 import logger from "@/lib/logger";
 
 const QuerySchema = z.object({
@@ -38,15 +37,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Unauthorized landlord access" }, { status: 403 });
     }
 
-    await connectMongoose();
-    const landlordMpesa = await LandlordMpesa.findOne({ landlord: parsed.data.landlordId })
-      .select({ shortcode: 1, _id: 0 })
-      .lean<{ shortcode: string }>()
-      .exec();
-
     return NextResponse.json({
       success: true,
-      shortcode: landlordMpesa?.shortcode || null,
+      shortcode: getMpesaShortcode(),
     });
   } catch (error) {
     logger.error("GET /api/mpesa/shortcode error", {

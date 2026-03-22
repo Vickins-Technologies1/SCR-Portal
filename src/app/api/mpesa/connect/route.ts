@@ -1,16 +1,11 @@
 // src/app/api/mpesa/connect/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
-import { encryptPasskey } from "@/lib/mpesa";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 
-const ConnectSchema = z.object({
-  shortcode: z.string().trim().min(5).max(10),
-  passkey: z.string().trim().min(8),
-});
+type AccountType = "till" | "bank";
 
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
@@ -24,14 +19,22 @@ export async function GET(request: NextRequest) {
   try {
     await connectMongoose();
     const doc = await LandlordMpesa.findOne({ landlord: userId })
-      .select({ shortcode: 1, _id: 0 })
-      .lean<{ shortcode: string }>()
+      .select({ accountType: 1, bankName: 1, accountNumber: 1, tillNumber: 1, _id: 0 })
+      .lean<{
+        accountType?: AccountType;
+        bankName?: string;
+        accountNumber?: string;
+        tillNumber?: string;
+      }>()
       .exec();
 
     return NextResponse.json({
       success: true,
       connected: !!doc,
-      shortcode: doc?.shortcode || null,
+      accountType: doc?.accountType || "till",
+      bankName: doc?.bankName || "",
+      accountNumber: doc?.accountNumber || "",
+      tillNumber: doc?.tillNumber || "",
     });
   } catch (error) {
     logger.error("GET /api/mpesa/connect error", {
@@ -56,30 +59,51 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
   }
 
-  let payload: unknown;
+  type Payload = {
+    accountType?: AccountType;
+    bankName?: string;
+    accountNumber?: string;
+    tillNumber?: string;
+  };
+  let payload: Payload;
   try {
-    payload = await request.json();
+    payload = (await request.json()) as Payload;
   } catch {
     return NextResponse.json({ success: false, message: "Invalid JSON payload" }, { status: 400 });
   }
-
-  const parsed = ConnectSchema.safeParse(payload);
-  if (!parsed.success) {
-    return NextResponse.json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() }, { status: 400 });
+  if (!payload || typeof payload !== "object") {
+    return NextResponse.json({ success: false, message: "Invalid payload" }, { status: 400 });
   }
+  const accountType: AccountType = payload.accountType === "bank" ? "bank" : "till";
 
   try {
     await connectMongoose();
-    // Encrypt passkey before persisting
-    const encrypted = encryptPasskey(parsed.data.passkey);
+    if (accountType === "bank") {
+      if (!payload.bankName || !payload.accountNumber) {
+        return NextResponse.json(
+          { success: false, message: "Please provide a bank name and account number." },
+          { status: 400 }
+        );
+      }
+    } else if (!payload.tillNumber) {
+      return NextResponse.json(
+        { success: false, message: "Please provide a till number." },
+        { status: 400 }
+      );
+    }
 
     await LandlordMpesa.findOneAndUpdate(
       { landlord: userId },
-      { shortcode: parsed.data.shortcode, passkey: encrypted },
+      {
+        accountType,
+        bankName: accountType === "bank" ? payload.bankName : "",
+        accountNumber: accountType === "bank" ? payload.accountNumber : "",
+        tillNumber: accountType === "till" ? payload.tillNumber : "",
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    return NextResponse.json({ success: true, message: "M-Pesa connected successfully" }, { status: 200 });
+    return NextResponse.json({ success: true, message: "Account details saved successfully" }, { status: 200 });
   } catch (error) {
     logger.error("POST /api/mpesa/connect error", {
       message: error instanceof Error ? error.message : String(error),

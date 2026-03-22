@@ -1,9 +1,7 @@
 // src/app/api/mpesa/c2b-register/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { connectMongoose } from "@/lib/mongoose";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
-import { getAccessToken, getMpesaBaseUrl } from "@/lib/mpesa";
+import { getAccessToken, getMpesaBaseUrl, getMpesaShortcode } from "@/lib/mpesa";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 
@@ -37,15 +35,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Use landlord-specific shortcode to register confirmation/validation URLs
-    await connectMongoose();
-    const landlordMpesa = await LandlordMpesa.findOne({ landlord: userId })
-      .select({ shortcode: 1, _id: 0 })
-      .lean<{ shortcode: string }>()
-      .exec();
-    if (!landlordMpesa) {
-      return NextResponse.json({ success: false, message: "Landlord M-Pesa is not connected" }, { status: 400 });
-    }
+    // Use platform-level shortcode to register confirmation/validation URLs
+    const shortcode = getMpesaShortcode();
 
     const base = process.env.MPESA_CALLBACK_BASE_URL || "";
     if (!base) {
@@ -60,7 +51,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        ShortCode: landlordMpesa.shortcode,
+        ShortCode: shortcode,
         ResponseType: parsed.data.responseType,
         ConfirmationURL: `${base}/api/mpesa/c2b-confirmation`,
         ValidationURL: `${base}/api/mpesa/c2b-validation`,

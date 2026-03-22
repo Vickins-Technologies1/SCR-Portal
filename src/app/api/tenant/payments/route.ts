@@ -5,10 +5,9 @@ import { ObjectId, Db } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { z } from "zod";
-import { connectMongoose } from "@/lib/mongoose";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
 import {
-  decryptPasskey,
+  getMpesaPasskey,
+  getMpesaShortcode,
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
@@ -243,18 +242,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Load landlord-specific shortcode + passkey
-    await connectMongoose();
+    // Use platform-level M-Pesa credentials
     const landlordId = typeof tenant.ownerId === "string" ? tenant.ownerId : property.ownerId;
-    const landlordMpesa = await LandlordMpesa.findOne({ landlord: landlordId })
-      .select({ shortcode: 1, passkey: 1, _id: 0 })
-      .lean<{ shortcode: string; passkey: string }>()
-      .exec();
-    if (!landlordMpesa) {
-      return NextResponse.json({ success: false, message: "Landlord M-Pesa is not connected" }, { status: 400 });
-    }
-
-    const passkey = decryptPasskey(landlordMpesa.passkey);
+    const shortcode = getMpesaShortcode();
+    const passkey = getMpesaPasskey();
     const callbackBase = process.env.MPESA_CALLBACK_BASE_URL || "";
     if (!callbackBase) {
       return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
@@ -263,7 +254,7 @@ export async function POST(request: NextRequest) {
     const accountReference = reference.startsWith("INV-") ? reference : `INV-${reference}`;
     // Initiate STK push with landlord shortcode
     const stkResponse = await initiateStkPush({
-      shortcode: landlordMpesa.shortcode,
+      shortcode,
       passkey,
       amount,
       phone: normalizedPhone,
