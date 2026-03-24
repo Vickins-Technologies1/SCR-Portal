@@ -153,6 +153,8 @@ export async function createIncomingPaymentRequest(params: {
 
 export async function getIncomingPaymentStatus(id: string): Promise<{
   status: string;
+  resourceStatus?: string;
+  errors?: string;
   reference?: string;
   amount?: number;
   phoneNumber?: string;
@@ -174,11 +176,20 @@ export async function getIncomingPaymentStatus(id: string): Promise<{
   const data = (await res.json()) as any;
   const attributes = data?.data?.attributes || {};
   const eventResource = attributes?.event?.resource || {};
+  const eventErrors = attributes?.event?.errors;
+  const errors =
+    eventErrors == null
+      ? ""
+      : Array.isArray(eventErrors)
+        ? eventErrors.map((item) => String(item)).join("; ")
+        : String(eventErrors);
   return {
     status: String(attributes?.status || ""),
-    reference: eventResource?.reference || undefined,
+    resourceStatus: eventResource?.status ? String(eventResource.status) : undefined,
+    errors: errors || undefined,
+    reference: eventResource?.reference ? String(eventResource.reference) : undefined,
     amount: eventResource?.amount ? Number(eventResource.amount) : undefined,
-    phoneNumber: eventResource?.sender_phone_number || undefined,
-    originationTime: eventResource?.origination_time || undefined,
+    phoneNumber: eventResource?.sender_phone_number ? String(eventResource.sender_phone_number) : undefined,
+    originationTime: eventResource?.origination_time ? String(eventResource.origination_time) : undefined,
   };
 }

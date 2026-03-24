@@ -15,9 +15,15 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("x-kopokopo-signature");
 
   const bodyText = await request.text();
-  if (secret && signature && !verifySignature(bodyText, signature, secret)) {
-    logger.error("Invalid KopoKopo signature", { signature });
-    return NextResponse.json({ success: false, message: "Invalid signature" }, { status: 401 });
+  if (secret) {
+    if (!signature) {
+      logger.error("Missing KopoKopo signature");
+      return NextResponse.json({ success: false, message: "Missing signature" }, { status: 401 });
+    }
+    if (!verifySignature(bodyText, signature, secret)) {
+      logger.error("Invalid KopoKopo signature", { signature });
+      return NextResponse.json({ success: false, message: "Invalid signature" }, { status: 401 });
+    }
   }
 
   let payload: any;
@@ -33,6 +39,11 @@ export async function POST(request: NextRequest) {
   const eventResource = attributes?.event?.resource || {};
 
   const status = String(attributes?.status || "").toLowerCase();
+  const resourceStatus = String(eventResource?.status || "").toLowerCase();
+  const eventErrors = attributes?.event?.errors;
+  const errorsLower = (Array.isArray(eventErrors) ? eventErrors.join("; ") : eventErrors || "")
+    .toString()
+    .toLowerCase();
   const reference = eventResource?.reference ? String(eventResource.reference) : "";
   const originationTime = eventResource?.origination_time ? String(eventResource.origination_time) : "";
 
@@ -40,15 +51,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Missing incoming payment id" }, { status: 400 });
   }
 
-  const normalizedStatus =
-    status === "success" ? "completed" : status === "failed" ? "failed" : "pending";
+  const isCompleted = status === "success" && resourceStatus === "received" && !!reference;
+  const isCancelled =
+    status === "failed" &&
+    (errorsLower.includes("cancel") || errorsLower.includes("canceled") || errorsLower.includes("cancelled"));
+  const isFailed =
+    status === "failed" ||
+    resourceStatus === "failed" ||
+    errorsLower.includes("timeout") ||
+    errorsLower.includes("expired");
+  const normalizedStatus = isCompleted ? "completed" : isCancelled ? "cancelled" : isFailed ? "failed" : "pending";
 
   try {
     const { db } = await connectToDatabase();
-    const update: Record<string, any> = {
-      status: normalizedStatus,
-    };
-    if (reference) update.mpesaCode = reference;
+    const update: Record<string, any> = { status: normalizedStatus };
+    if (isCompleted && reference) update.mpesaCode = reference;
     if (originationTime) update.paymentDate = originationTime;
 
     const result = await db.collection("payments").findOneAndUpdate(

@@ -65,23 +65,33 @@ export async function POST(request: NextRequest) {
       const incomingId = payment.kopokopoIncomingPaymentId || payment.transactionId;
       try {
         const statusData = await getIncomingPaymentStatus(String(incomingId));
-        const normalizedStatus =
-          statusData.status.toLowerCase() === "success"
-            ? "completed"
-            : statusData.status.toLowerCase() === "failed"
-              ? "failed"
-              : "pending";
+        const statusLower = (statusData.status || "").toLowerCase();
+        const resourceStatusLower = (statusData.resourceStatus || "").toLowerCase();
+        const errorsLower = (statusData.errors || "").toLowerCase();
+        const hasReference = !!statusData.reference;
 
-        if (normalizedStatus !== payment.status) {
+        const isCompleted = statusLower === "success" && resourceStatusLower === "received" && hasReference;
+        const isCancelled =
+          statusLower === "failed" &&
+          (errorsLower.includes("cancel") || errorsLower.includes("canceled") || errorsLower.includes("cancelled"));
+        const isFailed =
+          statusLower === "failed" ||
+          resourceStatusLower === "failed" ||
+          errorsLower.includes("timeout") ||
+          errorsLower.includes("expired");
+        const normalizedStatus = isCompleted ? "completed" : isCancelled ? "cancelled" : isFailed ? "failed" : "pending";
+
+        const shouldUpdate =
+          normalizedStatus !== payment.status ||
+          (hasReference && !payment.mpesaCode) ||
+          (statusData.originationTime && payment.paymentDate !== statusData.originationTime);
+
+        if (shouldUpdate) {
           const update: Record<string, any> = { status: normalizedStatus };
-          if (statusData.reference) update.mpesaCode = statusData.reference;
+          if (isCompleted && statusData.reference) update.mpesaCode = statusData.reference;
           if (statusData.originationTime) update.paymentDate = statusData.originationTime;
 
-          await db.collection("payments").updateOne(
-            { _id: payment._id },
-            { $set: update }
-          );
-
+          await db.collection("payments").updateOne({ _id: payment._id }, { $set: update });
           payment = { ...payment, ...update };
         }
       } catch (error) {
