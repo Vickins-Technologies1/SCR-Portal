@@ -8,7 +8,7 @@ import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { createPayRecipient } from "@/lib/kopokopo";
 
-type PaymentType = "paybill" | "till" | "bank";
+type PaymentType = "paybill" | "till";
 
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
@@ -27,8 +27,6 @@ export async function GET(request: NextRequest) {
         paybillNumber: 1,
         paybillAccountNumber: 1,
         tillNumber: 1,
-        bankPaybillNumber: 1,
-        accountNumber: 1,
         isDefault: 1,
         kopokopoRecipientType: 1,
         kopokopoRecipientUrl: 1,
@@ -39,23 +37,21 @@ export async function GET(request: NextRequest) {
         paybillNumber?: string;
         paybillAccountNumber?: string;
         tillNumber?: string;
-        bankPaybillNumber?: string;
-        accountNumber?: string;
         isDefault?: boolean;
         kopokopoRecipientType?: string;
         kopokopoRecipientUrl?: string;
       }>()
       .exec();
 
+    const safePaymentType: PaymentType = doc?.paymentType === "till" ? "till" : "paybill";
+
     return NextResponse.json({
       success: true,
       connected: !!doc?.kopokopoRecipientUrl,
-      paymentType: doc?.paymentType || "paybill",
+      paymentType: safePaymentType,
       paybillNumber: doc?.paybillNumber || "",
       paybillAccountNumber: doc?.paybillAccountNumber || "",
       tillNumber: doc?.tillNumber || "",
-      bankPaybillNumber: doc?.bankPaybillNumber || "",
-      accountNumber: doc?.accountNumber || "",
       isDefault: doc?.isDefault ?? true,
       kopokopoRecipientUrl: doc?.kopokopoRecipientUrl || "",
     });
@@ -87,8 +83,6 @@ export async function POST(request: NextRequest) {
     paybillNumber?: string;
     paybillAccountNumber?: string;
     tillNumber?: string;
-    accountNumber?: string;
-    bankPaybillNumber?: string;
     isDefault?: boolean;
   };
   let payload: Payload;
@@ -101,20 +95,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid payload" }, { status: 400 });
   }
   const paymentType: PaymentType =
-    payload.paymentType === "bank" || payload.paymentType === "till" || payload.paymentType === "paybill"
-      ? payload.paymentType
-      : "paybill";
+    payload.paymentType === "till" || payload.paymentType === "paybill" ? payload.paymentType : "paybill";
 
   try {
     await connectMongoose();
-    if (paymentType === "bank") {
-      if (!payload.bankPaybillNumber || !payload.accountNumber) {
-        return NextResponse.json(
-          { success: false, message: "Please provide a bank paybill number and account number." },
-          { status: 400 }
-        );
-      }
-    } else if (paymentType === "till" && !payload.tillNumber) {
+    if (paymentType === "till" && !payload.tillNumber) {
       return NextResponse.json(
         { success: false, message: "Please provide a till number." },
         { status: 400 }
@@ -147,17 +132,6 @@ export async function POST(request: NextRequest) {
         },
       });
       recipientUrl = recipient.location;
-    } else if (paymentType === "bank") {
-      recipientType = "paybill";
-      const recipient = await createPayRecipient({
-        type: "paybill",
-        payload: {
-          paybill_name: ownerName,
-          paybill_number: payload.bankPaybillNumber as string,
-          paybill_account_number: payload.accountNumber as string,
-        },
-      });
-      recipientUrl = recipient.location;
     } else {
       recipientType = "paybill";
       const recipient = await createPayRecipient({
@@ -178,8 +152,6 @@ export async function POST(request: NextRequest) {
         paybillNumber: paymentType === "paybill" ? payload.paybillNumber : "",
         paybillAccountNumber: paymentType === "paybill" ? payload.paybillAccountNumber : "",
         tillNumber: paymentType === "till" ? payload.tillNumber : "",
-        bankPaybillNumber: paymentType === "bank" ? payload.bankPaybillNumber : "",
-        accountNumber: paymentType === "bank" ? payload.accountNumber : "",
         isDefault: payload.isDefault ?? true,
         kopokopoRecipientType: recipientType,
         kopokopoRecipientUrl: recipientUrl,
