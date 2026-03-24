@@ -5,6 +5,7 @@ import { Db } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { z } from "zod";
+import { getIncomingPaymentStatus } from "@/lib/kopokopo";
 
 const StatusSchema = z.object({
   transaction_request_id: z.string().trim().min(1),
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
 
     // Resolve status from our own payments collection (updated by callbacks)
-    const payment = await db.collection("payments").findOne({
+    let payment = await db.collection("payments").findOne({
       $or: [
         { transactionId: transaction_request_id },
         { checkoutRequestId: transaction_request_id },
@@ -58,6 +59,37 @@ export async function POST(request: NextRequest) {
 
     if (!payment) {
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
+    }
+
+    if (payment.status === "pending" && (payment.provider === "kopokopo" || payment.kopokopoIncomingPaymentId)) {
+      const incomingId = payment.kopokopoIncomingPaymentId || payment.transactionId;
+      try {
+        const statusData = await getIncomingPaymentStatus(String(incomingId));
+        const normalizedStatus =
+          statusData.status.toLowerCase() === "success"
+            ? "completed"
+            : statusData.status.toLowerCase() === "failed"
+              ? "failed"
+              : "pending";
+
+        if (normalizedStatus !== payment.status) {
+          const update: Record<string, any> = { status: normalizedStatus };
+          if (statusData.reference) update.mpesaCode = statusData.reference;
+          if (statusData.originationTime) update.paymentDate = statusData.originationTime;
+
+          await db.collection("payments").updateOne(
+            { _id: payment._id },
+            { $set: update }
+          );
+
+          payment = { ...payment, ...update };
+        }
+      } catch (error) {
+        logger.error("KopoKopo status check failed", {
+          message: error instanceof Error ? error.message : "Unknown error",
+          incomingId,
+        });
+      }
     }
 
     return NextResponse.json({

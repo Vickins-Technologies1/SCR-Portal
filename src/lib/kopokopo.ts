@@ -93,3 +93,92 @@ export async function createPayRecipient(params: {
 
   return { location };
 }
+
+export async function createIncomingPaymentRequest(params: {
+  tillNumber: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  email?: string;
+  amount: number;
+  currency?: string;
+  metadata?: Record<string, string>;
+  callbackUrl: string;
+}): Promise<{ location: string; id: string }> {
+  const token = await getKopoKopoAccessToken();
+
+  const res = await fetch(`${KOPOKOPO_API_BASE_URL}/api/v1/incoming_payments`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      payment_channel: "M-PESA STK Push",
+      till_number: params.tillNumber,
+      subscriber: {
+        first_name: params.firstName,
+        last_name: params.lastName,
+        phone_number: params.phoneNumber,
+        email: params.email,
+      },
+      amount: {
+        currency: params.currency || "KES",
+        value: params.amount,
+      },
+      metadata: params.metadata,
+      _links: {
+        callback_url: params.callbackUrl,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`KopoKopo incoming payment request failed (${res.status}): ${text}`);
+  }
+
+  const location = res.headers.get("Location") || "";
+  if (!location) {
+    throw new Error("KopoKopo response missing Location header");
+  }
+  const id = location.split("/").pop() || "";
+  if (!id) {
+    throw new Error("KopoKopo response missing incoming payment id");
+  }
+
+  return { location, id };
+}
+
+export async function getIncomingPaymentStatus(id: string): Promise<{
+  status: string;
+  reference?: string;
+  amount?: number;
+  phoneNumber?: string;
+  originationTime?: string;
+}> {
+  const token = await getKopoKopoAccessToken();
+  const res = await fetch(`${KOPOKOPO_API_BASE_URL}/api/v1/incoming_payments/${id}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`KopoKopo incoming payment status failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as any;
+  const attributes = data?.data?.attributes || {};
+  const eventResource = attributes?.event?.resource || {};
+  return {
+    status: String(attributes?.status || ""),
+    reference: eventResource?.reference || undefined,
+    amount: eventResource?.amount ? Number(eventResource.amount) : undefined,
+    phoneNumber: eventResource?.sender_phone_number || undefined,
+    originationTime: eventResource?.origination_time || undefined,
+  };
+}

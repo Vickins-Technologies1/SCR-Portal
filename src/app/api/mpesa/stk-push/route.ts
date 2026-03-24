@@ -5,6 +5,7 @@ import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
+import { createIncomingPaymentRequest } from "@/lib/kopokopo";
 import {
   decryptPasskey,
   getMpesaPasskey,
@@ -61,6 +62,34 @@ async function resolveMpesaCredentials(landlordId: string): Promise<{
     passkey: getMpesaPasskey(),
     source: "platform",
   };
+}
+
+async function resolveKopoKopoTillNumber(landlordId: string): Promise<string> {
+  const fallback = (process.env.KOPOKOPO_STK_TILL_NUMBER || "").trim();
+  try {
+    await connectMongoose();
+    const doc = await LandlordMpesa.findOne({ landlord: landlordId })
+      .select({ paymentType: 1, tillNumber: 1 })
+      .lean<{ paymentType?: string; tillNumber?: string }>()
+      .exec();
+
+    const tillNumber = doc?.tillNumber?.trim() || "";
+    if (doc?.paymentType === "till" && tillNumber) {
+      return tillNumber;
+    }
+  } catch {
+    // Ignore and use fallback.
+  }
+
+  return fallback;
+}
+
+function splitName(fullName?: string): { firstName: string; lastName: string } {
+  const safe = (fullName || "").trim();
+  if (!safe) return { firstName: "Customer", lastName: "Payment" };
+  const parts = safe.split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "Payment" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
 function rateLimit(key: string, limit = 5, windowMs = 60_000) {
@@ -120,6 +149,8 @@ export async function POST(request: NextRequest) {
 
     let propertyId: string | null = null;
     let tenantId: string | null = null;
+    let tenantName: string | null = null;
+    let tenantEmail: string | null = null;
     let derivedLandlordId: string | null = null;
 
     // Resolve tenant + landlord context
@@ -130,6 +161,8 @@ export async function POST(request: NextRequest) {
       }
       tenantId = tenant._id.toString();
       propertyId = tenant.propertyId;
+      tenantName = tenant.name || null;
+      tenantEmail = tenant.email || null;
       derivedLandlordId =
         typeof tenant.ownerId === "string"
           ? tenant.ownerId
@@ -154,6 +187,80 @@ export async function POST(request: NextRequest) {
 
     if (!derivedLandlordId || derivedLandlordId !== parsed.data.landlordId) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
+    }
+
+    const kopoClientId = process.env.KOPOKOPO_CLIENT_ID || "";
+    const kopoClientSecret = process.env.KOPOKOPO_CLIENT_SECRET || "";
+    const kopoCallbackBase = process.env.KOPOKOPO_CALLBACK_BASE_URL || "";
+    const useKopoKopo = !!(kopoClientId && kopoClientSecret && kopoCallbackBase);
+
+    if (useKopoKopo) {
+      const kopoTill = await resolveKopoKopoTillNumber(derivedLandlordId);
+      if (!kopoTill) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Missing KopoKopo till number. Set landlord till number or KOPOKOPO_STK_TILL_NUMBER before initiating STK.",
+          },
+          { status: 500 }
+        );
+      }
+
+      const { firstName, lastName } = splitName(tenantName || undefined);
+      const accountReference = parsed.data.invoiceId.startsWith("INV-")
+        ? parsed.data.invoiceId
+        : `INV-${parsed.data.invoiceId}`;
+
+      const incoming = await createIncomingPaymentRequest({
+        tillNumber: kopoTill,
+        firstName,
+        lastName,
+        phoneNumber: `+${normalizedPhone}`,
+        email: tenantEmail || undefined,
+        amount: parsed.data.amount,
+        metadata: {
+          reference: accountReference,
+          invoice_id: parsed.data.invoiceId,
+          tenant_id: tenantId || "",
+          landlord_id: derivedLandlordId,
+        },
+        callbackUrl: `${kopoCallbackBase}/api/kopokopo/incoming-payments`,
+      });
+
+      const nowIso = new Date().toISOString();
+      await db.collection("payments").insertOne({
+        tenantId,
+        amount: parsed.data.amount,
+        propertyId,
+        paymentDate: nowIso,
+        transactionId: incoming.id,
+        status: "pending",
+        createdAt: nowIso,
+        type: parsed.data.type || "Rent",
+        phoneNumber: normalizedPhone,
+        reference: accountReference,
+        mpesaCode: null,
+        checkoutRequestId: incoming.id,
+        merchantRequestId: incoming.id,
+        invoiceId: parsed.data.invoiceId,
+        landlordId: parsed.data.landlordId,
+        provider: "kopokopo",
+        kopokopoIncomingPaymentId: incoming.id,
+        kopokopoLocation: incoming.location,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "STK Push initiated via KopoKopo. Check your phone.",
+          checkoutRequestId: incoming.id,
+          merchantRequestId: incoming.id,
+          customerMessage: "STK Push initiated via KopoKopo.",
+          provider: "kopokopo",
+        },
+        { status: 200 }
+      );
     }
 
     // Resolve M-Pesa credentials (prefer landlord-level, fallback to platform)
