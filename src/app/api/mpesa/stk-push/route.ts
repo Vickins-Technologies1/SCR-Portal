@@ -189,10 +189,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
     }
 
-    const kopoClientId = process.env.KOPOKOPO_CLIENT_ID || "";
-    const kopoClientSecret = process.env.KOPOKOPO_CLIENT_SECRET || "";
-    const kopoCallbackBase = process.env.KOPOKOPO_CALLBACK_BASE_URL || "";
+    const kopoClientId = (process.env.KOPOKOPO_CLIENT_ID || "").trim();
+    const kopoClientSecret = (process.env.KOPOKOPO_CLIENT_SECRET || "").trim();
+    const kopoCallbackBase = (process.env.KOPOKOPO_CALLBACK_BASE_URL || "").trim();
+    const kopoTillEnv = (process.env.KOPOKOPO_STK_TILL_NUMBER || "").trim();
+    const hasAnyKopoConfig = !!(kopoClientId || kopoClientSecret || kopoCallbackBase || kopoTillEnv);
     const useKopoKopo = !!(kopoClientId && kopoClientSecret && kopoCallbackBase);
+
+    if (hasAnyKopoConfig && !useKopoKopo) {
+      const missing: string[] = [];
+      if (!kopoClientId) missing.push("KOPOKOPO_CLIENT_ID");
+      if (!kopoClientSecret) missing.push("KOPOKOPO_CLIENT_SECRET");
+      if (!kopoCallbackBase) missing.push("KOPOKOPO_CALLBACK_BASE_URL");
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Incomplete KopoKopo configuration. Missing: ${missing.join(", ")}.`,
+        },
+        { status: 500 }
+      );
+    }
 
     if (useKopoKopo) {
       const kopoTill = await resolveKopoKopoTillNumber(derivedLandlordId);

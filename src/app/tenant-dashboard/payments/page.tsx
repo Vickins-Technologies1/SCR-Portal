@@ -612,7 +612,7 @@ export default function PaymentsPage() {
 
                 {isProcessing && (
                   <p className="text-sm text-gray-600 mb-6">
-                    Please complete the M-Pesa prompt on your phone
+                    Please complete the payment prompt on your phone
                   </p>
                 )}
 

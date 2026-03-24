@@ -78,7 +78,6 @@ export default function PayWithMpesaButton({
   const handleClick = async () => {
     if (disabled || isLoading) return;
     setIsLoading(true);
-    onStart?.();
 
     try {
       const res = await fetch("/api/mpesa/stk-push", {
@@ -104,6 +103,7 @@ export default function PayWithMpesaButton({
       }
 
       toast.success(data.message || "STK Push initiated. Check your phone.");
+      onStart?.();
 
       const status = await pollStatus(data.checkoutRequestId);
       if (status === "completed") {
