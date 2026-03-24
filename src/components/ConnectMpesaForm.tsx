@@ -8,51 +8,18 @@ interface ConnectMpesaFormProps {
   disabled?: boolean;
 }
 
-const OTHER_BANK_VALUE = "__other__";
-const DARAJA_BANKS = [
-  "KCB",
-  "Comm. Bank of Africa",
-  "Co-operative Bank",
-  "Standard Chartered Bank",
-  "Barclays Bank K LTD",
-  "NIC Bank Limited",
-  "Family Bank Ltd",
-  "CFC Stanbic",
-  "Equity Bank",
-  "National Bank",
-  "Chase Bank",
-  "I & M Bank Limited",
-  "Diamond Trust Bank (DTB)",
-  "Ecobank",
-  "Jamii Bora Bank",
-  "IMPERIAL BANK LTD",
-  "ABC Bank",
-  "Credit Bank",
-  "Consolidated Bank LTD",
-  "Equatorial Commercial Bank",
-  "K-REP BANK",
-  "Transnational Bank",
-  "Post Office Savings Bank",
-  "Gulf African Bank",
-  "Housing Finance Company Ltd",
-  "Bank of Africa (BOA)",
-  "UBA Bank",
-  "Guardian Bank",
-  "Prime Bank",
-  "Guaranty Trust Bank",
-  "KWFT DTM",
-  "SMEP DTM",
-  "Musoni",
-  "Vision Fund Kenya",
-  "Rafiki DTM",
-];
+type PaymentType = "bank" | "till" | "paybill";
 
 export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
-  const [accountType, setAccountType] = useState<"till" | "bank">("till");
+  const [paymentType, setPaymentType] = useState<PaymentType>("paybill");
+  const [paybillNumber, setPaybillNumber] = useState("");
+  const [paybillAccountNumber, setPaybillAccountNumber] = useState("");
   const [tillNumber, setTillNumber] = useState("");
-  const [bankSelection, setBankSelection] = useState("");
-  const [customBankName, setCustomBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const [bankBranchRef, setBankBranchRef] = useState("");
+  const [bankSettlementMethod, setBankSettlementMethod] = useState("EFT");
+  const [bankAccountName, setBankAccountName] = useState("");
+  const [isDefault, setIsDefault] = useState(true);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
@@ -64,20 +31,17 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         const data = await res.json();
         if (res.ok && data.success) {
           setConnected(!!data.connected);
-          if (data.accountType === "bank" || data.accountType === "till") {
-            setAccountType(data.accountType);
+          if (data.paymentType === "bank" || data.paymentType === "till" || data.paymentType === "paybill") {
+            setPaymentType(data.paymentType);
           }
-          if (data.bankName) {
-            if (DARAJA_BANKS.includes(data.bankName)) {
-              setBankSelection(data.bankName);
-              setCustomBankName("");
-            } else {
-              setBankSelection(OTHER_BANK_VALUE);
-              setCustomBankName(data.bankName);
-            }
-          }
+          if (data.paybillNumber) setPaybillNumber(data.paybillNumber);
+          if (data.paybillAccountNumber) setPaybillAccountNumber(data.paybillAccountNumber);
           if (data.accountNumber) setAccountNumber(data.accountNumber);
           if (data.tillNumber) setTillNumber(data.tillNumber);
+          if (data.bankBranchRef) setBankBranchRef(data.bankBranchRef);
+          if (data.bankSettlementMethod) setBankSettlementMethod(data.bankSettlementMethod);
+          if (data.bankAccountName) setBankAccountName(data.bankAccountName);
+          if (typeof data.isDefault === "boolean") setIsDefault(data.isDefault);
         } else {
           setConnected(false);
         }
@@ -104,18 +68,27 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
     e.preventDefault();
     if (disabled) return;
 
-    if (accountType === "bank") {
-      const resolvedBankName = bankSelection === OTHER_BANK_VALUE ? customBankName.trim() : bankSelection;
-      if (!resolvedBankName) {
-        toast.error("Please select your bank.");
+    if (paymentType === "bank") {
+      if (!bankBranchRef.trim()) {
+        toast.error("Please enter your bank branch reference.");
         return;
       }
       if (!accountNumber.trim()) {
         toast.error("Please enter your bank account number.");
         return;
       }
-    } else if (!tillNumber.trim()) {
+      if (!bankSettlementMethod.trim()) {
+        toast.error("Please select a settlement method.");
+        return;
+      }
+    } else if (paymentType === "till" && !tillNumber.trim()) {
       toast.error("Please enter your till number.");
+      return;
+    } else if (paymentType === "paybill" && !paybillNumber.trim()) {
+      toast.error("Please enter your paybill number.");
+      return;
+    } else if (paymentType === "paybill" && !paybillAccountNumber.trim()) {
+      toast.error("Please enter your paybill account number.");
       return;
     }
 
@@ -123,8 +96,6 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
       toast.error("Missing CSRF token");
       return;
     }
-
-    const resolvedBankName = bankSelection === OTHER_BANK_VALUE ? customBankName.trim() : bankSelection;
 
     setLoading(true);
     try {
@@ -136,10 +107,15 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         },
         credentials: "include",
         body: JSON.stringify({
-          accountType,
-          bankName: accountType === "bank" ? resolvedBankName : "",
-          accountNumber: accountType === "bank" ? accountNumber.trim() : "",
-          tillNumber: accountType === "till" ? tillNumber.trim() : "",
+          paymentType,
+          paybillNumber: paymentType === "paybill" ? paybillNumber.trim() : "",
+          paybillAccountNumber: paymentType === "paybill" ? paybillAccountNumber.trim() : "",
+          tillNumber: paymentType === "till" ? tillNumber.trim() : "",
+          accountNumber: paymentType === "bank" ? accountNumber.trim() : "",
+          bankBranchRef: paymentType === "bank" ? bankBranchRef.trim() : "",
+          bankSettlementMethod: paymentType === "bank" ? bankSettlementMethod : "",
+          bankAccountName: paymentType === "bank" ? bankAccountName.trim() : "",
+          isDefault,
         }),
       });
 
@@ -161,7 +137,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div className="flex items-center gap-2 text-xs">
         <span
           className={`inline-flex h-2.5 w-2.5 rounded-full ${
@@ -175,80 +151,21 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="text-xs font-medium text-gray-600">Collection Type</label>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => {
-                if (disabled) return;
-                setAccountType("till");
-                setBankSelection("");
-                setCustomBankName("");
-                setAccountNumber("");
-              }}
-              className={`px-3 py-2 rounded-xl border transition-colors ${
-                accountType === "till"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-gray-200 text-gray-600 hover:border-primary/60"
-              }`}
-            >
-              Till Number (Buy Goods)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (disabled) return;
-                setAccountType("bank");
-              }}
-              className={`px-3 py-2 rounded-xl border transition-colors ${
-                accountType === "bank"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-gray-200 text-gray-600 hover:border-primary/60"
-              }`}
-            >
-              Bank Account (Paybill)
-            </button>
-          </div>
+          <label className="text-xs font-medium text-gray-600">Choose Payment Type</label>
+          <select
+            value={paymentType}
+            onChange={(e) => setPaymentType(e.target.value as PaymentType)}
+            disabled={disabled}
+            className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+          >
+            <option value="bank">Bank Account</option>
+            <option value="till">Buy Goods Till Number</option>
+            <option value="paybill">Paybill Number</option>
+          </select>
         </div>
 
-        {accountType === "bank" && (
+        {paymentType === "bank" && (
           <>
-            <div>
-              <label className="text-xs font-medium text-gray-600">Supported Banks (Daraja)</label>
-              <select
-                value={bankSelection}
-                onChange={(e) => setBankSelection(e.target.value)}
-                disabled={disabled}
-                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-              >
-                <option value="">Select bank</option>
-                {DARAJA_BANKS.map((bank) => (
-                  <option key={bank} value={bank}>
-                    {bank}
-                  </option>
-                ))}
-                <option value={OTHER_BANK_VALUE}>Other (not listed)</option>
-              </select>
-              <p className="mt-2 text-[11px] text-gray-500">
-                Bank options follow Safaricom&apos;s mobile banking paybill list. If your bank is missing, choose
-                "Other".
-              </p>
-            </div>
-
-            {bankSelection === OTHER_BANK_VALUE && (
-              <div>
-                <label className="text-xs font-medium text-gray-600">Bank Name</label>
-                <input
-                  type="text"
-                  value={customBankName}
-                  onChange={(e) => setCustomBankName(e.target.value)}
-                  disabled={disabled}
-                  className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                  placeholder="Enter your bank name"
-                />
-              </div>
-            )}
-
             <div>
               <label className="text-xs font-medium text-gray-600">Bank Account Number</label>
               <input
@@ -258,13 +175,50 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
                 onChange={(e) => setAccountNumber(e.target.value)}
                 disabled={disabled}
                 className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                placeholder="Enter account number"
+                placeholder="Enter Account Number"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Bank Branch Reference</label>
+              <input
+                type="text"
+                value={bankBranchRef}
+                onChange={(e) => setBankBranchRef(e.target.value)}
+                disabled={disabled}
+                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                placeholder="Enter Bank Branch Ref"
+              />
+              <p className="mt-2 text-[11px] text-gray-500">
+                Get this reference from your KopoKopo dashboard (Bank Branches list).
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Settlement Method</label>
+              <select
+                value={bankSettlementMethod}
+                onChange={(e) => setBankSettlementMethod(e.target.value)}
+                disabled={disabled}
+                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+              >
+                <option value="EFT">EFT</option>
+                <option value="RTS">RTS</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Account Name (optional)</label>
+              <input
+                type="text"
+                value={bankAccountName}
+                onChange={(e) => setBankAccountName(e.target.value)}
+                disabled={disabled}
+                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                placeholder="Name as on bank account"
               />
             </div>
           </>
         )}
 
-        {accountType === "till" && (
+        {paymentType === "till" && (
           <div>
             <label className="text-xs font-medium text-gray-600">Till Number</label>
             <input
@@ -273,10 +227,62 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
               onChange={(e) => setTillNumber(e.target.value)}
               disabled={disabled}
               className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-              placeholder="e.g. 123456"
+              placeholder="Enter Till Number"
             />
           </div>
         )}
+
+        {paymentType === "paybill" && (
+          <>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Paybill Number</label>
+              <input
+                type="text"
+                value={paybillNumber}
+                onChange={(e) => setPaybillNumber(e.target.value)}
+                disabled={disabled}
+                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                placeholder="Enter Paybill Number"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Paybill Account Number</label>
+              <input
+                type="text"
+                value={paybillAccountNumber}
+                onChange={(e) => setPaybillAccountNumber(e.target.value)}
+                disabled={disabled}
+                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                placeholder="Enter Account Number"
+              />
+            </div>
+          </>
+        )}
+
+        <div className="sm:col-span-2">
+          <label className="text-xs font-medium text-gray-600">Set As Default</label>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (disabled) return;
+                setIsDefault((prev) => !prev);
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                isDefault ? "bg-primary" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                  isDefault ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+            <span className="text-xs text-gray-600">
+              {isDefault ? "Yes (Paybill, Till & Bank to M-Pesa)" : "No"}
+            </span>
+          </div>
+        </div>
       </div>
 
       <button

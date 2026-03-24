@@ -6,10 +6,17 @@ const LandlordMpesaSchema = new Schema(
     landlord: { type: Schema.Types.ObjectId, ref: "Landlord", required: true, unique: true },
     shortcode: { type: String, default: "" },
     passkey: { type: String, default: "" }, // encrypted (legacy)
+    paymentType: { type: String, enum: ["paybill", "till", "bank"], default: "paybill" },
+    paybillNumber: { type: String, default: "" },
+    paybillAccountNumber: { type: String, default: "" },
     tillNumber: { type: String, default: "" },
-    accountType: { type: String, enum: ["till", "bank"], default: "till" },
-    bankName: { type: String, default: "" },
     accountNumber: { type: String, default: "" },
+    bankBranchRef: { type: String, default: "" },
+    bankSettlementMethod: { type: String, default: "" },
+    bankAccountName: { type: String, default: "" },
+    isDefault: { type: Boolean, default: true },
+    kopokopoRecipientType: { type: String, default: "" },
+    kopokopoRecipientUrl: { type: String, default: "" },
   },
   { timestamps: true }
 );
