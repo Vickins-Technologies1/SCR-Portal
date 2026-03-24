@@ -22,6 +22,23 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
   const [loading, setLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
+  const handlePaymentTypeChange = (nextType: PaymentType) => {
+    setPaymentType(nextType);
+    setConnected(null);
+
+    if (nextType !== "paybill") {
+      setPaybillNumber("");
+      setPaybillAccountNumber("");
+    }
+    if (nextType !== "bank") {
+      setBankPaybillNumber("");
+      setAccountNumber("");
+    }
+    if (nextType !== "till") {
+      setTillNumber("");
+    }
+  };
+
   useEffect(() => {
     const fetchStatus = async () => {
       try {
@@ -144,7 +161,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
           <label className="text-xs font-medium text-gray-600">Choose Payment Type</label>
           <select
             value={paymentType}
-            onChange={(e) => setPaymentType(e.target.value as PaymentType)}
+            onChange={(e) => handlePaymentTypeChange(e.target.value as PaymentType)}
             disabled={disabled}
             className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
           >
@@ -160,6 +177,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
               <label className="text-xs font-medium text-gray-600">Bank Paybill Number</label>
               <input
                 type="text"
+                inputMode="numeric"
                 value={bankPaybillNumber}
                 onChange={(e) => setBankPaybillNumber(e.target.value)}
                 disabled={disabled}
@@ -183,10 +201,11 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         )}
 
         {paymentType === "till" && (
-          <div>
+          <div className="sm:col-span-2">
             <label className="text-xs font-medium text-gray-600">Till Number</label>
             <input
               type="text"
+              inputMode="numeric"
               value={tillNumber}
               onChange={(e) => setTillNumber(e.target.value)}
               disabled={disabled}
@@ -202,6 +221,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
               <label className="text-xs font-medium text-gray-600">Paybill Number</label>
               <input
                 type="text"
+                inputMode="numeric"
                 value={paybillNumber}
                 onChange={(e) => setPaybillNumber(e.target.value)}
                 disabled={disabled}
@@ -213,6 +233,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
               <label className="text-xs font-medium text-gray-600">Paybill Account Number</label>
               <input
                 type="text"
+                inputMode="numeric"
                 value={paybillAccountNumber}
                 onChange={(e) => setPaybillAccountNumber(e.target.value)}
                 disabled={disabled}
