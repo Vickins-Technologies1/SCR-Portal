@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash, FaGoogle, FaCheck, FaTimes, FaChevronDown } from "react-icons/fa";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { countries } from "countries-list";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
@@ -51,6 +51,7 @@ export default function SignUp() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState("");
+  const [step, setStep] = useState(0);
 
   const [criteria, setCriteria] = useState({
     length: false,
@@ -59,6 +60,13 @@ export default function SignUp() {
     number: false,
     special: false,
   });
+
+  const steps = [
+    { title: "Basics", subtitle: "Tell us who you are" },
+    { title: "Contact", subtitle: "How we can reach you" },
+    { title: "Security", subtitle: "Keep your account safe" },
+    { title: "Review", subtitle: "Confirm and finish" },
+  ];
 
   useEffect(() => {
     const length = password.length >= 8;
@@ -73,6 +81,22 @@ export default function SignUp() {
   const score = Object.values(criteria).filter(Boolean).length;
   const barColor =
     score === 5 ? "bg-primary" : score >= 3 ? "bg-foreground/30" : "bg-muted";
+
+  const fullPhone = countryCode + phone;
+  const isNameValid = name.trim().length >= 2;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isPhoneValid = /^\+\d{8,15}$/.test(fullPhone);
+  const isPasswordValid = score === 5;
+  const isPasswordMatch = password.length > 0 && password === confirmPassword;
+
+  const canProceed =
+    step === 0
+      ? isNameValid && isEmailValid
+      : step === 1
+        ? isPhoneValid
+        : step === 2
+          ? isPasswordValid && isPasswordMatch
+          : true;
 
   useEffect(() => {
     fetch("/api/csrf-token", { credentials: "include" })
@@ -108,12 +132,43 @@ export default function SignUp() {
     }
   }, [success, router]);
 
+  useEffect(() => {
+    setOpen(false);
+  }, [step]);
+
+  const goNext = () => {
+    setError(null);
+    if (canProceed) {
+      setStep((prev) => Math.min(prev + 1, steps.length - 1));
+      return;
+    }
+
+    if (step === 0) {
+      setError("Please enter your full name and a valid email address.");
+      return;
+    }
+    if (step === 1) {
+      setError("Please provide a valid phone number.");
+      return;
+    }
+    if (step === 2) {
+      setError("Create a strong password and confirm it to continue.");
+    }
+  };
+
+  const goBack = () => {
+    setError(null);
+    setStep((prev) => Math.max(prev - 1, 0));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (step < steps.length - 1) {
+      goNext();
+      return;
+    }
     setError(null);
     setIsLoading(true);
-
-    const fullPhone = countryCode + phone;
 
     // Client-side validations
     if (password !== confirmPassword) {
@@ -130,6 +185,12 @@ export default function SignUp() {
 
     if (!/^\+\d{8,15}$/.test(fullPhone)) {
       setError("Phone number must start with + and contain 8–15 digits total");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!isNameValid || !isEmailValid) {
+      setError("Please provide a valid name and email address.");
       setIsLoading(false);
       return;
     }
@@ -318,14 +379,69 @@ export default function SignUp() {
             />
           </div>
 
-          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-3 sm:pt-4 pb-4 sm:pb-5 space-y-2.5 sm:space-y-3">
+          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-3 sm:pt-4 pb-4 sm:pb-5 space-y-3">
             <div className="text-center space-y-1">
               <h1 className="text-lg xs:text-xl sm:text-2xl md:text-2.5xl font-extrabold text-gradient-primary">
                 Create Owner Account
               </h1>
               <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium">
-                Get started in minutes
+                Step {step + 1} of {steps.length} • {steps[step].subtitle}
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                {steps.map((stepItem, index) => {
+                  const isActive = index === step;
+                  const isComplete = index < step;
+                  return (
+                    <motion.button
+                      key={stepItem.title}
+                      type="button"
+                      onClick={() => {
+                        if (index <= step) {
+                          setError(null);
+                          setStep(index);
+                        }
+                      }}
+                      disabled={index > step}
+                      whileHover={index <= step ? { y: -2, scale: 1.01 } : undefined}
+                      whileTap={index <= step ? { scale: 0.99 } : undefined}
+                      animate={{
+                        y: isActive ? -2 : 0,
+                        boxShadow: isActive
+                          ? "0 14px 30px rgba(16,185,129,0.18)"
+                          : "0 0 0 rgba(0,0,0,0)",
+                      }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      className={`flex flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 transition-all ${
+                        isActive ? "bg-primary/10 ring-1 ring-primary/20" : "bg-transparent"
+                      } ${index > step ? "opacity-60" : "hover:bg-muted/60"}`}
+                    >
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition-all ${
+                          isActive || isComplete
+                            ? "bg-primary text-primary-foreground shadow"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="hidden sm:block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {stepItem.title}
+                      </span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-muted/70 overflow-hidden">
+                <motion.div
+                  className="h-1.5 rounded-full bg-[linear-gradient(110deg,#42c775,#34b46d)]"
+                  initial={{ width: "0%" }}
+                  animate={{ width: `${((step + 1) / steps.length) * 100}%` }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                />
+              </div>
             </div>
 
             {error && (
@@ -340,170 +456,368 @@ export default function SignUp() {
               </div>
             )}
 
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              type="button"
-              onClick={() => (window.location.href = "/api/auth/google")}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
-            >
-              <FaGoogle className="text-red-500 text-lg" />
-              Continue with Google
-            </motion.button>
+            {step === 0 && (
+              <>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="button"
+                  onClick={() => (window.location.href = "/api/auth/google")}
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
+                >
+                  <FaGoogle className="text-red-500 text-lg" />
+                  Continue with Google
+                </motion.button>
 
-            <div className="relative my-1 sm:my-2">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
-              </div>
-            </div>
+                <div className="relative my-1 sm:my-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
+                  </div>
+                </div>
+              </>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
-              />
-
-              {/* Phone with country dropdown */}
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setOpen(!open)}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-muted-foreground z-10 pointer-events-auto px-2"
-                >
-                  <span className="font-medium">{countryCode}</span>
-                  <FaChevronDown className="text-xs" />
-                </button>
-
-                <input
-                  type="tel"
-                  placeholder="712345678"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
-                  required
-                  className="w-full pl-24 pr-3.5 xs:pr-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
-                />
-
-                {open && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl max-h-64 overflow-y-auto z-30 text-sm">
+              <AnimatePresence mode="wait">
+                {step === 0 && (
+                  <motion.div
+                    key="step-0"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-3.5 sm:space-y-4"
+                  >
                     <input
                       type="text"
-                      placeholder="Search country or code..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="w-full px-4 py-3 border-b border-border sticky top-0 bg-card/90 backdrop-blur-sm z-10 text-sm placeholder:text-muted-foreground"
+                      placeholder="Full Name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
                     />
-                    <div className="py-1">
-                      {filtered.map((c) => (
-                        <button
-                          key={c.code}
-                          type="button"
-                          onClick={() => {
-                            setCountryCode("+" + c.phone);
-                            setOpen(false);
-                            setSearch("");
-                          }}
-                          className="w-full px-4 py-2.5 text-left hover:bg-muted/70 transition-colors flex items-center gap-3"
-                        >
-                          <span className="text-xl">{c.flag}</span>
-                          <span className="flex-1">{c.name}</span>
-                          <span className="text-muted-foreground">+{c.phone}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+
+                    <input
+                      type="email"
+                      placeholder="Email address"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+                    />
+                  </motion.div>
                 )}
-              </div>
 
-              <input
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
-              />
+                {step === 1 && (
+                  <motion.div
+                    key="step-1"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-3.5 sm:space-y-4"
+                  >
+                    <div className="relative" ref={dropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setOpen(!open)}
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-sm text-muted-foreground z-10 pointer-events-auto px-2"
+                      >
+                        <span className="font-medium">{countryCode}</span>
+                        <FaChevronDown className="text-xs" />
+                      </button>
 
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
-                />
+                      <input
+                        type="tel"
+                        placeholder="712345678"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
+                        required
+                        className="w-full pl-24 pr-3.5 xs:pr-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+                      />
+
+                      {open && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl max-h-64 overflow-y-auto z-30 text-sm">
+                          <input
+                            type="text"
+                            placeholder="Search country or code..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="w-full px-4 py-3 border-b border-border sticky top-0 bg-card/90 backdrop-blur-sm z-10 text-sm placeholder:text-muted-foreground"
+                          />
+                          <div className="py-1">
+                            {filtered.map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setCountryCode("+" + c.phone);
+                                  setOpen(false);
+                                  setSearch("");
+                                }}
+                                className="w-full px-4 py-2.5 text-left hover:bg-muted/70 transition-colors flex items-center gap-3"
+                              >
+                                <span className="text-xl">{c.flag}</span>
+                                <span className="flex-1">{c.name}</span>
+                                <span className="text-muted-foreground">+{c.phone}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-muted/40 px-3.5 xs:px-4 py-2.5 text-[11px] text-muted-foreground">
+                      We will only use your number for account security and critical updates.
+                    </div>
+                  </motion.div>
+                )}
+
+                {step === 2 && (
+                  <motion.div
+                    key="step-2"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-3.5 sm:space-y-4"
+                  >
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="password"
+                        placeholder="Confirm Password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+                      />
+                    </div>
+
+                    <div className="space-y-2 pt-1 text-xs">
+                      <div className="flex gap-1.5">
+                        {[...Array(5)].map((_, i) => (
+                          <div
+                            key={i}
+                            className={`h-1.5 flex-1 rounded-full transition-all ${i < score ? barColor : "bg-muted/70"}`}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>{score === 5 ? "Strong" : score >= 3 ? "Medium" : "Weak"}</span>
+                        <span>{score}/5</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {[
+                          { label: "8+ characters", ok: criteria.length },
+                          { label: "Uppercase letter", ok: criteria.upper },
+                          { label: "Lowercase letter", ok: criteria.lower },
+                          { label: "Number", ok: criteria.number },
+                          { label: "Special character", ok: criteria.special },
+                        ].map((c) => (
+                          <div key={c.label} className="flex items-center gap-1.5">
+                            {c.ok ? (
+                              <FaCheck className="text-primary" size={12} />
+                            ) : (
+                              <FaTimes className="text-muted-foreground" size={12} />
+                            )}
+                            <span className={c.ok ? "text-primary" : "text-muted-foreground"}>{c.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {step === 3 && (
+                  <motion.div
+                    key="step-3"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-3.5 sm:space-y-4"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2">
+                        <p className="text-[10px] text-muted-foreground">Full Name</p>
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="Full Name"
+                          className="w-full px-3.5 py-2 bg-background/80 border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-xs sm:text-sm shadow-inner"
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2">
+                        <p className="text-[10px] text-muted-foreground">Email</p>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="Email address"
+                          className="w-full px-3.5 py-2 bg-background/80 border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-xs sm:text-sm shadow-inner"
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2 sm:col-span-2">
+                        <p className="text-[10px] text-muted-foreground">Phone</p>
+                        <div className="relative" ref={dropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setOpen(!open)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs text-muted-foreground z-10 pointer-events-auto px-2"
+                          >
+                            <span className="font-medium">{countryCode}</span>
+                            <FaChevronDown className="text-[10px]" />
+                          </button>
+                          <input
+                            type="tel"
+                            placeholder="712345678"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 15))}
+                            className="w-full pl-20 pr-3.5 py-2 bg-background/80 border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-xs sm:text-sm shadow-inner"
+                          />
+
+                          {open && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl max-h-56 overflow-y-auto z-30 text-xs">
+                              <input
+                                type="text"
+                                placeholder="Search country or code..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="w-full px-3.5 py-2 border-b border-border sticky top-0 bg-card/90 backdrop-blur-sm z-10 text-xs placeholder:text-muted-foreground"
+                              />
+                              <div className="py-1">
+                                {filtered.map((c) => (
+                                  <button
+                                    key={c.code}
+                                    type="button"
+                                    onClick={() => {
+                                      setCountryCode("+" + c.phone);
+                                      setOpen(false);
+                                      setSearch("");
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left hover:bg-muted/70 transition-colors flex items-center gap-2"
+                                  >
+                                    <span className="text-lg">{c.flag}</span>
+                                    <span className="flex-1">{c.name}</span>
+                                    <span className="text-muted-foreground">+{c.phone}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2">
+                        <p className="text-[10px] text-muted-foreground">Password</p>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Password"
+                            className="w-full px-3.5 py-2 pr-9 bg-background/80 border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-xs sm:text-sm shadow-inner"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2">
+                        <p className="text-[10px] text-muted-foreground">Confirm Password</p>
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Confirm password"
+                          className="w-full px-3.5 py-2 bg-background/80 border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-xs sm:text-sm shadow-inner"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Strength: {score === 5 ? "Strong" : score >= 3 ? "Medium" : "Weak"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2 sm:col-span-2">
+                        <p className="text-[10px] text-muted-foreground">Account Type</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-sm">Property Owner</p>
+                          <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary">
+                            Default
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-[linear-gradient(110deg,rgba(66,199,117,0.10),rgba(66,199,117,0.04))] px-3.5 xs:px-4 py-3 text-[11px] text-muted-foreground">
+                      Everything looks good? Make quick edits right here, then create your account.
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="flex items-center gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                  onClick={goBack}
+                  disabled={step === 0}
+                  className="w-1/2 rounded-xl border border-border py-2.5 text-xs xs:text-sm font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all disabled:opacity-50"
                 >
-                  {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  Back
                 </button>
+                {step < steps.length - 1 ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="button"
+                    onClick={goNext}
+                    disabled={!canProceed}
+                    className="w-1/2 bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                  >
+                    Continue
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="submit"
+                    disabled={isLoading || !csrfToken || score < 5}
+                    className="w-1/2 bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                  >
+                    {isLoading ? "Creating Account…" : "Create Account"}
+                  </motion.button>
+                )}
               </div>
-
-              <div className="relative">
-                <input
-                  type="password"
-                  placeholder="Confirm Password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
-                />
-              </div>
-
-              {/* Password strength indicator */}
-              <div className="space-y-2 pt-1 text-xs">
-                <div className="flex gap-1.5">
-                  {[...Array(5)].map((_, i) => (
-                    <div
-                      key={i}
-                      className={`h-1.5 flex-1 rounded-full transition-all ${i < score ? barColor : "bg-muted/70"}`}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{score === 5 ? "Strong" : score >= 3 ? "Medium" : "Weak"}</span>
-                  <span>{score}/5</span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {[
-                    { label: "8+ characters", ok: criteria.length },
-                    { label: "Uppercase letter", ok: criteria.upper },
-                    { label: "Lowercase letter", ok: criteria.lower },
-                    { label: "Number", ok: criteria.number },
-                    { label: "Special character", ok: criteria.special },
-                  ].map((c) => (
-                    <div key={c.label} className="flex items-center gap-1.5">
-                      {c.ok ? (
-                        <FaCheck className="text-primary" size={12} />
-                      ) : (
-                        <FaTimes className="text-muted-foreground" size={12} />
-                      )}
-                      <span className={c.ok ? "text-primary" : "text-muted-foreground"}>{c.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                type="submit"
-                disabled={isLoading || !csrfToken || score < 5}
-                className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide mt-2"
-              >
-                {isLoading ? "Creating Account…" : "Create Account"}
-              </motion.button>
             </form>
 
             <p className="text-center text-[10px] sm:text-[11px] text-muted-foreground pt-1">

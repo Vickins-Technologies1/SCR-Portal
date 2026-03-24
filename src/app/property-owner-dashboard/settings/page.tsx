@@ -15,7 +15,9 @@ export default function OwnerSettingsPage() {
   const router = useRouter();
   const perm = usePermissions();
   const canViewSettings = perm.hasPermission("settings:view");
-  const canEditSettings = perm.hasPermission("settings:edit");
+  const sessionRole = Cookies.get("role") || null;
+  const isOwnerRole = sessionRole === "propertyOwner";
+  const canEditSettings = isOwnerRole || perm.hasPermission("settings:edit");
   const isReadOnly = !canEditSettings;
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [profile, setProfile] = useState({ name: "", email: "", phone: "" });
