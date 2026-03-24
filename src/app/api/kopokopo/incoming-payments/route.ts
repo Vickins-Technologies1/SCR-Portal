@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       { returnDocument: "after" }
     );
 
-    if (!result.value) {
+    if (!result?.value) {
       logger.error("KopoKopo callback payment not found", { id, reference });
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
