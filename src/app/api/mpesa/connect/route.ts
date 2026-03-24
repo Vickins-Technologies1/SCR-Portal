@@ -27,10 +27,8 @@ export async function GET(request: NextRequest) {
         paybillNumber: 1,
         paybillAccountNumber: 1,
         tillNumber: 1,
+        bankPaybillNumber: 1,
         accountNumber: 1,
-        bankBranchRef: 1,
-        bankSettlementMethod: 1,
-        bankAccountName: 1,
         isDefault: 1,
         kopokopoRecipientType: 1,
         kopokopoRecipientUrl: 1,
@@ -41,10 +39,8 @@ export async function GET(request: NextRequest) {
         paybillNumber?: string;
         paybillAccountNumber?: string;
         tillNumber?: string;
+        bankPaybillNumber?: string;
         accountNumber?: string;
-        bankBranchRef?: string;
-        bankSettlementMethod?: string;
-        bankAccountName?: string;
         isDefault?: boolean;
         kopokopoRecipientType?: string;
         kopokopoRecipientUrl?: string;
@@ -58,10 +54,8 @@ export async function GET(request: NextRequest) {
       paybillNumber: doc?.paybillNumber || "",
       paybillAccountNumber: doc?.paybillAccountNumber || "",
       tillNumber: doc?.tillNumber || "",
+      bankPaybillNumber: doc?.bankPaybillNumber || "",
       accountNumber: doc?.accountNumber || "",
-      bankBranchRef: doc?.bankBranchRef || "",
-      bankSettlementMethod: doc?.bankSettlementMethod || "",
-      bankAccountName: doc?.bankAccountName || "",
       isDefault: doc?.isDefault ?? true,
       kopokopoRecipientUrl: doc?.kopokopoRecipientUrl || "",
     });
@@ -94,9 +88,7 @@ export async function POST(request: NextRequest) {
     paybillAccountNumber?: string;
     tillNumber?: string;
     accountNumber?: string;
-    bankBranchRef?: string;
-    bankSettlementMethod?: string;
-    bankAccountName?: string;
+    bankPaybillNumber?: string;
     isDefault?: boolean;
   };
   let payload: Payload;
@@ -116,9 +108,9 @@ export async function POST(request: NextRequest) {
   try {
     await connectMongoose();
     if (paymentType === "bank") {
-      if (!payload.bankBranchRef || !payload.accountNumber || !payload.bankSettlementMethod) {
+      if (!payload.bankPaybillNumber || !payload.accountNumber) {
         return NextResponse.json(
-          { success: false, message: "Please provide bank branch reference, account number, and settlement method." },
+          { success: false, message: "Please provide a bank paybill number and account number." },
           { status: 400 }
         );
       }
@@ -156,14 +148,13 @@ export async function POST(request: NextRequest) {
       });
       recipientUrl = recipient.location;
     } else if (paymentType === "bank") {
-      recipientType = "bank_account";
+      recipientType = "paybill";
       const recipient = await createPayRecipient({
-        type: "bank_account",
+        type: "paybill",
         payload: {
-          account_name: payload.bankAccountName?.trim() || ownerName,
-          bank_branch_ref: payload.bankBranchRef as string,
-          account_number: payload.accountNumber as string,
-          settlement_method: payload.bankSettlementMethod as string,
+          paybill_name: ownerName,
+          paybill_number: payload.bankPaybillNumber as string,
+          paybill_account_number: payload.accountNumber as string,
         },
       });
       recipientUrl = recipient.location;
@@ -187,10 +178,8 @@ export async function POST(request: NextRequest) {
         paybillNumber: paymentType === "paybill" ? payload.paybillNumber : "",
         paybillAccountNumber: paymentType === "paybill" ? payload.paybillAccountNumber : "",
         tillNumber: paymentType === "till" ? payload.tillNumber : "",
+        bankPaybillNumber: paymentType === "bank" ? payload.bankPaybillNumber : "",
         accountNumber: paymentType === "bank" ? payload.accountNumber : "",
-        bankBranchRef: paymentType === "bank" ? payload.bankBranchRef : "",
-        bankSettlementMethod: paymentType === "bank" ? payload.bankSettlementMethod : "",
-        bankAccountName: paymentType === "bank" ? payload.bankAccountName : "",
         isDefault: payload.isDefault ?? true,
         kopokopoRecipientType: recipientType,
         kopokopoRecipientUrl: recipientUrl,

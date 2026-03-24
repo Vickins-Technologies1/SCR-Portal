@@ -15,10 +15,8 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
   const [paybillNumber, setPaybillNumber] = useState("");
   const [paybillAccountNumber, setPaybillAccountNumber] = useState("");
   const [tillNumber, setTillNumber] = useState("");
+  const [bankPaybillNumber, setBankPaybillNumber] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [bankBranchRef, setBankBranchRef] = useState("");
-  const [bankSettlementMethod, setBankSettlementMethod] = useState("EFT");
-  const [bankAccountName, setBankAccountName] = useState("");
   const [isDefault, setIsDefault] = useState(true);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,11 +34,9 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
           }
           if (data.paybillNumber) setPaybillNumber(data.paybillNumber);
           if (data.paybillAccountNumber) setPaybillAccountNumber(data.paybillAccountNumber);
+          if (data.bankPaybillNumber) setBankPaybillNumber(data.bankPaybillNumber);
           if (data.accountNumber) setAccountNumber(data.accountNumber);
           if (data.tillNumber) setTillNumber(data.tillNumber);
-          if (data.bankBranchRef) setBankBranchRef(data.bankBranchRef);
-          if (data.bankSettlementMethod) setBankSettlementMethod(data.bankSettlementMethod);
-          if (data.bankAccountName) setBankAccountName(data.bankAccountName);
           if (typeof data.isDefault === "boolean") setIsDefault(data.isDefault);
         } else {
           setConnected(false);
@@ -69,16 +65,12 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
     if (disabled) return;
 
     if (paymentType === "bank") {
-      if (!bankBranchRef.trim()) {
-        toast.error("Please enter your bank branch reference.");
+      if (!bankPaybillNumber.trim()) {
+        toast.error("Please enter your bank paybill number.");
         return;
       }
       if (!accountNumber.trim()) {
         toast.error("Please enter your bank account number.");
-        return;
-      }
-      if (!bankSettlementMethod.trim()) {
-        toast.error("Please select a settlement method.");
         return;
       }
     } else if (paymentType === "till" && !tillNumber.trim()) {
@@ -111,10 +103,8 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
           paybillNumber: paymentType === "paybill" ? paybillNumber.trim() : "",
           paybillAccountNumber: paymentType === "paybill" ? paybillAccountNumber.trim() : "",
           tillNumber: paymentType === "till" ? tillNumber.trim() : "",
+          bankPaybillNumber: paymentType === "bank" ? bankPaybillNumber.trim() : "",
           accountNumber: paymentType === "bank" ? accountNumber.trim() : "",
-          bankBranchRef: paymentType === "bank" ? bankBranchRef.trim() : "",
-          bankSettlementMethod: paymentType === "bank" ? bankSettlementMethod : "",
-          bankAccountName: paymentType === "bank" ? bankAccountName.trim() : "",
           isDefault,
         }),
       });
@@ -167,6 +157,17 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         {paymentType === "bank" && (
           <>
             <div>
+              <label className="text-xs font-medium text-gray-600">Bank Paybill Number</label>
+              <input
+                type="text"
+                value={bankPaybillNumber}
+                onChange={(e) => setBankPaybillNumber(e.target.value)}
+                disabled={disabled}
+                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                placeholder="Enter Bank Paybill Number"
+              />
+            </div>
+            <div>
               <label className="text-xs font-medium text-gray-600">Bank Account Number</label>
               <input
                 type="text"
@@ -176,43 +177,6 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
                 disabled={disabled}
                 className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                 placeholder="Enter Account Number"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600">Bank Branch Reference</label>
-              <input
-                type="text"
-                value={bankBranchRef}
-                onChange={(e) => setBankBranchRef(e.target.value)}
-                disabled={disabled}
-                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                placeholder="Enter Bank Branch Ref"
-              />
-              <p className="mt-2 text-[11px] text-gray-500">
-                Get this reference from your KopoKopo dashboard (Bank Branches list).
-              </p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600">Settlement Method</label>
-              <select
-                value={bankSettlementMethod}
-                onChange={(e) => setBankSettlementMethod(e.target.value)}
-                disabled={disabled}
-                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-              >
-                <option value="EFT">EFT</option>
-                <option value="RTS">RTS</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600">Account Name (optional)</label>
-              <input
-                type="text"
-                value={bankAccountName}
-                onChange={(e) => setBankAccountName(e.target.value)}
-                disabled={disabled}
-                className="mt-2 w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                placeholder="Name as on bank account"
               />
             </div>
           </>
