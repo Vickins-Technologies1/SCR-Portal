@@ -1,7 +1,15 @@
 // src/lib/kopokopo.ts
 import "server-only";
 
-const KOPOKOPO_BASE_URL = (process.env.KOPOKOPO_BASE_URL || "https://sandbox.kopokopo.com").replace(/\/$/, "");
+const KOPOKOPO_BASE_URL = (process.env.KOPOKOPO_BASE_URL || "").replace(/\/$/, "");
+const KOPOKOPO_OAUTH_BASE_URL = (process.env.KOPOKOPO_OAUTH_BASE_URL || KOPOKOPO_BASE_URL || "https://sandbox.kopokopo.com").replace(
+  /\/$/,
+  ""
+);
+const KOPOKOPO_API_BASE_URL = (process.env.KOPOKOPO_API_BASE_URL || KOPOKOPO_BASE_URL || "https://sandbox.kopokopo.com").replace(
+  /\/$/,
+  ""
+);
 const KOPOKOPO_CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || "";
 const KOPOKOPO_CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || "";
 
@@ -28,7 +36,7 @@ export async function getKopoKopoAccessToken(): Promise<string> {
     grant_type: "client_credentials",
   });
 
-  const res = await fetch(`${KOPOKOPO_BASE_URL}/oauth/token`, {
+  const res = await fetch(`${KOPOKOPO_OAUTH_BASE_URL}/oauth/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -60,7 +68,7 @@ export async function createPayRecipient(params: {
 }): Promise<{ location: string }> {
   const token = await getKopoKopoAccessToken();
 
-  const res = await fetch(`${KOPOKOPO_BASE_URL}/api/v1/pay_recipients`, {
+  const res = await fetch(`${KOPOKOPO_API_BASE_URL}/api/v1/pay_recipients`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

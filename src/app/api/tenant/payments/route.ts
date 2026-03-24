@@ -2,16 +2,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId, Db } from "mongodb";
+import { connectMongoose } from "@/lib/mongoose";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { z } from "zod";
 import {
+  decryptPasskey,
   getMpesaPasskey,
   getMpesaShortcode,
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
 } from "@/lib/mpesa";
+import { LandlordMpesa } from "@/models/LandlordMpesa";
 
 interface Payment {
   _id: ObjectId;
@@ -50,6 +53,42 @@ interface Property {
   _id: ObjectId;
   ownerId: string;
   name: string;
+}
+
+async function resolveMpesaCredentials(landlordId: string): Promise<{
+  shortcode: string;
+  passkey: string;
+  source: "landlord" | "platform";
+}> {
+  try {
+    await connectMongoose();
+    const doc = await LandlordMpesa.findOne({ landlord: landlordId })
+      .select({ shortcode: 1, passkey: 1 })
+      .lean<{ shortcode?: string; passkey?: string }>()
+      .exec();
+
+    const shortcode = doc?.shortcode?.trim() || "";
+    const rawPasskey = doc?.passkey?.trim() || "";
+    if (shortcode && rawPasskey) {
+      let resolvedPasskey = rawPasskey;
+      try {
+        resolvedPasskey = decryptPasskey(rawPasskey);
+      } catch {
+        // Stored as plain text or missing encryption secret; fallback to raw value.
+      }
+      if (resolvedPasskey) {
+        return { shortcode, passkey: resolvedPasskey, source: "landlord" };
+      }
+    }
+  } catch {
+    // Ignore landlord lookup errors and fallback to platform credentials.
+  }
+
+  return {
+    shortcode: getMpesaShortcode(),
+    passkey: getMpesaPasskey(),
+    source: "platform",
+  };
 }
 
 const PaymentRequestSchema = z.object({
@@ -242,10 +281,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Use platform-level M-Pesa credentials
+    // Resolve M-Pesa credentials (prefer landlord-level, fallback to platform)
     const landlordId = typeof tenant.ownerId === "string" ? tenant.ownerId : property.ownerId;
-    const shortcode = getMpesaShortcode();
-    const passkey = getMpesaPasskey();
+    let shortcode = "";
+    let passkey = "";
+    try {
+      const resolved = await resolveMpesaCredentials(landlordId);
+      shortcode = resolved.shortcode;
+      passkey = resolved.passkey;
+    } catch (err) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            err instanceof Error
+              ? err.message
+              : "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!shortcode || !passkey) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+        },
+        { status: 500 }
+      );
+    }
     const callbackBase = process.env.MPESA_CALLBACK_BASE_URL || "";
     if (!callbackBase) {
       return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });

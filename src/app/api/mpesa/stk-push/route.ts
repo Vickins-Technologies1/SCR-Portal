@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
+import { connectMongoose } from "@/lib/mongoose";
+import { LandlordMpesa } from "@/models/LandlordMpesa";
 import {
+  decryptPasskey,
   getMpesaPasskey,
   getMpesaShortcode,
   initiateStkPush,
@@ -23,6 +26,42 @@ const StkPushSchema = z.object({
 
 type RateLimitState = { count: number; resetAt: number };
 const rateLimitMap = new Map<string, RateLimitState>();
+
+async function resolveMpesaCredentials(landlordId: string): Promise<{
+  shortcode: string;
+  passkey: string;
+  source: "landlord" | "platform";
+}> {
+  try {
+    await connectMongoose();
+    const doc = await LandlordMpesa.findOne({ landlord: landlordId })
+      .select({ shortcode: 1, passkey: 1 })
+      .lean<{ shortcode?: string; passkey?: string }>()
+      .exec();
+
+    const shortcode = doc?.shortcode?.trim() || "";
+    const rawPasskey = doc?.passkey?.trim() || "";
+    if (shortcode && rawPasskey) {
+      let resolvedPasskey = rawPasskey;
+      try {
+        resolvedPasskey = decryptPasskey(rawPasskey);
+      } catch {
+        // Stored as plain text or missing encryption secret; fallback to raw value.
+      }
+      if (resolvedPasskey) {
+        return { shortcode, passkey: resolvedPasskey, source: "landlord" };
+      }
+    }
+  } catch {
+    // Ignore landlord lookup errors and fallback to platform credentials.
+  }
+
+  return {
+    shortcode: getMpesaShortcode(),
+    passkey: getMpesaPasskey(),
+    source: "platform",
+  };
+}
 
 function rateLimit(key: string, limit = 5, windowMs = 60_000) {
   const now = Date.now();
@@ -117,9 +156,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
     }
 
-    // Use platform-level M-Pesa credentials
-    const shortcode = getMpesaShortcode();
-    const passkey = getMpesaPasskey();
+    // Resolve M-Pesa credentials (prefer landlord-level, fallback to platform)
+    let shortcode = "";
+    let passkey = "";
+    try {
+      const resolved = await resolveMpesaCredentials(derivedLandlordId);
+      shortcode = resolved.shortcode;
+      passkey = resolved.passkey;
+    } catch (err) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            err instanceof Error
+              ? err.message
+              : "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!shortcode || !passkey) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+        },
+        { status: 500 }
+      );
+    }
     const accountReference = parsed.data.invoiceId.startsWith("INV-")
       ? parsed.data.invoiceId
       : `INV-${parsed.data.invoiceId}`;

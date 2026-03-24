@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
+import { connectMongoose } from "@/lib/mongoose";
+import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { getMpesaShortcode } from "@/lib/mpesa";
 import logger from "@/lib/logger";
 
@@ -37,9 +39,49 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Unauthorized landlord access" }, { status: 403 });
     }
 
+    let shortcode = "";
+    let paymentType: "paybill" | "till" | "bank" | "unknown" = "unknown";
+    let paybillAccountNumber = "";
+
+    try {
+      await connectMongoose();
+      const doc = await LandlordMpesa.findOne({ landlord: parsed.data.landlordId })
+        .select({ paymentType: 1, paybillNumber: 1, tillNumber: 1, paybillAccountNumber: 1, shortcode: 1 })
+        .lean<{
+          paymentType?: string;
+          paybillNumber?: string;
+          tillNumber?: string;
+          paybillAccountNumber?: string;
+          shortcode?: string;
+        }>()
+        .exec();
+
+      paymentType =
+        doc?.paymentType === "till" || doc?.paymentType === "paybill" || doc?.paymentType === "bank"
+          ? doc.paymentType
+          : "unknown";
+      paybillAccountNumber = doc?.paybillAccountNumber || "";
+      if (doc?.paymentType === "till" && doc?.tillNumber) {
+        shortcode = doc.tillNumber;
+      } else if (doc?.paymentType === "paybill" && doc?.paybillNumber) {
+        shortcode = doc.paybillNumber;
+      } else if (doc?.shortcode) {
+        shortcode = doc.shortcode;
+      }
+    } catch {
+      shortcode = "";
+    }
+
+    if (!shortcode) {
+      shortcode = getMpesaShortcode();
+      if (paymentType === "unknown") paymentType = "paybill";
+    }
+
     return NextResponse.json({
       success: true,
-      shortcode: getMpesaShortcode(),
+      shortcode,
+      paymentType,
+      paybillAccountNumber,
     });
   } catch (error) {
     logger.error("GET /api/mpesa/shortcode error", {
