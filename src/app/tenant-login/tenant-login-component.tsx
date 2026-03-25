@@ -16,72 +16,26 @@ export default function TenantLoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [propertyId, setPropertyId] = useState("");
-  const [properties, setProperties] = useState<
-    { id: string; name: string; address?: string }[]
-  >([]);
-  const [loadingProperties, setLoadingProperties] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Fetch available properties
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadProperties() {
-      try {
-        const res = await fetch("/api/public/properties", {
-          cache: "no-store",
-        });
-
-        if (!res.ok) throw new Error("Failed to load properties");
-
-        const data = await res.json();
-
-        if (data.success && mounted) {
-          setProperties(data.properties || []);
-        } else if (mounted) {
-          setError("Unable to load property list. Please try again.");
-        }
-      } catch (err) {
-        if (mounted) {
-          setError("Connection issue. Please check your internet.");
-        }
-      } finally {
-        if (mounted) setLoadingProperties(false);
-      }
-    }
-
-    loadProperties();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   // Auto-fill demo credentials
   useEffect(() => {
     const demo = searchParams.get("demo");
-    if (demo === "tenant" && properties.length > 0) {
+    if (demo === "tenant") {
       setEmail("tenant@demo.com");
       setPassword("Tenant@2025!");
-      setPropertyId(properties[0]?.id || "");
       setTimeout(() => {
         const form = document.getElementById("tenant-login-form") as HTMLFormElement;
         form?.requestSubmit();
       }, 600);
     }
-  }, [searchParams, properties]);
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    if (!propertyId) {
-      setError("Please select your property");
-      return;
-    }
 
     if (!email.trim()) {
       setError("Email is required");
@@ -99,7 +53,6 @@ export default function TenantLoginPage() {
       email: email.trim(),
       password,
       role: "tenant",
-      propertyId,
     };
 
     try {
@@ -115,7 +68,7 @@ export default function TenantLoginPage() {
       if (!response.ok || !result.success) {
         throw new Error(
           result.message ||
-            "Login failed. Please check your credentials and selected property."
+            "Login failed. Please check your credentials."
         );
       }
 
@@ -357,39 +310,6 @@ export default function TenantLoginPage() {
             </motion.button>
 
             <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
-              {/* Property Selection */}
-              <div>
-                <label htmlFor="property" className="block text-[11px] font-medium text-foreground mb-1.5">
-                  Your Property
-                </label>
-                {loadingProperties ? (
-                  <div className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl text-muted-foreground text-sm">
-                    Loading properties...
-                  </div>
-                ) : properties.length === 0 ? (
-                  <div className="w-full px-3.5 xs:px-4 py-2.5 bg-muted/70 border border-border rounded-xl text-muted-foreground text-sm">
-                    No properties available. Contact support.
-                  </div>
-                ) : (
-                  <select
-                    id="property"
-                    value={propertyId}
-                    onChange={(e) => setPropertyId(e.target.value)}
-                    required
-                    disabled={isSubmitting || loadingProperties}
-                    className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all disabled:opacity-60 text-xs xs:text-sm sm:text-base shadow-inner"
-                  >
-                    <option value="">Select your property</option>
-                    {properties.map((prop) => (
-                      <option key={prop.id} value={prop.id}>
-                        {prop.name}
-                        {prop.address && ` — ${prop.address}`}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
               {/* Email */}
               <input
                 type="email"
@@ -428,7 +348,7 @@ export default function TenantLoginPage() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 type="submit"
-                disabled={isSubmitting || loadingProperties || !propertyId}
+                disabled={isSubmitting}
                 className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
               >
                 {isSubmitting ? "Authenticating..." : "Sign In"}

@@ -123,6 +123,8 @@ export function isValidKenyanMsisdn(phone: string): boolean {
   return /^254[17]\d{8}$/.test(phone);
 }
 
+export type MpesaStkTransactionType = "CustomerPayBillOnline" | "CustomerBuyGoodsOnline";
+
 export async function initiateStkPush(params: {
   shortcode: string;
   passkey: string;
@@ -131,6 +133,7 @@ export async function initiateStkPush(params: {
   accountReference: string;
   transactionDesc: string;
   callbackUrl: string;
+  transactionType?: MpesaStkTransactionType;
 }): Promise<{
   MerchantRequestID: string;
   CheckoutRequestID: string;
@@ -147,7 +150,7 @@ export async function initiateStkPush(params: {
     BusinessShortCode: params.shortcode,
     Password: password,
     Timestamp: timestamp,
-    TransactionType: "CustomerPayBillOnline",
+    TransactionType: params.transactionType || "CustomerPayBillOnline",
     Amount: params.amount,
     PartyA: params.phone,
     PartyB: params.shortcode,

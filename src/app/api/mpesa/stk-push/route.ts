@@ -28,60 +28,30 @@ const StkPushSchema = z.object({
 type RateLimitState = { count: number; resetAt: number };
 const rateLimitMap = new Map<string, RateLimitState>();
 
-async function resolveMpesaCredentials(landlordId: string): Promise<{
-  shortcode: string;
-  passkey: string;
-  source: "landlord" | "platform";
-}> {
+function safeGetMpesaShortcode(): string {
   try {
-    await connectMongoose();
-    const doc = await LandlordMpesa.findOne({ landlord: landlordId })
-      .select({ shortcode: 1, passkey: 1 })
-      .lean<{ shortcode?: string; passkey?: string }>()
-      .exec();
-
-    const shortcode = doc?.shortcode?.trim() || "";
-    const rawPasskey = doc?.passkey?.trim() || "";
-    if (shortcode && rawPasskey) {
-      let resolvedPasskey = rawPasskey;
-      try {
-        resolvedPasskey = decryptPasskey(rawPasskey);
-      } catch {
-        // Stored as plain text or missing encryption secret; fallback to raw value.
-      }
-      if (resolvedPasskey) {
-        return { shortcode, passkey: resolvedPasskey, source: "landlord" };
-      }
-    }
+    return getMpesaShortcode();
   } catch {
-    // Ignore landlord lookup errors and fallback to platform credentials.
+    return "";
   }
-
-  return {
-    shortcode: getMpesaShortcode(),
-    passkey: getMpesaPasskey(),
-    source: "platform",
-  };
 }
 
-async function resolveKopoKopoTillNumber(landlordId: string): Promise<string> {
-  const fallback = (process.env.KOPOKOPO_STK_TILL_NUMBER || "").trim();
+function safeGetMpesaPasskey(): string {
   try {
-    await connectMongoose();
-    const doc = await LandlordMpesa.findOne({ landlord: landlordId })
-      .select({ paymentType: 1, tillNumber: 1 })
-      .lean<{ paymentType?: string; tillNumber?: string }>()
-      .exec();
-
-    const tillNumber = doc?.tillNumber?.trim() || "";
-    if (doc?.paymentType === "till" && tillNumber) {
-      return tillNumber;
-    }
+    return getMpesaPasskey();
   } catch {
-    // Ignore and use fallback.
+    return "";
   }
+}
 
-  return fallback;
+function resolveStoredPasskey(rawPasskey: string): string {
+  if (!rawPasskey) return "";
+  try {
+    return decryptPasskey(rawPasskey);
+  } catch {
+    // Stored as plain text or missing encryption secret; fallback to raw value.
+    return rawPasskey;
+  }
 }
 
 function splitName(fullName?: string): { firstName: string; lastName: string } {
@@ -194,64 +164,98 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
     }
 
+    let paymentType: "paybill" | "till" | "bank" | "unknown" = "unknown";
+    let paybillNumber = "";
+    let paybillAccountNumber = "";
+    let tillNumber = "";
+    let storedShortcode = "";
+    let storedPasskey = "";
+
+    try {
+      await connectMongoose();
+      const doc = await LandlordMpesa.findOne({ landlord: derivedLandlordId })
+        .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1, shortcode: 1, passkey: 1 })
+        .lean<{
+          paymentType?: string;
+          paybillNumber?: string;
+          paybillAccountNumber?: string;
+          tillNumber?: string;
+          shortcode?: string;
+          passkey?: string;
+        }>()
+        .exec();
+
+      paybillNumber = doc?.paybillNumber?.trim() || "";
+      paybillAccountNumber = doc?.paybillAccountNumber?.trim() || "";
+      tillNumber = doc?.tillNumber?.trim() || "";
+      storedShortcode = doc?.shortcode?.trim() || "";
+      storedPasskey = doc?.passkey?.trim() || "";
+
+      if (doc?.paymentType === "till" || doc?.paymentType === "paybill" || doc?.paymentType === "bank") {
+        paymentType = doc.paymentType;
+      } else if (tillNumber) {
+        paymentType = "till";
+      } else if (paybillNumber) {
+        paymentType = "paybill";
+      }
+    } catch {
+      // Ignore lookup errors and fall back to env defaults below.
+    }
+
+    const connectedShortcode =
+      paymentType === "till" ? tillNumber : paymentType === "paybill" ? paybillNumber : "";
+    const hasConnectedShortcode = !!connectedShortcode;
+    const preferredShortcode = connectedShortcode || storedShortcode;
+    const invoiceReference = parsed.data.invoiceId.startsWith("INV-")
+      ? parsed.data.invoiceId
+      : `INV-${parsed.data.invoiceId}`;
+    const stkAccountReference =
+      paymentType === "paybill" && paybillAccountNumber ? paybillAccountNumber : invoiceReference;
+    const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
+
     const kopoClientId = (process.env.KOPOKOPO_CLIENT_ID || "").trim();
     const kopoClientSecret = (process.env.KOPOKOPO_CLIENT_SECRET || "").trim();
     const kopoCallbackBase = (process.env.KOPOKOPO_CALLBACK_BASE_URL || "").trim();
     const kopoTillEnv = (process.env.KOPOKOPO_STK_TILL_NUMBER || "").trim();
-    const hasAnyKopoConfig = !!(kopoClientId || kopoClientSecret || kopoCallbackBase || kopoTillEnv);
     const useKopoKopo = !!(kopoClientId && kopoClientSecret && kopoCallbackBase);
 
-    if (hasAnyKopoConfig && !useKopoKopo) {
-      const missing: string[] = [];
-      if (!kopoClientId) missing.push("KOPOKOPO_CLIENT_ID");
-      if (!kopoClientSecret) missing.push("KOPOKOPO_CLIENT_SECRET");
-      if (!kopoCallbackBase) missing.push("KOPOKOPO_CALLBACK_BASE_URL");
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Incomplete KopoKopo configuration. Missing: ${missing.join(", ")}.`,
-        },
-        { status: 500 }
-      );
-    }
+    const kopoTillFromLandlord = paymentType === "till" ? tillNumber : "";
+    const kopoTillCandidate = hasConnectedShortcode
+      ? isKopoKopoOnlinePaymentsTill(kopoTillFromLandlord)
+        ? kopoTillFromLandlord
+        : ""
+      : isKopoKopoOnlinePaymentsTill(kopoTillEnv)
+        ? kopoTillEnv
+        : isKopoKopoOnlinePaymentsTill(kopoTillFromLandlord)
+          ? kopoTillFromLandlord
+          : "";
 
-    if (useKopoKopo) {
-      const kopoTill = await resolveKopoKopoTillNumber(derivedLandlordId);
-      if (!kopoTill) {
+    if (kopoTillCandidate) {
+      if (!useKopoKopo) {
+        const missing: string[] = [];
+        if (!kopoClientId) missing.push("KOPOKOPO_CLIENT_ID");
+        if (!kopoClientSecret) missing.push("KOPOKOPO_CLIENT_SECRET");
+        if (!kopoCallbackBase) missing.push("KOPOKOPO_CALLBACK_BASE_URL");
         return NextResponse.json(
           {
             success: false,
-            message:
-              "Missing KopoKopo till number. Set landlord till number or KOPOKOPO_STK_TILL_NUMBER before initiating STK.",
+            message: `Incomplete KopoKopo configuration. Missing: ${missing.join(", ")}.`,
           },
           { status: 500 }
         );
       }
-      if (!isKopoKopoOnlinePaymentsTill(kopoTill)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Invalid KopoKopo till number for STK Push. Use your KopoKopo Online Payments account till (starts with 'K').",
-          },
-          { status: 400 }
-        );
-      }
 
       const { firstName, lastName } = splitName(tenantName || undefined);
-      const accountReference = parsed.data.invoiceId.startsWith("INV-")
-        ? parsed.data.invoiceId
-        : `INV-${parsed.data.invoiceId}`;
 
       const incoming = await createIncomingPaymentRequest({
-        tillNumber: kopoTill,
+        tillNumber: kopoTillCandidate,
         firstName,
         lastName,
         phoneNumber: `+${normalizedPhone}`,
         email: tenantEmail || undefined,
         amount: parsed.data.amount,
         metadata: {
-          reference: accountReference,
+          reference: invoiceReference,
           invoice_id: parsed.data.invoiceId,
           tenant_id: tenantId || "",
           landlord_id: derivedLandlordId,
@@ -270,7 +274,7 @@ export async function POST(request: NextRequest) {
         createdAt: nowIso,
         type: parsed.data.type || "Rent",
         phoneNumber: normalizedPhone,
-        reference: accountReference,
+        reference: invoiceReference,
         mpesaCode: null,
         checkoutRequestId: incoming.id,
         merchantRequestId: incoming.id,
@@ -295,23 +299,38 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve M-Pesa credentials (prefer landlord-level, fallback to platform)
-    let shortcode = "";
-    let passkey = "";
-    try {
-      const resolved = await resolveMpesaCredentials(derivedLandlordId);
-      shortcode = resolved.shortcode;
-      passkey = resolved.passkey;
-    } catch (err) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            err instanceof Error
-              ? err.message
-              : "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
-        },
-        { status: 500 }
-      );
+    let shortcode = preferredShortcode;
+    let passkey = resolveStoredPasskey(storedPasskey);
+    const envShortcode = safeGetMpesaShortcode();
+    const envPasskey = safeGetMpesaPasskey();
+
+    if (!shortcode) {
+      shortcode = envShortcode;
+    }
+
+    if (!passkey) {
+      if (shortcode && envShortcode && shortcode !== envShortcode) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Missing M-Pesa passkey for shortcode ${shortcode}. Configure the landlord passkey or set MPESA_SHORTCODE/MPESA_PASSKEY for the same shortcode.`,
+          },
+          { status: 500 }
+        );
+      }
+
+      if (!envShortcode || !envPasskey) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+          },
+          { status: 500 }
+        );
+      }
+
+      passkey = envPasskey;
     }
 
     if (!shortcode || !passkey) {
@@ -324,9 +343,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    const accountReference = parsed.data.invoiceId.startsWith("INV-")
-      ? parsed.data.invoiceId
-      : `INV-${parsed.data.invoiceId}`;
     const callbackBase = process.env.MPESA_CALLBACK_BASE_URL || "";
     if (!callbackBase) {
       return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
@@ -338,9 +354,10 @@ export async function POST(request: NextRequest) {
       passkey,
       amount: parsed.data.amount,
       phone: normalizedPhone,
-      accountReference,
+      accountReference: stkAccountReference,
       transactionDesc: `${parsed.data.type || "Rent"} Payment`,
       callbackUrl: `${callbackBase}/api/mpesa/stk-callback`,
+      transactionType,
     });
 
     if (stkResponse.ResponseCode !== "0") {
@@ -362,7 +379,7 @@ export async function POST(request: NextRequest) {
       createdAt: nowIso,
       type: parsed.data.type || "Rent",
       phoneNumber: normalizedPhone,
-      reference: accountReference,
+      reference: invoiceReference,
       mpesaCode: null,
       checkoutRequestId: stkResponse.CheckoutRequestID,
       merchantRequestId: stkResponse.MerchantRequestID,
