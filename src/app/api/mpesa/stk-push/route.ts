@@ -92,6 +92,11 @@ function splitName(fullName?: string): { firstName: string; lastName: string } {
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
+function isKopoKopoOnlinePaymentsTill(value: string): boolean {
+  const trimmed = (value || "").trim().toUpperCase();
+  return /^K\d{5,}$/.test(trimmed);
+}
+
 function rateLimit(key: string, limit = 5, windowMs = 60_000) {
   const now = Date.now();
   const existing = rateLimitMap.get(key);
@@ -220,6 +225,16 @@ export async function POST(request: NextRequest) {
               "Missing KopoKopo till number. Set landlord till number or KOPOKOPO_STK_TILL_NUMBER before initiating STK.",
           },
           { status: 500 }
+        );
+      }
+      if (!isKopoKopoOnlinePaymentsTill(kopoTill)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Invalid KopoKopo till number for STK Push. Use your KopoKopo Online Payments account till (starts with 'K').",
+          },
+          { status: 400 }
         );
       }
 

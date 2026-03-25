@@ -93,13 +93,16 @@ export async function POST(request: NextRequest) {
 
     const expectedPhone = normalizeMsisdn(payment.phoneNumber);
     const incomingPhone = normalizeMsisdn(senderPhone);
-    const phoneMatches = !incomingPhone || !expectedPhone || incomingPhone === expectedPhone;
-    const amountMatches = amountValue == null || Number(amountValue) === Number(payment.amount);
+    const hasIncomingPhone = !!incomingPhone;
+    const hasAmount = amountValue != null && !Number.isNaN(amountValue);
+    const phoneMatches = hasIncomingPhone && (!expectedPhone || incomingPhone === expectedPhone);
+    const amountMatches = hasAmount && Number(amountValue) === Number(payment.amount);
+    const referenceValid = isLikelyMpesaReceipt(reference);
 
     const update: Record<string, any> = { status: normalizedStatus };
-    if (isCompleted && reference && phoneMatches && amountMatches) {
+    if (isCompleted && referenceValid && phoneMatches && amountMatches) {
       update.mpesaCode = reference;
-    } else if (isCompleted && (!phoneMatches || !amountMatches)) {
+    } else if (isCompleted && (!referenceValid || !phoneMatches || !amountMatches)) {
       update.status = "pending";
     }
     if (originationTime) update.paymentDate = originationTime;

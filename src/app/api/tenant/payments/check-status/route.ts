@@ -83,9 +83,10 @@ export async function POST(request: NextRequest) {
         const referenceValid = isLikelyMpesaReceipt(statusData.reference);
         const expectedPhone = normalizeMsisdn(payment.phoneNumber);
         const incomingPhone = normalizeMsisdn(statusData.phoneNumber);
-        const phoneMatches = !incomingPhone || !expectedPhone || incomingPhone === expectedPhone;
-        const amountMatches =
-          !statusData.amount || Number(statusData.amount) === Number(payment.amount);
+        const hasIncomingPhone = !!incomingPhone;
+        const hasAmount = statusData.amount != null && !Number.isNaN(Number(statusData.amount));
+        const phoneMatches = hasIncomingPhone && (!expectedPhone || incomingPhone === expectedPhone);
+        const amountMatches = hasAmount && Number(statusData.amount) === Number(payment.amount);
 
         const isCompleted =
           statusLower === "success" &&
