@@ -10,6 +10,17 @@ function verifySignature(body: string, signature: string | null, secret: string)
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
+function normalizeMsisdn(value?: string): string {
+  if (!value) return "";
+  return value.replace(/\D/g, "");
+}
+
+function isLikelyMpesaReceipt(reference?: string): boolean {
+  if (!reference) return false;
+  const trimmed = reference.trim();
+  return /^[A-Z0-9]{10}$/i.test(trimmed);
+}
+
 export async function POST(request: NextRequest) {
   const secret = process.env.KOPOKOPO_CLIENT_SECRET || "";
   const signature = request.headers.get("x-kopokopo-signature");
@@ -45,13 +56,15 @@ export async function POST(request: NextRequest) {
     .toString()
     .toLowerCase();
   const reference = eventResource?.reference ? String(eventResource.reference) : "";
+  const senderPhone = eventResource?.sender_phone_number ? String(eventResource.sender_phone_number) : "";
+  const amountValue = eventResource?.amount ? Number(eventResource.amount) : undefined;
   const originationTime = eventResource?.origination_time ? String(eventResource.origination_time) : "";
 
   if (!id) {
     return NextResponse.json({ success: false, message: "Missing incoming payment id" }, { status: 400 });
   }
 
-  const isCompleted = status === "success" && resourceStatus === "received" && !!reference;
+  const isCompleted = status === "success" && resourceStatus === "received" && isLikelyMpesaReceipt(reference);
   const isCancelled =
     status === "failed" &&
     (errorsLower.includes("cancel") || errorsLower.includes("canceled") || errorsLower.includes("cancelled"));
@@ -64,27 +77,34 @@ export async function POST(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
-    const update: Record<string, any> = { status: normalizedStatus };
-    if (isCompleted && reference) update.mpesaCode = reference;
-    if (originationTime) update.paymentDate = originationTime;
+    const payment = await db.collection("payments").findOne({
+      $or: [
+        { transactionId: id },
+        { checkoutRequestId: id },
+        { merchantRequestId: id },
+        ...(reference ? [{ reference }] : []),
+      ],
+    });
 
-    const result = await db.collection("payments").findOneAndUpdate(
-      {
-        $or: [
-          { transactionId: id },
-          { checkoutRequestId: id },
-          { merchantRequestId: id },
-          ...(reference ? [{ reference }] : []),
-        ],
-      },
-      { $set: update },
-      { returnDocument: "after" }
-    );
-
-    if (!result?.value) {
+    if (!payment) {
       logger.error("KopoKopo callback payment not found", { id, reference });
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
+
+    const expectedPhone = normalizeMsisdn(payment.phoneNumber);
+    const incomingPhone = normalizeMsisdn(senderPhone);
+    const phoneMatches = !incomingPhone || !expectedPhone || incomingPhone === expectedPhone;
+    const amountMatches = amountValue == null || Number(amountValue) === Number(payment.amount);
+
+    const update: Record<string, any> = { status: normalizedStatus };
+    if (isCompleted && reference && phoneMatches && amountMatches) {
+      update.mpesaCode = reference;
+    } else if (isCompleted && (!phoneMatches || !amountMatches)) {
+      update.status = "pending";
+    }
+    if (originationTime) update.paymentDate = originationTime;
+
+    await db.collection("payments").updateOne({ _id: payment._id }, { $set: update });
 
     return NextResponse.json({ success: true });
   } catch (error) {

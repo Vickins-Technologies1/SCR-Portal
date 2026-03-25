@@ -7,6 +7,17 @@ import logger from "@/lib/logger";
 import { z } from "zod";
 import { getIncomingPaymentStatus } from "@/lib/kopokopo";
 
+function normalizeMsisdn(value?: string): string {
+  if (!value) return "";
+  return value.replace(/\D/g, "");
+}
+
+function isLikelyMpesaReceipt(reference?: string): boolean {
+  if (!reference) return false;
+  const trimmed = reference.trim();
+  return /^[A-Z0-9]{10}$/i.test(trimmed);
+}
+
 const StatusSchema = z.object({
   transaction_request_id: z.string().trim().min(1),
   tenantId: z.string().trim().min(1),
@@ -69,8 +80,20 @@ export async function POST(request: NextRequest) {
         const resourceStatusLower = (statusData.resourceStatus || "").toLowerCase();
         const errorsLower = (statusData.errors || "").toLowerCase();
         const hasReference = !!statusData.reference;
+        const referenceValid = isLikelyMpesaReceipt(statusData.reference);
+        const expectedPhone = normalizeMsisdn(payment.phoneNumber);
+        const incomingPhone = normalizeMsisdn(statusData.phoneNumber);
+        const phoneMatches = !incomingPhone || !expectedPhone || incomingPhone === expectedPhone;
+        const amountMatches =
+          !statusData.amount || Number(statusData.amount) === Number(payment.amount);
 
-        const isCompleted = statusLower === "success" && resourceStatusLower === "received" && hasReference;
+        const isCompleted =
+          statusLower === "success" &&
+          resourceStatusLower === "received" &&
+          hasReference &&
+          referenceValid &&
+          phoneMatches &&
+          amountMatches;
         const isCancelled =
           statusLower === "failed" &&
           (errorsLower.includes("cancel") || errorsLower.includes("canceled") || errorsLower.includes("cancelled"));
