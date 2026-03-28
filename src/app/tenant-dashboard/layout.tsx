@@ -238,11 +238,11 @@ export default function TenantDashboardLayout({
       {/* ─── Sidebar ─── */}
       <aside
         data-tour="tenant-sidebar"
-        className={`fixed left-0 top-16 bottom-0 z-40 w-72 bg-white border-r border-gray-200/70 shadow-[0_20px_60px_rgba(15,23,42,0.18)] transition-transform duration-300 ease-out
+        className={`fixed left-0 top-16 bottom-0 z-40 w-[82vw] max-w-[18rem] lg:w-72 bg-card border-r border-border backdrop-blur-xl shadow-[0_20px_60px_rgba(15,23,42,0.16)] transition-transform duration-300 ease-out
           ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:inset-y-0`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-white/40 bg-gradient-to-b from-[#42c775]/10 to-transparent">
+          <div className="p-6 border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent">
             <div className="flex justify-center mb-5">
               <img
                 src="/logo.png"
@@ -252,8 +252,8 @@ export default function TenantDashboardLayout({
             </div>
 
             <div className="text-center">
-              <p className="text-xs uppercase tracking-widest text-gray-500 font-medium">Tenant Portal</p>
-              <p className="mt-1.5 text-lg font-semibold text-gray-900">
+              <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground font-medium">Tenant Portal</p>
+              <p className="mt-1.5 text-lg font-semibold text-foreground">
                 {isLoading ? "…" : error ? "Welcome" : name}
               </p>
             </div>
@@ -261,7 +261,7 @@ export default function TenantDashboardLayout({
 
           <nav className="flex-1 px-4 py-5 space-y-1.5 overflow-y-auto">
             {links.map(({ key, href, label, icon }) => {
-              const isActive = pathname === href;
+              const isActive = pathname === href || pathname.startsWith(href + "/");
               return (
                 <Link
                   key={href}
@@ -270,30 +270,30 @@ export default function TenantDashboardLayout({
                   data-tour={`tenant-nav-${key}`}
                   className={`group flex items-center gap-4 rounded-xl px-4 py-3.5 text-xs sm:text-sm font-medium transition-all duration-200
                     ${isActive
-                      ? "bg-[#42c775]/10 text-[#42c775] shadow-sm ring-1 ring-[#42c775]/20"
-                      : "text-gray-600 hover:bg-[#42c775]/5 hover:text-[#42c775]"
+                      ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
+                      : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
                     }`}
                 >
-                  <span className={isActive ? "text-[#42c775]" : "text-gray-500 group-hover:text-[#42c775]"}>
+                  <span className={isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}>
                     {icon}
                   </span>
-                  <span>{label}</span>
+                  <span className="truncate">{label}</span>
                 </Link>
               );
             })}
           </nav>
 
-          <div className="mt-auto border-t border-white/40 px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
-            <p className="text-center text-[10px] text-gray-400/70 font-light tracking-wide">
+          <div className="mt-auto border-t border-border px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
+            <p className="text-center text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
               © {new Date().getFullYear()} Sorana Property Managers Limited
             </p>
-            <p className="text-center text-[9px] text-gray-400/60 mt-1">
+            <p className="text-center text-[9px] text-muted-foreground mt-1 opacity-70">
               Built by{" "}
               <a
                 href="https://vickins-technologies.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-primary transition-colors underline underline-offset-2 decoration-gray-300/40 hover:decoration-primary/50"
+                className="text-muted-foreground hover:text-primary transition-colors underline underline-offset-2 decoration-gray-300/40 hover:decoration-primary/50"
               >
                 Vickins Technologies
               </a>

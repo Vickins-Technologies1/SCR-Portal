@@ -147,24 +147,24 @@ export default function Sidebar() {
     <>
       <aside
         data-tour="owner-sidebar"
-        className={`fixed left-0 top-16 bottom-0 z-40 w-64 sm:w-72 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)] border-r border-gray-200/70 transition-transform duration-300 ease-out ${
+        className={`fixed left-0 top-16 bottom-0 z-40 w-[82vw] max-w-[18rem] md:w-72 bg-card backdrop-blur-xl shadow-[0_20px_60px_rgba(15,23,42,0.16)] border-r border-border transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:inset-y-0 flex flex-col`}
       >
         <div className="flex h-full flex-col">
-          <div className="border-b border-white/40 bg-gradient-to-b from-[#42c775]/10 to-transparent px-5 sm:px-6 py-5 sm:py-6">
+          <div className="border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent px-5 sm:px-6 py-5 sm:py-6">
             <div className="flex flex-col items-center text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#42c775] to-[#34b46d] text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--color-primary)] to-[color:var(--color-primary-hover)] text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
                 {initials}
               </div>
 
-              <p className="text-xs tracking-widest uppercase text-gray-500">Welcome back</p>
-              <h2 className="mt-1 text-lg sm:text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+              <p className="text-xs tracking-[0.35em] uppercase text-muted-foreground">Welcome back</p>
+              <h2 className="mt-1 text-lg sm:text-xl font-semibold text-gradient-primary">
                 {name.split(" ")[0]}
               </h2>
 
-              <span className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-full bg-[#42c775]/10 text-[#42c775]">
-                <span className="h-2 w-2 rounded-full bg-[#42c775] animate-pulse"></span>
+              <span className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-full bg-primary/10 text-primary">
+                <span className="h-2 w-2 rounded-full bg-primary animate-pulse"></span>
                 {roleLabel}
               </span>
             </div>
@@ -181,14 +181,14 @@ export default function Sidebar() {
                   data-tour={`owner-nav-${key}`}
                   className={`group flex items-center gap-3 sm:gap-4 rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
                     isActive
-                      ? "bg-[#42c775]/10 text-[#42c775] shadow-sm ring-1 ring-[#42c775]/20"
-                      : "text-gray-600 hover:bg-[#42c775]/5 hover:text-[#42c775]"
+                      ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20"
+                      : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
                   }`}
                 >
-                  <span className={isActive ? "text-[#42c775]" : "text-gray-500 group-hover:text-[#42c775]"}>
+                  <span className={isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}>
                     {icon}
                   </span>
-                  <span>{label}</span>
+                  <span className="truncate">{label}</span>
                 </Link>
               );
             })}
@@ -196,29 +196,29 @@ export default function Sidebar() {
             {navLinks.length === 0 && mounted && !perm.isOwner && (
               <div className="px-6 py-12 text-center">
                 <AlertCircle className="mx-auto h-12 w-12 text-amber-500 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-800">Limited Access</h3>
-                <p className="mt-2 text-sm text-gray-600">
+                <h3 className="text-lg font-semibold text-foreground">Limited Access</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
                   Your account currently has no assigned permissions.
                 </p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Please contact the property owner to grant access.
                 </p>
               </div>
             )}
           </nav>
 
-          <div className="mt-auto border-t border-white/40 px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
+          <div className="mt-auto border-t border-border px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
             <div className="text-center space-y-1">
-              <p className="text-[10px] text-gray-400/80 font-light tracking-wide">
+              <p className="text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
                 © {new Date().getFullYear()} Sorana Property Managers Limited
               </p>
-              <p className="text-[9px] text-gray-400/60 font-light">
+              <p className="text-[9px] text-muted-foreground font-light opacity-70">
                 Developed by{" "}
                 <a
                   href="https://vickins-technologies.vercel.app/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-gray-400/80 hover:text-[#42c775] transition-colors duration-200 underline underline-offset-2 decoration-gray-300/50 hover:decoration-[#42c775]/60"
+                  className="text-muted-foreground hover:text-primary transition-colors duration-200 underline underline-offset-2 decoration-gray-300/50 hover:decoration-primary/60"
                 >
                   Vickins Technologies
                 </a>
