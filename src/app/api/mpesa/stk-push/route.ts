@@ -204,7 +204,6 @@ export async function POST(request: NextRequest) {
 
     const connectedShortcode =
       paymentType === "till" ? tillNumber : paymentType === "paybill" ? paybillNumber : "";
-    const hasConnectedShortcode = !!connectedShortcode;
     const preferredShortcode = connectedShortcode || storedShortcode;
     const invoiceReference = parsed.data.invoiceId.startsWith("INV-")
       ? parsed.data.invoiceId
@@ -219,16 +218,12 @@ export async function POST(request: NextRequest) {
     const kopoTillEnv = (process.env.KOPOKOPO_STK_TILL_NUMBER || "").trim();
     const useKopoKopo = !!(kopoClientId && kopoClientSecret && kopoCallbackBase);
 
-    const kopoTillFromLandlord = paymentType === "till" ? tillNumber : "";
-    const kopoTillCandidate = hasConnectedShortcode
-      ? isKopoKopoOnlinePaymentsTill(kopoTillFromLandlord)
-        ? kopoTillFromLandlord
-        : ""
+    const kopoTillFromLandlord = tillNumber;
+    const kopoTillCandidate = isKopoKopoOnlinePaymentsTill(kopoTillFromLandlord)
+      ? kopoTillFromLandlord
       : isKopoKopoOnlinePaymentsTill(kopoTillEnv)
         ? kopoTillEnv
-        : isKopoKopoOnlinePaymentsTill(kopoTillFromLandlord)
-          ? kopoTillFromLandlord
-          : "";
+        : "";
 
     if (kopoTillCandidate) {
       if (!useKopoKopo) {
@@ -295,6 +290,17 @@ export async function POST(request: NextRequest) {
           provider: "kopokopo",
         },
         { status: 200 }
+      );
+    }
+
+    if (useKopoKopo && !kopoTillCandidate) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "KopoKopo STK Push requires an Online Payments till that starts with 'K'. Configure a KopoKopo till number for this landlord or set KOPOKOPO_STK_TILL_NUMBER. If you want to use a Safaricom paybill/till instead, configure MPESA_SHORTCODE/MPESA_PASSKEY.",
+        },
+        { status: 400 }
       );
     }
 
