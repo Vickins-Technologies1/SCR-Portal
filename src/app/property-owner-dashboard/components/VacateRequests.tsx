@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Home, AlertCircle, CheckCircle2, XCircle, Calendar } from "lucide-react";
 import { VacateRequest } from "../../../types/vacate";
-import Cookies from "js-cookie";
 
 interface VacateRequestsProps {
   csrfToken: string;
@@ -23,20 +22,49 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [activeCsrfToken, setActiveCsrfToken] = useState<string | null>(csrfToken);
+
+  useEffect(() => {
+    setActiveCsrfToken(csrfToken);
+  }, [csrfToken]);
+
+  const fetchCsrfToken = async () => {
+    try {
+      const res = await fetch("/api/csrf-token", { credentials: "include" });
+      const data = await res.json();
+      if (data?.csrfToken) {
+        setActiveCsrfToken(data.csrfToken);
+        return data.csrfToken as string;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
 
   useEffect(() => {
     const fetchRequests = async () => {
-      const token = Cookies.get("csrf-token") || csrfToken;
+      const token = activeCsrfToken || (await fetchCsrfToken());
       if (!token) return;
       setIsLoading(true);
       setError(null);
 
       try {
-        const res = await fetch("/api/property-owners/vacate", {
+        let res = await fetch("/api/property-owners/vacate", {
           method: "GET",
           headers: { "x-csrf-token": token },
           credentials: "include",
         });
+        if (res.status === 403) {
+          const refreshed = await fetchCsrfToken();
+          if (refreshed) {
+            res = await fetch("/api/property-owners/vacate", {
+              method: "GET",
+              headers: { "x-csrf-token": refreshed },
+              credentials: "include",
+            });
+          }
+        }
         const data = await res.json();
         if (!res.ok || !data.success) {
           throw new Error(data.message || "Failed to load vacate requests");
@@ -50,13 +78,13 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
     };
 
     fetchRequests();
-  }, [csrfToken]);
+  }, [activeCsrfToken]);
 
   const updateStatus = async (id: string, status: "Approved" | "Rejected") => {
-    const token = Cookies.get("csrf-token") || csrfToken;
+    const token = activeCsrfToken || (await fetchCsrfToken());
     if (!token) return;
     try {
-      const res = await fetch("/api/property-owners/vacate", {
+      let res = await fetch("/api/property-owners/vacate", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -65,6 +93,20 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
         credentials: "include",
         body: JSON.stringify({ requestId: id, status }),
       });
+      if (res.status === 403) {
+        const refreshed = await fetchCsrfToken();
+        if (refreshed) {
+          res = await fetch("/api/property-owners/vacate", {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "x-csrf-token": refreshed,
+            },
+            credentials: "include",
+            body: JSON.stringify({ requestId: id, status }),
+          });
+        }
+      }
 
       const data = await res.json();
       if (!res.ok || !data.success) {
