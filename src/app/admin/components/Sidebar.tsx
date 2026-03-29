@@ -66,7 +66,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-14 bottom-0 z-40 flex flex-col bg-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.18)] backdrop-blur-xl border-r border-white/40 transition-all duration-400 ease-out md:inset-y-0",
+          "fixed left-0 top-14 bottom-0 z-40 flex flex-col bg-card backdrop-blur-xl shadow-[0_20px_60px_rgba(15,23,42,0.16)] border-r border-border transition-all duration-400 ease-out md:inset-y-0",
           "w-60 md:w-auto",
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           isCollapsed ? "md:w-16" : "md:w-60"
@@ -74,22 +74,22 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       >
         <div className="flex h-full flex-col">
           {/* Profile Header */}
-          <div className="relative border-b border-white/40 px-5 py-6">
+          <div className="relative border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent px-5 py-6">
         
             <div className="flex flex-col items-center text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#03a678] to-[#027a55] text-lg font-bold text-white shadow-lg ring-4 ring-[#03a678]/15 ring-offset-2 ring-offset-white">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-lg font-bold text-white shadow-lg ring-4 ring-primary/15 ring-offset-2 ring-offset-white">
                 {initials}
               </div>
 
               {!isCollapsed && (
                 <>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     Welcome back
                   </p>
-                  <h2 className="mt-1 text-base font-semibold text-gray-900">{firstName}</h2>
+                  <h2 className="mt-1 text-base font-semibold text-foreground">{firstName}</h2>
 
-                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#03a678]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#03a678]">
-                    <span className="h-2 w-2 rounded-full bg-[#03a678] shadow-sm animate-pulse" />
+                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                    <span className="h-2 w-2 rounded-full bg-primary shadow-sm animate-pulse" />
                     Admin
                   </div>
                 </>
@@ -105,24 +105,24 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                   <Link
                     href={href}
                     onClick={onClose}
+                  className={cn(
+                    "group flex items-center rounded-lg px-3 py-2.5 text-xs font-medium transition-all duration-200",
+                    isCollapsed ? "justify-center" : "gap-4",
+                    isActive(href)
+                      ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/30"
+                      : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                  )}
+                >
+                  <span
                     className={cn(
-                      "group flex items-center rounded-lg px-3 py-2.5 text-xs font-medium transition-all duration-200",
-                      isCollapsed ? "justify-center" : "gap-4",
-                      isActive(href)
-                        ? "bg-[#03a678]/10 text-[#03a678] shadow-sm ring-1 ring-[#03a678]/30"
-                        : "text-gray-600 hover:bg-[#03a678]/5 hover:text-[#03a678]"
+                      "flex h-5 w-5 items-center justify-center transition-colors",
+                      isActive(href) ? "text-primary" : "text-muted-foreground group-hover:text-primary"
                     )}
                   >
-                    <span
-                      className={cn(
-                        "flex h-5 w-5 items-center justify-center transition-colors",
-                        isActive(href) ? "text-[#03a678]" : "text-gray-500 group-hover:text-[#03a678]"
-                      )}
-                    >
-                      {icon}
-                    </span>
+                    {icon}
+                  </span>
 
-                    {!isCollapsed && <span>{label}</span>}
+                  {!isCollapsed && <span>{label}</span>}
                   </Link>
                 </li>
               ))}
@@ -130,8 +130,8 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               {navLinks.length === 0 && mounted && (
                 <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
                   <AlertCircle className="mb-5 h-14 w-14 text-amber-500/80" />
-                  <h3 className="text-lg font-semibold text-gray-800">No Modules Available</h3>
-                  <p className="mt-2 text-sm text-gray-600">
+                  <h3 className="text-lg font-semibold text-foreground">No Modules Available</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
                     Something went wrong — please refresh or contact support.
                   </p>
                 </div>
@@ -140,7 +140,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           </nav>
 
           {/* Footer */}
-          <div className="mt-auto border-t border-white/40 bg-gradient-to-t from-white/70 to-transparent px-4 py-4 text-center text-[10px] text-gray-500/80">
+          <div className="mt-auto border-t border-border bg-gradient-to-t from-white/70 to-transparent px-4 py-4 text-center text-[10px] text-muted-foreground">
             <p>© {new Date().getFullYear()} Sorana Property Managers Limited</p>
             {!isCollapsed && (
               <p className="mt-2">
@@ -149,7 +149,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                   href="https://vickins-technologies.vercel.app/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-gray-600/90 underline underline-offset-2 transition-colors hover:text-[#03a678]"
+                  className="font-medium text-muted-foreground underline underline-offset-2 transition-colors hover:text-primary"
                 >
                   Vickins Technologies
                 </a>

@@ -29,7 +29,7 @@ function SuccessToast({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 10 }}
-      className="fixed bottom-5 right-5 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 border border-emerald-500/30 text-xs"
+      className="fixed bottom-5 right-5 z-50 bg-primary text-white px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 border border-primary/30 text-xs"
     >
       <CheckCircle className="h-5 w-5 flex-shrink-0" />
       <span className="font-medium">{message}</span>
@@ -182,9 +182,9 @@ export default function PendingApprovals() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow border p-4 text-center">
-        <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-b-2 border-[#03a678] mx-auto mb-2"></div>
-        <p className="text-xs text-gray-600">Loading pending approvals...</p>
+      <div className="surface-card rounded-xl p-4 text-center">
+        <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-b-2 border-primary mx-auto mb-2"></div>
+        <p className="text-xs text-muted-foreground">Loading pending approvals...</p>
       </div>
     );
   }
@@ -206,10 +206,10 @@ export default function PendingApprovals() {
 
   if (pending.length === 0) {
     return (
-      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-        <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-        <h3 className="text-sm font-semibold text-green-800">All caught up!</h3>
-        <p className="text-xs text-green-700 mt-1">
+      <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 text-center">
+        <CheckCircle className="h-8 w-8 text-primary mx-auto mb-2" />
+        <h3 className="text-sm font-semibold text-foreground">All caught up!</h3>
+        <p className="text-xs text-muted-foreground mt-1">
           No pending property owner sign-up approvals at the moment.
         </p>
       </div>
@@ -218,29 +218,29 @@ export default function PendingApprovals() {
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow border overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-800 to-blue-950 px-4 py-3 text-white">
+      <div className="surface-card rounded-xl overflow-hidden">
+        <div className="bg-gradient-to-r from-primary to-primary-hover px-4 py-3 text-primary-foreground">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Clock className="h-5 w-5" />
               <h2 className="text-sm font-semibold">Pending Approvals</h2>
             </div>
-            <span className="bg-indigo-500/30 px-3 py-0.5 rounded-full text-xs font-medium backdrop-blur-sm border border-indigo-400/20">
+            <span className="bg-white/15 px-3 py-0.5 rounded-full text-xs font-medium backdrop-blur-sm border border-white/30">
               {pending.length} waiting
             </span>
           </div>
         </div>
 
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-border">
           {pending.map((owner) => (
             <div
               key={owner._id}
-              className="p-4 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              className="p-4 hover:bg-primary/5 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
             >
               <div>
-                <h3 className="text-sm font-medium text-gray-900">{owner.name}</h3>
-                <p className="text-xs text-gray-600 mt-0.5">{owner.email}</p>
-                <p className="text-[10px] text-gray-500 mt-1">
+                <h3 className="text-sm font-medium text-foreground">{owner.name}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">{owner.email}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">
                   Registered on{" "}
                   {new Date(owner.createdAt).toLocaleDateString("en-US", {
                     year: "numeric",
@@ -259,8 +259,8 @@ export default function PendingApprovals() {
                   inline-flex items-center gap-2 px-4 py-2 rounded-md font-medium text-xs transition-all shadow-sm min-w-[110px] justify-center
                   ${
                     approvingId === owner._id || !csrfToken
-                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      : "bg-[#03a678] text-white hover:bg-[#027a55] hover:shadow-md active:scale-95"
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
+                      : "bg-primary text-white hover:bg-primary-hover hover:shadow-md active:scale-95"
                   }
                 `}
               >
@@ -280,7 +280,7 @@ export default function PendingApprovals() {
           ))}
         </div>
 
-        <div className="px-4 py-3 bg-gray-50 text-right text-xs text-gray-500">
+        <div className="px-4 py-3 bg-white/70 text-right text-xs text-muted-foreground">
           Showing all pending property owner signups
         </div>
       </div>
@@ -295,12 +295,12 @@ export default function PendingApprovals() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden focus:outline-none"
+              className="surface-card rounded-xl shadow-2xl max-w-sm w-full overflow-hidden focus:outline-none"
               tabIndex={-1}
             >
               <div className="p-4">
                 <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-gray-900">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Confirm Approval
                   </h3>
                   <button
@@ -308,7 +308,7 @@ export default function PendingApprovals() {
                       setShowConfirmModal(false);
                       setSelectedOwner(null);
                     }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    className="text-muted-foreground hover:text-foreground transition-colors"
                     aria-label="Close modal"
                   >
                     <X size={24} />
@@ -316,13 +316,13 @@ export default function PendingApprovals() {
                 </div>
 
                 <div className="mb-5 space-y-2 text-xs">
-                  <p className="text-gray-700">
+                  <p className="text-foreground">
                     You are about to approve <strong>{selectedOwner.name}</strong>.
                   </p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-xs text-muted-foreground">
                     Email: {selectedOwner.email}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     They will gain immediate access to manage their properties and dashboard.
                   </p>
                 </div>
@@ -333,7 +333,7 @@ export default function PendingApprovals() {
                       setShowConfirmModal(false);
                       setSelectedOwner(null);
                     }}
-                    className="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition"
+                    className="px-4 py-2 text-xs font-medium text-muted-foreground bg-white/70 hover:bg-white rounded-md transition border border-border"
                   >
                     Cancel
                   </button>
@@ -344,8 +344,8 @@ export default function PendingApprovals() {
                       inline-flex items-center gap-2 px-4 py-2 rounded-md font-medium text-xs text-white min-w-[120px] justify-center transition-all
                       ${
                         approvingId === selectedOwner._id
-                          ? "bg-gray-400 cursor-not-allowed"
-                          : "bg-[#03a678] hover:bg-[#027a55] shadow-md active:scale-95"
+                          ? "bg-muted text-muted-foreground cursor-not-allowed"
+                          : "bg-primary hover:bg-primary-hover shadow-md active:scale-95"
                       }
                     `}
                   >

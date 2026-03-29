@@ -250,10 +250,10 @@ export default function PaymentsPage() {
   // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#03a678]"></div>
-          <p className="text-lg font-medium text-gray-700">Verifying admin session...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"></div>
+          <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
         </div>
       </div>
     );
@@ -262,7 +262,7 @@ export default function PaymentsPage() {
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[100svh] bg-transparent text-foreground">
       <Navbar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
@@ -273,14 +273,14 @@ export default function PaymentsPage() {
         <main className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6 mt-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
-              <CreditCard size={20} />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">Payments</h1>
-              <p className="text-xs text-gray-600 mt-1">Invoice transactions for property owners</p>
-            </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white shadow-md">
+            <CreditCard size={20} />
           </div>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Payments</h1>
+            <p className="text-xs text-muted-foreground mt-1">Invoice transactions for property owners</p>
+          </div>
+        </div>
 
           {/* Toast */}
           {toast && (
@@ -293,8 +293,8 @@ export default function PaymentsPage() {
                   toast.type === "error"
                     ? "bg-red-600"
                     : toast.type === "success"
-                    ? "bg-green-600"
-                    : "bg-[#03a678]"
+                    ? "bg-primary"
+                    : "bg-foreground"
                 }`}
               >
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -330,10 +330,10 @@ export default function PaymentsPage() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 p-4 lg:p-5 mb-6"
+            className="surface-card rounded-2xl p-4 lg:p-5 mb-6"
           >
-            <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Download className="text-[#03a678] h-5 w-5" />
+            <h3 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Download className="text-primary h-5 w-5" />
               Export Invoice Transactions
             </h3>
 
@@ -342,7 +342,7 @@ export default function PaymentsPage() {
                 value={selectedOwnerId}
                 onChange={(e) => setSelectedOwnerId(e.target.value)}
                 disabled={isExporting || isLoading}
-                className="w-full sm:w-80 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition text-xs text-gray-700"
+                className="w-full sm:w-80 px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition text-xs text-foreground bg-white/70"
               >
                 <option value="">Select Property Owner...</option>
                 {propertyOwners.map((o) => (
@@ -356,7 +356,7 @@ export default function PaymentsPage() {
                 <button
                   onClick={() => generateExcel(selectedOwnerId)}
                   disabled={isExporting || isLoading}
-                  className={`inline-flex items-center justify-center gap-2 px-5 py-2 bg-[#03a678] text-white text-xs font-medium rounded-md hover:bg-[#027a55] transition-all shadow-md min-w-[180px] ${
+                  className={`inline-flex items-center justify-center gap-2 px-5 py-2 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary-hover transition-all shadow-md min-w-[180px] ${
                     isExporting ? "opacity-70 cursor-wait" : ""
                   }`}
                 >
@@ -381,14 +381,14 @@ export default function PaymentsPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 p-4 lg:p-5 mb-6"
+            className="surface-card rounded-2xl p-4 lg:p-5 mb-6"
           >
-            <h3 className="text-base font-semibold text-gray-900 mb-4">Filters</h3>
+            <h3 className="text-base font-semibold text-foreground mb-4">Filters</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <select
                 value={filters.ownerEmail}
                 onChange={(e) => setFilters({ ...filters, ownerEmail: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                className="px-3 py-2 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
               >
                 <option value="">All Owners</option>
                 {propertyOwners.map((o) => (
@@ -403,13 +403,13 @@ export default function PaymentsPage() {
                 placeholder="Search property name..."
                 value={filters.propertyName}
                 onChange={(e) => setFilters({ ...filters, propertyName: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                className="px-3 py-2 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
               />
 
               <select
                 value={filters.billingPlan}
                 onChange={(e) => setFilters({ ...filters, billingPlan: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                className="px-3 py-2 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
               >
                 <option value="">All Billing Plans</option>
                 <option value="FullManagement">Full Management</option>
@@ -420,7 +420,7 @@ export default function PaymentsPage() {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                className="px-3 py-2 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
               >
                 <option value="">All Status</option>
                 <option value="completed">Completed</option>
@@ -436,22 +436,22 @@ export default function PaymentsPage() {
               {[...Array(6)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg h-24 animate-pulse"
+                  className="surface-card rounded-2xl h-24 animate-pulse"
                 />
               ))}
             </div>
           ) : filteredPayments.length === 0 ? (
-            <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 p-8 text-center">
+            <div className="surface-card rounded-2xl p-8 text-center">
               <AlertCircle className="w-12 h-12 text-orange-500 mx-auto mb-4" />
-              <h3 className="text-base font-semibold text-gray-900 mb-2">
+              <h3 className="text-base font-semibold text-foreground mb-2">
                 No Invoice Transactions Found
               </h3>
-              <p className="text-xs text-gray-600 mb-5 max-w-md mx-auto">
+              <p className="text-xs text-muted-foreground mb-5 max-w-md mx-auto">
                 No invoice transactions match the selected filters or no data is available yet.
               </p>
               <button
                 onClick={fetchData}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-[#03a678] text-white rounded-md hover:bg-[#027a55] transition shadow-md text-xs font-medium"
+                className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition shadow-md text-xs font-medium"
               >
                 <RefreshCw size={20} />
                 Refresh Data
@@ -462,39 +462,39 @@ export default function PaymentsPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 overflow-hidden"
+              className="surface-card rounded-2xl overflow-hidden"
             >
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-border">
+                  <thead className="bg-white/70">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Invoice Ref
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Owner
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Property
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Plan
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Amount
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Description
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Date
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Status
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border">
                     {paginated.map((p) => {
                       const prop = properties.find((pr) => pr._id === p.propertyId);
                       const owner = propertyOwners.find((o) => o._id === p.userId);
@@ -505,35 +505,35 @@ export default function PaymentsPage() {
                           ? "Software Leasing"
                           : "Unknown";
                       return (
-                        <tr key={p._id} className="hover:bg-gray-50/70 transition-colors">
-                          <td className="px-4 py-3 text-xs font-mono text-gray-700">
+                        <tr key={p._id} className="hover:bg-primary/5 transition-colors">
+                          <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
                             {p.reference}
                           </td>
-                          <td className="px-4 py-3 text-xs font-medium text-gray-900">
+                          <td className="px-4 py-3 text-xs font-medium text-foreground">
                             {owner?.email || "—"}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
                             {prop?.name || "—"}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="inline-flex px-2 py-0.5 text-[10px] font-medium rounded-full bg-gray-100 text-gray-700">
+                            <span className="inline-flex px-2 py-0.5 text-[10px] font-medium rounded-full bg-muted text-muted-foreground">
                               {billingPlanLabel}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-xs font-semibold text-emerald-700">
+                          <td className="px-4 py-3 text-xs font-semibold text-primary">
                             Ksh {p.amount.toLocaleString("en-KE")}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
                             {p.description || "—"}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
                             {new Date(p.createdAt).toLocaleDateString("en-KE")}
                           </td>
                           <td className="px-4 py-3">
                             <span
                               className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full ${
                                 p.status === "completed"
-                                  ? "bg-emerald-100 text-emerald-800"
+                                  ? "bg-primary/10 text-primary"
                                   : p.status === "pending"
                                   ? "bg-amber-100 text-amber-800"
                                   : "bg-red-100 text-red-800"
@@ -550,8 +550,8 @@ export default function PaymentsPage() {
               </div>
 
               {/* Pagination */}
-              <div className="px-4 py-4 bg-gray-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div className="text-xs text-gray-600">
+              <div className="px-4 py-4 bg-white/70 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="text-xs text-muted-foreground">
                   Showing {(currentPage - 1) * itemsPerPage + 1}–
                   {Math.min(currentPage * itemsPerPage, filteredPayments.length)} of{" "}
                   {filteredPayments.length} invoice transactions
@@ -561,19 +561,19 @@ export default function PaymentsPage() {
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-100 transition text-xs font-medium"
+                    className="px-4 py-2 border border-border rounded-md disabled:opacity-50 hover:bg-primary/5 transition text-xs font-medium text-muted-foreground"
                   >
                     Previous
                   </button>
 
-                  <span className="px-3 py-2 text-xs font-medium bg-white rounded-md border border-gray-200 shadow-sm">
+                  <span className="px-3 py-2 text-xs font-medium bg-white/70 rounded-md border border-border shadow-sm">
                     Page {currentPage} of {totalPages || 1}
                   </span>
 
                   <button
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage >= totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-100 transition text-xs font-medium"
+                    className="px-4 py-2 border border-border rounded-md disabled:opacity-50 hover:bg-primary/5 transition text-xs font-medium text-muted-foreground"
                   >
                     Next
                   </button>

@@ -299,10 +299,10 @@ export default function InvoicesPage() {
   // ── Rendering ──────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#03a678]"></div>
-          <p className="text-lg font-medium text-gray-700">Verifying admin session...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"></div>
+          <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
         </div>
       </div>
     );
@@ -311,7 +311,7 @@ export default function InvoicesPage() {
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[100svh] bg-transparent text-foreground">
       <Navbar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
@@ -322,14 +322,14 @@ export default function InvoicesPage() {
         <main className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6 mt-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
-              <FileText size={20} />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">Invoices</h1>
-              <p className="text-xs text-gray-600 mt-1">Manage and generate invoices for property owners</p>
-            </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white shadow-md">
+            <FileText size={20} />
           </div>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Invoices</h1>
+            <p className="text-xs text-muted-foreground mt-1">Manage and generate invoices for property owners</p>
+          </div>
+        </div>
 
           {/* Error Message */}
           {error && (
@@ -356,22 +356,22 @@ export default function InvoicesPage() {
               {[...Array(6)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg h-20 animate-pulse"
+                  className="surface-card rounded-2xl h-20 animate-pulse"
                 />
               ))}
             </div>
           ) : invoices.length === 0 ? (
-            <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 p-8 text-center">
+            <div className="surface-card rounded-2xl p-8 text-center">
               <AlertCircle className="w-12 h-12 text-orange-500 mx-auto mb-4" />
-              <h3 className="text-base font-semibold text-gray-900 mb-2">
+              <h3 className="text-base font-semibold text-foreground mb-2">
                 No Invoices Found
               </h3>
-              <p className="text-xs text-gray-600 mb-5 max-w-md mx-auto">
+              <p className="text-xs text-muted-foreground mb-5 max-w-md mx-auto">
                 No invoices available yet or none match current filters.
               </p>
               <button
                 onClick={fetchData}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-[#03a678] text-white rounded-md hover:bg-[#027a55] transition shadow-md text-xs font-medium"
+                className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition shadow-md text-xs font-medium"
               >
                 <RefreshCw size={20} />
                 Refresh Data
@@ -381,54 +381,54 @@ export default function InvoicesPage() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 overflow-hidden"
+              className="surface-card rounded-2xl overflow-hidden"
             >
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-border">
+                  <thead className="bg-white/70">
                     <tr>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("amount")}
                       >
                         Amount {getSortIcon("amount")}
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("userEmail")}
                       >
                         Owner Email {getSortIcon("userEmail")}
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("propertyName")}
                       >
                         Property Name {getSortIcon("propertyName")}
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("reference")}
                       >
                         Reference {getSortIcon("reference")}
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("status")}
                       >
                         Status {getSortIcon("status")}
                       </th>
                       <th
-                        className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("createdAt")}
                       >
                         Created At {getSortIcon("createdAt")}
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border">
                     {invoices.map((i) => {
                       const owner = propertyOwners.find((u) => u._id === i.userId);
                       const prop = properties.find((p) => p._id === i.propertyId);
@@ -438,17 +438,17 @@ export default function InvoicesPage() {
                         }
 
                       return (
-                        <tr key={i._id} className="hover:bg-gray-50/70 transition-colors">
-                          <td className="px-4 py-3 text-xs font-medium text-gray-900">
+                        <tr key={i._id} className="hover:bg-primary/5 transition-colors">
+                          <td className="px-4 py-3 text-xs font-medium text-foreground">
                             Ksh {i.amount.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
                             {owner?.email || "N/A"}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
                             {prop?.name || "N/A"}
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600 font-mono">
+                          <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                             {i.reference}
                           </td>
                           <td className="px-4 py-3">
@@ -458,9 +458,9 @@ export default function InvoicesPage() {
                                 handleStatusChange(i._id, e.target.value as "pending" | "completed" | "failed")
                               }
                               className={cn(
-                                "text-xs px-3 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 transition",
+                                "text-xs px-3 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-2 focus:ring-primary/30 transition",
                                 i.status === "completed"
-                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  ? "bg-primary/10 text-primary border-primary/30"
                                   : i.status === "failed"
                                   ? "bg-red-50 text-red-800 border-red-200"
                                   : "bg-amber-50 text-amber-800 border-amber-200"
@@ -471,7 +471,7 @@ export default function InvoicesPage() {
                               <option value="failed">Failed</option>
                             </select>
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
                             {new Date(i.createdAt).toLocaleDateString("en-KE")}
                           </td>
                           <td className="px-4 py-3">
@@ -479,7 +479,7 @@ export default function InvoicesPage() {
                               onClick={() => handleGenerateInvoice(i)}
                               disabled={isGenerating === i._id}
                               className={cn(
-                                "inline-flex items-center gap-2 px-4 py-2 bg-[#03a678] text-white font-medium rounded-md hover:bg-[#027a55] transition shadow-md disabled:opacity-60 text-xs",
+                                "inline-flex items-center gap-2 px-4 py-2 bg-primary text-white font-medium rounded-md hover:bg-primary-hover transition shadow-md disabled:opacity-60 text-xs",
                                 isGenerating === i._id && "opacity-70 cursor-wait"
                               )}
                             >
@@ -502,8 +502,8 @@ export default function InvoicesPage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="px-4 py-4 bg-gray-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <div className="text-xs text-gray-600">
+                <div className="px-4 py-4 bg-white/70 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div className="text-xs text-muted-foreground">
                     Showing {(currentPage - 1) * itemsPerPage + 1}–
                     {Math.min(currentPage * itemsPerPage, invoices.length)} of {totalInvoices} invoices
                   </div>
@@ -512,19 +512,19 @@ export default function InvoicesPage() {
                     <button
                       onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                       disabled={currentPage === 1}
-                      className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-100 transition text-xs font-medium"
+                      className="px-4 py-2 border border-border rounded-md disabled:opacity-50 hover:bg-primary/5 transition text-xs font-medium text-muted-foreground"
                     >
                       Previous
                     </button>
 
-                    <span className="px-3 py-2 text-xs font-medium bg-white rounded-md border border-gray-200 shadow-sm">
+                    <span className="px-3 py-2 text-xs font-medium bg-white/70 rounded-md border border-border shadow-sm">
                       Page {currentPage} of {totalPages}
                     </span>
 
                     <button
                       onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                       disabled={currentPage >= totalPages}
-                      className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-100 transition text-xs font-medium"
+                      className="px-4 py-2 border border-border rounded-md disabled:opacity-50 hover:bg-primary/5 transition text-xs font-medium text-muted-foreground"
                     >
                       Next
                     </button>

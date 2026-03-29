@@ -161,28 +161,24 @@ export default function AdminDashboard() {
       title: "Total Collected",
       value: `KSh ${paymentSummary.totalCollected.toLocaleString()}`,
       icon: DollarSign,
-      color: "green",
       explanation: "Total amount from successful payments received system-wide.",
     },
     {
       title: "Paid Invoices",
       value: `KSh ${paymentSummary.totalPaidInvoices.toLocaleString()}`,
       icon: CheckCircle2,
-      color: "emerald",
       explanation: "Total amount from invoices marked as paid or completed.",
     },
     {
       title: "Unpaid Invoices",
       value: `KSh ${paymentSummary.totalUnpaidInvoices.toLocaleString()}`,
       icon: AlertTriangle,
-      color: "red",
       explanation: "Total outstanding amount from pending/unpaid invoices.",
     },
     {
       title: "Pending Count",
       value: paymentSummary.pendingInvoicesCount.toLocaleString(),
       icon: Clock,
-      color: "amber",
       explanation: "Number of invoices still awaiting payment.",
     },
     // Original stats
@@ -190,42 +186,36 @@ export default function AdminDashboard() {
       title: "Property Owners",
       value: counts.propertyOwners.toLocaleString(),
       icon: Users,
-      color: "emerald",
       explanation: "Total number of registered property owners in the system.",
     },
     {
       title: "Tenants",
       value: counts.tenants.toLocaleString(),
       icon: Users,
-      color: "blue",
       explanation: "Total active tenants across all properties.",
     },
     {
       title: "Properties",
       value: counts.properties.toLocaleString(),
       icon: Building2,
-      color: "purple",
       explanation: "Total number of properties listed and managed.",
     },
     {
       title: "Payments",
       value: counts.payments.toLocaleString(),
       icon: CreditCard,
-      color: "green",
       explanation: "Total payment transactions processed to date.",
     },
     {
       title: "Invoices",
       value: counts.invoices.toLocaleString(),
       icon: FileText,
-      color: "indigo",
       explanation: "Total invoices generated and sent.",
     },
     {
       title: "Admins",
       value: counts.admins.toLocaleString(),
       icon: Shield,
-      color: "pink",
       explanation: "Total admin accounts with management privileges.",
     },
   ];
@@ -233,10 +223,10 @@ export default function AdminDashboard() {
   // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="flex flex-col items-center gap-5 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#03a678]"></div>
-          <p className="text-lg font-medium text-gray-700">Verifying admin session...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"></div>
+          <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
         </div>
       </div>
     );
@@ -245,7 +235,7 @@ export default function AdminDashboard() {
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[100svh] bg-transparent text-foreground">
       <Navbar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
@@ -256,11 +246,11 @@ export default function AdminDashboard() {
         <main className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6 mt-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
-              <Shield size={20} />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Admin Dashboard</h1>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white shadow-md">
+            <Shield size={20} />
           </div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Admin Dashboard</h1>
+        </div>
 
           {/* Error Message */}
           {error && (
@@ -287,7 +277,7 @@ export default function AdminDashboard() {
               {[...Array(10)].map((_, i) => (
                 <div
                   key={i}
-                  className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg h-28 animate-pulse"
+                  className="surface-card rounded-2xl h-28 animate-pulse"
                 />
               ))}
             </div>
@@ -301,19 +291,19 @@ export default function AdminDashboard() {
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05, duration: 0.45 }}
-                    className="group relative bg-white/95 backdrop-blur-sm rounded-xl p-4 sm:p-5 shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100/80 flex flex-col"
+                    className="group relative surface-card rounded-2xl p-4 sm:p-5 transition-all duration-300 flex flex-col"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] sm:text-xs font-medium text-gray-600 uppercase tracking-wide">
+                      <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         {item.title}
                       </p>
                       <div className="relative group/info">
                         <Info
-                          className="text-[#03a678]/70 hover:text-[#03a678] transition-colors cursor-help"
+                          className="text-primary/70 hover:text-primary transition-colors cursor-help"
                           size={14}
                         />
                         <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block z-50 pointer-events-none">
-                          <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 min-w-[200px] leading-relaxed shadow-xl">
+                          <div className="bg-foreground text-primary-foreground text-xs rounded-lg py-2 px-3 min-w-[200px] leading-relaxed shadow-xl">
                             {item.explanation}
                           </div>
                         </div>
@@ -321,11 +311,11 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="flex items-center justify-between mt-auto">
-                      <p className="text-xl sm:text-2xl font-semibold text-gray-900">
+                      <p className="text-xl sm:text-2xl font-semibold text-foreground">
                         {item.value}
                       </p>
-                      <div className={`p-2.5 sm:p-3 rounded-lg bg-${item.color}-50/70`}>
-                        <item.icon className={`h-5 w-5 sm:h-6 sm:w-6 text-${item.color}-600`} />
+                      <div className="p-2.5 sm:p-3 rounded-lg bg-primary/10">
+                        <item.icon className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                       </div>
                     </div>
                   </motion.div>

@@ -337,10 +337,10 @@ export default function PropertyOwnersPage() {
   // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[#03a678]"></div>
-          <p className="text-lg font-medium text-gray-700">Verifying admin session...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"></div>
+          <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
         </div>
       </div>
     );
@@ -349,7 +349,7 @@ export default function PropertyOwnersPage() {
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[100svh] bg-transparent text-foreground">
       <Navbar
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
@@ -360,11 +360,11 @@ export default function PropertyOwnersPage() {
         <main className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6 mt-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#03a678] to-[#027a55] text-white shadow-md">
-              <Users size={20} />
-            </div>
-            <h1 className="text-xl font-semibold text-gray-900">Property Owners</h1>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white shadow-md">
+            <Users size={20} />
           </div>
+          <h1 className="text-xl font-semibold text-foreground">Property Owners</h1>
+        </div>
 
           {/* Error Message */}
           {error && (
@@ -389,7 +389,7 @@ export default function PropertyOwnersPage() {
           <div className="flex justify-end mb-5">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#03a678] text-white text-xs font-medium rounded-md hover:bg-[#027a55] transition-all shadow-md hover:shadow-lg"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary-hover transition-all shadow-md hover:shadow-lg"
             >
               <Plus size={16} />
               Add New Owner
@@ -405,59 +405,59 @@ export default function PropertyOwnersPage() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 overflow-hidden"
+              className="surface-card rounded-2xl overflow-hidden"
             >
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-border">
+                  <thead className="bg-white/70">
                     <tr>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("name")}
                       >
                         Name {getSortIcon("name")}
                       </th>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("email")}
                       >
                         Email {getSortIcon("email")}
                       </th>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("phone")}
                       >
                         Phone {getSortIcon("phone")}
                       </th>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-[#03a678]"
+                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("createdAt")}
                       >
                         Created {getSortIcon("createdAt")}
                       </th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Status
                       </th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border">
                     {propertyOwners.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-10 text-center text-xs text-gray-500">
+                        <td colSpan={6} className="py-10 text-center text-xs text-muted-foreground">
                           No property owners found.
                         </td>
                       </tr>
                     ) : (
                       propertyOwners.map((owner) => (
                         <React.Fragment key={owner._id}>
-                          <tr className="hover:bg-gray-50/70 transition-colors">
-                            <td className="py-3 px-4 text-xs font-medium text-gray-900">{owner.name}</td>
-                            <td className="py-3 px-4 text-xs text-gray-600">{owner.email}</td>
-                            <td className="py-3 px-4 text-xs text-gray-600">{owner.phone}</td>
-                            <td className="py-3 px-4 text-xs text-gray-600">
+                          <tr className="hover:bg-primary/5 transition-colors">
+                            <td className="py-3 px-4 text-xs font-medium text-foreground">{owner.name}</td>
+                            <td className="py-3 px-4 text-xs text-muted-foreground">{owner.email}</td>
+                            <td className="py-3 px-4 text-xs text-muted-foreground">{owner.phone}</td>
+                            <td className="py-3 px-4 text-xs text-muted-foreground">
                               {owner.createdAt}
                             </td>
                             <td className="py-3 px-4 text-xs">
@@ -475,7 +475,7 @@ export default function PropertyOwnersPage() {
                               <div className="flex items-center gap-3">
                                 <button
                                   onClick={() => openImpersonateModal(owner)}
-                                  className="text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-50"
+                                  className="text-primary hover:text-primary-hover transition-colors disabled:opacity-50"
                                   title="Impersonate owner"
                                   disabled={!owner.isApproved}
                                 >
@@ -483,7 +483,7 @@ export default function PropertyOwnersPage() {
                                 </button>
                                 <button
                                   onClick={() => handleEdit(owner)}
-                                  className="text-[#03a678] hover:text-[#027a55] transition-colors"
+                                  className="text-primary hover:text-primary-hover transition-colors"
                                   title="Edit"
                                 >
                                   <Edit size={18} />
@@ -497,7 +497,7 @@ export default function PropertyOwnersPage() {
                                 </button>
                                 <button
                                   onClick={() => toggleExpand(owner._id)}
-                                  className="text-gray-500 hover:text-[#03a678] transition-colors"
+                                  className="text-muted-foreground hover:text-primary transition-colors"
                                   title="View stats"
                                 >
                                   {expanded.includes(owner._id) ? (
@@ -512,22 +512,22 @@ export default function PropertyOwnersPage() {
 
                           {expanded.includes(owner._id) && (
                             <tr>
-                              <td colSpan={6} className="bg-gray-50/70 px-4 py-4">
-                                <div className="grid grid-cols-3 gap-6 text-center text-xs text-gray-700">
+                              <td colSpan={6} className="bg-white/70 px-4 py-4">
+                                <div className="grid grid-cols-3 gap-6 text-center text-xs text-muted-foreground">
                                   <div>
-                                    <div className="text-lg font-semibold text-[#03a678]">
+                                    <div className="text-lg font-semibold text-primary">
                                       {owner.propertiesCount ?? 0}
                                     </div>
                                     <div className="mt-1 text-[10px]">Properties</div>
                                   </div>
                                   <div>
-                                    <div className="text-lg font-semibold text-[#03a678]">
+                                    <div className="text-lg font-semibold text-primary">
                                       {owner.paymentsCount ?? 0}
                                     </div>
                                     <div className="mt-1 text-[10px]">Payments</div>
                                   </div>
                                   <div>
-                                    <div className="text-lg font-semibold text-[#03a678]">
+                                    <div className="text-lg font-semibold text-primary">
                                       {owner.invoicesCount ?? 0}
                                     </div>
                                     <div className="mt-1 text-[10px]">Invoices</div>
@@ -548,8 +548,8 @@ export default function PropertyOwnersPage() {
           {/* Create Modal */}
           {showCreateModal && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5">
-                <h2 className="text-base font-semibold text-gray-900 mb-4">Add New Property Owner</h2>
+              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
+                <h2 className="text-base font-semibold text-foreground mb-4">Add New Property Owner</h2>
 
                 {createError && (
                   <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
@@ -565,7 +565,7 @@ export default function PropertyOwnersPage() {
                     required
                     value={newOwner.name}
                     onChange={(e) => setNewOwner({ ...newOwner, name: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                    className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                   />
                   <input
                     type="email"
@@ -573,7 +573,7 @@ export default function PropertyOwnersPage() {
                     required
                     value={newOwner.email}
                     onChange={(e) => setNewOwner({ ...newOwner, email: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                    className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                   />
                   <input
                     type="tel"
@@ -581,7 +581,7 @@ export default function PropertyOwnersPage() {
                     required
                     value={newOwner.phone}
                     onChange={(e) => setNewOwner({ ...newOwner, phone: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                    className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                   />
                   <input
                     type="password"
@@ -590,7 +590,7 @@ export default function PropertyOwnersPage() {
                     minLength={6}
                     value={newOwner.password}
                     onChange={(e) => setNewOwner({ ...newOwner, password: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                    className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                   />
 
                   <div className="flex justify-end gap-3 mt-6">
@@ -601,13 +601,13 @@ export default function PropertyOwnersPage() {
                         setCreateError(null);
                         setNewOwner({ name: "", email: "", phone: "", password: "" });
                       }}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-xs font-medium"
+                      className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-[#03a678] text-white rounded-md hover:bg-[#027a55] transition text-xs font-medium shadow-md"
+                      className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md"
                     >
                       Create Owner
                     </button>
@@ -620,35 +620,35 @@ export default function PropertyOwnersPage() {
           {/* Edit Modal */}
           {showEditModal && editUser && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5">
-                <h2 className="text-base font-semibold text-gray-900 mb-4">Edit Property Owner</h2>
+              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
+                <h2 className="text-base font-semibold text-foreground mb-4">Edit Property Owner</h2>
 
                 <form onSubmit={handleUpdate} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Name</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Name</label>
                     <input
                       type="text"
                       value={editUser.name}
                       onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
-                      className="w-full p-2.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                      className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Email</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Email</label>
                     <input
                       type="email"
                       value={editUser.email}
                       onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
-                      className="w-full p-2.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                      className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Phone</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Phone</label>
                     <input
                       type="tel"
                       value={editUser.phone}
                       onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
-                      className="w-full p-2.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-[#03a678]/40 focus:border-[#03a678] transition"
+                      className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                     />
                   </div>
 
@@ -656,13 +656,13 @@ export default function PropertyOwnersPage() {
                     <button
                       type="button"
                       onClick={() => setShowEditModal(false)}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-xs font-medium"
+                      className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-[#03a678] text-white rounded-md hover:bg-[#027a55] transition text-xs font-medium shadow-md"
+                      className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md"
                     >
                       Save Changes
                     </button>
@@ -675,14 +675,14 @@ export default function PropertyOwnersPage() {
           {/* Impersonate Modal */}
           {showImpersonateModal && impersonateTarget && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5">
+              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Shield size={20} />
                   </div>
                   <div>
-                    <h2 className="text-base font-semibold text-gray-900">Impersonate Owner</h2>
-                    <p className="text-xs text-gray-500">View the owner dashboard as this account.</p>
+                    <h2 className="text-base font-semibold text-foreground">Impersonate Owner</h2>
+                    <p className="text-xs text-muted-foreground">View the owner dashboard as this account.</p>
                   </div>
                 </div>
 
@@ -693,10 +693,10 @@ export default function PropertyOwnersPage() {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-3 text-xs text-indigo-900">
+                <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-3 text-xs text-foreground">
                   <p className="font-semibold">You are about to impersonate:</p>
                   <p className="mt-1">{impersonateTarget.name}</p>
-                  <p className="text-[10px] text-indigo-700 mt-1">{impersonateTarget.email}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{impersonateTarget.email}</p>
                 </div>
 
                 {!impersonateTarget.isApproved && (
@@ -713,7 +713,7 @@ export default function PropertyOwnersPage() {
                       setImpersonateTarget(null);
                       setImpersonateError(null);
                     }}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-xs font-medium"
+                    className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
                   >
                     Cancel
                   </button>
@@ -721,7 +721,7 @@ export default function PropertyOwnersPage() {
                     type="button"
                     onClick={handleImpersonate}
                     disabled={isImpersonating || !impersonateTarget.isApproved}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition text-xs font-medium shadow-md disabled:opacity-60"
+                    className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md disabled:opacity-60"
                   >
                     {isImpersonating ? "Switching..." : "Impersonate Owner"}
                   </button>
