@@ -349,7 +349,7 @@ export default function UsersPage() {
           const res = await fetch("/api/csrf-token", { credentials: "include" });
           const data = await res.json();
           if (data.csrfToken) {
-            Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict" });
+            Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", path: "/" });
             token = data.csrfToken;
           }
         } catch {}

@@ -155,7 +155,7 @@ export default function NotificationsPage() {
       const data: ApiResponse = await response.json();
       if (data.success && data.csrfToken) {
         setCsrfToken(data.csrfToken);
-        Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", secure: true });
+        Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", secure: true, path: "/" });
         return data.csrfToken;
       } else {
         setError("Failed to fetch CSRF token. Please try again.");
@@ -189,7 +189,7 @@ export default function NotificationsPage() {
         if (newToken) {
           headers.set("X-CSRF-Token", newToken);
           setCsrfToken(newToken);
-          Cookies.set("csrf-token", newToken, { sameSite: "strict", secure: true });
+          Cookies.set("csrf-token", newToken, { sameSite: "strict", secure: true, path: "/" });
           return makeAuthenticatedRequest(url, { ...options, headers }, retries - 1);
         }
       }

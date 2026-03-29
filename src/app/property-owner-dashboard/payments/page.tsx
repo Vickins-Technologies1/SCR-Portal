@@ -85,7 +85,7 @@ export default function PaymentsPage() {
       }
 
       setCsrfToken(data.csrfToken);
-      Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1 });
+      Cookies.set("csrf-token", data.csrfToken, { sameSite: "strict", expires: 1, path: "/" });
       console.log("Fetched new CSRF token:", data.csrfToken);
       return data.csrfToken;
     } catch (error) {

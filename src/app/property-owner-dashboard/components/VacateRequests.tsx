@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Home, AlertCircle, CheckCircle2, XCircle, Calendar } from "lucide-react";
 import { VacateRequest } from "../../../types/vacate";
+import Cookies from "js-cookie";
 
 interface VacateRequestsProps {
   csrfToken: string;
@@ -25,14 +26,15 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
 
   useEffect(() => {
     const fetchRequests = async () => {
-      if (!csrfToken) return;
+      const token = Cookies.get("csrf-token") || csrfToken;
+      if (!token) return;
       setIsLoading(true);
       setError(null);
 
       try {
         const res = await fetch("/api/property-owners/vacate", {
           method: "GET",
-          headers: { "x-csrf-token": csrfToken },
+          headers: { "x-csrf-token": token },
           credentials: "include",
         });
         const data = await res.json();
@@ -51,12 +53,14 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
   }, [csrfToken]);
 
   const updateStatus = async (id: string, status: "Approved" | "Rejected") => {
+    const token = Cookies.get("csrf-token") || csrfToken;
+    if (!token) return;
     try {
       const res = await fetch("/api/property-owners/vacate", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         credentials: "include",
         body: JSON.stringify({ requestId: id, status }),
