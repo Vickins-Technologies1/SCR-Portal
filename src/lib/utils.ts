@@ -83,6 +83,27 @@ export interface RentDueResult {
 
 const roundCurrency = (value: number): number => Math.round(value);
 
+export const calculateWalletBalanceFromPayments = ({
+  rentPaid = 0,
+  depositPaid = 0,
+  utilityPaid = 0,
+  rentDue = 0,
+  depositDue = 0,
+  utilityDue = 0,
+}: {
+  rentPaid?: number;
+  depositPaid?: number;
+  utilityPaid?: number;
+  rentDue?: number;
+  depositDue?: number;
+  utilityDue?: number;
+}): number => {
+  const rentOver = Math.max(0, rentPaid - rentDue);
+  const depositOver = Math.max(0, depositPaid - depositDue);
+  const utilityOver = Math.max(0, utilityPaid - utilityDue);
+  return roundCurrency(rentOver + depositOver + utilityOver);
+};
+
 export const calculateRentDueToDate = ({
   leaseStartDate,
   monthlyRent,

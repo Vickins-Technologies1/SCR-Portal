@@ -4,7 +4,7 @@ import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
-import { calculateRentDueToDate } from "../../../../../lib/utils";
+import { calculateRentDueToDate, calculateWalletBalanceFromPayments } from "../../../../../lib/utils";
 import { getTenantPaymentTotals } from "../../../../../lib/payment-totals";
 
 interface Tenant {
@@ -156,7 +156,15 @@ export async function POST(request: NextRequest) {
       remainingAmount -= applied;
     }
 
-    const walletBalance = (tenant.walletBalance || 0) + remainingAmount;
+    const depositTotal = tenant.deposit || 0;
+    const walletBalance = calculateWalletBalanceFromPayments({
+      rentPaid: paymentTotals.rentPaid,
+      depositPaid: paymentTotals.depositPaid,
+      utilityPaid: paymentTotals.utilityPaid,
+      rentDue: totalRentDue,
+      depositDue: depositTotal,
+      utilityDue: 0,
+    });
     const updateFields: Partial<Tenant> = {
       totalRentPaid: paymentTotals.rentPaid,
       totalUtilityPaid: paymentTotals.utilityPaid,

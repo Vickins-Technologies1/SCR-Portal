@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
-import { calculateRentDueToDate } from "@/lib/utils";
+import { calculateRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
@@ -141,33 +141,18 @@ export async function POST(request: NextRequest) {
 
     const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);
     const amount = metadata.amount || payment.amount || 0;
-
-    const rentPaidBefore =
-      payment.type === "Rent"
-        ? Math.max(0, paymentTotals.rentPaid - amount)
-        : paymentTotals.rentPaid;
-    const depositPaidBefore =
-      payment.type === "Deposit"
-        ? Math.max(0, paymentTotals.depositPaid - amount)
-        : paymentTotals.depositPaid;
-
-    const rentDueBefore = Math.max(0, totalRentDue - rentPaidBefore);
     const depositTotal = tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0;
-    const depositDueBefore = Math.max(0, depositTotal - depositPaidBefore);
-
-    let remainingAmount = amount;
-    if (payment.type === "Rent") {
-      const applied = Math.min(rentDueBefore, remainingAmount);
-      remainingAmount -= applied;
-    } else if (payment.type === "Deposit") {
-      const applied = Math.min(depositDueBefore, remainingAmount);
-      remainingAmount -= applied;
-    }
-
-    const walletBalance = (tenant.walletBalance || 0) + remainingAmount;
     const rentDueAfter = Math.max(0, totalRentDue - paymentTotals.rentPaid);
     const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
     const utilityDueAfter = 0;
+    const walletBalance = calculateWalletBalanceFromPayments({
+      rentPaid: paymentTotals.rentPaid,
+      depositPaid: paymentTotals.depositPaid,
+      utilityPaid: paymentTotals.utilityPaid,
+      rentDue: totalRentDue,
+      depositDue: depositTotal,
+      utilityDue: 0,
+    });
     const totalRemainingDues = rentDueAfter + depositDueAfter + utilityDueAfter;
 
     await db.collection("tenants").updateOne(

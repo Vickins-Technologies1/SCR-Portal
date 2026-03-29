@@ -5,7 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { calculateRentDueToDate } from "@/lib/utils";
+import { calculateRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
 
 interface Tenant {
   _id: ObjectId;
@@ -274,7 +274,14 @@ export async function POST(request: NextRequest) {
     const depositDue = tenant.deposit || 0;
 
     const updatedTotalRentPaid = rentPaid;
-    const updatedWalletBalance = tenant.walletBalance || 0;
+    const updatedWalletBalance = calculateWalletBalanceFromPayments({
+      rentPaid,
+      depositPaid,
+      utilityPaid,
+      rentDue,
+      depositDue,
+      utilityDue: 0,
+    });
 
     const rentDues = Math.max(0, rentDue - updatedTotalRentPaid);
     const depositDues = Math.max(0, depositDue - depositPaid);
