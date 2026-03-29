@@ -11,6 +11,7 @@ import {
   Building2,
   CreditCard,
   FileText,
+  LifeBuoy,
   ChevronLeft,
   AlertCircle,
   Settings,
@@ -56,6 +57,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     { key: "properties", href: "/admin/properties", label: "Properties", icon: <Building2 size={20} /> },
     { key: "payments", href: "/admin/payments", label: "Payments", icon: <CreditCard size={20} /> },
     { key: "invoices", href: "/admin/invoices", label: "Invoices", icon: <FileText size={20} /> },
+    { key: "support", href: "/admin/support", label: "Support", icon: <LifeBuoy size={20} /> },
   ];
 
   const isActive = (href: string) =>

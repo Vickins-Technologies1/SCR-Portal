@@ -121,6 +121,10 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/admin/property-owners": { roles: ["admin"], isApi: true },
   "/api/admin/impersonate-owner": { roles: ["admin"], isApi: true },
   "/api/admin/revert-impersonation": { roles: ["admin", "propertyOwner"], isApi: true },
+  "/api/support/messages": { roles: ["admin", "propertyOwner"], isApi: true },
+  "/api/support/conversations": { roles: ["admin"], isApi: true },
+  "/api/support/presence": { roles: ["admin", "propertyOwner"], isApi: true },
+  "/api/support/upload": { roles: ["admin", "propertyOwner"], isApi: true },
 
   // Shared / multi-role APIs
   "/api/payments": { roles: ["admin", "propertyOwner", "teamMember", "tenant"], isApi: true },
@@ -148,6 +152,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
 
   // Page routes (client-side routing protection)
   "/property-owner-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
+  "/admin/support": { roles: ["admin"], isApi: false },
   "/tenant-dashboard": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/tenant-dashboard/vacate": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/properties": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: false },

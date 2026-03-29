@@ -5,6 +5,7 @@ import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { SidebarProvider } from "./components/SidebarContext";
 import TourGuide, { TourStep } from "@/components/tour/TourGuide";
 import { usePathname } from "next/navigation";
+import SupportWidget from "./components/SupportWidget";
 
 export default function PropertyOwnerDashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -159,6 +160,7 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
           <div className="relative z-10" data-tour="owner-workspace">
             {children}
           </div>
+          <SupportWidget />
           <TourGuide
             steps={steps}
             storageKey="owner-tour-v1"
