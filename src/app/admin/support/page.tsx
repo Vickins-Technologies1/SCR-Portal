@@ -2,7 +2,19 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, LifeBuoy, MessageCircle, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
+import {
+  Check,
+  FileText,
+  LifeBuoy,
+  MessageCircle,
+  Paperclip,
+  PencilLine,
+  Search,
+  Send,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
