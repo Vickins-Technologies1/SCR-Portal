@@ -129,6 +129,9 @@ body {
   .text-foreground {
     color: var(--color-foreground);
   }
+  .bg-foreground {
+    background-color: var(--color-foreground);
+  }
   .bg-accent {
     background-color: var(--color-accent);
   }
