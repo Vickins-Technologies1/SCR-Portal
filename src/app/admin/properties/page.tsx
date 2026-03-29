@@ -374,15 +374,29 @@ export default function PropertiesPage() {
       />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-      <div className="md:ml-60 pt-14 pb-12 px-4 sm:px-5 lg:px-6">
-        <main className="max-w-7xl mx-auto">
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex items-center gap-3 mb-6 mt-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white shadow-md">
-              <Building2 size={20} />
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Properties</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Review managed properties, unit types, and billing settings.
+                  </p>
+                </div>
+              </div>
             </div>
-            <h1 className="text-xl font-semibold text-foreground">Properties</h1>
-          </div>
+          </motion.section>
 
           {/* Error Message */}
           {error && (
@@ -413,11 +427,11 @@ export default function PropertiesPage() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="surface-card rounded-2xl overflow-hidden"
+              className="table-shell"
             >
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-border">
-                  <thead className="bg-white/70">
+              <div className="table-scroll">
+                <table className="w-full">
+                  <thead>
                     <tr>
                       <th
                         className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
@@ -445,7 +459,7 @@ export default function PropertiesPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {properties.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="py-10 text-center text-xs text-muted-foreground">

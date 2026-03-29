@@ -269,18 +269,29 @@ export default function PaymentsPage() {
       />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-      <div className="md:ml-60 pt-14 pb-12 px-4 sm:px-5 lg:px-6">
-        <main className="max-w-7xl mx-auto">
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex items-center gap-3 mb-6 mt-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white shadow-md">
-            <CreditCard size={20} />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Payments</h1>
-            <p className="text-xs text-muted-foreground mt-1">Invoice transactions for property owners</p>
-          </div>
-        </div>
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <CreditCard className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Payments</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Track invoice transactions across property owners.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.section>
 
           {/* Toast */}
           {toast && (
@@ -462,11 +473,11 @@ export default function PaymentsPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="surface-card rounded-2xl overflow-hidden"
+              className="table-shell table-compact"
             >
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-border">
-                  <thead className="bg-white/70">
+              <div className="table-scroll">
+                <table className="w-full">
+                  <thead>
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Invoice Ref
@@ -494,7 +505,7 @@ export default function PaymentsPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {paginated.map((p) => {
                       const prop = properties.find((pr) => pr._id === p.propertyId);
                       const owner = propertyOwners.find((o) => o._id === p.userId);

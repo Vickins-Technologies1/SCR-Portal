@@ -242,15 +242,29 @@ export default function AdminDashboard() {
       />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-      <div className="md:ml-60 pt-14 pb-10 px-4 sm:px-5 lg:px-6">
-        <main className="max-w-7xl mx-auto">
+      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex items-center gap-3 mb-6 mt-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-hover text-white shadow-md">
-            <Shield size={20} />
-          </div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Admin Dashboard</h1>
-        </div>
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Shield className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Dashboard Overview</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Monitor platform activity, approvals, and billing performance.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.section>
 
           {/* Error Message */}
           {error && (
@@ -284,7 +298,7 @@ export default function AdminDashboard() {
           ) : (
             <>
               {/* Single unified grid – original + new cards together */}
-              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-5 mb-8">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-5">
                 {allCards.map((item, i) => (
                   <motion.div
                     key={i}
@@ -294,7 +308,7 @@ export default function AdminDashboard() {
                     className="group relative surface-card rounded-2xl p-4 sm:p-5 transition-all duration-300 flex flex-col"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-[0.3em]">
                         {item.title}
                       </p>
                       <div className="relative group/info">

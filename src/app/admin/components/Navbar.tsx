@@ -23,8 +23,8 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
   };
 
   return (
-    <header className="fixed top-0 z-40 h-14 w-full border-b border-white/40 bg-card/80 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-60 lg:pl-60">
-      <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-5 lg:px-8">
+    <header className="fixed top-0 left-0 right-0 z-40 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72">
+      <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-3 sm:px-6 lg:px-10">
         {/* Left: Menu + Logo */}
         <div className="flex min-w-0 items-center gap-3">
           <button
@@ -40,7 +40,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
             alt="Sorana Property Managers Logo"
             width={180}
             height={64}
-            className="h-9 w-auto max-w-[140px] sm:h-10 sm:max-w-[160px] lg:h-11 lg:max-w-none object-contain drop-shadow-sm rounded-md"
+            className="h-8 w-auto max-w-[120px] sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none object-contain drop-shadow-sm rounded-md"
             priority
           />
         </div>
@@ -48,7 +48,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
         {/* Right: Logout */}
         <button
           onClick={handleSignOut}
-          className="group flex items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95"
+          className="group flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 active:scale-95"
           title="Sign out"
         >
           <LogOut size={18} className="transition-transform group-hover:rotate-6" />
