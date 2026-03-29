@@ -43,7 +43,7 @@ export default function SupportWidget() {
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [role, setRole] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(() => Cookies.get("role") || null);
   const [presence, setPresence] = useState({
     adminOnline: false,
     adminTyping: false,
@@ -315,7 +315,7 @@ export default function SupportWidget() {
             transition={{ duration: 0.2 }}
             className="fixed bottom-24 right-6 left-4 sm:left-auto sm:w-[360px] z-50"
           >
-            <div className="glass-panel rounded-3xl overflow-hidden border border-white/40 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)]">
+            <div className="glass-panel rounded-3xl overflow-hidden border border-white/60 shadow-[0_40px_120px_-50px_rgba(15,23,42,0.75)] ring-1 ring-slate-900/10">
               <div className="px-5 py-4 bg-gradient-to-r from-primary to-primary-hover text-white flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4" />
@@ -563,10 +563,10 @@ export default function SupportWidget() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.96 }}
           onClick={() => setIsOpen((open) => !open)}
-          className="relative h-14 w-14 rounded-full bg-gradient-to-br from-primary to-primary-hover text-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.6)] flex items-center justify-center"
+          className="relative h-14 w-14 rounded-full bg-slate-900 text-white shadow-[0_20px_45px_-18px_rgba(15,23,42,0.75)] ring-2 ring-white/80 flex items-center justify-center transition hover:bg-slate-800"
           aria-label="Open live support"
         >
-          <span className="absolute -inset-1 rounded-full bg-primary/30 blur-xl" />
+          <span className="absolute -inset-1 rounded-full bg-slate-900/30 blur-xl" />
           <MessageCircle className="h-6 w-6 relative" />
         </motion.button>
       </div>
