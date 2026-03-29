@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import Cookies from "js-cookie";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MessageCircle,
   Send,
@@ -13,7 +12,7 @@ import {
   Paperclip,
   FileText,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 interface SupportMessage {
   _id: string;
@@ -31,8 +30,16 @@ interface SupportMessage {
   }[];
 }
 
+const panelVariants = {
+  open: { opacity: 1, y: 0, scale: 1 },
+  closed: { opacity: 0, y: 20, scale: 0.98 },
+};
+
 export default function SupportWidget() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem("supportWidgetOpen") === "true";
+  });
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -43,16 +50,12 @@ export default function SupportWidget() {
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [role, setRole] = useState<string | null>(() => Cookies.get("role") || null);
+  const hasLoadedMessages = useRef(false);
   const [presence, setPresence] = useState({
     adminOnline: false,
     adminTyping: false,
     adminLastSeen: null as string | null,
   });
-
-  useEffect(() => {
-    setRole(Cookies.get("role") || null);
-  }, []);
 
   const attachmentPreviews = useMemo(
     () =>
@@ -73,7 +76,12 @@ export default function SupportWidget() {
     };
   }, [attachmentPreviews]);
 
-  const canShow = role === "propertyOwner";
+  const canShow = true;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem("supportWidgetOpen", isOpen ? "true" : "false");
+  }, [isOpen]);
 
   const fetchCsrfToken = useCallback(async () => {
     try {
@@ -95,15 +103,38 @@ export default function SupportWidget() {
 
   const fetchMessages = useCallback(async () => {
     if (!canShow) return;
-    setIsLoading(true);
+    const wasInitialLoad = !hasLoadedMessages.current;
+    if (wasInitialLoad) {
+      setIsLoading(true);
+    }
     try {
       const res = await fetch("/api/support/messages", { credentials: "include", cache: "no-store" });
       const data = await res.json();
       if (data.success) {
-        setMessages(data.messages || []);
+        const nextMessages = data.messages || [];
+        setMessages((prev) => {
+          if (prev.length !== nextMessages.length) return nextMessages;
+          for (let i = 0; i < prev.length; i += 1) {
+            const prevMessage = prev[i];
+            const nextMessage = nextMessages[i];
+            if (
+              prevMessage._id !== nextMessage._id ||
+              prevMessage.updatedAt !== nextMessage.updatedAt ||
+              prevMessage.createdAt !== nextMessage.createdAt ||
+              prevMessage.message !== nextMessage.message ||
+              (prevMessage.attachments?.length || 0) !== (nextMessage.attachments?.length || 0)
+            ) {
+              return nextMessages;
+            }
+          }
+          return prev;
+        });
+        hasLoadedMessages.current = true;
       }
     } finally {
-      setIsLoading(false);
+      if (wasInitialLoad) {
+        setIsLoading(false);
+      }
     }
   }, [canShow]);
 
@@ -306,17 +337,18 @@ export default function SupportWidget() {
 
   return (
     <>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.98 }}
-            transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-6 left-4 sm:left-auto sm:w-[360px] z-50"
-          >
-            <div className="glass-panel rounded-3xl overflow-hidden border border-white/60 shadow-[0_40px_120px_-50px_rgba(15,23,42,0.75)] ring-1 ring-slate-900/10">
-              <div className="px-5 py-4 bg-gradient-to-r from-primary to-primary-hover text-white flex items-center justify-between">
+      <motion.div
+        variants={panelVariants}
+        initial={false}
+        animate={isOpen ? "open" : "closed"}
+        transition={{ duration: 0.2 }}
+        className={`fixed bottom-24 right-6 left-4 sm:left-auto sm:w-[360px] z-50 ${
+          isOpen ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+        aria-hidden={!isOpen}
+      >
+        <div className="glass-panel rounded-3xl overflow-hidden border border-white/60 shadow-[0_40px_120px_-50px_rgba(15,23,42,0.75)] ring-1 ring-slate-900/10">
+              <div className="px-5 py-4 bg-foreground text-white flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4" />
                   <div>
@@ -553,20 +585,18 @@ export default function SupportWidget() {
                   We typically respond within a few minutes during business hours.
                 </p>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      </motion.div>
 
       <div className="fixed bottom-6 right-6 z-40">
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.96 }}
           onClick={() => setIsOpen((open) => !open)}
-          className="relative h-14 w-14 rounded-full bg-slate-900 text-white shadow-[0_20px_45px_-18px_rgba(15,23,42,0.75)] ring-2 ring-white/80 flex items-center justify-center transition hover:bg-slate-800"
+          className="relative h-14 w-14 rounded-full bg-foreground text-white shadow-[0_20px_45px_-18px_rgba(15,23,42,0.75)] ring-2 ring-white/80 flex items-center justify-center transition hover:bg-foreground/90"
           aria-label="Open live support"
         >
-          <span className="absolute -inset-1 rounded-full bg-slate-900/30 blur-xl" />
+          <span className="absolute -inset-1 rounded-full bg-foreground/35 blur-xl" />
           <MessageCircle className="h-6 w-6 relative" />
         </motion.button>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, LifeBuoy, MessageCircle, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
 import { motion } from "framer-motion";
@@ -66,6 +66,9 @@ export default function AdminSupportPage() {
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isUpdatingTicket, setIsUpdatingTicket] = useState(false);
+  const hasLoadedConversations = useRef(false);
+  const hasLoadedMessages = useRef(false);
+  const previousOwnerId = useRef<string | null>(null);
   const [presence, setPresence] = useState({
     ownerOnline: false,
     ownerTyping: false,
@@ -153,7 +156,10 @@ export default function AdminSupportPage() {
 
   const fetchConversations = useCallback(async () => {
     if (status !== "authenticated") return;
-    setIsLoadingConversations(true);
+    const wasInitialLoad = !hasLoadedConversations.current;
+    if (wasInitialLoad) {
+      setIsLoadingConversations(true);
+    }
     try {
       const res = await fetch("/api/support/conversations", { credentials: "include", cache: "no-store" });
       if (res.status === 401 || res.status === 403) {
@@ -162,10 +168,37 @@ export default function AdminSupportPage() {
       }
       const data = await res.json();
       if (data.success) {
-        setConversations(data.conversations || []);
+        const nextConversations = data.conversations || [];
+        setConversations((prev) => {
+          if (prev.length !== nextConversations.length) return nextConversations;
+          for (let i = 0; i < prev.length; i += 1) {
+            const prevConv = prev[i];
+            const nextConv = nextConversations[i];
+            if (
+              prevConv.ownerId !== nextConv.ownerId ||
+              prevConv.unreadCount !== nextConv.unreadCount ||
+              prevConv.assignedAdminId !== nextConv.assignedAdminId ||
+              prevConv.assignedAdminName !== nextConv.assignedAdminName ||
+              prevConv.lastMessage.createdAt !== nextConv.lastMessage.createdAt ||
+              prevConv.lastMessage.message !== nextConv.lastMessage.message
+            ) {
+              return nextConversations;
+            }
+            const prevLabels = prevConv.labels || [];
+            const nextLabels = nextConv.labels || [];
+            if (prevLabels.length !== nextLabels.length) return nextConversations;
+            for (let j = 0; j < prevLabels.length; j += 1) {
+              if (prevLabels[j] !== nextLabels[j]) return nextConversations;
+            }
+          }
+          return prev;
+        });
+        hasLoadedConversations.current = true;
       }
     } finally {
-      setIsLoadingConversations(false);
+      if (wasInitialLoad) {
+        setIsLoadingConversations(false);
+      }
     }
   }, [status, router]);
 
@@ -181,7 +214,10 @@ export default function AdminSupportPage() {
   const fetchMessages = useCallback(
     async (ownerId: string) => {
       if (!ownerId) return;
-      setIsLoadingMessages(true);
+      const wasInitialLoad = !hasLoadedMessages.current;
+      if (wasInitialLoad) {
+        setIsLoadingMessages(true);
+      }
       try {
         const res = await fetch(`/api/support/messages?ownerId=${ownerId}`, {
           credentials: "include",
@@ -189,10 +225,30 @@ export default function AdminSupportPage() {
         });
         const data = await res.json();
         if (data.success) {
-          setMessages(data.messages || []);
+          const nextMessages = data.messages || [];
+          setMessages((prev) => {
+            if (prev.length !== nextMessages.length) return nextMessages;
+            for (let i = 0; i < prev.length; i += 1) {
+              const prevMessage = prev[i];
+              const nextMessage = nextMessages[i];
+              if (
+                prevMessage._id !== nextMessage._id ||
+                prevMessage.updatedAt !== nextMessage.updatedAt ||
+                prevMessage.createdAt !== nextMessage.createdAt ||
+                prevMessage.message !== nextMessage.message ||
+                (prevMessage.attachments?.length || 0) !== (nextMessage.attachments?.length || 0)
+              ) {
+                return nextMessages;
+              }
+            }
+            return prev;
+          });
+          hasLoadedMessages.current = true;
         }
       } finally {
-        setIsLoadingMessages(false);
+        if (wasInitialLoad) {
+          setIsLoadingMessages(false);
+        }
       }
     },
     []
@@ -272,6 +328,8 @@ export default function AdminSupportPage() {
 
   useEffect(() => {
     if (!selectedOwnerId) return;
+    hasLoadedMessages.current = false;
+    setIsLoadingMessages(false);
     fetchMessages(selectedOwnerId);
     const interval = setInterval(() => fetchMessages(selectedOwnerId), 5000);
     return () => clearInterval(interval);
@@ -306,7 +364,17 @@ export default function AdminSupportPage() {
     [conversations, selectedOwnerId]
   );
 
+  const areLabelsEqual = useCallback((left: string[], right: string[]) => {
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i += 1) {
+      if (left[i] !== right[i]) return false;
+    }
+    return true;
+  }, []);
+
   useEffect(() => {
+    if (selectedOwnerId === previousOwnerId.current) return;
+    previousOwnerId.current = selectedOwnerId;
     if (selectedConversation) {
       setAssignedAdminId(selectedConversation.assignedAdminId || null);
       setLabels(selectedConversation.labels || []);
@@ -325,7 +393,15 @@ export default function AdminSupportPage() {
         ownerLastSeen: null,
       });
     }
-  }, [selectedConversation]);
+  }, [selectedOwnerId, selectedConversation]);
+
+  useEffect(() => {
+    if (!selectedConversation) return;
+    const nextAssigned = selectedConversation.assignedAdminId || null;
+    setAssignedAdminId((prev) => (prev === nextAssigned ? prev : nextAssigned));
+    const nextLabels = selectedConversation.labels || [];
+    setLabels((prev) => (areLabelsEqual(prev, nextLabels) ? prev : nextLabels));
+  }, [selectedConversation, areLabelsEqual]);
 
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLowerCase();
