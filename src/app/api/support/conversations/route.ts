@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     const assignedAdminIds = tickets
       .map((ticket) => ticket.assignedAdminId)
-      .filter((id): id is string => Boolean(id) && ObjectId.isValid(id))
+      .filter((id): id is string => typeof id === "string" && ObjectId.isValid(id))
       .map((id) => new ObjectId(id));
 
     const assignedAdmins = assignedAdminIds.length
