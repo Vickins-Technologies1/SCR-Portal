@@ -64,7 +64,9 @@ export default function PaymentsPage() {
   useEffect(() => {
     if (!isClient) return;
 
-    const id = Cookies.get("userId");
+    const isImpersonating = Cookies.get("isImpersonating") === "true";
+    const impersonatingTenantId = Cookies.get("impersonatingTenantId");
+    const id = isImpersonating && impersonatingTenantId ? impersonatingTenantId : Cookies.get("userId");
     if (!id) {
       setMessages((prev) => [
         ...prev,

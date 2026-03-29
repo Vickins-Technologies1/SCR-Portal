@@ -106,6 +106,7 @@ const SELF_HANDLED_CSRF_ROUTES = [
 // Routes completely exempt from CSRF (e.g. logout, public GETs, impersonation revert)
 const CSRF_EXEMPT_ROUTES = [
   "/api/revert-impersonation",
+  "/api/admin/revert-impersonation",
   "/api/signout",           // if you have it
   "/api/csrf-token",        // token generation should not require CSRF
 ];
@@ -118,6 +119,8 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/admins": { roles: ["admin"], isApi: true },
   "/api/admin/properties": { roles: ["admin"], isApi: true },
   "/api/admin/property-owners": { roles: ["admin"], isApi: true },
+  "/api/admin/impersonate-owner": { roles: ["admin"], isApi: true },
+  "/api/admin/revert-impersonation": { roles: ["admin", "propertyOwner"], isApi: true },
 
   // Shared / multi-role APIs
   "/api/payments": { roles: ["admin", "propertyOwner", "teamMember", "tenant"], isApi: true },

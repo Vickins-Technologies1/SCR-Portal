@@ -8,9 +8,6 @@ import {
   DollarSign,
   User,
   AlertCircle,
-  LogOut,
-  Loader2,
-  Shield,
   PieChart as PieChartIcon,
   Wallet,
   CalendarClock,
@@ -258,9 +255,6 @@ export default function TenantDashboardPage() {
   const router = useRouter();
 
   const [userId, setUserId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-  const [isImpersonated, setIsImpersonated] = useState(false);
-  const [isReverting, setIsReverting] = useState(false);
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
@@ -268,7 +262,6 @@ export default function TenantDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDuesLoading, setIsDuesLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [csrfToken, setCsrfToken] = useState<string | null>(Cookies.get("csrf-token") || null);
   const requestInProgress = useRef(false);
@@ -367,8 +360,6 @@ export default function TenantDashboardPage() {
     }
 
     setUserId(uid);
-    setRole(currentRole);
-    setIsImpersonated(isImpersonating);
   }, [router]);
 
   useEffect(() => {
@@ -438,29 +429,6 @@ export default function TenantDashboardPage() {
     loadData();
   }, [userId, csrfToken, fetchCsrfToken, fetchDues]);
 
-  const handleRevertImpersonation = async () => {
-    if (isReverting) return;
-    setIsReverting(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/revert-impersonation", { method: "POST", credentials: "include" });
-      const data = await res.json();
-
-      if (data.success) {
-        setSuccessMessage("Reverted to owner view");
-        Cookies.remove("impersonatingTenantId", { path: "/" });
-        Cookies.remove("isImpersonating", { path: "/" });
-        setTimeout(() => router.push("/property-owner-dashboard"), 700);
-      } else {
-        setError(data.message || "Revert failed");
-      }
-    } catch {
-      setError("Network error");
-    } finally {
-      setIsReverting(false);
-    }
-  };
 
   const paymentTrendData = (analytics?.monthlyPayments ?? []).map((item) => ({
     month: item.month,
@@ -553,38 +521,7 @@ export default function TenantDashboardPage() {
       <div className="pointer-events-none absolute -top-24 right-[-12%] h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 left-[-10%] h-80 w-80 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
 
-      {isImpersonated && (
-        <div className="fixed top-0 inset-x-0 z-50 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between text-sm">
-            <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5" />
-              <div>
-                <p className="font-medium">Impersonating tenant</p>
-                <p className="text-xs opacity-90">{tenant?.name || "Tenant"}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleRevertImpersonation}
-              disabled={isReverting}
-              className="flex items-center gap-2 bg-white/95 text-red-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-white disabled:opacity-60 transition"
-            >
-              {isReverting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Reverting…
-                </>
-              ) : (
-                <>
-                  <LogOut className="w-4 h-4" />
-                  Exit
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className={`${isImpersonated ? "pt-16 sm:pt-20" : "pt-10 sm:pt-14"} relative z-10`}>
+      <div className="pt-10 sm:pt-14 relative z-10">
         <div className="mx-4 sm:mx-6 lg:mx-8">
           <section className="glass-panel rounded-3xl p-6 sm:p-8 md:p-9 relative overflow-hidden">
             <div className="absolute -top-24 right-6 h-48 w-48 rounded-full bg-primary/25 blur-3xl" />
@@ -631,11 +568,6 @@ export default function TenantDashboardPage() {
             <div className="flex items-center gap-2.5 p-3 bg-red-50 text-red-800 rounded-lg border border-red-200 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
-            </div>
-          )}
-          {successMessage && (
-            <div className="p-3 bg-primary/10 text-primary rounded-lg border border-primary/20 text-sm">
-              {successMessage}
             </div>
           )}
         </div>

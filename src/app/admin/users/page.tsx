@@ -13,6 +13,8 @@ import {
   Plus,
   AlertCircle,
   RefreshCw,
+  LogIn,
+  Shield,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
@@ -61,6 +63,11 @@ export default function PropertyOwnersPage() {
   const [error, setError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [showImpersonateModal, setShowImpersonateModal] = useState(false);
+  const [impersonateTarget, setImpersonateTarget] = useState<PropertyOwner | null>(null);
+  const [impersonateError, setImpersonateError] = useState<string | null>(null);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   // ── Session check ───────────────────────────────────────────────────────────
   const checkSession = useCallback(async () => {
@@ -133,6 +140,23 @@ export default function PropertyOwnersPage() {
     }
   }, [status, fetchPropertyOwners]);
 
+  useEffect(() => {
+    const loadCsrf = async () => {
+      try {
+        const res = await fetch("/api/csrf-token", { credentials: "include" });
+        const data = await res.json();
+        if (data.success && data.csrfToken) {
+          setCsrfToken(data.csrfToken);
+        }
+      } catch {
+        // ignore csrf preload errors
+      }
+    };
+    if (status === "authenticated") {
+      loadCsrf();
+    }
+  }, [status]);
+
   // ── Sorting ────────────────────────────────────────────────────────────────
   const handleSort = (key: keyof PropertyOwner) => {
     setSortConfig((prev) => {
@@ -193,6 +217,62 @@ export default function PropertyOwnersPage() {
   const handleEdit = (owner: PropertyOwner) => {
     setEditUser(owner);
     setShowEditModal(true);
+  };
+
+  const openImpersonateModal = (owner: PropertyOwner) => {
+    setImpersonateTarget(owner);
+    setImpersonateError(null);
+    setShowImpersonateModal(true);
+  };
+
+  const ensureCsrfToken = async () => {
+    if (csrfToken) return csrfToken;
+    try {
+      const res = await fetch("/api/csrf-token", { credentials: "include" });
+      const data = await res.json();
+      if (data.success && data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+        return data.csrfToken;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const handleImpersonate = async () => {
+    if (!impersonateTarget) return;
+    setIsImpersonating(true);
+    setImpersonateError(null);
+
+    try {
+      const token = await ensureCsrfToken();
+      if (!token) {
+        setImpersonateError("Security token missing. Please refresh and try again.");
+        setIsImpersonating(false);
+        return;
+      }
+
+      const res = await fetch("/api/admin/impersonate-owner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": token },
+        credentials: "include",
+        body: JSON.stringify({ ownerId: impersonateTarget._id }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setImpersonateError(data.message || "Failed to impersonate owner");
+        setIsImpersonating(false);
+        return;
+      }
+
+      const redirect = data.redirect || "/property-owner-dashboard";
+      window.location.href = redirect;
+    } catch {
+      setImpersonateError("Impersonation request failed.");
+      setIsImpersonating(false);
+    }
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -394,6 +474,14 @@ export default function PropertyOwnersPage() {
                             <td className="py-3 px-4 text-xs">
                               <div className="flex items-center gap-3">
                                 <button
+                                  onClick={() => openImpersonateModal(owner)}
+                                  className="text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-50"
+                                  title="Impersonate owner"
+                                  disabled={!owner.isApproved}
+                                >
+                                  <LogIn size={18} />
+                                </button>
+                                <button
                                   onClick={() => handleEdit(owner)}
                                   className="text-[#03a678] hover:text-[#027a55] transition-colors"
                                   title="Edit"
@@ -580,6 +668,64 @@ export default function PropertyOwnersPage() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Impersonate Modal */}
+          {showImpersonateModal && impersonateTarget && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
+              <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                    <Shield size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900">Impersonate Owner</h2>
+                    <p className="text-xs text-gray-500">View the owner dashboard as this account.</p>
+                  </div>
+                </div>
+
+                {impersonateError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
+                    <AlertCircle size={18} />
+                    <span>{impersonateError}</span>
+                  </div>
+                )}
+
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-3 text-xs text-indigo-900">
+                  <p className="font-semibold">You are about to impersonate:</p>
+                  <p className="mt-1">{impersonateTarget.name}</p>
+                  <p className="text-[10px] text-indigo-700 mt-1">{impersonateTarget.email}</p>
+                </div>
+
+                {!impersonateTarget.isApproved && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                    This owner is not approved yet. Approve the account before impersonating.
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowImpersonateModal(false);
+                      setImpersonateTarget(null);
+                      setImpersonateError(null);
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-xs font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImpersonate}
+                    disabled={isImpersonating || !impersonateTarget.isApproved}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition text-xs font-medium shadow-md disabled:opacity-60"
+                  >
+                    {isImpersonating ? "Switching..." : "Impersonate Owner"}
+                  </button>
+                </div>
               </div>
             </div>
           )}

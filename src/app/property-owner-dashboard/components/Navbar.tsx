@@ -2,17 +2,52 @@
 
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { LogOut, Menu, X, Sparkles } from "lucide-react";
+import { LogOut, Menu, X, Sparkles, Shield } from "lucide-react";
+import Cookies from "js-cookie";
+import { useEffect, useState } from "react";
 import { useSidebar } from "./SidebarContext";
 
 export default function Navbar() {
   const router = useRouter();
   const { isOpen, toggle } = useSidebar();
+  const [isAdminImpersonating, setIsAdminImpersonating] = useState(false);
+  const [impersonatedOwnerName, setImpersonatedOwnerName] = useState("");
+  const [isReverting, setIsReverting] = useState(false);
+
+  useEffect(() => {
+    const isImpersonating = Cookies.get("adminImpersonating") === "true";
+    setIsAdminImpersonating(isImpersonating);
+    if (isImpersonating) {
+      setImpersonatedOwnerName(Cookies.get("adminImpersonatingOwnerName") || "Owner");
+    }
+  }, []);
 
   const handleSignOut = () => {
     localStorage.removeItem("userId");
     localStorage.removeItem("role");
     router.push("/");
+  };
+
+  const handleRevertImpersonation = async () => {
+    if (isReverting) return;
+    setIsReverting(true);
+    try {
+      const res = await fetch("/api/admin/revert-impersonation", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        Cookies.remove("adminOriginalUserId", { path: "/" });
+        Cookies.remove("adminOriginalRole", { path: "/" });
+        Cookies.remove("adminImpersonating", { path: "/" });
+        Cookies.remove("adminImpersonatingOwnerId", { path: "/" });
+        Cookies.remove("adminImpersonatingOwnerName", { path: "/" });
+        router.push("/admin/users");
+      }
+    } finally {
+      setIsReverting(false);
+    }
   };
 
   return (
@@ -45,6 +80,18 @@ export default function Navbar() {
 
       {/* Right: Tour + Logout Buttons */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {isAdminImpersonating && (
+            <button
+              onClick={handleRevertImpersonation}
+              disabled={isReverting}
+              className="group flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-red-700 transition-all hover:border-red-300 hover:text-red-800 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-300/60 focus:ring-offset-1 active:scale-95 disabled:opacity-60"
+              title="Return to admin"
+            >
+              <Shield size={16} className="transition-transform group-hover:rotate-6 sm:size-[18px]" />
+              <span className="hidden sm:inline">Admin: {impersonatedOwnerName}</span>
+              <span className="sm:hidden">Return</span>
+            </button>
+          )}
           <button
             onClick={() => window.dispatchEvent(new Event("start-owner-tour"))}
             className="group flex shrink-0 items-center gap-1.5 rounded-full border border-gray-300 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"

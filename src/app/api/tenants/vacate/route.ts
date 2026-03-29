@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
+import { resolveTenantContext } from "@/lib/impersonation";
 import { sendWelcomeSms } from "@/lib/sms";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { sendVacateRequestEmail } from "@/lib/email";
@@ -37,19 +38,21 @@ export async function GET(req: NextRequest) {
   const isImpersonating = req.cookies.get("isImpersonating")?.value === "true";
   const impersonatingTenantId = req.cookies.get("impersonatingTenantId")?.value;
 
-  if (!userId || !ObjectId.isValid(userId)) {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
-
-  let tenantId = userId;
-  if (role === "propertyOwner" && isImpersonating && impersonatingTenantId && ObjectId.isValid(impersonatingTenantId)) {
-    tenantId = impersonatingTenantId;
-  } else if (role !== "tenant") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     const { db } = await connectToDatabase();
+    const tenantContext = await resolveTenantContext({
+      db,
+      userId,
+      role,
+      isImpersonating,
+      impersonatingTenantId,
+    });
+
+    if (!tenantContext) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const { tenantId } = tenantContext;
 
     const requests = await db
       .collection<VacateRequestDoc>("vacate_requests")
@@ -89,10 +92,8 @@ export async function POST(req: NextRequest) {
 
   const userId = req.cookies.get("userId")?.value;
   const role = req.cookies.get("role")?.value;
-
-  if (!userId || !ObjectId.isValid(userId) || role !== "tenant") {
-    return NextResponse.json({ success: false, message: "Unauthorized: Tenant access required" }, { status: 401 });
-  }
+  const isImpersonating = req.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = req.cookies.get("impersonatingTenantId")?.value;
 
   let body: { message?: string; moveOutDate?: string };
   try {
@@ -110,8 +111,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const tenantContext = await resolveTenantContext({
+      db,
+      userId,
+      role,
+      isImpersonating,
+      impersonatingTenantId,
+    });
 
-    const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(userId) });
+    if (!tenantContext) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized: Tenant access required" },
+        { status: 401 }
+      );
+    }
+
+    const { tenantId } = tenantContext;
+
+    const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(tenantId) });
     if (!tenant) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
@@ -123,7 +140,7 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
     const newRequest: Omit<VacateRequestDoc, "_id"> = {
-      tenantId: new ObjectId(userId),
+      tenantId: new ObjectId(tenantId),
       ownerId: tenant.ownerId,
       propertyId,
       message,
@@ -199,7 +216,7 @@ export async function POST(req: NextRequest) {
         success: true,
         data: {
           _id: result.insertedId.toString(),
-          tenantId: userId,
+          tenantId,
           ownerId: tenant.ownerId,
           propertyId: tenant.propertyId,
           message,

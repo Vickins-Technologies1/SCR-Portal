@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Menu,
   X,
@@ -13,6 +13,8 @@ import {
   Wrench,
   DoorOpen,
   Sparkles,
+  Shield,
+  Loader2,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
@@ -50,12 +52,15 @@ export default function TenantDashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { userId, role } = useAuth();
   const [name, setName] = useState<string>("Tenant");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isImpersonating, setIsImpersonating] = useState(false);
+  const [isReverting, setIsReverting] = useState(false);
 
   const links = [
     { key: "overview", href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
@@ -66,7 +71,12 @@ export default function TenantDashboardLayout({
   ];
 
   useEffect(() => {
-    if (!userId || role !== "tenant") {
+    const impersonating = Cookies.get("isImpersonating") === "true";
+    setIsImpersonating(impersonating);
+  }, []);
+
+  useEffect(() => {
+    if (!userId) {
       setIsLoading(false);
       return;
     }
@@ -74,12 +84,20 @@ export default function TenantDashboardLayout({
     const fetchUserName = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(
-          `/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`,
-          { credentials: "include" }
-        );
-        const data: UserResponse = await response.json();
-        if (data.success && data.user?.name) setName(data.user.name);
+        if (isImpersonating) {
+          const response = await fetch("/api/tenant/profile", { credentials: "include" });
+          const data = await response.json();
+          if (data.success && data.tenant?.name) {
+            setName(data.tenant.name);
+          }
+        } else if (role === "tenant") {
+          const response = await fetch(
+            `/api/user?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`,
+            { credentials: "include" }
+          );
+          const data: UserResponse = await response.json();
+          if (data.success && data.user?.name) setName(data.user.name);
+        }
       } catch {
         setError("Connection error");
       } finally {
@@ -89,12 +107,36 @@ export default function TenantDashboardLayout({
 
     const timer = setTimeout(fetchUserName, 300);
     return () => clearTimeout(timer);
-  }, [userId, role]);
+  }, [userId, role, isImpersonating]);
 
   const handleLogout = () => {
     Cookies.remove("userId");
     Cookies.remove("role");
+    Cookies.remove("impersonatingTenantId", { path: "/" });
+    Cookies.remove("isImpersonating", { path: "/" });
     window.location.href = "/tenant-login";
+  };
+
+  const handleRevertImpersonation = async () => {
+    if (isReverting) return;
+    setIsReverting(true);
+
+    try {
+      const res = await fetch("/api/revert-impersonation", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        Cookies.remove("impersonatingTenantId", { path: "/" });
+        Cookies.remove("isImpersonating", { path: "/" });
+        router.push("/property-owner-dashboard");
+      }
+    } catch {
+      setError("Failed to exit impersonation");
+    } finally {
+      setIsReverting(false);
+    }
   };
 
   const initials = name
@@ -191,10 +233,42 @@ export default function TenantDashboardLayout({
   return (
     <PublicThemeWrapper>
     <div className="min-h-[100svh] flex flex-col bg-background text-foreground overflow-x-hidden">
+      {isImpersonating && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg">
+          <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between text-sm">
+            <div className="flex items-center gap-3">
+              <Shield className="w-5 h-5" />
+              <div>
+                <p className="font-medium">Impersonating tenant</p>
+                <p className="text-xs opacity-90">{name || "Tenant"}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleRevertImpersonation}
+              disabled={isReverting}
+              className="flex items-center gap-2 bg-white/95 text-red-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-white disabled:opacity-60 transition"
+            >
+              {isReverting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Reverting…
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4" />
+                  Exit
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
       {/* ─── Navbar ─── */}
       <header
         data-tour="tenant-navbar"
-        className="fixed top-0 left-0 right-0 z-20 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)]"
+        className={`fixed left-0 right-0 z-20 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] ${
+          isImpersonating ? "top-10" : "top-0"
+        }`}
       >
         <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
           {/* Left side – logo + mobile toggle */}
@@ -238,8 +312,8 @@ export default function TenantDashboardLayout({
       {/* ─── Sidebar ─── */}
       <aside
         data-tour="tenant-sidebar"
-        className={`fixed left-0 top-16 bottom-0 z-40 w-[82vw] max-w-[18rem] lg:w-72 bg-card border-r border-border backdrop-blur-xl shadow-[0_20px_60px_rgba(15,23,42,0.16)] transition-transform duration-300 ease-out
-          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:inset-y-0`}
+        className={`fixed left-0 bottom-0 z-40 w-[82vw] max-w-[18rem] lg:w-72 bg-card border-r border-border backdrop-blur-xl shadow-[0_20px_60px_rgba(15,23,42,0.16)] transition-transform duration-300 ease-out
+          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:inset-y-0 ${isImpersonating ? "top-[6.5rem]" : "top-16"}`}
       >
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent">
@@ -303,13 +377,18 @@ export default function TenantDashboardLayout({
       </aside>
 
       {/* ─── Main Content ─── */}
-      <main className="flex-1 pt-16 lg:ml-72 p-5 sm:p-6 lg:p-8" data-tour="tenant-workspace">
+      <main
+        className={`flex-1 ${isImpersonating ? "pt-[6.5rem]" : "pt-16"} lg:ml-72 p-5 sm:p-6 lg:p-8`}
+        data-tour="tenant-workspace"
+      >
         <div className="max-w-7xl mx-auto">{children}</div>
       </main>
 
       {isSidebarOpen && (
         <div
-          className="fixed inset-x-0 bottom-0 top-16 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
+          className={`fixed inset-x-0 bottom-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden ${
+            isImpersonating ? "top-[6.5rem]" : "top-16"
+          }`}
           onClick={() => setIsSidebarOpen(false)}
         />
       )}

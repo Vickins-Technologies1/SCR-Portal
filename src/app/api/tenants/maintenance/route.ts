@@ -2,19 +2,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
+import { resolveTenantContext } from "@/lib/impersonation";
 import { ObjectId } from "mongodb";
 import { MaintenanceRequest } from "@/types/maintenance";
 
 export async function GET(req: NextRequest) {
   const userId = req.cookies.get("userId")?.value;
   const role = req.cookies.get("role")?.value;
-
-  if (!userId || role !== "tenant") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 }
-    );
-  }
+  const isImpersonating = req.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = req.cookies.get("impersonatingTenantId")?.value;
 
   // Parse query params
   const { searchParams } = new URL(req.url);
@@ -24,14 +20,30 @@ export async function GET(req: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const tenantContext = await resolveTenantContext({
+      db,
+      userId,
+      role,
+      isImpersonating,
+      impersonatingTenantId,
+    });
+
+    if (!tenantContext) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const { tenantId } = tenantContext;
 
     const total = await db
       .collection("maintenance_requests")
-      .countDocuments({ tenantId: new ObjectId(userId) });
+      .countDocuments({ tenantId: new ObjectId(tenantId) });
 
     const requests = await db
       .collection("maintenance_requests")
-      .find({ tenantId: new ObjectId(userId) })
+      .find({ tenantId: new ObjectId(tenantId) })
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit)
@@ -45,7 +57,7 @@ export async function GET(req: NextRequest) {
       urgency: r.urgency,
       date: r.date.toISOString(),
       propertyId: r.propertyId.toString(),
-      tenantId: userId,
+      tenantId,
     }));
 
     return NextResponse.json(
@@ -79,13 +91,8 @@ export async function POST(req: NextRequest) {
 
   const userId = req.cookies.get("userId")?.value;
   const role = req.cookies.get("role")?.value;
-
-  if (!userId || role !== "tenant") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized: Tenant access required" },
-      { status: 401 }
-    );
-  }
+  const isImpersonating = req.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = req.cookies.get("impersonatingTenantId")?.value;
 
   let body;
   try {
@@ -115,11 +122,27 @@ export async function POST(req: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const tenantContext = await resolveTenantContext({
+      db,
+      userId,
+      role,
+      isImpersonating,
+      impersonatingTenantId,
+    });
+
+    if (!tenantContext) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized: Tenant access required" },
+        { status: 401 }
+      );
+    }
+
+    const { tenantId } = tenantContext;
 
     // Verify tenant owns this property
     const tenant = await db
       .collection("tenants")
-      .findOne({ _id: new ObjectId(userId) });
+      .findOne({ _id: new ObjectId(tenantId) });
 
     if (!tenant || tenant.propertyId.toString() !== propertyId) {
       return NextResponse.json(
@@ -133,7 +156,7 @@ export async function POST(req: NextRequest) {
       description: description.trim(),
       status: "Pending" as const,
       urgency: urgency as "low" | "medium" | "high",
-      tenantId: new ObjectId(userId),
+      tenantId: new ObjectId(tenantId),
       propertyId: new ObjectId(propertyId),
       ownerId: tenant.ownerId,
       date: new Date(),
@@ -151,7 +174,7 @@ export async function POST(req: NextRequest) {
       urgency: newReq.urgency,
       date: newReq.date.toISOString(),
       propertyId: newReq.propertyId.toString(),
-      tenantId: userId,
+      tenantId,
     };
 
     return NextResponse.json(

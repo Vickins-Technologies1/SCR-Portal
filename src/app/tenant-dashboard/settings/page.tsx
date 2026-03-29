@@ -29,7 +29,9 @@ export default function SettingsPage() {
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const tenantId = Cookies.get("userId");
+  const isImpersonating = Cookies.get("isImpersonating") === "true";
+  const impersonatingTenantId = Cookies.get("impersonatingTenantId");
+  const tenantId = isImpersonating && impersonatingTenantId ? impersonatingTenantId : Cookies.get("userId");
 
   const notify = (type: "success" | "error", msg: string) => {
     const id = Date.now().toString();
@@ -80,6 +82,10 @@ export default function SettingsPage() {
     tenant.phone !== original.phone;
 
   const saveProfile = async () => {
+    if (isImpersonating) {
+      notify("error", "Impersonation is view-only. Exit to edit tenant details.");
+      return;
+    }
     if (!csrfToken) return;
     setSaving(true);
     try {
@@ -102,6 +108,10 @@ export default function SettingsPage() {
   };
 
   const changePassword = async () => {
+    if (isImpersonating) {
+      notify("error", "Impersonation is view-only. Exit to change a tenant password.");
+      return;
+    }
     if (password !== confirmPassword || password.length < 6) {
       notify("error", "Passwords must match and be 6+ characters");
       return;
@@ -199,6 +209,11 @@ export default function SettingsPage() {
         <div className="pointer-events-none absolute -top-24 right-[-12%] h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 left-[-8%] h-72 w-72 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
         <div className="max-w-2xl mx-auto space-y-6 relative z-10">
+          {isImpersonating && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs sm:text-sm text-amber-800">
+              Impersonation is view-only. Exit impersonation to edit profile details or change passwords.
+            </div>
+          )}
 
           {/* Header */}
           <div className="glass-panel rounded-3xl p-5 sm:p-6 text-center">
@@ -242,7 +257,7 @@ export default function SettingsPage() {
 
             <button
               onClick={saveProfile}
-              disabled={saving || !hasChanges()}
+              disabled={saving || !hasChanges() || isImpersonating}
               className="w-full sm:w-auto px-7 py-2.5 text-sm bg-[#1E3A8A] text-white font-bold rounded-xl hover:bg-[#1E40AF] disabled:bg-gray-300 transition flex items-center justify-center gap-2"
             >
               <Save size={18} />
@@ -297,7 +312,7 @@ export default function SettingsPage() {
 
             <button
               onClick={changePassword}
-              disabled={changing || !password || password !== confirmPassword}
+              disabled={changing || !password || password !== confirmPassword || isImpersonating}
               className="w-full sm:w-auto px-7 py-2.5 text-sm bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:bg-gray-300 transition"
             >
               {changing ? "Changing..." : "Change Password"}

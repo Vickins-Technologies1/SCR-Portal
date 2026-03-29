@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { validateCsrfToken } from "@/lib/csrf";
+import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
 import { z } from "zod";
 import {
@@ -104,6 +105,8 @@ const PaymentRequestSchema = z.object({
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
+  const isImpersonating = request.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = request.cookies.get("impersonatingTenantId")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
   const { searchParams } = new URL(request.url);
   const tenantId = searchParams.get("tenantId");
@@ -128,7 +131,21 @@ export async function GET(request: NextRequest) {
 
     const query: { tenantId?: string; propertyId?: string | { $in: string[] } } = {};
 
-    if (role === "propertyOwner") {
+    if (role === "propertyOwner" && isImpersonating) {
+      const tenantContext = await resolveTenantContext({
+        db,
+        userId,
+        role,
+        isImpersonating,
+        impersonatingTenantId,
+      });
+
+      if (!tenantContext) {
+        return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
+      }
+
+      query.tenantId = tenantContext.tenantId;
+    } else if (role === "propertyOwner") {
       const properties = await db
         .collection<Property>("properties")
         .find({ ownerId: userId })
@@ -215,6 +232,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
+  const isImpersonating = request.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = request.cookies.get("impersonatingTenantId")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
 
   // Auth + CSRF guard for payment initiation
@@ -266,12 +285,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
-    const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
+    let targetTenantId = tenantId;
+    if (role === "propertyOwner" && isImpersonating) {
+      const tenantContext = await resolveTenantContext({
+        db,
+        userId,
+        role,
+        isImpersonating,
+        impersonatingTenantId,
+      });
+
+      if (!tenantContext) {
+        return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
+      }
+
+      targetTenantId = tenantContext.tenantId;
+    }
+
+    const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(targetTenantId) });
     if (!tenant) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    if (role === "propertyOwner") {
+    if (role === "propertyOwner" && !isImpersonating) {
       const propertyCheck = await db
         .collection<Property>("properties")
         .findOne({ _id: new ObjectId(propertyId), ownerId: userId });
@@ -340,7 +376,7 @@ export async function POST(request: NextRequest) {
     const nowIso = new Date().toISOString();
     const payment: Payment = {
       _id: new ObjectId(),
-      tenantId,
+      tenantId: targetTenantId,
       amount: Number(amount),
       propertyId,
       paymentDate: nowIso,

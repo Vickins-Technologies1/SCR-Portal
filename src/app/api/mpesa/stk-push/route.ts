@@ -15,6 +15,7 @@ import {
   normalizePhoneNumber,
 } from "@/lib/mpesa";
 import { validateCsrfToken } from "@/lib/csrf";
+import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
 
 const StkPushSchema = z.object({
@@ -84,6 +85,8 @@ function rateLimit(key: string, limit = 5, windowMs = 60_000) {
 export async function POST(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
+  const isImpersonating = request.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = request.cookies.get("impersonatingTenantId")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
 
   if (!userId || !role || !["tenant", "propertyOwner"].includes(role)) {
@@ -129,8 +132,25 @@ export async function POST(request: NextRequest) {
     let derivedLandlordId: string | null = null;
 
     // Resolve tenant + landlord context
-    if (role === "tenant") {
-      const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(userId) });
+    if (role === "tenant" || (role === "propertyOwner" && isImpersonating)) {
+      let targetTenantId = userId;
+      if (role === "propertyOwner") {
+        const tenantContext = await resolveTenantContext({
+          db,
+          userId,
+          role,
+          isImpersonating,
+          impersonatingTenantId,
+        });
+
+        if (!tenantContext) {
+          return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
+        }
+
+        targetTenantId = tenantContext.tenantId;
+      }
+
+      const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(targetTenantId) });
       if (!tenant) {
         return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
       }
@@ -145,7 +165,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Owner-initiated STK (e.g., platform invoices)
-    if (role === "propertyOwner") {
+    if (role === "propertyOwner" && !isImpersonating) {
       if (!ObjectId.isValid(parsed.data.invoiceId)) {
         return NextResponse.json({ success: false, message: "Invalid invoice ID" }, { status: 400 });
       }
