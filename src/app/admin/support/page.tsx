@@ -139,26 +139,20 @@ export default function AdminSupportPage() {
       const data = await res.json();
       if (data.success && data.csrfToken) {
         setCsrfToken(data.csrfToken);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const ensureCsrfToken = useCallback(async () => {
-    if (csrfToken) return csrfToken;
-    try {
-      const res = await fetch("/api/csrf-token", { credentials: "include" });
-      const data = await res.json();
-      if (data.success && data.csrfToken) {
-        setCsrfToken(data.csrfToken);
         return data.csrfToken as string;
       }
     } catch {
       // ignore
     }
     return null;
-  }, [csrfToken]);
+  }, []);
+
+  const ensureCsrfToken = useCallback(async () => {
+    if (csrfToken) return csrfToken;
+    return loadCsrfToken();
+  }, [csrfToken, loadCsrfToken]);
+
+  const refreshCsrfToken = useCallback(async () => loadCsrfToken(), [loadCsrfToken]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -454,16 +448,26 @@ export default function AdminSupportPage() {
     try {
       const formData = new FormData();
       attachments.forEach((file) => formData.append("files", file));
-      const res = await fetch("/api/support/upload", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "x-csrf-token": token,
-        },
-        body: formData,
-      });
+      const attemptUpload = async (activeToken: string) =>
+        fetch("/api/support/upload", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "x-csrf-token": activeToken,
+          },
+          body: formData,
+        });
+
+      let res = await attemptUpload(token);
+      if (res.status === 403) {
+        const refreshed = await refreshCsrfToken();
+        if (refreshed) {
+          res = await attemptUpload(refreshed);
+        }
+      }
+
       const data = await res.json();
-      if (!data.success) {
+      if (!res.ok || !data.success) {
         throw new Error(data.message || "Upload failed");
       }
       return data.uploads as AttachmentMeta[];

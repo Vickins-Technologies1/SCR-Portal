@@ -9,10 +9,16 @@ export async function GET() {
 
     const response = NextResponse.json({ success: true, csrfToken });
 
+    response.cookies.set('csrf-token', '', {
+      path: '/api',
+      maxAge: 0,
+    });
+
     response.cookies.set('csrf-token', csrfToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
+      path: '/',
       maxAge: 60 * 60,
     });
 
