@@ -83,6 +83,8 @@ export default function TenantDeletionRequests({ csrfToken }: TenantDeletionRequ
   const updateStatus = async (id: string, status: "Approved" | "Rejected") => {
     const token = activeCsrfToken || (await fetchCsrfToken());
     if (!token) return;
+    const targetRequest = requests.find((req) => req._id === id);
+    const tenantLabel = targetRequest?.tenantName || "tenant";
     try {
       let res = await fetch("/api/property-owners/tenant-deletions", {
         method: "PATCH",
@@ -114,11 +116,17 @@ export default function TenantDeletionRequests({ csrfToken }: TenantDeletionRequ
       }
 
       setRequests((prev) =>
-        prev.map((req) =>
-          req._id === id ? { ...req, status, decisionAt: new Date().toISOString() } : req
-        )
+        status === "Approved"
+          ? prev.filter((req) => req._id !== id)
+          : prev.map((req) =>
+              req._id === id ? { ...req, status, decisionAt: new Date().toISOString() } : req
+            )
       );
-      setSuccess(`Deletion request ${status.toLowerCase()}.`);
+      setSuccess(
+        status === "Approved"
+          ? `Approved & removed: ${tenantLabel}.`
+          : `Deletion request rejected: ${tenantLabel}.`
+      );
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.message || "Failed to update deletion request");

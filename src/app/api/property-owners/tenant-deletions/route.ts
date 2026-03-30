@@ -216,6 +216,23 @@ export async function PATCH(req: NextRequest) {
           await restoreUnitQuantity(db, tenant.propertyId, tenant.unitIdentifier);
         }
       }
+
+      // Auto-delete the request after approval
+      await db.collection("tenant_deletion_requests").deleteOne({
+        _id: new ObjectId(requestId),
+        ownerId,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: tenantAlreadyDeleted
+            ? "Request approved. Tenant was already removed."
+            : "Request approved. Tenant deleted.",
+          deletedPaymentsCount,
+        },
+        { status: 200 }
+      );
     }
 
     await db.collection("tenant_deletion_requests").updateOne(
@@ -233,12 +250,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message:
-          status === "Approved"
-            ? tenantAlreadyDeleted
-              ? "Request approved. Tenant was already removed."
-              : "Request approved. Tenant deleted."
-            : "Request rejected.",
+        message: "Request rejected.",
         deletedPaymentsCount,
       },
       { status: 200 }
