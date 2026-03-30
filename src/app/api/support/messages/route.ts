@@ -217,7 +217,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (role !== "propertyOwner") {
+  if (!["admin", "propertyOwner"].includes(role)) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
   }
 
@@ -246,7 +246,7 @@ export async function PATCH(request: NextRequest) {
     const existing = await db.collection<SupportMessage>("supportMessages").findOne({
       _id: new ObjectId(messageId),
       senderId: userId,
-      senderRole: "propertyOwner",
+      senderRole: role as "propertyOwner" | "admin",
     });
 
     if (!existing) {
@@ -286,7 +286,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (role !== "propertyOwner") {
+  if (!["admin", "propertyOwner"].includes(role)) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
   }
 
@@ -307,7 +307,7 @@ export async function DELETE(request: NextRequest) {
     const result = await db.collection<SupportMessage>("supportMessages").deleteOne({
       _id: new ObjectId(messageId),
       senderId: userId,
-      senderRole: "propertyOwner",
+      senderRole: role as "propertyOwner" | "admin",
     });
 
     if (!result.deletedCount) {

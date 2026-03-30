@@ -13,6 +13,7 @@ import {
   FileText,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import Cookies from "js-cookie";
 
 interface SupportMessage {
   _id: string;
@@ -39,6 +40,10 @@ export default function SupportWidget() {
   const [isOpen, setIsOpen] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem("supportWidgetOpen") === "true";
+  });
+  const [role] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return Cookies.get("role") || null;
   });
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
@@ -76,7 +81,7 @@ export default function SupportWidget() {
     };
   }, [attachmentPreviews]);
 
-  const canShow = true;
+  const canShow = role === "propertyOwner";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
