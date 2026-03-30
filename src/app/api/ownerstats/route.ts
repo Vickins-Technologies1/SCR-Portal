@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
-import { calculateRentDueToDate } from "@/lib/utils";
+import { calculateRentDueToDate, resolveMonthlyRentForDate } from "@/lib/utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds } from "@/lib/payment-totals";
 
 interface Property {
@@ -137,7 +138,6 @@ export async function GET(request: NextRequest) {
       .aggregate<{
         totalTenants: number;
         occupiedUnits: number;
-        expectedMonthlyRent: number;
       }>([
         { $match: { propertyId: { $in: propertyIds } } },
         {
@@ -168,7 +168,9 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
 
-    const { totalTenants = 0, occupiedUnits = 0, expectedMonthlyRent = 0 } = tenantsResult[0] || {};
+    const { totalTenants = 0, occupiedUnits = 0 } = tenantsResult[0] || {};
+
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
     // Current month range
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -299,10 +301,12 @@ export async function GET(request: NextRequest) {
     let totalOverdueAmount = 0;
 
     const bulkOps = activeTenantsForDues.map((tenant) => {
+      const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
       const { rentDue } = calculateRentDueToDate({
         leaseStartDate: tenant.leaseStartDate,
         monthlyRent: tenant.price || 0,
         today,
+        overrides,
       });
 
       const totalDue = rentDue + (tenant.deposit || 0);
@@ -339,13 +343,25 @@ export async function GET(request: NextRequest) {
       await db.collection("tenants").bulkWrite(bulkOps);
     }
 
+    const expectedMonthlyRent = roundMoney(
+      activeTenantsForDues.reduce((sum, tenant) => {
+        const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+        const effectiveMonthlyRent = resolveMonthlyRentForDate({
+          monthlyRent: tenant.price || 0,
+          date: today,
+          overrides,
+        });
+        return sum + effectiveMonthlyRent;
+      }, 0)
+    );
+
     // Final stats
     const stats: Stats = {
       activeProperties: properties.length,
       totalTenants,
       totalUnits,
       occupiedUnits,
-      expectedMonthlyRent: roundMoney(expectedMonthlyRent),
+      expectedMonthlyRent,
       totalMonthlyRent,
       totalRentPaid,
       overduePayments,

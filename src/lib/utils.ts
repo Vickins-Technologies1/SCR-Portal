@@ -1,6 +1,7 @@
 // src/lib/utils.ts
 import { UnitType } from '../types/property';
 import { Tenant, ResponseTenant } from '../types/tenant';
+import { RentPriceOverride } from '../types/rent-price-override';
 import { Db, ObjectId } from 'mongodb';
 
 interface LogMeta {
@@ -83,6 +84,59 @@ export interface RentDueResult {
 
 const roundCurrency = (value: number): number => Math.round(value);
 
+const toValidDate = (value?: Date | string): Date | null => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toMonthStart = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const normalizeOverrides = (overrides?: RentPriceOverride[]): RentPriceOverride[] => {
+  if (!overrides?.length) return [];
+  return overrides.filter((override) => override && override.status !== "inactive");
+};
+
+export const resolveMonthlyRentForDate = ({
+  monthlyRent,
+  date,
+  overrides,
+}: {
+  monthlyRent: number;
+  date: Date;
+  overrides?: RentPriceOverride[];
+}): number => {
+  const baseRent = Math.max(0, monthlyRent || 0);
+  const activeOverrides = normalizeOverrides(overrides);
+  if (!activeOverrides.length) return baseRent;
+
+  const monthStart = toMonthStart(date);
+  let matched: RentPriceOverride | null = null;
+
+  for (const override of activeOverrides) {
+    const start = toValidDate(override.startDate);
+    const end = toValidDate(override.endDate);
+    if (!start || !end) continue;
+    const startMonth = toMonthStart(start);
+    const endMonth = toMonthStart(end);
+
+    if (monthStart < startMonth || monthStart > endMonth) continue;
+
+    if (!matched) {
+      matched = override;
+      continue;
+    }
+
+    const matchedStart = toValidDate(matched.startDate);
+    if (matchedStart && start > matchedStart) {
+      matched = override;
+    }
+  }
+
+  if (!matched) return baseRent;
+  return Math.max(0, matched.price || 0);
+};
+
 export const calculateWalletBalanceFromPayments = ({
   rentPaid = 0,
   depositPaid = 0,
@@ -108,17 +162,25 @@ export const calculateRentDueToDate = ({
   leaseStartDate,
   monthlyRent,
   today = new Date(),
+  overrides,
 }: {
   leaseStartDate?: string;
   monthlyRent: number;
   today?: Date;
+  overrides?: RentPriceOverride[];
 }): RentDueResult => {
   const safeMonthlyRent = Math.max(0, monthlyRent || 0);
+  const hasOverrides = normalizeOverrides(overrides).length > 0;
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const currentDailyRent = safeMonthlyRent > 0 ? safeMonthlyRent / daysInCurrentMonth : 0;
+  const currentMonthlyRent = resolveMonthlyRentForDate({
+    monthlyRent: safeMonthlyRent,
+    date: today,
+    overrides,
+  });
+  const currentDailyRent = currentMonthlyRent > 0 ? currentMonthlyRent / daysInCurrentMonth : 0;
 
-  if (!leaseStartDate || safeMonthlyRent <= 0) {
+  if (!leaseStartDate || (!hasOverrides && safeMonthlyRent <= 0)) {
     return {
       rentDue: 0,
       monthsStayed: 0,
@@ -146,7 +208,18 @@ export const calculateRentDueToDate = ({
 
   const monthsStayed = Math.max(1, monthDiff + 1);
 
-  const rentDue = roundCurrency(monthsStayed * safeMonthlyRent);
+  let rentDueTotal = 0;
+  for (let i = 0; i < monthsStayed; i += 1) {
+    const monthStart = new Date(startMonthStart.getFullYear(), startMonthStart.getMonth() + i, 1);
+    const effectiveMonthlyRent = resolveMonthlyRentForDate({
+      monthlyRent: safeMonthlyRent,
+      date: monthStart,
+      overrides,
+    });
+    rentDueTotal += effectiveMonthlyRent;
+  }
+
+  const rentDue = roundCurrency(rentDueTotal);
 
   return {
     rentDue,
@@ -202,11 +275,22 @@ export const applyWalletToRent = ({
     walletCoverageRemainder: roundCurrency(walletCoverageRemainder),
   };
 };
-export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = new Date()): Promise<TenantDues> => {
+export const calculateTenantDues = async (
+  db: Db,
+  tenant: Tenant,
+  today: Date = new Date(),
+  rentOverrides?: RentPriceOverride[]
+): Promise<TenantDues> => {
   const { rentDue: totalRentDue, monthsStayed } = calculateRentDueToDate({
     leaseStartDate: tenant.leaseStartDate,
     monthlyRent: tenant.price,
     today,
+    overrides: rentOverrides,
+  });
+  const currentMonthlyRent = resolveMonthlyRentForDate({
+    monthlyRent: tenant.price,
+    date: today,
+    overrides: rentOverrides,
   });
   const totalDepositDue = tenant.deposit || 0;
   const totalUtilityDue = 0;
@@ -234,9 +318,9 @@ export const calculateTenantDues = async (db: Db, tenant: Tenant, today: Date = 
     monthsStayed,
     walletApplied,
     walletRemaining,
-    walletCoverageMonths: (tenant.price || 0) > 0 ? Math.floor(walletRemaining / (tenant.price || 1)) : 0,
+    walletCoverageMonths: currentMonthlyRent > 0 ? Math.floor(walletRemaining / currentMonthlyRent) : 0,
     walletCoverageRemainder: roundCurrency(
-      (tenant.price || 0) > 0 ? walletRemaining % (tenant.price || 1) : walletRemaining
+      currentMonthlyRent > 0 ? walletRemaining % currentMonthlyRent : walletRemaining
     ),
   };
 };

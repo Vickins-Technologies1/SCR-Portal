@@ -5,6 +5,7 @@ import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { calculateRentDueToDate, calculateTenantDues } from "@/lib/utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
 
 interface Property {
@@ -37,6 +38,7 @@ interface DuePayload {
 interface Tenant {
   _id: string;
   propertyId: string;
+  unitType: string;
   price: number;
   deposit: number;
   leaseStartDate: string | null;
@@ -99,6 +101,8 @@ export async function GET(request: NextRequest) {
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
     const startOfMonthISO = startOfMonth.toISOString();
     const endOfMonthISO = endOfMonth.toISOString();
+
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
     // Total units aggregation
     const totalUnitsResult = await db
@@ -230,10 +234,12 @@ export async function GET(request: NextRequest) {
 
     const bulkOps = activeTenants.map((tenant) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
+      const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
       const { rentDue } = calculateRentDueToDate({
         leaseStartDate: tenant.leaseStartDate,
         monthlyRent: tenant.price || 0,
         today,
+        overrides,
       });
       const totalDue = rentDue + (tenant.deposit || 0);
       const tenantTotals = paymentTotalsByTenant.get(tenantObjectId.toString()) || {
@@ -343,7 +349,9 @@ export async function POST(request: NextRequest) {
       totalUtilityPaid: paymentTotals.utilityPaid,
     };
 
-    const dues = await calculateTenantDues(db, tenantWithTotals as any, today);
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
+    const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+    const dues = await calculateTenantDues(db, tenantWithTotals as any, today, overrides);
 
     await db.collection("tenants").updateOne(
       { _id: new ObjectId(tenantId) },

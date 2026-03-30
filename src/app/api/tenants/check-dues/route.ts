@@ -5,7 +5,8 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { calculateRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
+import { calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "@/lib/utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
 interface Tenant {
   _id: ObjectId;
@@ -85,6 +86,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, stats: emptyStats });
     }
 
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
+
     // 1. Total Units
     const totalUnitsResult = await db.collection("properties")
       .aggregate([
@@ -158,10 +161,12 @@ export async function GET(request: NextRequest) {
     for (const tenant of activeTenants) {
       const tenantIdStr = tenant._id.toString();
       const paid = paidMap[tenantIdStr] || { rentPaid: 0, depositPaid: 0 };
+      const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
       const { rentDue, monthsStayed } = calculateRentDueToDate({
         leaseStartDate: tenant.leaseStartDate,
         monthlyRent: tenant.price,
         today,
+        overrides,
       });
       const depositDue = tenant.deposit || 0;
       const totalDue = rentDue + depositDue;
@@ -266,10 +271,13 @@ export async function POST(request: NextRequest) {
       .filter(p => p.type === "Utility")
       .reduce((sum, p) => sum + p.amount, 0);
 
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
+    const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
     const { rentDue, monthsStayed } = calculateRentDueToDate({
       leaseStartDate: tenant.leaseStartDate,
       monthlyRent: tenant.price,
       today,
+      overrides,
     });
     const depositDue = tenant.deposit || 0;
 
@@ -305,6 +313,12 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    const effectiveMonthlyRent = resolveMonthlyRentForDate({
+      monthlyRent: tenant.price,
+      date: today,
+      overrides,
+    });
+
     const dues = {
       rentDues,
       depositDues,
@@ -312,8 +326,8 @@ export async function POST(request: NextRequest) {
       totalRemainingDues,
       walletApplied: 0,
       walletRemaining: updatedWalletBalance,
-      walletCoverageMonths: tenant.price ? Math.floor(updatedWalletBalance / tenant.price) : 0,
-      walletCoverageRemainder: tenant.price ? updatedWalletBalance % tenant.price : updatedWalletBalance,
+      walletCoverageMonths: effectiveMonthlyRent ? Math.floor(updatedWalletBalance / effectiveMonthlyRent) : 0,
+      walletCoverageRemainder: effectiveMonthlyRent ? updatedWalletBalance % effectiveMonthlyRent : updatedWalletBalance,
     };
 
     logger.info("Tenant dues recalculated and totals synced", {

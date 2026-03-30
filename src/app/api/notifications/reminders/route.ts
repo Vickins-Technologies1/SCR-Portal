@@ -12,6 +12,8 @@ import { validateCsrfToken } from "../../../../lib/csrf";
 import logger from "../../../../lib/logger";
 import { Tenant } from "../../../../types/tenant";
 import { sendPaymentReminders } from "../../../../lib/reminders";
+import { resolveMonthlyRentForDate } from "../../../../lib/utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
 interface Notification {
   _id: string;
@@ -307,6 +309,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const notifications: Notification[] = [];
+    const today = new Date();
+    const propertyIds = Array.from(new Set(tenants.map((tenant) => tenant.propertyId)));
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
     for (const tenant of tenants) {
       let finalMessage = message ? sanitizeInput(message) : "";
@@ -318,8 +323,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       if (type === "payment") {
-        finalMessage = tenant.price
-          ? `Payment of Ksh. ${tenant.price.toFixed(2)} is due for ${tenant.name}`
+        const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+        const effectiveMonthlyRent = resolveMonthlyRentForDate({
+          monthlyRent: tenant.price,
+          date: today,
+          overrides,
+        });
+        finalMessage = effectiveMonthlyRent
+          ? `Payment of Ksh. ${effectiveMonthlyRent.toFixed(2)} is due for ${tenant.name}`
           : `Payment reminder for ${tenant.name}`;
       } else if (type === "maintenance") {
         finalMessage = finalMessage || "Scheduled maintenance for your property";

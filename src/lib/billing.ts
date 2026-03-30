@@ -1,4 +1,6 @@
 import { Db, ObjectId } from "mongodb";
+import { resolveMonthlyRentForDate } from "./utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 
 export type BillingPlan = "RentCollection" | "FullManagement";
 
@@ -42,33 +44,33 @@ export async function computeExpectedMonthlyIncome(db: Db, propertyId: string, n
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const results = await db.collection("tenants").aggregate([
-    { $match: { propertyId, status: { $ne: "inactive" } } },
-    {
-      $addFields: {
-        leaseStart: { $toDate: "$leaseStartDate" },
-        leaseEnd: { $toDate: "$leaseEndDate" },
-      },
-    },
-    {
-      $match: {
-        $expr: {
-          $and: [
-            { $lte: ["$leaseStart", endOfMonth] },
-            { $gte: ["$leaseEnd", startOfMonth] },
-          ],
-        },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: { $ifNull: ["$price", 0] } },
-      },
-    },
-  ]).toArray();
+  const tenants = await db.collection("tenants").find({
+    propertyId,
+    status: { $ne: "inactive" },
+  }).toArray();
 
-  return results[0]?.total || 0;
+  if (tenants.length === 0) return 0;
+
+  const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [propertyId]);
+  const total = tenants.reduce((sum, tenant) => {
+    const leaseStart = tenant.leaseStartDate ? new Date(tenant.leaseStartDate) : null;
+    const leaseEnd = tenant.leaseEndDate ? new Date(tenant.leaseEndDate) : null;
+    if (!leaseStart || !leaseEnd || Number.isNaN(leaseStart.getTime()) || Number.isNaN(leaseEnd.getTime())) {
+      return sum;
+    }
+    if (leaseStart > endOfMonth || leaseEnd < startOfMonth) {
+      return sum;
+    }
+    const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+    const effectiveMonthlyRent = resolveMonthlyRentForDate({
+      monthlyRent: tenant.price || 0,
+      date: now,
+      overrides,
+    });
+    return sum + effectiveMonthlyRent;
+  }, 0);
+
+  return total;
 }
 
 export async function getOwnerDueStatus(db: Db, ownerId: string, now: Date = new Date()) {

@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Home, Pencil, Trash2, Plus, ArrowUpDown } from "lucide-react";
+import { Home, Pencil, Trash2, Plus, ArrowUpDown, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
+import PriceOverrideModal from "../components/PriceOverrideModal";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface Property {
@@ -123,8 +124,10 @@ export default function PropertiesPage() {
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const [overrideProperty, setOverrideProperty] = useState<Property | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
   const [propertyName, setPropertyName] = useState("");
   const [address, setAddress] = useState("");
@@ -281,6 +284,12 @@ export default function PropertiesPage() {
     if (!canEditProperties) return;
     setPropertyToDelete(id);
     setIsDeleteModalOpen(true);
+  }, [canEditProperties]);
+
+  const openOverrideModal = useCallback((property: Property) => {
+    if (!canEditProperties) return;
+    setOverrideProperty(property);
+    setIsOverrideModalOpen(true);
   }, [canEditProperties]);
 
   const confirmDelete = useCallback(async () => {
@@ -583,6 +592,14 @@ export default function PropertiesPage() {
                         {canEditProperties && (
                           <>
                           <button
+                            onClick={() => openOverrideModal(p)}
+                            className="text-primary hover:text-primary-hover transition"
+                            title="Schedule Price Change"
+                            aria-label={`Schedule price change for ${p.name}`}
+                          >
+                            <Calendar className="h-5 w-5" />
+                          </button>
+                          <button
                             onClick={() => openEditModal(p)}
                             className="text-primary hover:text-primary-hover transition"
                             title="Edit Property"
@@ -873,6 +890,16 @@ export default function PropertiesPage() {
               </Modal>
             )}
           </AnimatePresence>
+          <PriceOverrideModal
+            isOpen={isOverrideModalOpen}
+            onClose={() => {
+              setIsOverrideModalOpen(false);
+              setOverrideProperty(null);
+            }}
+            property={overrideProperty}
+            csrfToken={csrfToken}
+            canEdit={canEditProperties}
+          />
         </main>
       </div>
       <style jsx global>{`

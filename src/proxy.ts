@@ -151,6 +151,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   // Owner/team stats & charts
   "/api/ownerstats": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/ownercharts": { roles: ["propertyOwner", "teamMember"], isApi: true },
+  "/api/rent-price-overrides": { roles: ["propertyOwner", "teamMember"], isApi: true },
 
   // Page routes (client-side routing protection)
   "/property-owner-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },

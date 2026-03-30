@@ -7,6 +7,8 @@ import { sendReminderEmail } from "./email";
 import logger from "./logger";
 import { Property } from "../types/property";
 import { Tenant } from "../types/tenant";
+import { resolveMonthlyRentForDate } from "./utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 
 type ReminderType = "fiveDaysBefore" | "paymentDate";
 
@@ -156,6 +158,10 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
   }
 
   const tenantIds = tenants.map((tenant) => tenant._id.toString());
+  const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(
+    db,
+    Array.from(propertyMap.keys())
+  );
   const payments = await db.collection<Payment>("payments").find({
     tenantId: { $in: tenantIds },
     status: "completed",
@@ -220,7 +226,13 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       unit.uniqueType === unitKey || unit.type === unitKey
     );
 
-    const rentAmount = unitConfig?.price ?? tenant.price;
+    const baseRentAmount = unitConfig?.price ?? tenant.price;
+    const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+    const rentAmount = resolveMonthlyRentForDate({
+      monthlyRent: baseRentAmount,
+      date: dueDate,
+      overrides,
+    });
     const depositAmount = unitConfig?.deposit ?? tenant.deposit ?? 0;
 
     const rangeStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);

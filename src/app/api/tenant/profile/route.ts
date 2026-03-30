@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
-import { calculateRentDueToDate, calculateWalletBalanceFromPayments } from "../../../../lib/utils";
+import { calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "../../../../lib/utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
 interface Tenant {
   _id: ObjectId;
@@ -198,6 +199,8 @@ export async function GET(request: NextRequest) {
     };
 
     let analytics = null;
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenantDoc.propertyId]);
+    const rentOverrides = rentOverrideMap.get(buildOverrideKey(tenantDoc.propertyId, tenantDoc.unitType)) ?? [];
 
     if (shouldCalculateDues) {
       const today = new Date();
@@ -205,6 +208,7 @@ export async function GET(request: NextRequest) {
         leaseStartDate: tenantDoc.leaseStartDate,
         monthlyRent: tenantDoc.price,
         today,
+        overrides: rentOverrides,
       });
 
       const payments = await db
@@ -256,6 +260,11 @@ export async function GET(request: NextRequest) {
       );
 
       const monthlyPayments = await getMonthlyPayments(db, targetTenantId, monthsStayed);
+      const effectiveMonthlyRent = resolveMonthlyRentForDate({
+        monthlyRent: tenantDoc.price,
+        date: today,
+        overrides: rentOverrides,
+      });
 
       Object.assign(tenant, {
         monthsStayed,
@@ -272,8 +281,12 @@ export async function GET(request: NextRequest) {
           totalRemainingDues,
           walletApplied: 0,
           walletRemaining: updatedWalletBalance,
-          walletCoverageMonths: tenantDoc.price ? Math.floor(updatedWalletBalance / tenantDoc.price) : 0,
-          walletCoverageRemainder: tenantDoc.price ? updatedWalletBalance % tenantDoc.price : updatedWalletBalance,
+          walletCoverageMonths: effectiveMonthlyRent
+            ? Math.floor(updatedWalletBalance / effectiveMonthlyRent)
+            : 0,
+          walletCoverageRemainder: effectiveMonthlyRent
+            ? updatedWalletBalance % effectiveMonthlyRent
+            : updatedWalletBalance,
         },
       });
 

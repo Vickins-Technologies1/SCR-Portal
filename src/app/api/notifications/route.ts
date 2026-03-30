@@ -12,6 +12,7 @@ import nodemailer from "nodemailer";
 import logger from "../../../lib/logger";
 import { Tenant } from "../../../types/tenant";
 import { calculateTenantDues, TenantDues } from "../../../lib/utils";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds } from "../../../lib/payment-totals";
 
 interface Notification {
@@ -190,6 +191,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       db,
       tenants.map((tenant) => tenant._id)
     );
+    const propertyIds = Array.from(new Set(tenants.map((tenant) => tenant.propertyId)));
+    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
     // === PROCESS EACH TENANT ===
     for (const tenant of tenants) {
@@ -209,7 +212,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               totalUtilityPaid: tenantTotals.utilityPaid,
             }
           : tenant;
-        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today);
+        const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today, overrides);
         if (dues.paymentStatus === "up-to-date") {
           logger.info("Skipping up-to-date tenant", { tenantId: tenant._id.toString() });
           continue;
