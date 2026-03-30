@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Cookies from "js-cookie";
+import { withCsrfRetry } from "@/lib/csrf-client";
 
 interface SupportMessage {
   _id: string;
@@ -174,22 +175,27 @@ export default function SupportWidget() {
 
   const pingPresence = useCallback(
     async (typing?: boolean) => {
-      if (!canShow || !csrfToken) return;
+      if (!canShow) return;
+      const token = await ensureCsrfToken();
+      if (!token) return;
       try {
-        await fetch("/api/support/presence", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken,
-          },
-          body: JSON.stringify({ typing }),
-        });
+        await withCsrfRetry(token, (activeToken) =>
+          fetch("/api/support/presence", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "x-csrf-token": activeToken,
+            },
+            body: JSON.stringify({ typing }),
+          }),
+          refreshCsrfToken
+        );
       } catch {
         // ignore
       }
     },
-    [canShow, csrfToken]
+    [canShow, ensureCsrfToken, refreshCsrfToken]
   );
 
   useEffect(() => {
@@ -273,15 +279,20 @@ export default function SupportWidget() {
     setIsSending(true);
     try {
       const uploaded = attachments.length > 0 ? await uploadAttachments(token) : [];
-      const res = await fetch("/api/support/messages", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": token,
-        },
-        body: JSON.stringify({ message: messageInput.trim(), attachments: uploaded }),
-      });
+      const res = await withCsrfRetry(
+        token,
+        (activeToken) =>
+        fetch("/api/support/messages", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": activeToken,
+          },
+          body: JSON.stringify({ message: messageInput.trim(), attachments: uploaded }),
+        }),
+        refreshCsrfToken
+      );
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Failed to send message");
@@ -308,15 +319,20 @@ export default function SupportWidget() {
     }
     setIsSending(true);
     try {
-      const res = await fetch("/api/support/messages", {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": token,
-        },
-        body: JSON.stringify({ messageId: editingId, message: editingText.trim() }),
-      });
+      const res = await withCsrfRetry(
+        token,
+        (activeToken) =>
+        fetch("/api/support/messages", {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": activeToken,
+          },
+          body: JSON.stringify({ messageId: editingId, message: editingText.trim() }),
+        }),
+        refreshCsrfToken
+      );
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Failed to update message");
@@ -342,15 +358,20 @@ export default function SupportWidget() {
     }
     setIsSending(true);
     try {
-      const res = await fetch("/api/support/messages", {
-        method: "DELETE",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": token,
-        },
-        body: JSON.stringify({ messageId }),
-      });
+      const res = await withCsrfRetry(
+        token,
+        (activeToken) =>
+        fetch("/api/support/messages", {
+          method: "DELETE",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": activeToken,
+          },
+          body: JSON.stringify({ messageId }),
+        }),
+        refreshCsrfToken
+      );
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Failed to delete message");
@@ -384,12 +405,27 @@ export default function SupportWidget() {
 
   const formatTime = (value: string) =>
     new Date(value).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-
-  const lastAdminMessage = useMemo(() => {
-    const latest = [...messages].reverse().find((m) => m.senderRole === "admin");
-    if (!latest) return "";
-    return latest.message || (latest.attachments && latest.attachments.length > 0 ? "Attachment sent" : "");
-  }, [messages]);
+  const isSameCalendarDay = (leftDate: Date, rightDate: Date) => {
+    return (
+      leftDate.getFullYear() === rightDate.getFullYear() &&
+      leftDate.getMonth() === rightDate.getMonth() &&
+      leftDate.getDate() === rightDate.getDate()
+    );
+  };
+  const formatDayLabel = (value: string) => {
+    const messageDate = new Date(value);
+    const now = new Date();
+    if (isSameCalendarDay(messageDate, now)) return "Today";
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (isSameCalendarDay(messageDate, yesterday)) return "Yesterday";
+    return messageDate.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
   if (!canShow) return null;
 
@@ -444,130 +480,144 @@ export default function SupportWidget() {
                   </div>
                 ) : (
                   <>
-                    {messages.map((message) => {
+                    {messages.map((message, index) => {
                       const isOwnerMessage = message.senderRole === "propertyOwner";
                       const isEditing = editingId === message._id;
+                      const previous = index > 0 ? messages[index - 1] : null;
+                      const showDate =
+                        !previous ||
+                        !isSameCalendarDay(new Date(previous.createdAt), new Date(message.createdAt));
                       return (
-                        <div
-                          key={message._id}
-                          className={`flex ${isOwnerMessage ? "justify-end" : "justify-start"}`}
-                        >
-                          <div
-                            className={`max-w-[78%] rounded-2xl px-4 py-3 text-xs shadow-sm ${
-                              isOwnerMessage
-                                ? "bg-primary text-white"
-                                : "bg-white/80 text-foreground border border-border"
-                            }`}
-                          >
-                            {isEditing ? (
-                              <div className="space-y-2">
-                                <textarea
-                                  value={editingText}
-                                  onChange={(e) => setEditingText(e.target.value)}
-                                  rows={2}
-                                  className="w-full resize-none rounded-xl bg-white/15 px-3 py-2 text-xs text-white placeholder:text-white/70 focus:outline-none"
-                                />
-                                <div className="flex items-center gap-2 justify-end">
-                                  <button
-                                    onClick={() => {
-                                      setEditingId(null);
-                                      setEditingText("");
-                                    }}
-                                    className="text-[10px] text-white/80 hover:text-white"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={handleEditSave}
-                                    disabled={isSending}
-                                    className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-white/30 disabled:opacity-60"
-                                  >
-                                    <Check className="h-3 w-3" />
-                                    Save
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {message.message && <p className="whitespace-pre-wrap">{message.message}</p>}
-                                {message.attachments && message.attachments.length > 0 && (
-                                  <div className="mt-3 grid grid-cols-1 gap-2">
-                                    {message.attachments.map((attachment) => {
-                                      const isImage = attachment.type.startsWith("image/");
-                                      return (
-                                        <a
-                                          key={attachment.url}
-                                          href={attachment.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className={`flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-[10px] ${
-                                            isOwnerMessage ? "text-white" : "text-foreground"
-                                          }`}
-                                        >
-                                          {isImage ? (
-                                            <img
-                                              src={attachment.url}
-                                              alt={attachment.name}
-                                              className="h-12 w-16 rounded-lg object-cover"
-                                            />
-                                          ) : (
-                                            <div className="h-12 w-16 rounded-lg bg-white/20 flex items-center justify-center">
-                                              <FileText className="h-5 w-5" />
-                                            </div>
-                                          )}
-                                          <div className="flex-1">
-                                            <p className="font-medium truncate">{attachment.name}</p>
-                                            <p className="text-[9px] opacity-70">
-                                              {Math.round(attachment.size / 1024)} KB
-                                            </p>
-                                          </div>
-                                        </a>
-                                      );
-                                    })}
+                        <React.Fragment key={message._id}>
+                          {showDate && (
+                            <div className="flex justify-center">
+                              <span className="rounded-full bg-white/70 px-3 py-1 text-[10px] font-semibold text-muted-foreground">
+                                {formatDayLabel(message.createdAt)}
+                              </span>
+                            </div>
+                          )}
+                          <div className={`flex ${isOwnerMessage ? "justify-end" : "justify-start"}`}>
+                            <div
+                              className={`max-w-[78%] rounded-2xl px-4 py-3 text-xs shadow-sm ${
+                                isOwnerMessage
+                                  ? "bg-primary text-white"
+                                  : "bg-white/80 text-foreground border border-border"
+                              }`}
+                            >
+                              {isEditing ? (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editingText}
+                                    onChange={(e) => setEditingText(e.target.value)}
+                                    rows={2}
+                                    className="w-full resize-none rounded-xl bg-white/15 px-3 py-2 text-xs text-white placeholder:text-white/70 focus:outline-none"
+                                  />
+                                  <div className="flex items-center gap-2 justify-end">
+                                    <button
+                                      onClick={() => {
+                                        setEditingId(null);
+                                        setEditingText("");
+                                      }}
+                                      className="text-[10px] text-white/80 hover:text-white"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      onClick={handleEditSave}
+                                      disabled={isSending}
+                                      className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-white/30 disabled:opacity-60"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                      Save
+                                    </button>
                                   </div>
-                                )}
-                                <div className={`mt-2 flex items-center justify-between text-[10px] ${isOwnerMessage ? "text-white/80" : "text-muted-foreground"}`}>
-                                  <span>
-                                    {formatTime(message.createdAt)}
-                                    {message.updatedAt ? " · edited" : ""}
-                                  </span>
-                                  {isOwnerMessage && (
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={() => {
-                                          setEditingId(message._id);
-                                          setEditingText(message.message);
-                                        }}
-                                        className="hover:text-white"
-                                        title="Edit message"
-                                      >
-                                        <PencilLine className="h-3 w-3" />
-                                      </button>
-                                      {deleteConfirmId === message._id ? (
-                                        <button
-                                          onClick={() => handleDelete(message._id)}
-                                          disabled={isSending}
-                                          className="hover:text-white disabled:opacity-60"
-                                          title="Confirm delete"
-                                        >
-                                          <Check className="h-3 w-3" />
-                                        </button>
-                                      ) : (
-                                        <button
-                                          onClick={() => setDeleteConfirmId(message._id)}
-                                          className="hover:text-white"
-                                          title="Delete message"
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </button>
-                                      )}
+                                </div>
+                              ) : (
+                                <>
+                                  {message.message && <p className="whitespace-pre-wrap">{message.message}</p>}
+                                  {message.attachments && message.attachments.length > 0 && (
+                                    <div className="mt-3 grid grid-cols-1 gap-2">
+                                      {message.attachments.map((attachment) => {
+                                        const isImage = attachment.type.startsWith("image/");
+                                        return (
+                                          <a
+                                            key={attachment.url}
+                                            href={attachment.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className={`flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-[10px] ${
+                                              isOwnerMessage ? "text-white" : "text-foreground"
+                                            }`}
+                                          >
+                                            {isImage ? (
+                                              <img
+                                                src={attachment.url}
+                                                alt={attachment.name}
+                                                className="h-12 w-16 rounded-lg object-cover"
+                                              />
+                                            ) : (
+                                              <div className="h-12 w-16 rounded-lg bg-white/20 flex items-center justify-center">
+                                                <FileText className="h-5 w-5" />
+                                              </div>
+                                            )}
+                                            <div className="flex-1">
+                                              <p className="font-medium truncate">{attachment.name}</p>
+                                              <p className="text-[9px] opacity-70">
+                                                {Math.round(attachment.size / 1024)} KB
+                                              </p>
+                                            </div>
+                                          </a>
+                                        );
+                                      })}
                                     </div>
                                   )}
-                                </div>
-                              </>
-                            )}
+                                  <div
+                                    className={`mt-2 flex items-center justify-between text-[10px] ${
+                                      isOwnerMessage ? "text-white/80" : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    <span>
+                                      {formatTime(message.createdAt)}
+                                      {message.updatedAt ? " · edited" : ""}
+                                    </span>
+                                    {isOwnerMessage && (
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => {
+                                            setEditingId(message._id);
+                                            setEditingText(message.message);
+                                          }}
+                                          className="hover:text-white"
+                                          title="Edit message"
+                                        >
+                                          <PencilLine className="h-3 w-3" />
+                                        </button>
+                                        {deleteConfirmId === message._id ? (
+                                          <button
+                                            onClick={() => handleDelete(message._id)}
+                                            disabled={isSending}
+                                            className="hover:text-white disabled:opacity-60"
+                                            title="Confirm delete"
+                                          >
+                                            <Check className="h-3 w-3" />
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => setDeleteConfirmId(message._id)}
+                                            className="hover:text-white"
+                                            title="Delete message"
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        </React.Fragment>
                       );
                     })}
                     {presence.adminTyping && (
@@ -576,13 +626,6 @@ export default function SupportWidget() {
                   </>
                 )}
               </div>
-
-              {lastAdminMessage && (
-                <div className="px-5 py-2 border-t border-border bg-white/60 text-[10px] text-muted-foreground">
-                  Latest reply: {lastAdminMessage.slice(0, 60)}
-                  {lastAdminMessage.length > 60 ? "…" : ""}
-                </div>
-              )}
 
               <div className="px-5 py-4 border-t border-border bg-white/70">
                 {attachments.length > 0 && (

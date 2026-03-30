@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:e2e": "vitest run src/e2e/**/*.e2e.test.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.1",
@@ -72,6 +74,7 @@
     "postcss": "^8.5.6",
     "postinstall-postinstall": "^2.1.0",
     "tailwindcss": "^4.1.11",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.2"
   }
 }
