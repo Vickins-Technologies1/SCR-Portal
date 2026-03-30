@@ -858,8 +858,8 @@ export default function AdminSupportPage() {
                                     </button>
                                     <button
                                       onClick={handleEditSave}
-                                      disabled={isSending}
-                                      className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-white/30"
+                                      disabled={isSending || !csrfToken}
+                                      className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-white/30 disabled:opacity-60"
                                     >
                                       <Check className="h-3 w-3" />
                                       Save
@@ -929,7 +929,8 @@ export default function AdminSupportPage() {
                                         {deleteConfirmId === message._id ? (
                                           <button
                                             onClick={() => handleDelete(message._id)}
-                                            className="hover:text-white"
+                                            disabled={isSending || !csrfToken}
+                                            className="hover:text-white disabled:opacity-60"
                                             title="Confirm delete"
                                           >
                                             <Check className="h-3 w-3" />
@@ -1005,7 +1006,7 @@ export default function AdminSupportPage() {
                       accept="image/png,image/jpeg,application/pdf"
                       className="hidden"
                       onChange={handleAttachmentSelect}
-                      disabled={!selectedOwnerId || isSending || isUploading}
+                      disabled={!selectedOwnerId || isSending || isUploading || !csrfToken}
                     />
                     <Paperclip className="h-4 w-4" />
                   </label>
@@ -1021,7 +1022,7 @@ export default function AdminSupportPage() {
                   />
                   <button
                     onClick={handleSend}
-                    disabled={!selectedOwnerId || isSending || isUploading || (!messageInput.trim() && attachments.length === 0)}
+                    disabled={!selectedOwnerId || isSending || isUploading || !csrfToken || (!messageInput.trim() && attachments.length === 0)}
                     className="h-11 w-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-md hover:bg-primary-hover transition disabled:opacity-60"
                     title="Send message"
                   >
