@@ -1,24 +1,24 @@
 // src/app/api/csrf-token/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { generateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const existingToken = request.cookies.get("csrf-token")?.value;
+    if (existingToken) {
+      return NextResponse.json({ success: true, csrfToken: existingToken });
+    }
+
     const csrfToken = generateCsrfToken();
 
     const response = NextResponse.json({ success: true, csrfToken });
 
-    response.cookies.set('csrf-token', '', {
-      path: '/api',
-      maxAge: 0,
-    });
-
-    response.cookies.set('csrf-token', csrfToken, {
+    response.cookies.set("csrf-token", csrfToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
       maxAge: 60 * 60,
     });
 
