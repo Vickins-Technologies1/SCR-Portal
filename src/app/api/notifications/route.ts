@@ -230,7 +230,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       const shortMessage = finalMessage.slice(0, 160);
-      const effectiveMethod = deliveryMethod === "both" || !tenant.deliveryMethod ? deliveryMethod : tenant.deliveryMethod;
+      const effectiveMethod = deliveryMethod;
 
       // === SEND SMS (BlessedTexts) ===
       if (["sms", "both"].includes(effectiveMethod) && tenant.phone) {
