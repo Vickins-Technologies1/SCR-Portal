@@ -187,12 +187,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
       }
 
-      // Since _id is stored as string (uuid), we use it directly
-      // If someone sends ObjectId hex string by mistake, we still treat it as string
-      const filter = {
-        _id: notificationId,
+      const filter: Record<string, unknown> = {
         ownerId: effectiveOwnerId,
       };
+
+      if (ObjectId.isValid(notificationId)) {
+        filter.$or = [
+          { _id: notificationId },
+          { _id: new ObjectId(notificationId) },
+        ];
+      } else {
+        filter._id = notificationId;
+      }
 
       const result = await db.collection<Notification>("notifications").updateOne(
         filter,
