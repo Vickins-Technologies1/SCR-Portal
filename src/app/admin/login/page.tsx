@@ -82,7 +82,7 @@ export default function AdminLogin() {
 
   return (
     <PublicThemeWrapper>
-      <div className="min-h-[100svh] flex flex-col lg:flex-row bg-background text-foreground">
+      <div className="min-h-[100svh] lg:h-[100svh] flex flex-col lg:flex-row bg-background text-foreground overflow-hidden">
         {/* LEFT: Branding – hidden on mobile */}
         <div
           className="
@@ -159,14 +159,14 @@ export default function AdminLogin() {
             </motion.div>
           </div>
 
-          <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
+          <div className="relative z-10 max-w-lg text-center space-y-4 xl:space-y-6">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
               <Image
                 src="/logo.png"
                 alt="Sorana Admin Portal"
                 width={400}
                 height={140}
-                className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
+                className="mx-auto drop-shadow-xl max-w-[240px] sm:max-w-[280px] xl:max-w-[320px]"
                 priority
               />
             </motion.div>
@@ -201,26 +201,26 @@ export default function AdminLogin() {
         </div>
 
         {/* RIGHT: Form */}
-        <div className="flex-1 flex items-center justify-center px-4 py-3 sm:py-6 md:py-8 bg-background/80">
+        <div className="flex-1 flex items-center justify-center px-4 py-2 sm:py-4 md:py-6 bg-background/80">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: "easeOut" }}
-            className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem]"
+            className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem] max-h-[90svh]"
           >
             {/* Mobile logo */}
-            <div className="lg:hidden flex justify-center pt-6 pb-4">
+            <div className="lg:hidden flex justify-center pt-4 pb-3">
               <Image
                 src="/logo.png"
                 alt="Sorana"
                 width={240}
                 height={80}
-                className="drop-shadow-lg max-w-[180px] xs:max-w-[200px]"
+                className="drop-shadow-lg max-w-[160px] xs:max-w-[180px]"
                 priority
               />
             </div>
 
-            <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-3 sm:pt-4 pb-4 sm:pb-5 space-y-2.5 sm:space-y-3">
+            <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-2 sm:pt-3 pb-3 sm:pb-4 space-y-2 sm:space-y-2.5">
               <div className="text-center space-y-1">
                 <h1 className="text-lg xs:text-xl sm:text-2xl md:text-2.5xl font-extrabold text-gradient-primary">
                   Admin Portal Login
@@ -236,7 +236,7 @@ export default function AdminLogin() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
+              <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-3.5 pt-1">
                 <div>
                   <input
                     type="email"
@@ -299,16 +299,35 @@ export default function AdminLogin() {
                     isLoading || formErrors.email || formErrors.password ? "pointer-events-none" : ""
                   }`}
                 >
-                  {isLoading && (
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  {isLoading ? (
+                    <span className="flex items-center justify-center gap-3">
+                      <span className="relative h-1.5 w-16 overflow-hidden rounded-full bg-white/30">
+                        <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/80 to-transparent animate-admin-login-shimmer" />
+                      </span>
+                      <span className="tracking-wide">Authenticating</span>
+                    </span>
+                  ) : (
+                    "Sign In"
                   )}
-                  {isLoading ? "Authenticating..." : "Sign In"}
                 </motion.button>
               </form>
             </div>
           </motion.div>
         </div>
       </div>
+      <style jsx global>{`
+        @keyframes admin-login-shimmer {
+          0% {
+            transform: translateX(-120%);
+          }
+          100% {
+            transform: translateX(120%);
+          }
+        }
+        .animate-admin-login-shimmer {
+          animation: admin-login-shimmer 1.4s ease-in-out infinite;
+        }
+      `}</style>
     </PublicThemeWrapper>
   );
 }
