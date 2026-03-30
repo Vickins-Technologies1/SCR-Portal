@@ -57,6 +57,17 @@ interface VacateRequestEmailOptions {
   dashboardUrl: string;
 }
 
+interface TenantDeletionRequestEmailOptions {
+  to: string;
+  ownerName: string;
+  tenantName: string;
+  propertyName: string;
+  houseNumber?: string;
+  unitType?: string;
+  requestedBy: string;
+  dashboardUrl: string;
+}
+
 interface ResetEmailOptions {
   to: string;
   name: string;
@@ -424,5 +435,53 @@ export async function sendVacateRequestEmail({
   } catch (error) {
     console.error(`Error sending vacate request email to ${to}:`, error);
     throw new Error("Failed to send vacate request email");
+  }
+}
+
+export async function sendTenantDeletionRequestEmail({
+  to,
+  ownerName,
+  tenantName,
+  propertyName,
+  houseNumber,
+  unitType,
+  requestedBy,
+  dashboardUrl,
+}: TenantDeletionRequestEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const detailItems = [
+      `<li><strong>Tenant:</strong> ${tenantName}</li>`,
+      `<li><strong>Property:</strong> ${propertyName}</li>`,
+      houseNumber ? `<li><strong>House/Unit:</strong> ${houseNumber}</li>` : "",
+      unitType ? `<li><strong>Unit Type:</strong> ${unitType}</li>` : "",
+      `<li><strong>Requested By:</strong> ${requestedBy}</li>`,
+    ].filter(Boolean).join("");
+
+    const html = generateStyledTemplate({
+      name: ownerName || "Property Owner",
+      title: "Tenant Deletion Request",
+      intro: "A team member has requested to delete a tenant. Please review and approve before removal.",
+      details: `
+        <ul>${detailItems}</ul>
+        <p style="text-align: center; margin-top: 32px;">
+          <a href="${dashboardUrl}" class="button">Review Deletion Requests</a>
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Tenant Deletion Request Submitted",
+      html,
+    });
+    console.log(`Tenant deletion request email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending tenant deletion request email to ${to}:`, error);
+    throw new Error("Failed to send tenant deletion request email");
   }
 }

@@ -97,6 +97,7 @@ const SELF_HANDLED_CSRF_ROUTES = [
   "/api/tenants/maintenance",
   "/api/tenants/vacate",
   "/api/property-owners/vacate",
+  "/api/property-owners/tenant-deletions",
   "/api/tenant/payments",
   "/api/tenant/change-password",
   "/api/tenant/profile",
@@ -140,6 +141,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/tenants/maintenance": { roles: ["tenant", "propertyOwner", "teamMember"], isApi: true },
   "/api/tenants/vacate": { roles: ["tenant", "propertyOwner"], isApi: true },
   "/api/property-owners/vacate": { roles: ["propertyOwner", "teamMember"], isApi: true },
+  "/api/property-owners/tenant-deletions": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/update-wallet": { roles: ["propertyOwner", "teamMember"], isApi: true },
 
   // Impersonation

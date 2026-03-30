@@ -54,6 +54,7 @@ interface TenantsTableProps {
   csrfToken: string | null | undefined;
   canManageTenants?: boolean;
   canSendNotifications?: boolean;
+  pendingDeletionIds?: string[];
   onEdit: (tenant: ResponseTenant) => void;
   onDelete: (id: string) => void;
   onResendWelcome: (tenant: ResponseTenant) => void;   // ← NEW prop
@@ -74,12 +75,14 @@ export default function TenantsTable({
   csrfToken,
   canManageTenants = true,
   canSendNotifications = true,
+  pendingDeletionIds = [],
   onEdit,
   onDelete,
   onResendWelcome,   // ← NEW
 }: TenantsTableProps) {
   const router = useRouter();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
+  const pendingDeletionSet = useMemo(() => new Set(pendingDeletionIds), [pendingDeletionIds]);
 
   const getUnitDisplayName = (tenant: ResponseTenant): string => {
     if (!tenant.unitIdentifier) return "—";
@@ -356,13 +359,23 @@ export default function TenantsTable({
                 {displayedTenants.map((tenant) => {
                   const property = properties.find((p) => p._id === tenant.propertyId);
                   const paymentSnapshot = getPaymentSnapshot(tenant);
+                  const hasPendingDeletion = pendingDeletionSet.has(tenant._id);
                   return (
                     <tr
                       key={tenant._id}
                       className="hover:bg-primary/5 cursor-pointer transition"
                       onClick={() => handleTenantClick(tenant._id)}
                     >
-                      <td className="font-medium text-gray-900">{tenant.name}</td>
+                      <td className="font-medium text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span>{tenant.name}</span>
+                          {hasPendingDeletion && (
+                            <span className="px-2 py-0.5 text-[10px] rounded-full font-semibold bg-yellow-100 text-yellow-800">
+                              Pending deletion
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="text-gray-600">{tenant.email}</td>
                       <td className="text-gray-600">{property?.name || "—"}</td>
                       <td className="text-gray-600">{getUnitDisplayName(tenant)}</td>

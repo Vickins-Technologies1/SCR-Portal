@@ -4,6 +4,7 @@ import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import MaintenanceRequests from "./components/MaintenanceRequests";
 import VacateRequests from "./components/VacateRequests";
+import TenantDeletionRequests from "./components/TenantDeletionRequests";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -621,6 +622,7 @@ export default function PropertyOwnerDashboard() {
 
                   {/* MAINTENANCE REQUESTS */}
                   <div className="mt-8 space-y-8">
+                    {role === "propertyOwner" && <TenantDeletionRequests csrfToken={csrfToken!} />}
                     <VacateRequests csrfToken={csrfToken!} />
                     <MaintenanceRequests
                       userId={ownerIdFromCookie || loggedInUserId!}

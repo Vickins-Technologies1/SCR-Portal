@@ -73,6 +73,7 @@ export default function TenantsPage() {
   const [editingTenant, setEditingTenant] = useState<ResponseTenant | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<string | null>(null);
   const [pendingTenantData, setPendingTenantData] = useState<Partial<TenantRequest> | null>(null);
+  const [pendingDeletionIds, setPendingDeletionIds] = useState<string[]>([]);
   const [csrfToken, setCsrfToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -271,6 +272,27 @@ export default function TenantsPage() {
     } catch {}
   }, [effectiveOwnerId, csrfToken]);
 
+  const fetchPendingDeletionRequests = useCallback(async () => {
+    if (!effectiveOwnerId || !csrfToken || role !== "teamMember") {
+      setPendingDeletionIds([]);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/property-owners/tenant-deletions?status=Pending", {
+        headers: { "x-csrf-token": csrfToken },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const ids = (data.data?.requests || []).map((req: any) => req.tenantId).filter(Boolean);
+        setPendingDeletionIds(ids);
+      }
+    } catch {
+      // ignore
+    }
+  }, [effectiveOwnerId, csrfToken, role]);
+
   // Load all data when effectiveOwnerId & csrfToken are ready
   useEffect(() => {
     if (effectiveOwnerId && csrfToken) {
@@ -280,6 +302,7 @@ export default function TenantsPage() {
         fetchProperties(),
         fetchPendingInvoices(),
         fetchDueStatus(),
+        fetchPendingDeletionRequests(),
       ]).catch(() => setError("Failed to load initial data."));
     }
   }, [
@@ -293,6 +316,7 @@ export default function TenantsPage() {
     fetchProperties,
     fetchPendingInvoices,
     fetchDueStatus,
+    fetchPendingDeletionRequests,
   ]);
 
   // ────────────────────────────────────────────────
@@ -408,8 +432,9 @@ export default function TenantsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setSuccessMessage("Tenant deleted successfully!");
+        setSuccessMessage(data.message || "Tenant deleted successfully!");
         fetchTenants();
+        fetchPendingDeletionRequests();
       } else {
         setError(data.message || "Failed to delete tenant");
       }
@@ -533,6 +558,7 @@ export default function TenantsPage() {
               isLoading={isLoading}
               userId={effectiveOwnerId} // ← changed to effective
               csrfToken={csrfToken}
+              pendingDeletionIds={pendingDeletionIds}
               onEdit={openEditModal}
               onDelete={(id) => {
                 setTenantToDelete(id);
@@ -578,7 +604,10 @@ export default function TenantsPage() {
             {isDeleteModalOpen && (
               <Modal title="Confirm Delete" isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}>
                 <p className="mb-6 text-gray-700">
-                  Are you sure you want to delete this tenant? This action cannot be undone.
+                  Are you sure you want to delete this tenant?{" "}
+                  {role === "teamMember"
+                    ? "This will send a request to the owner for approval before the tenant is deleted."
+                    : "This action cannot be undone."}
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
@@ -592,7 +621,7 @@ export default function TenantsPage() {
                     disabled={isLoading}
                     className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
                   >
-                    {isLoading ? "Deleting..." : "Delete"}
+                    {isLoading ? "Deleting..." : role === "teamMember" ? "Request Approval" : "Delete"}
                   </button>
                 </div>
               </Modal>

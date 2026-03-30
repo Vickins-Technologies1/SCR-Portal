@@ -6,6 +6,9 @@ import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { Tenant, ResponseTenant, TenantRequest } from "../../../../types/tenant";
 import { Property } from "../../../../types/property";
+import { sendTenantDeletionRequestEmail } from "../../../../lib/email";
+import { sendWelcomeSms } from "../../../../lib/sms";
+import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
 
 const logger = {
   info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
@@ -231,9 +234,16 @@ export async function DELETE(
   { params }: { params: Promise<{ tenantId: string }> }
 ) {
   const { tenantId } = await params;
-  const userId = (await cookies()).get("userId")?.value;
+  const cookieStore = await cookies();
+  const userId = cookieStore.get("userId")?.value;
+  const role = cookieStore.get("role")?.value;
 
-  if (!ObjectId.isValid(tenantId) || !userId || !ObjectId.isValid(userId)) {
+  if (
+    !ObjectId.isValid(tenantId) ||
+    !userId ||
+    !ObjectId.isValid(userId) ||
+    !["propertyOwner", "teamMember"].includes(role || "")
+  ) {
     return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 });
   }
 
@@ -243,14 +253,158 @@ export async function DELETE(
 
   try {
     const { db } = await connectToDatabase();
+    let effectiveOwnerId = userId;
+    let requesterName = "Team member";
+
+    if (role === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(userId),
+        active: true,
+      });
+
+      if (!teamMember || !teamMember.ownerId) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+
+      effectiveOwnerId = teamMember.ownerId.toString();
+      requesterName = teamMember.name || teamMember.email || "Team member";
+    }
 
     const tenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(tenantId),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
     });
 
     if (!tenant) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+    }
+
+    if (role === "teamMember") {
+      const existingRequest = await db.collection("tenant_deletion_requests").findOne({
+        tenantId: new ObjectId(tenantId),
+        ownerId: effectiveOwnerId,
+        status: "Pending",
+      });
+
+      if (existingRequest) {
+        return NextResponse.json({
+          success: true,
+          message: "Delete request already pending approval.",
+        });
+      }
+
+      const now = new Date();
+      const propertyObjectId = tenant.propertyId && ObjectId.isValid(tenant.propertyId)
+        ? new ObjectId(tenant.propertyId)
+        : undefined;
+
+      const requestDoc = {
+        tenantId: new ObjectId(tenantId),
+        ownerId: effectiveOwnerId,
+        requestedBy: userId,
+        status: "Pending",
+        createdAt: now,
+        updatedAt: now,
+        tenantName: tenant.name,
+        propertyId: propertyObjectId,
+        houseNumber: tenant.houseNumber,
+        unitType: tenant.unitType,
+        unitIdentifier: tenant.unitIdentifier,
+        requesterName,
+      };
+
+      const insertResult = await db.collection("tenant_deletion_requests").insertOne(requestDoc as any);
+
+      const unitLabel = tenant.houseNumber || tenant.unitType || tenant.unitIdentifier || "unit";
+      const notificationMessage = `${requesterName} requested to delete tenant ${tenant.name}${unitLabel ? ` (${unitLabel})` : ""}. Approval required.`;
+
+      await db.collection("notifications").insertOne({
+        _id: new ObjectId(),
+        message: notificationMessage,
+        type: "tenant",
+        createdAt: now.toISOString(),
+        status: "unread",
+        tenantId: tenant._id.toString(),
+        tenantName: tenant.name,
+        ownerId: effectiveOwnerId,
+        deliveryMethod: "app",
+        deliveryStatus: "success",
+      });
+
+      const property =
+        tenant.propertyId && ObjectId.isValid(tenant.propertyId)
+          ? await db.collection<Property>("properties").findOne({
+              _id: new ObjectId(tenant.propertyId),
+              ownerId: effectiveOwnerId,
+            })
+          : null;
+      const owner = await db.collection("propertyOwners").findOne({
+        _id: new ObjectId(effectiveOwnerId),
+      });
+
+      const propertyName = property?.name || "Property";
+      const ownerName = owner?.name || "Property Owner";
+      const ownerEmail = owner?.email;
+      const ownerPhone = owner?.phone;
+      const dashboardUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/property-owner-dashboard`;
+
+      const smsBase = `Deletion request: ${tenant.name} (${unitLabel}) at ${propertyName}. Requested by ${requesterName}. Review in dashboard.`;
+      const smsMessage = smsBase.length > 160 ? `${smsBase.slice(0, 157)}...` : smsBase;
+      const waMessage = [
+        `Tenant deletion request`,
+        `Tenant: ${tenant.name}`,
+        `Property: ${propertyName}`,
+        tenant.houseNumber ? `Unit: ${tenant.houseNumber}` : null,
+        tenant.unitType ? `Unit type: ${tenant.unitType}` : null,
+        `Requested by: ${requesterName}`,
+        `Review in dashboard: ${dashboardUrl}`,
+      ].filter(Boolean).join("\n");
+
+      try {
+        if (ownerEmail) {
+          await sendTenantDeletionRequestEmail({
+            to: ownerEmail,
+            ownerName,
+            tenantName: tenant.name,
+            propertyName,
+            houseNumber: tenant.houseNumber,
+            unitType: tenant.unitType,
+            requestedBy: requesterName,
+            dashboardUrl,
+          });
+        }
+      } catch (err) {
+        logger.error("Tenant deletion email failed", { error: (err as any)?.message || err });
+      }
+
+      try {
+        if (ownerPhone) {
+          await sendWelcomeSms({ phone: ownerPhone, message: smsMessage });
+        }
+      } catch (err) {
+        logger.error("Tenant deletion SMS failed", { error: (err as any)?.message || err });
+      }
+
+      try {
+        if (ownerPhone) {
+          await sendWhatsAppMessage({ phone: ownerPhone, message: waMessage });
+        }
+      } catch (err) {
+        logger.error("Tenant deletion WhatsApp failed", { error: (err as any)?.message || err });
+      }
+
+      logger.info("Tenant deletion requested", {
+        tenantId,
+        requestedBy: userId,
+        ownerId: effectiveOwnerId,
+        requestId: insertResult.insertedId.toString(),
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Delete request sent to owner for approval.",
+        requestId: insertResult.insertedId.toString(),
+      });
     }
 
     // Delete tenant
