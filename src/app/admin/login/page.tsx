@@ -84,16 +84,7 @@ export default function AdminLogin() {
     <PublicThemeWrapper>
       <div className="min-h-[100svh] lg:h-[100svh] flex flex-col lg:flex-row bg-background text-foreground overflow-hidden">
         {/* LEFT: Branding – hidden on mobile */}
-        <div
-          className="
-            hidden lg:flex lg:w-1/2 
-            bg-background 
-            text-foreground items-center justify-center 
-            p-6 xl:p-12 relative overflow-hidden
-            shadow-[-20px_0_30px_-15px_rgba(30,58,138,0.08)] 
-            lg:shadow-[-30px_0_40px_-20px_rgba(30,58,138,0.10)]
-          "
-        >
+        <div className="hidden lg:flex lg:w-1/2 bg-background text-foreground items-center justify-center p-6 xl:p-12 relative overflow-hidden shadow-[-20px_0_30px_-15px_rgba(30,58,138,0.08)] lg:shadow-[-30px_0_40px_-20px_rgba(30,58,138,0.10)]">
           {/* Floating bubbles */}
           <div className="absolute inset-0 pointer-events-none">
             <motion.div
