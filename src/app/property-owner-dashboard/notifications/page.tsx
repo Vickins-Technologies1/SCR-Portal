@@ -461,7 +461,7 @@ export default function NotificationsPage() {
     if (!effectiveOwnerId || !csrfToken) return;
     setIsLoading(true);
     try {
-      const response = await makeAuthenticatedRequest("/api/notifications/reminders/mark-read", {
+      const response = await makeAuthenticatedRequest("/api/notifications/reminders", {
         method: "POST",
         body: JSON.stringify({ notificationId }),
       });

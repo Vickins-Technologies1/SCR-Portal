@@ -177,8 +177,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const { pathname } = new URL(req.url);
 
-    if (pathname.includes("mark-read")) {
-      const { notificationId } = body as { notificationId?: string };
+    const { notificationId, action } = body as { notificationId?: string; action?: string };
+
+    if (notificationId || action === "mark-read" || pathname.includes("mark-read")) {
       if (!notificationId) {
         logger.warn("Missing notification ID for mark-read", { ownerId: effectiveOwnerId });
         return NextResponse.json(
