@@ -52,6 +52,7 @@ export default function SupportWidget() {
   const [editingText, setEditingText] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -99,6 +100,21 @@ export default function SupportWidget() {
       // ignore
     }
   }, []);
+
+  const ensureCsrfToken = useCallback(async () => {
+    if (csrfToken) return csrfToken;
+    try {
+      const res = await fetch("/api/csrf-token", { credentials: "include" });
+      const data = await res.json();
+      if (data.success && data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+        return data.csrfToken as string;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [csrfToken]);
 
   useEffect(() => {
     if (canShow) {
@@ -217,8 +233,8 @@ export default function SupportWidget() {
     return () => clearTimeout(timeout);
   }, [messageInput, isOpen, pingPresence]);
 
-  const uploadAttachments = async () => {
-    if (!csrfToken || attachments.length === 0) return [];
+  const uploadAttachments = async (token: string) => {
+    if (attachments.length === 0) return [];
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -227,7 +243,7 @@ export default function SupportWidget() {
         method: "POST",
         credentials: "include",
         headers: {
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: formData,
       });
@@ -242,33 +258,48 @@ export default function SupportWidget() {
   };
 
   const handleSend = async () => {
-    if (!csrfToken) return;
     if (!messageInput.trim() && attachments.length === 0) return;
+    const token = await ensureCsrfToken();
+    if (!token) {
+      setError("Unable to verify your session. Please refresh and try again.");
+      return;
+    }
     setIsSending(true);
     try {
-      const uploaded = attachments.length > 0 ? await uploadAttachments() : [];
+      const uploaded = attachments.length > 0 ? await uploadAttachments(token) : [];
       const res = await fetch("/api/support/messages", {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: JSON.stringify({ message: messageInput.trim(), attachments: uploaded }),
       });
       const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to send message");
+      }
       if (data.success) {
         setMessageInput("");
         setAttachments([]);
+        setError(null);
         fetchMessages();
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send message");
     } finally {
       setIsSending(false);
     }
   };
 
   const handleEditSave = async () => {
-    if (!editingId || !editingText.trim() || !csrfToken) return;
+    if (!editingId || !editingText.trim()) return;
+    const token = await ensureCsrfToken();
+    if (!token) {
+      setError("Unable to verify your session. Please refresh and try again.");
+      return;
+    }
     setIsSending(true);
     try {
       const res = await fetch("/api/support/messages", {
@@ -276,23 +307,33 @@ export default function SupportWidget() {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: JSON.stringify({ messageId: editingId, message: editingText.trim() }),
       });
       const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to update message");
+      }
       if (data.success) {
         setEditingId(null);
         setEditingText("");
+        setError(null);
         fetchMessages();
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update message");
     } finally {
       setIsSending(false);
     }
   };
 
   const handleDelete = async (messageId: string) => {
-    if (!csrfToken) return;
+    const token = await ensureCsrfToken();
+    if (!token) {
+      setError("Unable to verify your session. Please refresh and try again.");
+      return;
+    }
     setIsSending(true);
     try {
       const res = await fetch("/api/support/messages", {
@@ -300,15 +341,21 @@ export default function SupportWidget() {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: JSON.stringify({ messageId }),
       });
       const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete message");
+      }
       if (data.success) {
         setDeleteConfirmId(null);
+        setError(null);
         fetchMessages();
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete message");
     } finally {
       setIsSending(false);
     }
@@ -426,7 +473,7 @@ export default function SupportWidget() {
                                   </button>
                                   <button
                                     onClick={handleEditSave}
-                                    disabled={isSending || !csrfToken}
+                                    disabled={isSending}
                                     className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-white/30 disabled:opacity-60"
                                   >
                                     <Check className="h-3 w-3" />
@@ -493,7 +540,7 @@ export default function SupportWidget() {
                                       {deleteConfirmId === message._id ? (
                                         <button
                                           onClick={() => handleDelete(message._id)}
-                                          disabled={isSending || !csrfToken}
+                                          disabled={isSending}
                                           className="hover:text-white disabled:opacity-60"
                                           title="Confirm delete"
                                         >
@@ -566,7 +613,7 @@ export default function SupportWidget() {
                       accept="image/png,image/jpeg,application/pdf"
                       className="hidden"
                       onChange={handleAttachmentSelect}
-                      disabled={isSending || isUploading || !csrfToken}
+                      disabled={isSending || isUploading}
                     />
                     <Paperclip className="h-4 w-4" />
                   </label>
@@ -580,7 +627,7 @@ export default function SupportWidget() {
                   />
                   <button
                     onClick={handleSend}
-                    disabled={isSending || isUploading || !csrfToken || (!messageInput.trim() && attachments.length === 0)}
+                    disabled={isSending || isUploading || (!messageInput.trim() && attachments.length === 0)}
                     className="h-11 w-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-md hover:bg-primary-hover transition disabled:opacity-60"
                     title="Send message"
                   >
@@ -590,6 +637,11 @@ export default function SupportWidget() {
                 <p className="mt-2 text-[10px] text-muted-foreground">
                   We typically respond within a few minutes during business hours.
                 </p>
+                {error && (
+                  <p className="mt-2 text-[10px] text-red-600" role="alert">
+                    {error}
+                  </p>
+                )}
               </div>
         </div>
       </motion.div>

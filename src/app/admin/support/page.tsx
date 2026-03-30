@@ -76,6 +76,7 @@ export default function AdminSupportPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -143,6 +144,21 @@ export default function AdminSupportPage() {
       // ignore
     }
   }, []);
+
+  const ensureCsrfToken = useCallback(async () => {
+    if (csrfToken) return csrfToken;
+    try {
+      const res = await fetch("/api/csrf-token", { credentials: "include" });
+      const data = await res.json();
+      if (data.success && data.csrfToken) {
+        setCsrfToken(data.csrfToken);
+        return data.csrfToken as string;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [csrfToken]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -432,8 +448,8 @@ export default function AdminSupportPage() {
     );
   }, [conversations, search]);
 
-  const uploadAttachments = async () => {
-    if (!csrfToken || attachments.length === 0) return [];
+  const uploadAttachments = async (token: string) => {
+    if (attachments.length === 0) return [];
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -442,7 +458,7 @@ export default function AdminSupportPage() {
         method: "POST",
         credentials: "include",
         headers: {
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: formData,
       });
@@ -457,17 +473,22 @@ export default function AdminSupportPage() {
   };
 
   const handleSend = async () => {
-    if (!selectedOwnerId || !csrfToken) return;
+    if (!selectedOwnerId) return;
     if (!messageInput.trim() && attachments.length === 0) return;
+    const token = await ensureCsrfToken();
+    if (!token) {
+      setSendError("Unable to verify your session. Please refresh and try again.");
+      return;
+    }
     setIsSending(true);
     try {
-      const uploaded = attachments.length > 0 ? await uploadAttachments() : [];
+      const uploaded = attachments.length > 0 ? await uploadAttachments(token) : [];
       const res = await fetch("/api/support/messages", {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: JSON.stringify({
           ownerId: selectedOwnerId,
@@ -476,12 +497,18 @@ export default function AdminSupportPage() {
         }),
       });
       const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to send message");
+      }
       if (data.success) {
         setMessageInput("");
         setAttachments([]);
+        setSendError(null);
         fetchMessages(selectedOwnerId);
         fetchConversations();
       }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to send message");
     } finally {
       setIsSending(false);
     }
@@ -516,7 +543,12 @@ export default function AdminSupportPage() {
   };
 
   const handleEditSave = async () => {
-    if (!editingId || !editingText.trim() || !csrfToken) return;
+    if (!editingId || !editingText.trim()) return;
+    const token = await ensureCsrfToken();
+    if (!token) {
+      setSendError("Unable to verify your session. Please refresh and try again.");
+      return;
+    }
     setIsSending(true);
     try {
       const res = await fetch("/api/support/messages", {
@@ -524,24 +556,34 @@ export default function AdminSupportPage() {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: JSON.stringify({ messageId: editingId, message: editingText.trim() }),
       });
       const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to update message");
+      }
       if (data.success && selectedOwnerId) {
         setEditingId(null);
         setEditingText("");
+        setSendError(null);
         fetchMessages(selectedOwnerId);
         fetchConversations();
       }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to update message");
     } finally {
       setIsSending(false);
     }
   };
 
   const handleDelete = async (messageId: string) => {
-    if (!csrfToken) return;
+    const token = await ensureCsrfToken();
+    if (!token) {
+      setSendError("Unable to verify your session. Please refresh and try again.");
+      return;
+    }
     setIsSending(true);
     try {
       const res = await fetch("/api/support/messages", {
@@ -549,16 +591,22 @@ export default function AdminSupportPage() {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
+          "x-csrf-token": token,
         },
         body: JSON.stringify({ messageId }),
       });
       const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete message");
+      }
       if (data.success && selectedOwnerId) {
         setDeleteConfirmId(null);
+        setSendError(null);
         fetchMessages(selectedOwnerId);
         fetchConversations();
       }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to delete message");
     } finally {
       setIsSending(false);
     }
@@ -858,7 +906,7 @@ export default function AdminSupportPage() {
                                     </button>
                                     <button
                                       onClick={handleEditSave}
-                                      disabled={isSending || !csrfToken}
+                                      disabled={isSending}
                                       className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-white/30 disabled:opacity-60"
                                     >
                                       <Check className="h-3 w-3" />
@@ -929,7 +977,7 @@ export default function AdminSupportPage() {
                                         {deleteConfirmId === message._id ? (
                                           <button
                                             onClick={() => handleDelete(message._id)}
-                                            disabled={isSending || !csrfToken}
+                                            disabled={isSending}
                                             className="hover:text-white disabled:opacity-60"
                                             title="Confirm delete"
                                           >
@@ -1006,7 +1054,7 @@ export default function AdminSupportPage() {
                       accept="image/png,image/jpeg,application/pdf"
                       className="hidden"
                       onChange={handleAttachmentSelect}
-                      disabled={!selectedOwnerId || isSending || isUploading || !csrfToken}
+                      disabled={!selectedOwnerId || isSending || isUploading}
                     />
                     <Paperclip className="h-4 w-4" />
                   </label>
@@ -1022,17 +1070,22 @@ export default function AdminSupportPage() {
                   />
                   <button
                     onClick={handleSend}
-                    disabled={!selectedOwnerId || isSending || isUploading || !csrfToken || (!messageInput.trim() && attachments.length === 0)}
+                    disabled={!selectedOwnerId || isSending || isUploading || (!messageInput.trim() && attachments.length === 0)}
                     className="h-11 w-11 rounded-2xl bg-primary text-white flex items-center justify-center shadow-md hover:bg-primary-hover transition disabled:opacity-60"
                     title="Send message"
                   >
                     <Send className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="mt-2 text-[10px] text-muted-foreground">
-                  Tip: Add a label or assign this ticket to keep support organized.
-                </p>
-              </div>
+                  <p className="mt-2 text-[10px] text-muted-foreground">
+                    Tip: Add a label or assign this ticket to keep support organized.
+                  </p>
+                  {sendError && (
+                    <p className="mt-2 text-[10px] text-red-600" role="alert">
+                      {sendError}
+                    </p>
+                  )}
+                </div>
             </div>
           </div>
         </main>
