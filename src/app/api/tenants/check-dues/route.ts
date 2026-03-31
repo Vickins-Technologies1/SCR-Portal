@@ -6,7 +6,7 @@ import { ObjectId } from "mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "@/lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 
 interface Tenant {
   _id: ObjectId;
@@ -161,7 +161,10 @@ export async function GET(request: NextRequest) {
     for (const tenant of activeTenants) {
       const tenantIdStr = tenant._id.toString();
       const paid = paidMap[tenantIdStr] || { rentPaid: 0, depositPaid: 0 };
-      const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+      const overrides = filterOverridesForUnit(
+        rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
+        tenant.unitIdentifier
+      );
       const { rentDue, monthsStayed } = calculateRentDueToDate({
         leaseStartDate: tenant.leaseStartDate,
         monthlyRent: tenant.price,
@@ -272,7 +275,10 @@ export async function POST(request: NextRequest) {
       .reduce((sum, p) => sum + p.amount, 0);
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+    const overrides = filterOverridesForUnit(
+      rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
+      tenant.unitIdentifier
+    );
     const { rentDue, monthsStayed } = calculateRentDueToDate({
       leaseStartDate: tenant.leaseStartDate,
       monthlyRent: tenant.price,

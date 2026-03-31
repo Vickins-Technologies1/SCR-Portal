@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "../../../../lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 
 interface Tenant {
   _id: ObjectId;
@@ -200,7 +200,10 @@ export async function GET(request: NextRequest) {
 
     let analytics = null;
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenantDoc.propertyId]);
-    const rentOverrides = rentOverrideMap.get(buildOverrideKey(tenantDoc.propertyId, tenantDoc.unitType)) ?? [];
+    const rentOverrides = filterOverridesForUnit(
+      rentOverrideMap.get(buildOverrideKey(tenantDoc.propertyId, tenantDoc.unitType)) ?? [],
+      tenantDoc.unitIdentifier
+    );
 
     if (shouldCalculateDues) {
       const today = new Date();

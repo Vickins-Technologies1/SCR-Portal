@@ -100,9 +100,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { propertyId, unitType, price, startDate, endDate } = body as {
+    const { propertyId, unitType, unitIdentifier, price, startDate, endDate } = body as {
       propertyId?: string;
       unitType?: string;
+      unitIdentifier?: string;
       price?: number;
       startDate?: string;
       endDate?: string;
@@ -155,20 +156,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const hasUnitType = Array.isArray(property.unitTypes)
-      ? property.unitTypes.some((unit: { type?: string }) => unit.type === unitType)
-      : false;
-    if (!hasUnitType) {
+    const unitTypes = Array.isArray(property.unitTypes)
+      ? property.unitTypes.map((unit: { type?: string; uniqueType?: string }, index: number) => ({
+          ...unit,
+          uniqueType: unit.uniqueType || `${unit.type}-${index}`,
+        }))
+      : [];
+
+    let selectedUnit = unitIdentifier
+      ? unitTypes.find((unit) => unit.uniqueType === unitIdentifier)
+      : null;
+
+    if (!selectedUnit) {
+      const matches = unitTypes.filter((unit) => unit.type === unitType);
+      if (matches.length > 1) {
+        return NextResponse.json(
+          { success: false, message: "Multiple unit groups share this type. Please pick a specific unit group." },
+          { status: 400 }
+        );
+      }
+      selectedUnit = matches[0] ?? null;
+    }
+
+    if (!selectedUnit) {
       return NextResponse.json({ success: false, message: "Unit type not found on property" }, { status: 400 });
     }
 
-    const overlapping = await db.collection<RentPriceOverride>("rentPriceOverrides").findOne({
+    const resolvedUnitType = selectedUnit.type as string;
+    const resolvedUnitIdentifier = selectedUnit.uniqueType as string;
+
+    const overlapQuery: Record<string, unknown> = {
       propertyId,
-      unitType,
       status: { $ne: "inactive" },
       startDate: { $lte: normalizedEnd },
       endDate: { $gte: normalizedStart },
-    });
+    };
+
+    if (resolvedUnitIdentifier) {
+      overlapQuery.$or = [
+        { unitIdentifier: resolvedUnitIdentifier },
+        { unitType: resolvedUnitType, unitIdentifier: { $exists: false } },
+        { unitType: resolvedUnitType, unitIdentifier: null },
+      ];
+    } else {
+      overlapQuery.unitType = resolvedUnitType;
+    }
+
+    const overlapping = await db.collection<RentPriceOverride>("rentPriceOverrides").findOne(overlapQuery);
     if (overlapping) {
       return NextResponse.json(
         { success: false, message: "A price override already exists for this unit type within that period" },
@@ -179,7 +213,8 @@ export async function POST(request: NextRequest) {
     const newOverride: RentPriceOverride = {
       ownerId: ownerId,
       propertyId: propertyId,
-      unitType,
+      unitType: resolvedUnitType,
+      unitIdentifier: resolvedUnitIdentifier,
       price,
       startDate: normalizedStart,
       endDate: normalizedEnd,

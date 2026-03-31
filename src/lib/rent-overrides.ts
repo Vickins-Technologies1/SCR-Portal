@@ -4,6 +4,19 @@ import { RentPriceOverride } from "@/types/rent-price-override";
 export const buildOverrideKey = (propertyId: string, unitType: string): string =>
   `${propertyId}::${unitType}`;
 
+export const filterOverridesForUnit = (
+  overrides: RentPriceOverride[],
+  unitIdentifier?: string
+): RentPriceOverride[] => {
+  if (!overrides?.length) return [];
+  if (!unitIdentifier) {
+    return overrides.filter((override) => !override.unitIdentifier);
+  }
+  const specific = overrides.filter((override) => override.unitIdentifier === unitIdentifier);
+  if (specific.length > 0) return specific;
+  return overrides.filter((override) => !override.unitIdentifier);
+};
+
 export const fetchActiveRentOverridesByPropertyIds = async (
   db: Db,
   propertyIds: string[]

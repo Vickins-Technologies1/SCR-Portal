@@ -5,6 +5,7 @@ export interface RentPriceOverride {
   ownerId: string;
   propertyId: string;
   unitType: string;
+  unitIdentifier?: string;
   price: number;
   startDate: Date | string;
   endDate: Date | string;

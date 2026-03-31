@@ -5,7 +5,7 @@ import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
 import { calculateRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
@@ -135,7 +135,10 @@ export async function POST(request: NextRequest) {
     }
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+    const overrides = filterOverridesForUnit(
+      rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
+      tenant.unitIdentifier
+    );
     const { rentDue: totalRentDue } = calculateRentDueToDate({
       leaseStartDate: tenant.leaseStartDate,
       monthlyRent: tenant.price || 0,

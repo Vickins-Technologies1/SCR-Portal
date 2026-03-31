@@ -13,7 +13,7 @@ import logger from "../../../../lib/logger";
 import { Tenant } from "../../../../types/tenant";
 import { sendPaymentReminders } from "../../../../lib/reminders";
 import { resolveMonthlyRentForDate } from "../../../../lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 
 interface Notification {
   _id: string;
@@ -323,7 +323,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       if (type === "payment") {
-        const overrides = rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [];
+        const overrides = filterOverridesForUnit(
+          rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
+          tenant.unitIdentifier
+        );
         const effectiveMonthlyRent = resolveMonthlyRentForDate({
           monthlyRent: tenant.price,
           date: today,

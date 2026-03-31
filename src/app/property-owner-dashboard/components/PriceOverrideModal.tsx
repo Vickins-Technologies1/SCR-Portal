@@ -5,6 +5,7 @@ import Modal from "./Modal";
 
 interface UnitType {
   type: string;
+  uniqueType?: string;
   price: number;
   deposit: number;
   quantity: number;
@@ -23,6 +24,7 @@ interface RentPriceOverride {
   _id: string;
   propertyId: string;
   unitType: string;
+  unitIdentifier?: string;
   price: number;
   startDate: string;
   endDate: string;
@@ -56,13 +58,13 @@ export default function PriceOverrideModal({
   const [overrides, setOverrides] = useState<RentPriceOverride[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [unitType, setUnitType] = useState("");
+  const [unitIdentifier, setUnitIdentifier] = useState("");
   const [price, setPrice] = useState("");
   const [startMonth, setStartMonth] = useState("");
   const [endMonth, setEndMonth] = useState("");
 
   const resetForm = () => {
-    setUnitType("");
+    setUnitIdentifier("");
     setPrice("");
     setStartMonth("");
     setEndMonth("");
@@ -70,8 +72,46 @@ export default function PriceOverrideModal({
 
   const unitTypeOptions = useMemo(() => {
     if (!property) return [];
-    return Array.from(new Set(property.unitTypes.map((unit) => unit.type))).filter(Boolean);
+    const counts = property.unitTypes.reduce<Record<string, number>>((acc, unit) => {
+      const type = unit.type || "";
+      if (!type) return acc;
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {});
+
+    const running: Record<string, number> = {};
+
+    return property.unitTypes
+      .map((unit, index) => {
+        if (!unit.type) return null;
+        const uniqueType = unit.uniqueType || `${unit.type}-${index}`;
+        running[unit.type] = (running[unit.type] || 0) + 1;
+        const groupLabel = counts[unit.type] > 1 ? ` (Group ${running[unit.type]})` : "";
+        const priceLabel =
+          typeof unit.price === "number" ? `Ksh ${unit.price.toLocaleString()}/mo` : "";
+        const quantityLabel =
+          typeof unit.quantity === "number"
+            ? `${unit.quantity} unit${unit.quantity === 1 ? "" : "s"}`
+            : "";
+        const details = [priceLabel, quantityLabel].filter(Boolean).join(" • ");
+        const baseLabel = `${unit.type}${groupLabel}`;
+        return {
+          value: uniqueType,
+          type: unit.type,
+          label: details ? `${baseLabel} — ${details}` : baseLabel,
+        };
+      })
+      .filter((option): option is { value: string; type: string; label: string } => Boolean(option?.type));
   }, [property]);
+
+  const unitTypeLabelMap = useMemo(() => {
+    return new Map(unitTypeOptions.map((option) => [option.value, option.label]));
+  }, [unitTypeOptions]);
+
+  const selectedUnit = useMemo(
+    () => unitTypeOptions.find((option) => option.value === unitIdentifier) || null,
+    [unitIdentifier, unitTypeOptions]
+  );
 
   const fetchOverrides = async () => {
     if (!property) return;
@@ -112,7 +152,7 @@ export default function PriceOverrideModal({
       setError("You do not have permission to schedule price changes.");
       return;
     }
-    if (!unitType || !price || !startMonth || !endMonth) {
+    if (!selectedUnit || !price || !startMonth || !endMonth) {
       setError("All fields are required.");
       return;
     }
@@ -136,7 +176,8 @@ export default function PriceOverrideModal({
         credentials: "include",
         body: JSON.stringify({
           propertyId: property._id,
-          unitType,
+          unitType: selectedUnit.type,
+          unitIdentifier: selectedUnit.value,
           price: Number(price),
           startDate,
           endDate,
@@ -209,14 +250,16 @@ export default function PriceOverrideModal({
             <label className="text-sm font-medium text-gray-700">
               Unit Type
               <select
-                value={unitType}
-                onChange={(e) => setUnitType(e.target.value)}
+                value={unitIdentifier}
+                onChange={(e) => setUnitIdentifier(e.target.value)}
                 className="mt-1 w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition border-gray-300 text-sm"
                 disabled={!canEdit || isLoading}
               >
                 <option value="">Select unit type</option>
-                {unitTypeOptions.map((type) => (
-                  <option key={type} value={type}>{type}</option>
+                {unitTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
                 ))}
               </select>
             </label>
@@ -293,7 +336,11 @@ export default function PriceOverrideModal({
                   >
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        {override.unitType} • Ksh {override.price.toLocaleString()}/mo
+                        {override.unitIdentifier
+                          ? unitTypeLabelMap.get(override.unitIdentifier) ||
+                            `${override.unitType} (${override.unitIdentifier})`
+                          : override.unitType}{" "}
+                        • Ksh {override.price.toLocaleString()}/mo
                       </p>
                       <p className="text-xs text-muted-foreground">{formatMonthRange(override.startDate, override.endDate)}</p>
                     </div>
