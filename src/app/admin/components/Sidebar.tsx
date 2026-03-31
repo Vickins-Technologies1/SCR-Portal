@@ -10,7 +10,6 @@ import {
   Users,
   Building2,
   CreditCard,
-  FileText,
   Headphones,
   ChevronLeft,
   AlertCircle,
@@ -79,8 +78,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     { key: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     { key: "users", href: "/admin/users", label: "Property Owners", icon: <Users size={20} /> },
     { key: "properties", href: "/admin/properties", label: "Properties", icon: <Building2 size={20} /> },
-    { key: "payments", href: "/admin/payments", label: "Payments", icon: <CreditCard size={20} /> },
-    { key: "invoices", href: "/admin/invoices", label: "Invoices", icon: <FileText size={20} /> },
+    { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
     { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },
   ];
 
