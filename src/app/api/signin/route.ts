@@ -5,8 +5,7 @@ import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
 import { getDefaultPermissions } from "../../../lib/permissions";
-import { sendOtpEmail } from "../../../lib/email";
-import { sendOtpSms } from "../../../lib/sms";
+import { deliverOtp } from "../../../lib/otp-delivery";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -148,14 +147,22 @@ export async function POST(request: NextRequest) {
             collection: userCollection,
           });
 
+          let delivery;
           try {
-            await sendOtpEmail({ to: otpEmail, name: user.name || "User", code: otpCode });
-            await sendOtpSms({ phone: otpPhone, code: otpCode });
+            delivery = await deliverOtp({
+              email: otpEmail,
+              phone: otpPhone,
+              name: user.name || "User",
+              code: otpCode,
+            });
           } catch (sendErr) {
             await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });
             console.error("OTP delivery failed:", sendErr);
             return NextResponse.json(
-              { success: false, message: "Failed to send OTP. Please try again." },
+              {
+                success: false,
+                message: sendErr instanceof Error ? sendErr.message : "Failed to send OTP. Please try again.",
+              },
               { status: 500 }
             );
           }
@@ -165,7 +172,9 @@ export async function POST(request: NextRequest) {
               success: false,
               requiresOtp: true,
               otpId: otpRecordId.toString(),
-              message: "OTP sent to your email and phone.",
+              message: delivery?.emailSent
+                ? "OTP sent to your email and phone."
+                : "OTP sent via SMS only. Email delivery failed.",
             },
             { status: 200 }
           );
@@ -390,14 +399,22 @@ export async function POST(request: NextRequest) {
             collection: userCollection,
           });
 
+          let delivery;
           try {
-            await sendOtpEmail({ to: otpEmail, name: user.name || "User", code: otpCode });
-            await sendOtpSms({ phone: otpPhone, code: otpCode });
+            delivery = await deliverOtp({
+              email: otpEmail,
+              phone: otpPhone,
+              name: user.name || "User",
+              code: otpCode,
+            });
           } catch (sendErr) {
             await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });
             console.error("OTP delivery failed:", sendErr);
             return NextResponse.json(
-              { success: false, message: "Failed to send OTP. Please try again." },
+              {
+                success: false,
+                message: sendErr instanceof Error ? sendErr.message : "Failed to send OTP. Please try again.",
+              },
               { status: 500 }
             );
           }
@@ -407,7 +424,9 @@ export async function POST(request: NextRequest) {
               success: false,
               requiresOtp: true,
               otpId: otpRecordId.toString(),
-              message: "OTP sent to your email and phone.",
+              message: delivery?.emailSent
+                ? "OTP sent to your email and phone."
+                : "OTP sent via SMS only. Email delivery failed.",
             },
             { status: 200 }
           );

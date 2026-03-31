@@ -2,8 +2,7 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { sendOtpEmail } from "@/lib/email";
-import { sendOtpSms } from "@/lib/sms";
+import { deliverOtp } from "@/lib/otp-delivery";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -131,9 +130,14 @@ export async function POST(request: Request) {
       }
     );
 
+    let delivery;
     try {
-      await sendOtpEmail({ to: otpEmail, name: user.name || "User", code: newCode });
-      await sendOtpSms({ phone: otpPhone, code: newCode });
+      delivery = await deliverOtp({
+        email: otpEmail,
+        phone: otpPhone,
+        name: user.name || "User",
+        code: newCode,
+      });
     } catch (sendErr) {
       await db.collection("otpChallenges").updateOne(
         { _id: otpObjectId },
@@ -148,14 +152,19 @@ export async function POST(request: Request) {
       );
       console.error("OTP resend delivery failed:", sendErr);
       return NextResponse.json(
-        { success: false, message: "Failed to resend OTP. Please try again." },
+        {
+          success: false,
+          message: sendErr instanceof Error ? sendErr.message : "Failed to resend OTP. Please try again.",
+        },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: "OTP resent to your email and phone.",
+      message: delivery?.emailSent
+        ? "OTP resent to your email and phone."
+        : "OTP resent via SMS only. Email delivery failed.",
       retryAfterMs: OTP_RESEND_COOLDOWN_MS,
     });
   } catch (error) {

@@ -431,7 +431,18 @@ export async function sendOtpEmail({
     });
     console.log(`OTP email sent to ${to}`);
   } catch (error) {
-    console.error(`Error sending OTP email to ${to}:`, error);
+    const err = error as { code?: string; responseCode?: number; response?: string; message?: string };
+    console.error(`Error sending OTP email to ${to}:`, {
+      code: err?.code,
+      responseCode: err?.responseCode,
+      response: err?.response,
+      message: err?.message,
+    });
+
+    if (err?.code === "EAUTH" || err?.responseCode === 535) {
+      throw new Error("SMTP authentication failed. Check SMTP_USER/SMTP_PASS (use an app password if required).");
+    }
+
     throw new Error("Failed to send OTP email");
   }
 }
