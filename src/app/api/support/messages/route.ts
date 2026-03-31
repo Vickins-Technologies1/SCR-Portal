@@ -10,6 +10,13 @@ interface SupportMessage {
   senderRole: "propertyOwner" | "admin";
   senderName?: string;
   message: string;
+  replyTo?: {
+    messageId: string;
+    message: string;
+    senderRole: "propertyOwner" | "admin";
+    senderName?: string;
+    createdAt?: string;
+  };
   attachments?: {
     url: string;
     name: string;
@@ -24,9 +31,32 @@ interface SupportMessage {
 
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_ATTACHMENTS = 5;
+const MAX_REPLY_PREVIEW = 240;
 const AUTO_REPLY_WINDOW_MINUTES = 30;
 const AUTO_REPLY_MESSAGE =
   "Thanks for reaching out! Our support team has received your message and will get back to you shortly.";
+
+const sanitizeReplyTo = (value?: Partial<SupportMessage["replyTo"]>) => {
+  if (!value || typeof value !== "object") return undefined;
+  const messageId = String(value.messageId || "").trim();
+  if (!messageId || !ObjectId.isValid(messageId)) return undefined;
+  const message = String(value.message || "").trim();
+  if (!message) return undefined;
+  const senderRole =
+    value.senderRole === "admin" || value.senderRole === "propertyOwner"
+      ? value.senderRole
+      : undefined;
+  if (!senderRole) return undefined;
+  const senderName = value.senderName ? String(value.senderName) : undefined;
+  const createdAt = value.createdAt ? String(value.createdAt) : undefined;
+  return {
+    messageId,
+    message: message.slice(0, MAX_REPLY_PREVIEW),
+    senderRole,
+    senderName,
+    createdAt,
+  };
+};
 
 export async function GET(request: NextRequest) {
   const role = request.cookies.get("role")?.value;
@@ -98,7 +128,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
   }
 
-  let payload: { ownerId?: string; message?: string; attachments?: SupportMessage["attachments"] } = {};
+  let payload: {
+    ownerId?: string;
+    message?: string;
+    attachments?: SupportMessage["attachments"];
+    replyTo?: SupportMessage["replyTo"];
+  } = {};
   try {
     payload = await request.json();
   } catch {
@@ -134,6 +169,7 @@ export async function POST(request: NextRequest) {
       type: String(att.type || "application/octet-stream"),
       size: Number(att.size || 0),
     }));
+  const replyTo = sanitizeReplyTo(payload.replyTo);
 
   const ownerId = role === "admin" ? payload.ownerId : userId;
   if (!ownerId || !ObjectId.isValid(ownerId)) {
@@ -157,6 +193,7 @@ export async function POST(request: NextRequest) {
       senderName,
       message: rawMessage,
       attachments: sanitizedAttachments.length > 0 ? sanitizedAttachments : undefined,
+      replyTo,
       createdAt: new Date().toISOString(),
       seenByAdmin: role === "admin",
       seenByOwner: role === "propertyOwner",

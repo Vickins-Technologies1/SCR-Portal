@@ -2,12 +2,14 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  MessageCircle,
+  CheckCheck,
+  Headphones,
   Send,
   X,
   Sparkles,
   PencilLine,
   Trash2,
+  Reply,
   Check,
   Paperclip,
   FileText,
@@ -22,6 +24,13 @@ interface SupportMessage {
   senderRole: "propertyOwner" | "admin";
   senderName?: string;
   message: string;
+  replyTo?: {
+    messageId: string;
+    message: string;
+    senderRole: "propertyOwner" | "admin";
+    senderName?: string;
+    createdAt?: string;
+  };
   createdAt: string;
   updatedAt?: string;
   attachments?: {
@@ -29,7 +38,9 @@ interface SupportMessage {
     name: string;
     type: string;
     size: number;
-  }[];
+    }[];
+  seenByAdmin?: boolean;
+  seenByOwner?: boolean;
 }
 
 const panelVariants = {
@@ -48,6 +59,7 @@ export default function SupportWidget() {
   });
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
+  const [replyTo, setReplyTo] = useState<SupportMessage["replyTo"] | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -135,12 +147,19 @@ export default function SupportWidget() {
           for (let i = 0; i < prev.length; i += 1) {
             const prevMessage = prev[i];
             const nextMessage = nextMessages[i];
+            const prevReply = prevMessage.replyTo;
+            const nextReply = nextMessage.replyTo;
             if (
               prevMessage._id !== nextMessage._id ||
               prevMessage.updatedAt !== nextMessage.updatedAt ||
               prevMessage.createdAt !== nextMessage.createdAt ||
               prevMessage.message !== nextMessage.message ||
-              (prevMessage.attachments?.length || 0) !== (nextMessage.attachments?.length || 0)
+              prevMessage.seenByAdmin !== nextMessage.seenByAdmin ||
+              prevMessage.seenByOwner !== nextMessage.seenByOwner ||
+              (prevMessage.attachments?.length || 0) !== (nextMessage.attachments?.length || 0) ||
+              (prevReply?.messageId || "") !== (nextReply?.messageId || "") ||
+              (prevReply?.message || "") !== (nextReply?.message || "") ||
+              (prevReply?.senderRole || "") !== (nextReply?.senderRole || "")
             ) {
               return nextMessages;
             }
@@ -209,6 +228,7 @@ export default function SupportWidget() {
     if (isOpen) return;
     setAttachments([]);
     setMessageInput("");
+    setReplyTo(null);
   }, [isOpen]);
 
   useEffect(() => {
@@ -289,7 +309,11 @@ export default function SupportWidget() {
             "Content-Type": "application/json",
             "x-csrf-token": activeToken,
           },
-          body: JSON.stringify({ message: messageInput.trim(), attachments: uploaded }),
+          body: JSON.stringify({
+            message: messageInput.trim(),
+            attachments: uploaded,
+            replyTo: replyTo ?? undefined,
+          }),
         }),
         refreshCsrfToken
       );
@@ -300,6 +324,7 @@ export default function SupportWidget() {
       if (data.success) {
         setMessageInput("");
         setAttachments([]);
+        setReplyTo(null);
         setError(null);
         fetchMessages();
       }
@@ -427,6 +452,29 @@ export default function SupportWidget() {
     });
   };
 
+  const selectReplyTarget = useCallback((message: SupportMessage) => {
+    let preview = message.message?.trim() || "";
+    if (!preview && message.attachments && message.attachments.length > 0) {
+      const names = message.attachments
+        .map((attachment) => attachment.name)
+        .filter(Boolean);
+      if (names.length > 0) {
+        const maxNames = 2;
+        const head = names.slice(0, maxNames).join(", ");
+        const suffix = names.length > maxNames ? ` +${names.length - maxNames} more` : "";
+        preview = `${names.length > 1 ? "Attachments" : "Attachment"}: ${head}${suffix}`;
+      }
+    }
+    if (!preview) return;
+    setReplyTo({
+      messageId: message._id,
+      message: preview,
+      senderRole: message.senderRole,
+      senderName: message.senderName,
+      createdAt: message.createdAt,
+    });
+  }, []);
+
   if (!canShow) return null;
 
   return (
@@ -534,6 +582,23 @@ export default function SupportWidget() {
                                 </div>
                               ) : (
                                 <>
+                                  {message.replyTo && (
+                                    <div
+                                      className={`mb-2 rounded-xl border-l-2 px-3 py-2 text-[10px] ${
+                                        isOwnerMessage
+                                          ? "border-white/50 bg-white/10 text-white/80"
+                                          : "border-primary/30 bg-primary/5 text-muted-foreground"
+                                      }`}
+                                    >
+                                      <p className="text-[9px] uppercase tracking-[0.2em]">
+                                        {message.replyTo.senderName ||
+                                          (message.replyTo.senderRole === "admin" ? "Support" : "Owner")}
+                                      </p>
+                                      <p className="text-[11px] sm:text-xs line-clamp-2 break-words">
+                                        {message.replyTo.message}
+                                      </p>
+                                    </div>
+                                  )}
                                   {message.message && <p className="whitespace-pre-wrap">{message.message}</p>}
                                   {message.attachments && message.attachments.length > 0 && (
                                     <div className="mt-3 grid grid-cols-1 gap-2">
@@ -576,42 +641,62 @@ export default function SupportWidget() {
                                       isOwnerMessage ? "text-white/80" : "text-muted-foreground"
                                     }`}
                                   >
-                                    <span>
-                                      {formatTime(message.createdAt)}
-                                      {message.updatedAt ? " · edited" : ""}
-                                    </span>
-                                    {isOwnerMessage && (
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          onClick={() => {
-                                            setEditingId(message._id);
-                                            setEditingText(message.message);
-                                          }}
-                                          className="hover:text-white"
-                                          title="Edit message"
-                                        >
-                                          <PencilLine className="h-3 w-3" />
-                                        </button>
-                                        {deleteConfirmId === message._id ? (
+                                    <div className="flex items-center gap-2">
+                                      <span>
+                                        {formatTime(message.createdAt)}
+                                        {message.updatedAt ? " · edited" : ""}
+                                      </span>
+                                      {isOwnerMessage && (
+                                        <span className="inline-flex items-center">
+                                          {message.seenByAdmin ? (
+                                            <CheckCheck className="h-3 w-3 text-sky-300" />
+                                          ) : (
+                                            <Check className="h-3 w-3 text-white/70" />
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => selectReplyTarget(message)}
+                                        className={isOwnerMessage ? "hover:text-white" : "hover:text-foreground"}
+                                        title="Reply to message"
+                                      >
+                                        <Reply className="h-3 w-3" />
+                                      </button>
+                                      {isOwnerMessage && (
+                                        <>
                                           <button
-                                            onClick={() => handleDelete(message._id)}
-                                            disabled={isSending}
-                                            className="hover:text-white disabled:opacity-60"
-                                            title="Confirm delete"
-                                          >
-                                            <Check className="h-3 w-3" />
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={() => setDeleteConfirmId(message._id)}
+                                            onClick={() => {
+                                              setEditingId(message._id);
+                                              setEditingText(message.message);
+                                            }}
                                             className="hover:text-white"
-                                            title="Delete message"
+                                            title="Edit message"
                                           >
-                                            <Trash2 className="h-3 w-3" />
+                                            <PencilLine className="h-3 w-3" />
                                           </button>
-                                        )}
-                                      </div>
-                                    )}
+                                          {deleteConfirmId === message._id ? (
+                                            <button
+                                              onClick={() => handleDelete(message._id)}
+                                              disabled={isSending}
+                                              className="hover:text-white disabled:opacity-60"
+                                              title="Confirm delete"
+                                            >
+                                              <Check className="h-3 w-3" />
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={() => setDeleteConfirmId(message._id)}
+                                              className="hover:text-white"
+                                              title="Delete message"
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
                                 </>
                               )}
@@ -628,6 +713,25 @@ export default function SupportWidget() {
               </div>
 
               <div className="px-5 py-4 border-t border-border bg-white/70">
+                {replyTo && (
+                  <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-border bg-white/70 px-3 py-2 text-[10px] text-muted-foreground">
+                    <div className="space-y-1">
+                      <p className="text-[9px] uppercase tracking-[0.2em]">
+                        Replying to {replyTo.senderName || (replyTo.senderRole === "admin" ? "Support" : "Owner")}
+                      </p>
+                      <p className="text-[11px] sm:text-xs text-foreground line-clamp-2 break-words">
+                        {replyTo.message}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setReplyTo(null)}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Cancel reply"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
                 {attachments.length > 0 && (
                   <div className="mb-3 flex flex-wrap gap-2">
                     {attachmentPreviews.map((item, index) => (
@@ -704,7 +808,7 @@ export default function SupportWidget() {
           aria-label="Open live support"
         >
           <span className="absolute -inset-1 rounded-full bg-foreground/35 blur-xl" />
-          <MessageCircle className="h-6 w-6 relative" />
+          <Headphones className="h-6 w-6 relative" />
         </motion.button>
       </div>
     </>
