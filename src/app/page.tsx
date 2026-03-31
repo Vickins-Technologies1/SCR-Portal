@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle, FaTimes } from "react-icons/fa";
@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [otpMessage, setOtpMessage] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
+  const autoVerifyRef = useRef<string>("");
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
@@ -100,8 +101,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleOtpVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const verifyOtp = async () => {
     setError(null);
     setIsLoading(true);
 
@@ -146,10 +146,25 @@ export default function LoginPage() {
       router.push(data.redirect || "/property-owner-dashboard");
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
+      autoVerifyRef.current = "";
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleOtpVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await verifyOtp();
+  };
+
+  useEffect(() => {
+    if (!otpRequired) return;
+    if (otpCode.length !== 6) return;
+    if (isLoading) return;
+    if (autoVerifyRef.current === otpCode) return;
+    autoVerifyRef.current = otpCode;
+    verifyOtp();
+  }, [otpCode, otpRequired, isLoading]);
 
   useEffect(() => {
     if (resendCountdown <= 0) return;
@@ -513,6 +528,7 @@ export default function LoginPage() {
                     setOtpCode("");
                     setOtpMessage(null);
                     setResendCountdown(0);
+                    autoVerifyRef.current = "";
                   }}
                   className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
                 >

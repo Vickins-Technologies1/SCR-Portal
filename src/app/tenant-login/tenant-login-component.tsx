@@ -1,7 +1,7 @@
 // app/tenant-login/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } from "react-icons/fa";
@@ -25,6 +25,7 @@ export default function TenantLoginPage() {
   const [otpMessage, setOtpMessage] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
+  const autoVerifyRef = useRef<string>("");
 
   // Auto-fill demo credentials
   useEffect(() => {
@@ -105,8 +106,7 @@ export default function TenantLoginPage() {
     }
   };
 
-  const handleOtpVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const verifyOtp = async () => {
     setError(null);
     setIsSubmitting(true);
 
@@ -143,10 +143,25 @@ export default function TenantLoginPage() {
       router.push(result.redirect || "/tenant-dashboard");
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
+      autoVerifyRef.current = "";
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleOtpVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await verifyOtp();
+  };
+
+  useEffect(() => {
+    if (!otpRequired) return;
+    if (otpCode.length !== 6) return;
+    if (isSubmitting) return;
+    if (autoVerifyRef.current === otpCode) return;
+    autoVerifyRef.current = otpCode;
+    verifyOtp();
+  }, [otpCode, otpRequired, isSubmitting]);
 
   useEffect(() => {
     if (resendCountdown <= 0) return;
@@ -440,6 +455,7 @@ export default function TenantLoginPage() {
                     setOtpCode("");
                     setOtpMessage(null);
                     setResendCountdown(0);
+                    autoVerifyRef.current = "";
                   }}
                   className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
