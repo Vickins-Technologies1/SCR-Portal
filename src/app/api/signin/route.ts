@@ -4,48 +4,18 @@ import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
+import { getDefaultPermissions } from "../../../lib/permissions";
+import { sendOtpEmail } from "../../../lib/email";
+import { sendOtpSms } from "../../../lib/sms";
+import {
+  generateOtpCode,
+  hashOtpCode,
+  OTP_EXPIRY_MS,
+  OTP_MAX_ATTEMPTS,
+  OTP_REQUIRE_AFTER_MS,
+} from "../../../lib/otp";
 
-// Default permissions per role (fallback when no stored permissions exist)
-const getDefaultPermissions = (role: string, isTeamMember: boolean = false): string[] => {
-  const common = [
-    "dashboard:view",
-    "properties:view",
-    "tenants:view",
-    "payments:view",
-    "expenses:view",
-    "notifications:view",
-    "reports:view",
-    "settings:view",
-  ];
-
-  if (role === "propertyOwner") {
-    return [
-      ...common,
-      "users:view",
-      "properties:list_new",
-    ];
-  }
-
-  if (isTeamMember) {
-    // Team members usually get broad access — adjust as needed
-    return [
-      ...common,
-      "users:view",
-      "properties:list_new", // remove if team members shouldn't list properties
-    ];
-  }
-
-  if (role === "tenant") {
-    return [
-      "dashboard:view",
-      "properties:view",     // maybe restrict to own properties later
-      "payments:view",
-      "notifications:view",
-    ];
-  }
-
-  return [];
-};
+const OTP_COLLECTION = "otpChallenges";
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,12 +53,14 @@ export async function POST(request: NextRequest) {
       let finalRole = providedRole || "unknown";
       let isTeamMember = false;
       let isOwner = false;
+      let userCollection: "tenants" | "propertyOwners" | "teamMembers" | null = null;
 
       // Try tenant
       user = await db.collection("tenants").findOne({ _id: new ObjectId(userId) });
       if (user) {
         finalRole = "tenant";
         redirectPath = "/tenant-dashboard";
+        userCollection = "tenants";
       } else {
         // Try property owner
         user = await db.collection("propertyOwners").findOne({ _id: new ObjectId(userId) });
@@ -96,6 +68,7 @@ export async function POST(request: NextRequest) {
           finalRole = "propertyOwner";
           redirectPath = "/property-owner-dashboard";
           isOwner = true;
+          userCollection = "propertyOwners";
 
           // ──── ADMIN APPROVAL CHECK ────
           if (user.isApproved === false) {
@@ -115,11 +88,89 @@ export async function POST(request: NextRequest) {
             finalRole = user.role; // e.g. "Manager", "Assistant"
             redirectPath = "/property-owner-dashboard";
             isTeamMember = true;
+            userCollection = "teamMembers";
           }
         }
       }
 
       if (user) {
+        if (!userCollection) {
+          return NextResponse.json(
+            { success: false, message: "Unable to resolve user collection" },
+            { status: 500 }
+          );
+        }
+
+        const now = new Date();
+        const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
+        const requiresOtp =
+          !lastLoginAt || Number.isNaN(lastLoginAt.getTime())
+            ? true
+            : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS;
+
+        if (requiresOtp) {
+          const otpEmail = user.email?.toString();
+          const otpPhone = user.phone?.toString();
+
+          if (!otpEmail || !otpPhone) {
+            return NextResponse.json(
+              { success: false, message: "Email and phone number are required for OTP login." },
+              { status: 400 }
+            );
+          }
+
+          const otpCode = generateOtpCode();
+          const otpRecordId = new ObjectId();
+
+          await db.collection(OTP_COLLECTION).deleteMany({
+            userId: user._id.toString(),
+            purpose: "login",
+          });
+
+          await db.collection(OTP_COLLECTION).insertOne({
+            _id: otpRecordId,
+            userId: user._id.toString(),
+            role: finalRole,
+            isTeamMember,
+            isOwner,
+            ownerId: isTeamMember ? user.ownerId?.toString() : null,
+            email: otpEmail,
+            phone: otpPhone,
+            purpose: "login",
+            codeHash: hashOtpCode(otpCode),
+            attempts: 0,
+            maxAttempts: OTP_MAX_ATTEMPTS,
+            createdAt: now,
+            expiresAt: new Date(now.getTime() + OTP_EXPIRY_MS),
+            lastSentAt: now,
+            resendCount: 0,
+            redirectPath,
+            collection: userCollection,
+          });
+
+          try {
+            await sendOtpEmail({ to: otpEmail, name: user.name || "User", code: otpCode });
+            await sendOtpSms({ phone: otpPhone, code: otpCode });
+          } catch (sendErr) {
+            await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });
+            console.error("OTP delivery failed:", sendErr);
+            return NextResponse.json(
+              { success: false, message: "Failed to send OTP. Please try again." },
+              { status: 500 }
+            );
+          }
+
+          return NextResponse.json(
+            {
+              success: false,
+              requiresOtp: true,
+              otpId: otpRecordId.toString(),
+              message: "OTP sent to your email and phone.",
+            },
+            { status: 200 }
+          );
+        }
+
         // Determine permissions — prefer stored ones for team members
         let finalPermissions: string[] = [];
 
@@ -183,6 +234,11 @@ export async function POST(request: NextRequest) {
           maxAge: 60 * 60,
           path: "/",
         });
+
+        await db.collection(userCollection).updateOne(
+          { _id: user._id },
+          { $set: { lastLoginAt: now } }
+        );
 
         console.log("Cookies set:", { 
           userId: user._id.toString(), 
@@ -218,6 +274,7 @@ export async function POST(request: NextRequest) {
     let finalRole = "unknown";
     let isTeamMember = false;
     let isOwner = false;
+    let userCollection: "tenants" | "propertyOwners" | "teamMembers" | null = null;
 
     // 1. Check propertyOwners (most privileged)
     user = await db.collection("propertyOwners").findOne({
@@ -227,6 +284,7 @@ export async function POST(request: NextRequest) {
       finalRole = "propertyOwner";
       redirectPath = "/property-owner-dashboard";
       isOwner = true;
+      userCollection = "propertyOwners";
 
       // ──── ADMIN APPROVAL CHECK ────
       if (user.isApproved === false) {
@@ -248,6 +306,7 @@ export async function POST(request: NextRequest) {
         finalRole = user.role; // e.g. "Manager"
         redirectPath = "/property-owner-dashboard";
         isTeamMember = true;
+        userCollection = "teamMembers";
       } else {
         // 3. Check tenants
         user = await db.collection("tenants").findOne({
@@ -256,6 +315,7 @@ export async function POST(request: NextRequest) {
         if (user) {
           finalRole = "tenant";
           redirectPath = "/tenant-dashboard";
+          userCollection = "tenants";
         }
       }
     }
@@ -276,6 +336,83 @@ export async function POST(request: NextRequest) {
       }
 
       if (isPasswordValid) {
+        if (!userCollection) {
+          return NextResponse.json(
+            { success: false, message: "Unable to resolve user collection" },
+            { status: 500 }
+          );
+        }
+
+        const now = new Date();
+        const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
+        const requiresOtp =
+          !lastLoginAt || Number.isNaN(lastLoginAt.getTime())
+            ? true
+            : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS;
+
+        if (requiresOtp) {
+          const otpEmail = user.email?.toString();
+          const otpPhone = user.phone?.toString();
+
+          if (!otpEmail || !otpPhone) {
+            return NextResponse.json(
+              { success: false, message: "Email and phone number are required for OTP login." },
+              { status: 400 }
+            );
+          }
+
+          const otpCode = generateOtpCode();
+          const otpRecordId = new ObjectId();
+
+          await db.collection(OTP_COLLECTION).deleteMany({
+            userId: user._id.toString(),
+            purpose: "login",
+          });
+
+          await db.collection(OTP_COLLECTION).insertOne({
+            _id: otpRecordId,
+            userId: user._id.toString(),
+            role: finalRole,
+            isTeamMember,
+            isOwner,
+            ownerId: isTeamMember ? user.ownerId?.toString() : null,
+            email: otpEmail,
+            phone: otpPhone,
+            purpose: "login",
+            codeHash: hashOtpCode(otpCode),
+            attempts: 0,
+            maxAttempts: OTP_MAX_ATTEMPTS,
+            createdAt: now,
+            expiresAt: new Date(now.getTime() + OTP_EXPIRY_MS),
+            lastSentAt: now,
+            resendCount: 0,
+            redirectPath,
+            collection: userCollection,
+          });
+
+          try {
+            await sendOtpEmail({ to: otpEmail, name: user.name || "User", code: otpCode });
+            await sendOtpSms({ phone: otpPhone, code: otpCode });
+          } catch (sendErr) {
+            await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });
+            console.error("OTP delivery failed:", sendErr);
+            return NextResponse.json(
+              { success: false, message: "Failed to send OTP. Please try again." },
+              { status: 500 }
+            );
+          }
+
+          return NextResponse.json(
+            {
+              success: false,
+              requiresOtp: true,
+              otpId: otpRecordId.toString(),
+              message: "OTP sent to your email and phone.",
+            },
+            { status: 200 }
+          );
+        }
+
         // Determine permissions — prefer stored ones for team members
         let finalPermissions: string[] = [];
 
@@ -339,6 +476,11 @@ export async function POST(request: NextRequest) {
           maxAge: 60 * 60,
           path: "/",
         });
+
+        await db.collection(userCollection).updateOne(
+          { _id: user._id },
+          { $set: { lastLoginAt: now } }
+        );
 
         console.log("Cookies set:", { 
           userId: user._id.toString(), 

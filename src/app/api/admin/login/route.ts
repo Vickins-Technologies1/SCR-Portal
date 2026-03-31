@@ -1,8 +1,19 @@
 // app/api/admin/login/route.ts
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
-import { Db } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
+import { sendOtpEmail } from "../../../../lib/email";
+import { sendOtpSms } from "../../../../lib/sms";
+import {
+  generateOtpCode,
+  hashOtpCode,
+  OTP_EXPIRY_MS,
+  OTP_MAX_ATTEMPTS,
+  OTP_REQUIRE_AFTER_MS,
+} from "../../../../lib/otp";
+
+const OTP_COLLECTION = "otpChallenges";
 
 export async function POST(request: Request) {
   let email: string | null = null;
@@ -42,13 +53,82 @@ export async function POST(request: Request) {
       );
     }
 
+    const now = new Date();
+    const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
+    const requiresOtp =
+      !lastLoginAt || Number.isNaN(lastLoginAt.getTime())
+        ? true
+        : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS;
+
+    if (requiresOtp) {
+      const otpEmail = user.email?.toString();
+      const otpPhone = user.phone?.toString();
+
+      if (!otpEmail || !otpPhone) {
+        return NextResponse.json(
+          { success: false, message: "Email and phone number are required for OTP login." },
+          { status: 400 }
+        );
+      }
+
+      const otpCode = generateOtpCode();
+      const otpRecordId = new ObjectId();
+
+      await db.collection(OTP_COLLECTION).deleteMany({
+        userId: user._id.toString(),
+        purpose: "login",
+      });
+
+      await db.collection(OTP_COLLECTION).insertOne({
+        _id: otpRecordId,
+        userId: user._id.toString(),
+        role: user.role,
+        isTeamMember: false,
+        isOwner: false,
+        ownerId: null,
+        email: otpEmail,
+        phone: otpPhone,
+        purpose: "login",
+        codeHash: hashOtpCode(otpCode),
+        attempts: 0,
+        maxAttempts: OTP_MAX_ATTEMPTS,
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + OTP_EXPIRY_MS),
+        lastSentAt: now,
+        resendCount: 0,
+        redirectPath: "/admin/dashboard",
+        collection: "propertyOwners",
+      });
+
+      try {
+        await sendOtpEmail({ to: otpEmail, name: user.name || "Admin", code: otpCode });
+        await sendOtpSms({ phone: otpPhone, code: otpCode });
+      } catch (sendErr) {
+        await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });
+        console.error("OTP delivery failed:", sendErr);
+        return NextResponse.json(
+          { success: false, message: "Failed to send OTP. Please try again." },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          requiresOtp: true,
+          otpId: otpRecordId.toString(),
+          message: "OTP sent to your email and phone.",
+        },
+        { status: 200 }
+      );
+    }
+
     // ── Success ────────────────────────────────────────────────
     const response = NextResponse.json({
       success: true,
-      user: {
-        id: user._id.toString(),
-        role: user.role,
-      },
+      userId: user._id.toString(),
+      role: user.role,
+      redirect: "/admin/dashboard",
     });
 
     const cookieOptions = {
@@ -61,6 +141,11 @@ export async function POST(request: Request) {
 
     response.cookies.set("userId", user._id.toString(), cookieOptions);
     response.cookies.set("role", user.role, cookieOptions);
+
+    await db.collection("propertyOwners").updateOne(
+      { _id: user._id },
+      { $set: { lastLoginAt: now } }
+    );
 
     return response;
   } catch (error) {

@@ -1,0 +1,201 @@
+// src/app/api/auth/otp/verify/route.ts
+import { NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
+import { v4 as uuidv4 } from "uuid";
+import { getDefaultPermissions } from "@/lib/permissions";
+import { hashOtpCode } from "@/lib/otp";
+
+type OtpDoc = {
+  _id: ObjectId;
+  userId: string;
+  role: string;
+  isTeamMember?: boolean;
+  isOwner?: boolean;
+  ownerId?: string | null;
+  email: string;
+  phone: string;
+  purpose: "login";
+  codeHash: string;
+  attempts: number;
+  maxAttempts: number;
+  createdAt: Date;
+  expiresAt: Date;
+  redirectPath?: string;
+  collection: "tenants" | "propertyOwners" | "teamMembers";
+  lastSentAt?: Date;
+  resendCount?: number;
+};
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const otpId = body?.otpId?.toString();
+    const code = body?.code?.toString().trim();
+
+    if (!otpId || !code) {
+      return NextResponse.json(
+        { success: false, message: "OTP code and request ID are required." },
+        { status: 400 }
+      );
+    }
+
+    const { db } = await connectToDatabase();
+    if (!ObjectId.isValid(otpId)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid OTP request ID." },
+        { status: 400 }
+      );
+    }
+
+    const otpObjectId = new ObjectId(otpId);
+    const otp = await db.collection<OtpDoc>("otpChallenges").findOne({
+      _id: otpObjectId,
+      purpose: "login",
+    });
+
+    if (!otp) {
+      return NextResponse.json(
+        { success: false, message: "OTP request not found or expired." },
+        { status: 404 }
+      );
+    }
+
+    const now = new Date();
+    if (otp.expiresAt && now > new Date(otp.expiresAt)) {
+      await db.collection("otpChallenges").deleteOne({ _id: otpObjectId });
+      return NextResponse.json(
+        { success: false, message: "OTP expired. Please log in again." },
+        { status: 400 }
+      );
+    }
+
+    if (otp.attempts >= otp.maxAttempts) {
+      return NextResponse.json(
+        { success: false, message: "Too many invalid attempts. Please log in again." },
+        { status: 429 }
+      );
+    }
+
+    if (hashOtpCode(code) !== otp.codeHash) {
+      await db.collection("otpChallenges").updateOne(
+        { _id: otpObjectId },
+        { $inc: { attempts: 1 } }
+      );
+      return NextResponse.json(
+        { success: false, message: "Invalid OTP code." },
+        { status: 401 }
+      );
+    }
+
+    const user = await db.collection(otp.collection).findOne({
+      _id: new ObjectId(otp.userId),
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "User account not found." },
+        { status: 404 }
+      );
+    }
+
+    if (otp.collection === "propertyOwners" && user.isApproved === false) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Your account is still pending admin approval. Please try again later or contact support.",
+        },
+        { status: 403 }
+      );
+    }
+
+    const isTeamMember = otp.collection === "teamMembers" || otp.isTeamMember;
+    const isOwner = otp.collection === "propertyOwners" && otp.role === "propertyOwner";
+    const redirectPath =
+      otp.redirectPath ||
+      (otp.role === "admin"
+        ? "/admin/dashboard"
+        : otp.role === "tenant"
+          ? "/tenant-dashboard"
+          : "/property-owner-dashboard");
+
+    let finalPermissions: string[] = [];
+
+    if (otp.role === "propertyOwner") {
+      finalPermissions = getDefaultPermissions("propertyOwner");
+    } else if (isTeamMember) {
+      finalPermissions = Array.isArray(user.permissions) && user.permissions.length > 0
+        ? user.permissions
+        : getDefaultPermissions(otp.role, true);
+    } else if (otp.role === "tenant") {
+      finalPermissions = getDefaultPermissions("tenant");
+    }
+
+    const response = new NextResponse(
+      JSON.stringify({
+        success: true,
+        userId: user._id.toString(),
+        role: otp.role,
+        redirect: redirectPath,
+        isTeamMember,
+        isOwner,
+        permissions: finalPermissions,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+    response.cookies.set("userId", user._id.toString(), {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60,
+      path: "/",
+    });
+
+    response.cookies.set("role", otp.role, {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60,
+      path: "/",
+    });
+
+    if (finalPermissions.length > 0) {
+      response.cookies.set("permissions", JSON.stringify(finalPermissions), {
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60,
+        path: "/",
+      });
+    }
+
+    if (isTeamMember && user.ownerId) {
+      response.cookies.set("ownerId", user.ownerId.toString(), {
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60,
+        path: "/",
+      });
+    }
+
+    response.cookies.set("csrf-token", uuidv4(), {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 60 * 60,
+      path: "/",
+    });
+
+    await db.collection(otp.collection).updateOne(
+      { _id: user._id },
+      { $set: { lastLoginAt: now } }
+    );
+
+    await db.collection("otpChallenges").deleteOne({ _id: otpObjectId });
+
+    return response;
+  } catch (error) {
+    console.error("OTP verification error:", error);
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

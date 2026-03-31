@@ -4,11 +4,29 @@ import type { ReactNode } from "react";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { SidebarProvider } from "./components/SidebarContext";
 import TourGuide, { TourStep } from "@/components/tour/TourGuide";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import SupportWidget from "./components/SupportWidget";
+import Cookies from "js-cookie";
+import { useIdleLogout } from "@/hooks/useIdleLogout";
 
 export default function PropertyOwnerDashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
+
+  useIdleLogout({
+    timeoutMs: IDLE_TIMEOUT_MS,
+    onIdle: () => {
+      Cookies.remove("userId");
+      Cookies.remove("role");
+      Cookies.remove("permissions");
+      Cookies.remove("ownerId");
+      Cookies.remove("csrf-token");
+      Cookies.remove("impersonatingTenantId", { path: "/" });
+      Cookies.remove("isImpersonating", { path: "/" });
+      router.replace("/login");
+    },
+  });
   const steps: TourStep[] = [
     {
       title: "Navigation Sidebar",

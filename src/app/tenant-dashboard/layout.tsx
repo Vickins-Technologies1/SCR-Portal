@@ -19,6 +19,7 @@ import {
 import Cookies from "js-cookie";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import TourGuide, { TourStep } from "@/components/tour/TourGuide";
+import { useIdleLogout } from "@/hooks/useIdleLogout";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -61,6 +62,21 @@ export default function TenantDashboardLayout({
   const [error, setError] = useState<string | null>(null);
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
+  const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
+
+  useIdleLogout({
+    timeoutMs: IDLE_TIMEOUT_MS,
+    onIdle: () => {
+      Cookies.remove("userId");
+      Cookies.remove("role");
+      Cookies.remove("permissions");
+      Cookies.remove("ownerId");
+      Cookies.remove("csrf-token");
+      Cookies.remove("impersonatingTenantId", { path: "/" });
+      Cookies.remove("isImpersonating", { path: "/" });
+      window.location.href = "/tenant-login";
+    },
+  });
 
   const links = [
     { key: "overview", href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },

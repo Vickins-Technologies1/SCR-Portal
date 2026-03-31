@@ -2,8 +2,26 @@
 
 import type { ReactNode } from "react";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
+import { useIdleLogout } from "@/hooks/useIdleLogout";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
+
+  useIdleLogout({
+    timeoutMs: IDLE_TIMEOUT_MS,
+    onIdle: () => {
+      Cookies.remove("userId");
+      Cookies.remove("role");
+      Cookies.remove("permissions");
+      Cookies.remove("ownerId");
+      Cookies.remove("csrf-token");
+      router.replace("/admin/login");
+    },
+  });
+
   return (
     <PublicThemeWrapper>
       <div className="owner-portal relative min-h-[100svh] bg-background text-foreground text-[12px] sm:text-[13px] lg:text-sm overflow-x-hidden">

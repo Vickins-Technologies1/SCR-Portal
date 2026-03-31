@@ -138,3 +138,16 @@ export async function sendWelcomeSms({
     throw error; // Re-throw for caller to handle
   }
 }
+
+export async function sendOtpSms({
+  phone,
+  code,
+  senderId = "BLESSEDTEXT",
+}: {
+  phone: string;
+  code: string;
+  senderId?: string;
+}): Promise<void> {
+  const message = `Your login verification code is ${code}. It expires in 10 minutes.`;
+  await sendWelcomeSms({ phone, message, senderId });
+}

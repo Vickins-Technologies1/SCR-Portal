@@ -15,6 +15,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [otpId, setOtpId] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
@@ -54,6 +60,13 @@ export default function LoginPage() {
 
       const data = await res.json();
 
+      if (data?.requiresOtp && data?.otpId) {
+        setOtpRequired(true);
+        setOtpId(data.otpId);
+        setOtpMessage(data.message || "Enter the OTP sent to your email and phone.");
+        return;
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Login failed");
       }
@@ -84,6 +97,97 @@ export default function LoginPage() {
       setError(err.message || "Authentication failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleOtpVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      if (!otpId) {
+        throw new Error("OTP session expired. Please log in again.");
+      }
+
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ otpId, code: otpCode }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "OTP verification failed");
+      }
+
+      Cookies.set("userId", data.userId, {
+        secure: true,
+        sameSite: "Strict",
+        expires: 7,
+      });
+
+      Cookies.set("role", data.role, {
+        secure: true,
+        sameSite: "Strict",
+        expires: 7,
+      });
+
+      if (data.permissions) {
+        Cookies.set("permissions", JSON.stringify(data.permissions), {
+          secure: true,
+          sameSite: "Strict",
+          expires: 7,
+        });
+      }
+
+      router.push(data.redirect || "/property-owner-dashboard");
+    } catch (err: any) {
+      setError(err.message || "OTP verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCountdown]);
+
+  const handleResendOtp = async () => {
+    if (!otpId || resendLoading || resendCountdown > 0) return;
+    setResendLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/auth/otp/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ otpId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        const retryAfter = Math.ceil((data.retryAfterMs || 30000) / 1000);
+        if (res.status === 429) {
+          setResendCountdown(retryAfter);
+        }
+        throw new Error(data.message || "Failed to resend OTP.");
+      }
+
+      setOtpMessage(data.message || "OTP resent to your email and phone.");
+      const retryAfter = Math.ceil((data.retryAfterMs || 30000) / 1000);
+      setResendCountdown(retryAfter);
+    } catch (err: any) {
+      setError(err.message || "Failed to resend OTP.");
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -373,56 +477,113 @@ export default function LoginPage() {
               Continue with Google
             </motion.button>
 
-            <form id="login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
-              <input
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
-              />
+            {otpRequired ? (
+              <form onSubmit={handleOtpVerify} className="space-y-3.5 sm:space-y-4 pt-1">
+                {otpMessage && (
+                  <div className="p-2.5 xs:p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs sm:text-sm rounded-xl text-center">
+                    {otpMessage}
+                  </div>
+                )}
 
-              <div className="relative">
                 <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                  className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Enter 6-digit OTP"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.35em] text-center"
                 />
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="submit"
+                  disabled={isLoading || otpCode.length < 6}
+                  className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                >
+                  {isLoading ? "Verifying..." : "Verify OTP"}
+                </motion.button>
+
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                  onClick={() => {
+                    setOtpRequired(false);
+                    setOtpId(null);
+                    setOtpCode("");
+                    setOtpMessage(null);
+                    setResendCountdown(0);
+                  }}
+                  className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
-                  {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  Back to login
                 </button>
-              </div>
 
-              <div className="flex items-center justify-end text-xs sm:text-sm">
                 <button
                   type="button"
-                  onClick={openResetModal}
-                  className="text-primary font-semibold hover:underline"
+                  onClick={handleResendOtp}
+                  disabled={resendLoading || resendCountdown > 0}
+                  className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-60"
                 >
-                  Forgot password?
+                  {resendLoading
+                    ? "Resending OTP..."
+                    : resendCountdown > 0
+                      ? `Resend OTP in ${resendCountdown}s`
+                      : "Resend OTP"}
                 </button>
-              </div>
+              </form>
+            ) : (
+              <form id="login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
+                <input
+                  type="email"
+                  placeholder="Email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+                />
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
-              >
-                {isLoading ? "Authenticating..." : "Sign In"}
-              </motion.button>
-            </form>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    className="w-full px-3.5 xs:px-4 py-2.5 pr-9 xs:pr-10 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2.5 xs:right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-end text-xs sm:text-sm">
+                  <button
+                    type="button"
+                    onClick={openResetModal}
+                    className="text-primary font-semibold hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                >
+                  {isLoading ? "Authenticating..." : "Sign In"}
+                </motion.button>
+              </form>
+            )}
 
             <p className="text-center text-[10px] sm:text-[11px] text-muted-foreground pt-1">
               New to Sorana?{" "}

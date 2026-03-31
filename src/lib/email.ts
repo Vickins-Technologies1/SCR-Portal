@@ -82,6 +82,12 @@ interface OwnerResetEmailOptions {
   resetLink: string;
 }
 
+interface OtpEmailOptions {
+  to: string;
+  name: string;
+  code: string;
+}
+
 // Reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -387,6 +393,46 @@ export async function sendOwnerPasswordResetEmail({
   } catch (error) {
     console.error(`Error sending owner password reset email to ${to}:`, error);
     throw new Error("Failed to send owner password reset email");
+  }
+}
+
+export async function sendOtpEmail({
+  to,
+  name,
+  code,
+}: OtpEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const html = generateStyledTemplate({
+      name,
+      title: "Your Login Verification Code",
+      intro: "Use the code below to complete your sign-in.",
+      details: `
+        <p style="font-size: 20px; font-weight: 700; letter-spacing: 2px; text-align: center; margin: 16px 0;">
+          ${code}
+        </p>
+        <p style="font-size: 14px; color: #dc2626; text-align: center; margin-top: 12px;">
+          This code expires in 10 minutes.
+        </p>
+        <p style="font-size: 14px; margin-top: 16px; text-align: center;">
+          If you did not request this, please contact support immediately.
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Your OTP Code",
+      html,
+    });
+    console.log(`OTP email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending OTP email to ${to}:`, error);
+    throw new Error("Failed to send OTP email");
   }
 }
 
