@@ -15,6 +15,7 @@ interface Tenant {
   phone: string;
   propertyId: string;
   unitType: string;
+  unitIdentifier?: string;
   houseNumber: string;
   price: number;
   deposit: number;

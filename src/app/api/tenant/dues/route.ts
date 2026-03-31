@@ -39,6 +39,7 @@ interface Tenant {
   _id: string;
   propertyId: string;
   unitType: string;
+  unitIdentifier?: string;
   price: number;
   deposit: number;
   leaseStartDate: string | null;

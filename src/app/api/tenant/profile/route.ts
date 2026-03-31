@@ -14,6 +14,7 @@ interface Tenant {
   role: string;
   propertyId: string;
   unitType: string;
+  unitIdentifier?: string;
   price: number;
   deposit: number;
   houseNumber: string;
