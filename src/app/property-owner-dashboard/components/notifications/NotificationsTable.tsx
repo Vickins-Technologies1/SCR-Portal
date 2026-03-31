@@ -5,7 +5,6 @@
 import {
   Trash2,
   RefreshCw,
-  Eye,
   CheckCircle2,
   AlertTriangle,
   Clock,
@@ -17,6 +16,7 @@ import {
 import { format } from "date-fns";
 
 interface TableRow {
+  _id?: string;
   id?: string;
   message?: string;
   type?: string;
@@ -40,7 +40,6 @@ interface NotificationsTableProps {
   items: TableRow[];
   viewMode: "sent" | "upcoming";
   onViewDetails: (item: TableRow) => void;
-  onMarkAsRead?: (id: string) => void;
   onRetry?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
@@ -49,7 +48,6 @@ export default function NotificationsTable({
   items,
   viewMode,
   onViewDetails,
-  onMarkAsRead,
   onRetry,
   onDelete,
 }: NotificationsTableProps) {
@@ -155,8 +153,9 @@ export default function NotificationsTable({
     <div className="space-y-4">
       <div className="md:hidden space-y-3">
         {items.map((item, index) => {
+          const rowId = item._id || item.id;
           const uniqueKey =
-            item.id ||
+            rowId ||
             (viewMode === "upcoming" && item.tenantId
               ? item.tenantId
               : `card-${viewMode}-${index}`);
@@ -206,16 +205,7 @@ export default function NotificationsTable({
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
-                  onClick={() => item.id && onMarkAsRead?.(item.id)}
-                  className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-blue-700 hover:bg-blue-100 transition-colors"
-                  title="Mark as read"
-                >
-                  <Eye className="w-4 h-4" />
-                  Mark Read
-                </button>
-
-                <button
-                  onClick={() => item.id && onRetry?.(item.id)}
+                  onClick={() => rowId && onRetry?.(rowId)}
                   className="flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-amber-700 hover:bg-amber-100 transition-colors"
                   title="Retry sending"
                 >
@@ -224,7 +214,7 @@ export default function NotificationsTable({
                 </button>
 
                 <button
-                  onClick={() => item.id && onDelete?.(item.id)}
+                  onClick={() => rowId && onDelete?.(rowId)}
                   className="flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-rose-700 hover:bg-rose-100 transition-colors"
                   title="Delete notification"
                 >
@@ -303,8 +293,9 @@ export default function NotificationsTable({
             </thead>
             <tbody>
               {items.map((item, index) => {
+                const rowId = item._id || item.id;
                 const uniqueKey =
-                  item.id ||
+                  rowId ||
                   (viewMode === "upcoming" && item.tenantId
                     ? item.tenantId
                     : `row-${viewMode}-${index}`);
@@ -344,16 +335,7 @@ export default function NotificationsTable({
                         <td className="align-top" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-3 text-[11px] sm:text-xs font-semibold">
                             <button
-                              onClick={() => item.id && onMarkAsRead?.(item.id)}
-                              className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 transition-colors"
-                              title="Mark as read"
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span className="hidden md:inline">Mark Read</span>
-                            </button>
-
-                            <button
-                              onClick={() => item.id && onRetry?.(item.id)}
+                              onClick={() => rowId && onRetry?.(rowId)}
                               className="flex items-center gap-1.5 text-yellow-600 hover:text-yellow-700 transition-colors"
                               title="Retry sending"
                             >
@@ -362,7 +344,7 @@ export default function NotificationsTable({
                             </button>
 
                             <button
-                              onClick={() => item.id && onDelete?.(item.id)}
+                              onClick={() => rowId && onDelete?.(rowId)}
                               className="flex items-center gap-1.5 text-red-600 hover:text-red-800 transition-colors"
                               title="Delete notification"
                             >

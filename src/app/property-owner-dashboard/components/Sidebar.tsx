@@ -52,6 +52,7 @@ export default function Sidebar() {
   const [teamRole, setTeamRole] = useState("Team Member");
   const [mounted, setMounted] = useState(false);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -78,6 +79,30 @@ export default function Sidebar() {
       cancelled = true;
     };
   }, [userId, role]);
+
+  useEffect(() => {
+    if (!userId || !perm.hasPermission("notifications:view")) return;
+    let cancelled = false;
+
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch("/api/notifications?unreadCount=1", { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setUnreadNotifications(Number(data.unreadCount || 0));
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [userId, perm]);
 
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
@@ -173,6 +198,7 @@ export default function Sidebar() {
           <nav className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 space-y-1.5">
             {navLinks.map(({ key, href, label, icon }) => {
               const isActive = pathname === href || pathname.startsWith(href + "/");
+              const showUnreadBadge = key === "notifications" && unreadNotifications > 0;
               return (
                 <Link
                   key={key}
@@ -185,10 +211,25 @@ export default function Sidebar() {
                       : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
                   }`}
                 >
-                  <span className={isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}>
+                  <span className={`relative ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}`}>
                     {icon}
+                    {showUnreadBadge && (
+                      <span
+                        className="absolute -top-2 -right-2 min-w-[18px] rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow"
+                        aria-label={`${unreadNotifications} unread notifications`}
+                      >
+                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                      </span>
+                    )}
                   </span>
-                  <span className="truncate">{label}</span>
+                  <span className="truncate">
+                    {label}
+                    {showUnreadBadge && (
+                      <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                      </span>
+                    )}
+                  </span>
                 </Link>
               );
             })}

@@ -104,6 +104,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const { searchParams } = new URL(req.url);
     const ownerIdParam = searchParams.get("ownerId");
+    const unreadCountOnly = searchParams.get("unreadCount") === "1";
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
 
@@ -112,6 +113,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     const { db } = await connectToDatabase();
+
+    if (unreadCountOnly) {
+      const unreadCount = await db
+        .collection<Notification>("notifications")
+        .countDocuments({ ownerId: effectiveOwnerId, status: "unread" });
+      return NextResponse.json({ success: true, unreadCount });
+    }
+
     const skip = (page - 1) * limit;
 
     const [notifications, total] = await Promise.all([
@@ -375,6 +384,54 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   } catch (error: any) {
     logger.error("POST /notifications failed", { error: error.message, stack: error.stack });
+    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+  try {
+    const auth = await authenticateUser(req);
+    if (!auth.isValid || !auth.effectiveOwnerId) {
+      return NextResponse.json(
+        { success: false, message: auth.error },
+        { status: auth.error?.includes("CSRF") ? 403 : 401 }
+      );
+    }
+
+    const { effectiveOwnerId } = auth;
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const { notificationId } = body as { notificationId?: string };
+
+    if (!notificationId) {
+      return NextResponse.json(
+        { success: false, message: "Notification ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const { db } = await connectToDatabase();
+    const filter: Record<string, unknown> = { ownerId: effectiveOwnerId };
+
+    if (ObjectId.isValid(notificationId)) {
+      filter.$or = [{ _id: new ObjectId(notificationId) }, { _id: notificationId }];
+    } else {
+      filter._id = notificationId;
+    }
+
+    const result = await db
+      .collection<Notification>("notifications")
+      .updateOne(filter, { $set: { status: "read" } });
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json(
+        { success: false, message: "Notification not found or unauthorized" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    logger.error("PATCH /notifications failed", { error });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }

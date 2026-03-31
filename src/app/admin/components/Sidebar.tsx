@@ -36,11 +36,35 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [name, setName] = useState("Admin");
   const [mounted, setMounted] = useState(false);
+  const [unreadSupportCount, setUnreadSupportCount] = useState(0);
 
   useEffect(() => {
     setMounted(true);
     const adminName = Cookies.get("adminName") || "Admin";
     setName(adminName);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchUnreadSupport = async () => {
+      try {
+        const res = await fetch("/api/support/messages?unreadCount=1", { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setUnreadSupportCount(Number(data.unreadCount || 0));
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchUnreadSupport();
+    const interval = setInterval(fetchUnreadSupport, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const initials = name
@@ -103,7 +127,9 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5">
             <ul className="space-y-1.5">
-              {navLinks.map(({ key, href, label, icon }) => (
+              {navLinks.map(({ key, href, label, icon }) => {
+                const showUnreadBadge = key === "support" && unreadSupportCount > 0;
+                return (
                 <li key={key}>
                   <Link
                     href={href}
@@ -115,20 +141,37 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                       ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/30"
                       : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
                   )}
-                >
-                  <span
-                    className={cn(
-                      "flex h-5 w-5 items-center justify-center transition-colors",
-                      isActive(href) ? "text-primary" : "text-muted-foreground group-hover:text-primary"
-                    )}
                   >
-                    {icon}
-                  </span>
+                    <span
+                      className={cn(
+                      "relative flex h-5 w-5 items-center justify-center transition-colors",
+                      isActive(href) ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+                      )}
+                    >
+                      {icon}
+                      {showUnreadBadge && (
+                        <span
+                          className="absolute -top-2 -right-2 min-w-[18px] rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow"
+                          aria-label={`${unreadSupportCount} unread support messages`}
+                        >
+                          {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
+                        </span>
+                      )}
+                    </span>
 
-                  {!isCollapsed && <span className="truncate">{label}</span>}
+                  {!isCollapsed && (
+                    <span className="truncate">
+                      {label}
+                      {showUnreadBadge && (
+                        <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+                          {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
+                        </span>
+                      )}
+                    </span>
+                  )}
                   </Link>
                 </li>
-              ))}
+              )})}
 
               {navLinks.length === 0 && mounted && (
                 <div className="flex flex-col items-center justify-center px-6 py-16 text-center">

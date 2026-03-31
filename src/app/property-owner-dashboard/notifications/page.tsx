@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Bell, Plus, Send, Trash2, ChevronLeft, ChevronRight, Eye, RefreshCw, ChevronDown } from "lucide-react";
+import { Bell, Plus, Send, Trash2, ChevronLeft, ChevronRight, RefreshCw, ChevronDown } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
@@ -457,12 +457,12 @@ export default function NotificationsPage() {
     }
   }, [effectiveOwnerId, csrfToken, makeAuthenticatedRequest, canManageNotifications]);
 
-  const markAsRead = async (notificationId: string) => {
+  const markAsRead = async (notificationId: string, options?: { silent?: boolean }) => {
     if (!effectiveOwnerId || !csrfToken) return;
-    setIsLoading(true);
+    if (!options?.silent) setIsLoading(true);
     try {
-      const response = await makeAuthenticatedRequest("/api/notifications/reminders", {
-        method: "POST",
+      const response = await makeAuthenticatedRequest("/api/notifications", {
+        method: "PATCH",
         body: JSON.stringify({ notificationId }),
       });
       const data: ApiResponse = await response.json();
@@ -470,11 +470,13 @@ export default function NotificationsPage() {
         setNotifications((prev) =>
           prev.map((n) => (n._id === notificationId ? { ...n, status: "read" } : n))
         );
+      } else {
+        setError(data.message || "Failed to mark notification as read.");
       }
     } catch (err) {
       setError("Failed to mark notification as read.");
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) setIsLoading(false);
     }
   };
 
@@ -566,10 +568,17 @@ export default function NotificationsPage() {
   }, [effectiveOwnerId, csrfToken, canViewReminders, canSendNotifications, canViewNotifications, fetchTenantsAndPayments, fetchNotifications]);
 
   const openNotificationDetails = useCallback((notification: Notification) => {
-    setSelectedNotification(notification);
+    const shouldMarkRead = notification.status !== "read" && canViewNotifications;
+    const nextNotification: Notification = shouldMarkRead
+      ? { ...notification, status: "read" as Notification["status"] }
+      : notification;
+    setSelectedNotification(nextNotification);
     setSelectedReminder(null);
     setIsModalOpen(true);
-  }, []);
+    if (shouldMarkRead) {
+      void markAsRead(notification._id, { silent: true });
+    }
+  }, [canViewNotifications, markAsRead]);
 
   const openReminderDetails = useCallback((reminder: UpcomingReminder) => {
     setSelectedReminder(reminder);
@@ -657,7 +666,6 @@ export default function NotificationsPage() {
                     ? openNotificationDetails(item as Notification)
                     : openReminderDetails(item as UpcomingReminder)
                 }
-                onMarkAsRead={viewMode === "sent" && canViewNotifications ? markAsRead : undefined}
                 onRetry={viewMode === "sent" && canSendNotifications ? retryNotification : undefined}
                 onDelete={viewMode === "sent" && canManageNotifications ? openDeleteConfirmation : undefined}
               />
@@ -714,15 +722,6 @@ export default function NotificationsPage() {
                   <p className="mt-1 capitalize">{selectedNotification.status}</p>
                 </div>
                 <div className="flex gap-3 mt-6">
-                  {selectedNotification.status !== "read" && canViewNotifications && (
-                    <button
-                      onClick={() => markAsRead(selectedNotification._id)}
-                      className="bg-[#42c775] text-white px-5 py-2.5 rounded-xl hover:bg-[#34b46d] transition-colors shadow-md"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "Processing..." : "Mark as Read"}
-                    </button>
-                  )}
                   {selectedNotification.deliveryStatus === "failed" && canSendNotifications && (
                     <button
                       onClick={() => retryNotification(selectedNotification._id)}

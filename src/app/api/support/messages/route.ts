@@ -72,7 +72,45 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const ownerIdParam = searchParams.get("ownerId");
+  const unreadCountOnly = searchParams.get("unreadCount") === "1";
   const ownerId = role === "admin" ? ownerIdParam : userId;
+
+  if (unreadCountOnly) {
+    try {
+      const { db } = await connectToDatabase();
+      if (role === "admin") {
+        if (ownerIdParam && !ObjectId.isValid(ownerIdParam)) {
+          return NextResponse.json({ success: false, message: "Valid ownerId is required" }, { status: 400 });
+        }
+        const filter: Record<string, unknown> = {
+          senderRole: "propertyOwner",
+          seenByAdmin: { $ne: true },
+        };
+        if (ownerIdParam) {
+          filter.ownerId = ownerIdParam;
+        }
+        const unreadCount = await db.collection<SupportMessage>("supportMessages").countDocuments(filter);
+        return NextResponse.json({ success: true, unreadCount });
+      }
+
+      if (!userId || !ObjectId.isValid(userId)) {
+        return NextResponse.json({ success: false, message: "Valid ownerId is required" }, { status: 400 });
+      }
+      const unreadCount = await db.collection<SupportMessage>("supportMessages").countDocuments({
+        ownerId: userId,
+        senderRole: "admin",
+        seenByOwner: { $ne: true },
+      });
+      return NextResponse.json({ success: true, unreadCount });
+    } catch (error) {
+      logger.error("Support unread count error", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        ownerId: ownerIdParam || userId,
+        role,
+      });
+      return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    }
+  }
 
   if (!ownerId || !ObjectId.isValid(ownerId)) {
     return NextResponse.json({ success: false, message: "Valid ownerId is required" }, { status: 400 });
