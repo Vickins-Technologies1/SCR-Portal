@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
         const requiresOtp =
           finalRole !== "propertyOwner" &&
+          finalRole !== "tenant" &&
           (!lastLoginAt || Number.isNaN(lastLoginAt.getTime())
             ? true
             : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS);
@@ -357,6 +358,7 @@ export async function POST(request: NextRequest) {
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
         const requiresOtp =
           finalRole !== "propertyOwner" &&
+          finalRole !== "tenant" &&
           (!lastLoginAt || Number.isNaN(lastLoginAt.getTime())
             ? true
             : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS);
