@@ -54,8 +54,10 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-    // OTP temporarily disabled for admin logins
-    const requiresOtp = false;
+    const requiresOtp =
+      !lastLoginAt || Number.isNaN(lastLoginAt.getTime())
+        ? true
+        : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS;
 
     if (requiresOtp) {
       const otpEmail = user.email?.toString();

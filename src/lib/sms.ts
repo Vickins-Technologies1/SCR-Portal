@@ -28,7 +28,7 @@ interface SendSmsOptions {
 export async function sendWelcomeSms({
   phone,
   message,
-  senderId = "BLESSEDTEXT",
+  senderId,
 }: SendSmsOptions): Promise<void> {
   // === VALIDATION ===
   if (!phone?.trim()) throw new Error("Phone number is required");
@@ -40,6 +40,10 @@ export async function sendWelcomeSms({
   const apiKey = process.env.BLESSEDTEXTS_API_KEY;
   if (!apiKey) {
     throw new Error("BLESSEDTEXTS_API_KEY is missing in environment");
+  }
+  const resolvedSenderId = senderId ?? process.env.BLESSEDTEXTS_SENDER_ID;
+  if (!resolvedSenderId) {
+    throw new Error("BLESSEDTEXTS_SENDER_ID is missing in environment");
   }
 
   // === NORMALIZE PHONE: 0xxx → 254xxx, 7xx → 2547xx ===
@@ -57,7 +61,7 @@ export async function sendWelcomeSms({
 
   const payload = {
     api_key: apiKey,
-    sender_id: senderId,
+    sender_id: resolvedSenderId,
     message: message.trim(),
     phone: recipient,
   };
@@ -90,7 +94,7 @@ export async function sendWelcomeSms({
     // === LOG REQUEST ===
     logger.info("BlessedTexts SMS Request", {
       to: recipient,
-      sender: senderId,
+      sender: resolvedSenderId,
       message: message.trim(),
       status: res.status,
     });
@@ -124,7 +128,7 @@ export async function sendWelcomeSms({
     const successItem = responseArray[0];
     logger.info("SMS Sent Successfully", {
       phone: recipient,
-      sender: senderId,
+      sender: resolvedSenderId,
       message_id: successItem.message_id,
       cost: successItem.message_cost,
     });
@@ -142,7 +146,7 @@ export async function sendWelcomeSms({
 export async function sendOtpSms({
   phone,
   code,
-  senderId = "BLESSEDTEXT",
+  senderId,
 }: {
   phone: string;
   code: string;
