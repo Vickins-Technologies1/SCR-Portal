@@ -410,10 +410,8 @@ export async function DELETE(
     // Delete tenant
     await db.collection<Tenant>("tenants").deleteOne({ _id: new ObjectId(tenantId) });
 
-    // Delete payments
-    const { deletedCount } = await db.collection("payments").deleteMany({
-      tenantId: tenant._id.toString(),
-    });
+    // Keep payments for recordkeeping (do not delete tenant payments)
+    const deletedCount = 0;
 
     // Restore unit quantity
     await db.collection<Property>("properties").updateOne(
@@ -422,7 +420,12 @@ export async function DELETE(
       { arrayFilters: [{ "elem.uniqueType": tenant.unitIdentifier }] }
     );
 
-    logger.info("Tenant deleted", { tenantId, restoredUnit: tenant.unitIdentifier, deletedPayments: deletedCount });
+    logger.info("Tenant deleted", {
+      tenantId,
+      restoredUnit: tenant.unitIdentifier,
+      deletedPayments: deletedCount,
+      paymentsPreserved: true,
+    });
 
     return NextResponse.json({
       success: true,

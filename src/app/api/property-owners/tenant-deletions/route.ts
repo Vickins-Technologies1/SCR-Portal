@@ -207,10 +207,8 @@ export async function PATCH(req: NextRequest) {
       } else {
         await db.collection<Tenant>("tenants").deleteOne({ _id: tenant._id });
 
-        const paymentsResult = await db.collection("payments").deleteMany({
-          tenantId: tenant._id.toString(),
-        });
-        deletedPaymentsCount = paymentsResult.deletedCount || 0;
+        // Keep payments for recordkeeping (do not delete tenant payments)
+        deletedPaymentsCount = 0;
 
         if (tenant.propertyId && ObjectId.isValid(tenant.propertyId)) {
           await restoreUnitQuantity(db, tenant.propertyId, tenant.unitIdentifier);
