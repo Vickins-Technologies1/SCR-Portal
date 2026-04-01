@@ -4,7 +4,7 @@ import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverride
 
 export type BillingPlan = "RentCollection" | "FullManagement";
 
-export const SOFTWARE_LEASING_PERCENT = 1.5;
+export const SOFTWARE_LEASING_PERCENT = 1;
 
 export function resolveBillingPlan(input: { billingType?: BillingPlan; unitTypes?: { managementType?: string }[] }): BillingPlan {
   if (input.billingType && (input.billingType === "RentCollection" || input.billingType === "FullManagement")) {

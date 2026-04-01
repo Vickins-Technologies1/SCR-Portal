@@ -720,7 +720,7 @@ export default function PropertiesPage() {
                       onChange={(e) => setBillingType(e.target.value as "RentCollection" | "FullManagement")}
                       className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition border-gray-300 text-sm sm:text-base"
                     >
-                      <option value="RentCollection">Software Leasing (1.5% of expected income)</option>
+                      <option value="RentCollection">Software Leasing (1% of expected income)</option>
                       <option value="FullManagement">Full Property Management</option>
                     </select>
                   </div>
@@ -815,7 +815,7 @@ export default function PropertiesPage() {
                       </p>
                       <p className="text-sm font-medium text-gray-700">
                         Billing Plan: {billingType === "RentCollection"
-                          ? "Software leasing (1.5% of expected income)"
+                          ? "Software leasing (1% of expected income)"
                           : "Full management (admin-set % of expected income)"}
                       </p>
                     </div>
