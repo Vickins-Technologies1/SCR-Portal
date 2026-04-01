@@ -103,9 +103,10 @@ export async function POST(request: NextRequest) {
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
         const requiresOtp =
-          !lastLoginAt || Number.isNaN(lastLoginAt.getTime())
+          finalRole !== "propertyOwner" &&
+          (!lastLoginAt || Number.isNaN(lastLoginAt.getTime())
             ? true
-            : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS;
+            : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();
@@ -355,9 +356,10 @@ export async function POST(request: NextRequest) {
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
         const requiresOtp =
-          !lastLoginAt || Number.isNaN(lastLoginAt.getTime())
+          finalRole !== "propertyOwner" &&
+          (!lastLoginAt || Number.isNaN(lastLoginAt.getTime())
             ? true
-            : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS;
+            : now.getTime() - lastLoginAt.getTime() > OTP_REQUIRE_AFTER_MS);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();
