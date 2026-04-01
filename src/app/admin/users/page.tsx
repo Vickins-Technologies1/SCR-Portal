@@ -68,6 +68,10 @@ export default function PropertyOwnersPage() {
   const [impersonateTarget, setImpersonateTarget] = useState<PropertyOwner | null>(null);
   const [impersonateError, setImpersonateError] = useState<string | null>(null);
   const [isImpersonating, setIsImpersonating] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PropertyOwner | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // ── Session check ───────────────────────────────────────────────────────────
   const checkSession = useCallback(async () => {
@@ -186,11 +190,24 @@ export default function PropertyOwnersPage() {
   };
 
   // ── Delete ─────────────────────────────────────────────────────────────────
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this owner? This action cannot be undone.")) return;
+  const openDeleteModal = (owner: PropertyOwner) => {
+    setDeleteTarget(owner);
+    setDeleteError(null);
+    setShowDeleteModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.isApproved) {
+      setDeleteError("Approved owners cannot be deleted. Only pending owners can be removed.");
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
 
     try {
-      const res = await fetch(`/api/admin/property-owners/${id}`, {
+      const res = await fetch(`/api/admin/property-owners/${deleteTarget._id}`, {
         method: "DELETE",
         credentials: "include",
       });
@@ -203,13 +220,17 @@ export default function PropertyOwnersPage() {
       const data = await res.json();
 
       if (data.success) {
-        setPropertyOwners(propertyOwners.filter((o) => o._id !== id));
+        setPropertyOwners((prev) => prev.filter((o) => o._id !== deleteTarget._id));
+        setShowDeleteModal(false);
+        setDeleteTarget(null);
         setError(null);
       } else {
-        setError(data.message || "Delete failed");
+        setDeleteError(data.message || "Delete failed");
       }
     } catch {
-      setError("Delete request failed. Please try again.");
+      setDeleteError("Delete request failed. Please try again.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -500,7 +521,7 @@ export default function PropertyOwnersPage() {
                                   <Edit size={18} />
                                 </button>
                                 <button
-                                  onClick={() => handleDelete(owner._id)}
+                                  onClick={() => openDeleteModal(owner)}
                                   className="text-red-600 hover:text-red-800 transition-colors"
                                   title="Delete"
                                 >
@@ -735,6 +756,64 @@ export default function PropertyOwnersPage() {
                     className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md disabled:opacity-60"
                   >
                     {isImpersonating ? "Switching..." : "Impersonate Owner"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Modal */}
+          {showDeleteModal && deleteTarget && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
+              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-700">
+                    <Trash2 size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">Delete Property Owner</h2>
+                    <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+                  </div>
+                </div>
+
+                {deleteError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
+                    <AlertCircle size={18} />
+                    <span>{deleteError}</span>
+                  </div>
+                )}
+
+                <div className="rounded-lg border border-border bg-white/70 px-3 py-3 text-xs text-foreground">
+                  <p className="font-semibold">You are about to delete:</p>
+                  <p className="mt-1">{deleteTarget.name}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{deleteTarget.email}</p>
+                </div>
+
+                {deleteTarget.isApproved && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                    Approved owners cannot be deleted. Only pending sign-ups can be removed.
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeleteModal(false);
+                      setDeleteTarget(null);
+                      setDeleteError(null);
+                    }}
+                    className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isDeleting || deleteTarget.isApproved}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-xs font-medium shadow-md disabled:opacity-60"
+                  >
+                    {isDeleting ? "Deleting..." : "Delete Owner"}
                   </button>
                 </div>
               </div>
