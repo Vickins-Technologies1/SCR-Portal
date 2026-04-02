@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import logger from "./lib/logger";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "./lib/session";
 
 type Role = "admin" | "propertyOwner" | "teamMember" | "tenant" | null;
 
@@ -47,6 +48,28 @@ function rateLimiter(ip: string): { success: boolean; remaining: number } {
 
 function generateCsrfToken(): string {
   return uuidv4();
+}
+
+function buildCookieHeader(
+  request: NextRequest,
+  overrides: Record<string, string | null | undefined>
+): string {
+  const entries = new Map<string, string>();
+  for (const cookie of request.cookies.getAll()) {
+    entries.set(cookie.name, cookie.value);
+  }
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null || value === undefined || value === "") {
+      entries.delete(key);
+    } else {
+      entries.set(key, value);
+    }
+  }
+
+  return Array.from(entries.entries())
+    .map(([name, value]) => `${name}=${encodeURIComponent(value)}`)
+    .join("; ");
 }
 
 async function validateCsrfToken(req: NextRequest): Promise<boolean> {
@@ -126,6 +149,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/support/conversations": { roles: ["admin"], isApi: true },
   "/api/support/presence": { roles: ["admin", "propertyOwner"], isApi: true },
   "/api/support/upload": { roles: ["admin", "propertyOwner"], isApi: true },
+  "/api/user": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: true },
 
   // Shared / multi-role APIs
   "/api/payments": { roles: ["admin", "propertyOwner", "teamMember", "tenant"], isApi: true },
@@ -196,10 +220,31 @@ export async function proxy(request: NextRequest) {
 
   try {
     const { cookies } = request;
-    const role = cookies.get("role")?.value as Role;
-    const userId = cookies.get("userId")?.value;
-    const isImpersonating = cookies.get("isImpersonating")?.value === "true";
-    const impersonatingTenantId = cookies.get("impersonatingTenantId")?.value;
+    const sessionToken = cookies.get(SESSION_COOKIE_NAME)?.value;
+    const session = sessionToken ? await verifySessionToken(sessionToken) : null;
+
+    const role = (session?.role ?? null) as Role;
+    const userId = session?.sub ?? null;
+    const ownerId = session?.ownerId ?? null;
+    const isImpersonating =
+      role === "propertyOwner" && cookies.get("isImpersonating")?.value === "true";
+    const impersonatingTenantId = isImpersonating
+      ? cookies.get("impersonatingTenantId")?.value
+      : undefined;
+
+    const requestHeaders = new Headers(request.headers);
+    const cookieHeader = buildCookieHeader(request, {
+      userId,
+      role,
+      ownerId,
+    });
+    if (cookieHeader) {
+      requestHeaders.set("cookie", cookieHeader);
+    } else {
+      requestHeaders.delete("cookie");
+    }
+
+    const nextWithAuth = () => NextResponse.next({ request: { headers: requestHeaders } });
 
     // CSRF token generation (always allowed)
     if (path === "/api/csrf-token") {
@@ -241,12 +286,12 @@ export async function proxy(request: NextRequest) {
 
     // No explicit rule → allow (fallback)
     if (!config) {
-      return NextResponse.next();
+      return nextWithAuth();
     }
 
     // Public routes (empty roles array)
     if (config.roles.length === 0) {
-      return NextResponse.next();
+      return nextWithAuth();
     }
 
     // Must be authenticated
@@ -308,7 +353,7 @@ export async function proxy(request: NextRequest) {
       const isCsrfExempt = CSRF_EXEMPT_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
       const isSelfHandled = SELF_HANDLED_CSRF_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 
-      let handler = async (req: NextRequest) => NextResponse.next();
+      let handler = async (req: NextRequest) => nextWithAuth();
 
       // Only apply CSRF on mutating requests (POST/PUT/DELETE/PATCH)
       if (isMutatingMethod && !isCsrfExempt && !isSelfHandled) {
@@ -332,7 +377,7 @@ export async function proxy(request: NextRequest) {
       duration: Date.now() - startTime,
     });
 
-    return NextResponse.next();
+    return nextWithAuth();
   } catch (error) {
     logger.error("Proxy middleware error", {
       error: error instanceof Error ? error.message : String(error),

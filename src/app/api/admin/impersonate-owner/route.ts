@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Db, ObjectId } from "mongodb";
+import { SESSION_COOKIE_NAME, createSessionToken, getSessionCookieOptions, verifySessionToken } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
   try {
-    const role = request.cookies.get("role")?.value;
-    const adminUserId = request.cookies.get("userId")?.value;
+    const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const session = sessionToken ? await verifySessionToken(sessionToken) : null;
+    const adminUserId = session?.sub;
 
-    if (!role || role !== "admin" || !adminUserId || !ObjectId.isValid(adminUserId)) {
+    if (!session || session.role !== "admin" || !adminUserId || !ObjectId.isValid(adminUserId)) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
@@ -44,6 +46,14 @@ export async function POST(request: NextRequest) {
       redirect: "/property-owner-dashboard",
     });
 
+    const impersonationToken = await createSessionToken({
+      sub: owner._id.toString(),
+      role: "propertyOwner",
+      ownerId: owner._id.toString(),
+      impersonator: { userId: adminUserId, role: "admin" },
+    });
+    response.cookies.set("session", impersonationToken, getSessionCookieOptions());
+
     response.cookies.set("adminOriginalUserId", adminUserId, {
       path: "/",
       httpOnly: false,
@@ -52,7 +62,7 @@ export async function POST(request: NextRequest) {
       maxAge: 3600,
     });
 
-    response.cookies.set("adminOriginalRole", role, {
+    response.cookies.set("adminOriginalRole", "admin", {
       path: "/",
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",

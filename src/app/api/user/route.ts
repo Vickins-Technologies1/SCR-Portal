@@ -1,32 +1,33 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { ObjectId } from "mongodb";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "../../../lib/session";
+import { cookies } from "next/headers";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-    const role = searchParams.get("role");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    const session = sessionCookie ? await verifySessionToken(sessionCookie) : null;
 
-    if (!userId || !role) {
-      console.log("Missing userId or role:", { userId, role });
+    if (!session || !session.sub || !session.role) {
       return NextResponse.json(
-        { success: false, message: "User ID and role are required" },
-        { status: 400 }
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
       );
     }
 
+    const userId = session.sub;
+    const role = session.role;
+
     if (!ObjectId.isValid(userId)) {
-      console.log("Invalid ObjectId:", userId);
       return NextResponse.json(
-        { success: false, message: "Invalid user ID format" },
+        { success: false, message: "Invalid user ID" },
         { status: 400 }
       );
     }
 
     const { db } = await connectToDatabase();
-    console.log("Connected to database");
-
     let user = null;
     let collectionName = "";
 
@@ -57,7 +58,6 @@ export async function GET(request: Request) {
         break;
 
       default:
-        console.log("Invalid role:", role);
         return NextResponse.json(
           { success: false, message: "Invalid role. Must be 'tenant', 'propertyOwner' or 'teamMember'" },
           { status: 400 }
@@ -65,7 +65,6 @@ export async function GET(request: Request) {
     }
 
     if (!user) {
-      console.log(`No user found in ${collectionName} for userId:`, userId);
       return NextResponse.json(
         { success: false, message: "User not found" },
         { status: 404 }

@@ -4,6 +4,7 @@ import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
 import { deliverOtp } from "../../../../lib/otp-delivery";
+import { createSessionToken, getSessionCookieOptions } from "../../../../lib/session";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -136,6 +137,13 @@ export async function POST(request: Request) {
       role: user.role,
       redirect: "/admin/dashboard",
     });
+
+    const sessionToken = await createSessionToken({
+      sub: user._id.toString(),
+      role: user.role,
+      ownerId: null,
+    });
+    response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
     const cookieOptions = {
       httpOnly: true,

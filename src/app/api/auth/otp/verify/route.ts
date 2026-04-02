@@ -5,6 +5,7 @@ import { ObjectId } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
 import { getDefaultPermissions } from "@/lib/permissions";
 import { hashOtpCode } from "@/lib/otp";
+import { createSessionToken, getSessionCookieOptions } from "@/lib/session";
 
 type OtpDoc = {
   _id: ObjectId;
@@ -143,6 +144,13 @@ export async function POST(request: Request) {
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
+
+    const sessionToken = await createSessionToken({
+      sub: user._id.toString(),
+      role: otp.role,
+      ownerId: isTeamMember ? user.ownerId?.toString() ?? null : otp.role === "propertyOwner" ? user._id.toString() : null,
+    });
+    response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
     response.cookies.set("userId", user._id.toString(), {
       secure: process.env.NODE_ENV === "production",

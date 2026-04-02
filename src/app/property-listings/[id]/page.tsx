@@ -6,6 +6,8 @@ import { Listing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
 import ImageGallery from "./ImageGallery";
 
+export const dynamic = "force-dynamic";
+
 interface PropertyResponse {
   success: boolean;
   property?: Listing;

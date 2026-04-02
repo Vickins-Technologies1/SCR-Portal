@@ -2,16 +2,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { tenantId, ownerId } = body;
+    const { tenantId } = body;
 
-    if (!tenantId || !ownerId || !ObjectId.isValid(tenantId) || !ObjectId.isValid(ownerId)) {
+    if (!tenantId || !ObjectId.isValid(tenantId)) {
       return NextResponse.json(
         { success: false, message: "Invalid input" },
         { status: 400 }
+      );
+    }
+
+    const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const session = sessionToken ? await verifySessionToken(sessionToken) : null;
+    const ownerId = session?.sub;
+
+    if (!session || session.role !== "propertyOwner" || !ownerId || !ObjectId.isValid(ownerId)) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized owner" },
+        { status: 401 }
       );
     }
 

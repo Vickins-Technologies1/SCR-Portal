@@ -6,6 +6,7 @@ import { ObjectId } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
 import { getDefaultPermissions } from "../../../lib/permissions";
 import { deliverOtp } from "../../../lib/otp-delivery";
+import { createSessionToken, getSessionCookieOptions } from "../../../lib/session";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -19,12 +20,11 @@ const OTP_COLLECTION = "otpChallenges";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log("Received signin request:", body);
     const { email, password, role: providedRole, userId } = body;
 
     // Validate input
     if (!body || (!email || !password) && !userId) {
-      console.log("Invalid or missing fields:", body);
+      console.log("Invalid or missing signin fields");
       return NextResponse.json(
         { success: false, message: "Please provide email and password, or a valid user ID" },
         { status: 400 }
@@ -203,6 +203,13 @@ export async function POST(request: NextRequest) {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
 
+        const sessionToken = await createSessionToken({
+          sub: user._id.toString(),
+          role: finalRole,
+          ownerId: isTeamMember ? user.ownerId?.toString() ?? null : finalRole === "propertyOwner" ? user._id.toString() : null,
+        });
+        response.cookies.set("session", sessionToken, getSessionCookieOptions());
+
         response.cookies.set("userId", user._id.toString(), {
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
@@ -266,7 +273,7 @@ export async function POST(request: NextRequest) {
     // Email + password login - auto-detect user type
     // ──────────────────────────────────────────────────────────────
     if (!email || !password) {
-      console.log("Missing email or password:", { email, password });
+      console.log("Missing email or password");
       return NextResponse.json(
         { success: false, message: "Email and password are required" },
         { status: 400 }
@@ -452,6 +459,13 @@ export async function POST(request: NextRequest) {
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
 
+        const sessionToken = await createSessionToken({
+          sub: user._id.toString(),
+          role: finalRole,
+          ownerId: isTeamMember ? user.ownerId?.toString() ?? null : finalRole === "propertyOwner" ? user._id.toString() : null,
+        });
+        response.cookies.set("session", sessionToken, getSessionCookieOptions());
+
         response.cookies.set("userId", user._id.toString(), {
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
@@ -520,7 +534,6 @@ export async function POST(request: NextRequest) {
     console.error("Signin error:", {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
-      requestBody: await request.json().catch(() => "Failed to parse request body"),
     });
 
     return NextResponse.json(

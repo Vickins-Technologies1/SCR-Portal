@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!validateCsrfToken(request, csrfToken)) {
-    logger.error("Invalid CSRF token", { userId, csrfToken, cookies: request.cookies.getAll() });
+    logger.error("Invalid CSRF token", { userId });
     return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
   }
 
