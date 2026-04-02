@@ -13,6 +13,7 @@ import {
   OTP_EXPIRY_MS,
   OTP_MAX_ATTEMPTS,
   OTP_REQUIRE_AFTER_MS,
+  shouldBypassOtp,
 } from "../../../lib/otp";
 
 const OTP_COLLECTION = "otpChallenges";
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-        const requiresOtp = true;
+        const requiresOtp = !shouldBypassOtp(user.email?.toString(), finalRole);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();
@@ -358,7 +359,7 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-        const requiresOtp = true;
+        const requiresOtp = !shouldBypassOtp(user.email?.toString(), finalRole);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();

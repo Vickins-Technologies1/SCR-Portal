@@ -14,3 +14,27 @@ export function generateOtpCode(): string {
 export function hashOtpCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
 }
+
+export function shouldBypassOtp(email?: string | null, role?: string | null): boolean {
+  if (process.env.DEMO_OTP_BYPASS !== "true") return false;
+  if (process.env.NODE_ENV === "production" && process.env.DEMO_OTP_BYPASS_ALLOW_PROD !== "true") {
+    return false;
+  }
+
+  const allowedRoles = (process.env.DEMO_OTP_BYPASS_ROLES || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (allowedRoles.length > 0 && (!role || !allowedRoles.includes(role))) {
+    return false;
+  }
+
+  const allowedEmails = (process.env.DEMO_OTP_BYPASS_EMAILS || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!allowedEmails.length || !email) return false;
+  return allowedEmails.includes(email.toLowerCase());
+}
