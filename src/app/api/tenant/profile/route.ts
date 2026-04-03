@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
+import { validateCsrfToken } from "../../../../lib/csrf";
 import { calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "../../../../lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 
@@ -307,6 +308,116 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, tenant, analytics }, { status: 200 });
   } catch (error: unknown) {
     console.error("Error in /api/tenant/profile:", error);
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const userId = request.cookies.get("userId")?.value;
+  const role = request.cookies.get("role")?.value;
+  const csrfToken = request.headers.get("x-csrf-token");
+
+  if (!userId || !ObjectId.isValid(userId) || role !== "tenant") {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!validateCsrfToken(request, csrfToken)) {
+    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+  }
+
+  let body: { tenantId?: string; name?: string; email?: string; phone?: string } | null = null;
+
+  try {
+    body = await request.json();
+
+    const { tenantId, name, email, phone } = body || {};
+
+    if (!tenantId || tenantId !== userId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    const cleanName = (name || "").trim();
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanPhone = (phone || "").trim();
+
+    if (!cleanName || !cleanEmail || !cleanPhone) {
+      return NextResponse.json(
+        { success: false, message: "Name, email, and phone are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return NextResponse.json({ success: false, message: "Invalid email" }, { status: 400 });
+    }
+
+    const { db }: { db: Db } = await connectToDatabase();
+
+    const tenant = await db.collection<Tenant>("tenants").findOne({
+      _id: new ObjectId(userId),
+      role: "tenant",
+    });
+
+    if (!tenant) {
+      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+    }
+
+    const ownerId = tenant.ownerId;
+
+    const duplicateEmail = await db.collection<Tenant>("tenants").findOne({
+      ownerId,
+      email: { $regex: new RegExp(`^${cleanEmail}$`, "i") },
+      _id: { $ne: new ObjectId(userId) },
+    });
+
+    if (duplicateEmail) {
+      return NextResponse.json(
+        { success: false, message: "This email is already in use" },
+        { status: 409 }
+      );
+    }
+
+    const duplicatePhone = await db.collection<Tenant>("tenants").findOne({
+      ownerId,
+      phone: cleanPhone,
+      _id: { $ne: new ObjectId(userId) },
+    });
+
+    if (duplicatePhone) {
+      return NextResponse.json(
+        { success: false, message: "This phone number is already in use" },
+        { status: 409 }
+      );
+    }
+
+    const updateResult = await db.collection<Tenant>("tenants").updateOne(
+      { _id: new ObjectId(userId) },
+      {
+        $set: {
+          name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      return NextResponse.json({ success: false, message: "Update failed" }, { status: 500 });
+    }
+
+    return NextResponse.json(
+      { success: true, message: "Profile updated successfully" },
+      { status: 200 }
+    );
+  } catch (error: unknown) {
+    console.error("Error in PUT /api/tenant/profile:", {
+      message: error instanceof Error ? error.message : "Unknown error",
+      tenantId: body?.tenantId || "unknown",
+    });
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 }
