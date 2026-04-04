@@ -76,22 +76,30 @@ export async function POST(request: NextRequest) {
       tenant.email
     )}`;
 
-    // ────────────────────────────────────────────────
-    //  Prepare short SMS message (< 160 chars)
-    // ────────────────────────────────────────────────
-    const shortPropertyInfo = tenant.houseNumber
-      ? `${tenant.propertyName || "Property"} ${tenant.houseNumber}`
-      : tenant.propertyName || "your property";
+    const propertyId = tenant.propertyId;
+    const property = propertyId && ObjectId.isValid(propertyId)
+      ? await db.collection("properties").findOne({ _id: new ObjectId(propertyId) })
+      : null;
 
-    let smsMessage = `Hello ${tenant.name}, set/reset your password: ${resetLink} (expires in 1hr) - ${shortPropertyInfo}`;
+    const propertyName = property?.name || tenant.propertyName || "your property";
+    const unitSummary =
+      Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0
+        ? tenant.leasedUnits
+            .map((unit: any) => unit.houseNumber || unit.unitType || unit.unitIdentifier)
+            .filter(Boolean)
+            .join(", ")
+        : (tenant.houseNumber || tenant.unitType || tenant.unitIdentifier || "N/A");
 
-    if (smsMessage.length > 160) {
-      logger.warn("SMS message too long, truncating", {
-        length: smsMessage.length,
-        tenantId: tenant._id.toString()
-      });
-      smsMessage = smsMessage.substring(0, 157) + "...";
-    }
+    // ────────────────────────────────────────────────
+    //  Prepare full SMS message (auto-split into multi-part if needed)
+    // ────────────────────────────────────────────────
+    const smsMessage =
+      `Hello ${tenant.name},\n` +
+      `Reset your tenant portal password using this link (expires in 1 hour):\n` +
+      `${resetLink}\n` +
+      `Property: ${propertyName}\n` +
+      `Unit(s): ${unitSummary}\n` +
+      `If you did not request this, contact your property manager.`;
 
     // ────────────────────────────────────────────────
     //  Prepare longer WhatsApp message (up to 4096 chars)
@@ -101,8 +109,8 @@ export async function POST(request: NextRequest) {
       `A secure link has been generated for you to set or reset your password for your tenant account.\n\n` +
       `Click here: ${resetLink}\n\n` +
       `This link expires in 1 hour.\n` +
-      `Property: ${tenant.propertyName || "your property"}\n` +
-      `Unit/House: ${tenant.houseNumber || "N/A"}\n\n` +
+      `Property: ${propertyName}\n` +
+      `Unit/House: ${unitSummary}\n\n` +
       `If you did not request this, please contact your property manager immediately.\n\n` +
       `Best regards,\nSorana Property Managers Ltd.`;
 

@@ -35,6 +35,7 @@ interface Stats {
 }
 
 const roundMoney = (value: number) => Math.round(value || 0);
+const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out"] as const;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -118,6 +119,10 @@ export async function GET(request: NextRequest) {
 
     const today = new Date();
     const todayISO = today.toISOString();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    const startOfMonthISO = startOfMonth.toISOString();
+    const endOfMonthISO = endOfMonth.toISOString();
 
     // === FIXED: Accurate totalUnits from unitTypes.quantity ===
     const totalUnitsResult = await db
@@ -135,60 +140,36 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalUnits = totalUnitsResult[0]?.totalUnits || 0;
 
-    // === FIXED: Accurate occupiedUnits — only active lease + active status ===
-    const tenantsResult = await db
-      .collection("tenants")
-      .aggregate<{
-        totalTenants: number;
-        occupiedUnits: number;
-      }>([
-        { $match: { propertyId: { $in: propertyIds } } },
-        {
-          $addFields: {
-            isLeaseActive: {
-              $and: [
-                { $ne: ["$leaseEndDate", null] },
-                { $gte: [{ $toDate: "$leaseEndDate" }, today] },
-              ],
-            },
-            isStatusActive: { $ne: ["$status", "inactive"] },
-          },
-        },
-        {
-          $match: {
-            isLeaseActive: true,
-            isStatusActive: true,
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalTenants: { $sum: 1 },
-            occupiedUnits: { $sum: 1 },
-            expectedMonthlyRent: { $sum: { $ifNull: ["$price", 0] } },
-          },
-        },
-      ])
-      .toArray();
-
-    const { totalTenants = 0, occupiedUnits = 0 } = tenantsResult[0] || {};
-
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
-    // Current month range
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-    const startOfMonthISO = startOfMonth.toISOString();
-    const endOfMonthISO = endOfMonth.toISOString();
+    const activeTenantsForOccupancy = await db.collection("tenants").find({
+      propertyId: { $in: propertyIds },
+      status: { $nin: NON_OCCUPYING_STATUSES },
+      leaseStartDate: { $ne: null, $lte: todayISO },
+      leaseEndDate: { $ne: null, $gte: todayISO },
+    }).toArray();
 
-    // Current month revenue (all completed payments)
-    const currentMonthRentResult = await db
+    const activeTenantsForMonth = await db.collection("tenants").find({
+      propertyId: { $in: propertyIds },
+      status: { $nin: NON_OCCUPYING_STATUSES },
+      leaseStartDate: { $ne: null, $lte: endOfMonthISO },
+      leaseEndDate: { $ne: null, $gte: startOfMonthISO },
+    }).toArray();
+
+    const totalTenants = activeTenantsForOccupancy.length;
+    const occupiedUnits = activeTenantsForOccupancy.reduce((sum, tenant: any) => {
+      const unitCount = tenant.leasedUnits && tenant.leasedUnits.length > 0 ? tenant.leasedUnits.length : 1;
+      return sum + unitCount;
+    }, 0);
+
+    const rentPaidThisMonthResult = await db
       .collection("payments")
       .aggregate([
         {
           $match: {
             propertyId: { $in: propertyIds },
             status: "completed",
+            type: "Rent",
             $or: [
               { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
               { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
@@ -197,13 +178,28 @@ export async function GET(request: NextRequest) {
         },
         {
           $group: {
-            _id: null,
-            totalMonthlyRent: { $sum: "$amount" },
+            _id: "$tenantId",
+            total: { $sum: "$amount" },
           },
         },
       ])
       .toArray();
-    const totalMonthlyRent = roundMoney(currentMonthRentResult[0]?.totalMonthlyRent || 0);
+
+    const rentPaidThisMonthByTenant = new Map(
+      rentPaidThisMonthResult.map((row: any) => [String(row._id), Number(row.total || 0)])
+    );
+
+    const totalMonthlyRent = roundMoney(
+      activeTenantsForMonth.reduce((sum: number, tenant: any) => {
+        const currentMonthRent = resolveTenantMonthlyRentForDate({
+          tenant,
+          date: startOfMonth,
+          rentOverrideMap,
+        });
+        const paidThisMonth = rentPaidThisMonthByTenant.get(tenant._id.toString()) ?? 0;
+        return sum + Math.min(currentMonthRent, paidThisMonth);
+      }, 0)
+    );
 
     // Total rent paid (all time)
     const totalRentPaidResult = await db
@@ -289,11 +285,7 @@ export async function GET(request: NextRequest) {
     const totalUtilityPaid = roundMoney(utilityPaymentsResult[0]?.totalUtilityPaid || 0);
 
     // === Overdue Logic ===
-    const activeTenantsForDues = await db.collection("tenants").find({
-      propertyId: { $in: propertyIds },
-      leaseStartDate: { $ne: null, $lte: todayISO },
-      leaseEndDate: { $ne: null, $gte: todayISO },
-    }).toArray();
+    const activeTenantsForDues = activeTenantsForOccupancy;
 
     const paymentTotalsByTenant = await getPaymentTotalsByTenantIds(
       db,
@@ -357,10 +349,10 @@ export async function GET(request: NextRequest) {
     }
 
     const expectedMonthlyRent = roundMoney(
-      activeTenantsForDues.reduce((sum, tenant) => {
+      activeTenantsForMonth.reduce((sum, tenant: any) => {
         const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
-          tenant: tenant as any,
-          date: today,
+          tenant,
+          date: startOfMonth,
           rentOverrideMap,
         });
         return sum + effectiveMonthlyRent;

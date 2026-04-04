@@ -42,16 +42,20 @@ const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "m
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
   propertyId: string,
-  excludeTenantId?: ObjectId
+  excludeTenantId?: ObjectId,
+  now: Date = new Date()
 ): Promise<Map<string, number>> => {
   const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
   if (ObjectId.isValid(propertyId)) {
     propertyIdCandidates.push(new ObjectId(propertyId));
   }
 
+  const todayISO = now.toISOString();
   const query: any = {
     propertyId: { $in: propertyIdCandidates },
     status: { $nin: NON_OCCUPYING_STATUSES },
+    leaseStartDate: { $ne: null, $lte: todayISO },
+    leaseEndDate: { $ne: null, $gte: todayISO },
   };
   if (excludeTenantId) {
     query._id = { $ne: excludeTenantId };
@@ -285,7 +289,7 @@ export async function PUT(
         );
       }
 
-      const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, targetPropertyId, tenant._id);
+      const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, targetPropertyId, tenant._id, new Date());
 
       for (const [unitIdentifier, count] of requestedCounts.entries()) {
         const config = configById.get(unitIdentifier);

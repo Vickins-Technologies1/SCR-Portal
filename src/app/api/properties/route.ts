@@ -11,16 +11,25 @@ const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "m
 
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
-  propertyId: string
+  propertyId: string,
+  now: Date = new Date()
 ): Promise<Map<string, number>> => {
   const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
   if (ObjectId.isValid(propertyId)) {
     propertyIdCandidates.push(new ObjectId(propertyId));
   }
 
+  const todayISO = now.toISOString();
+  const tenantFilter = {
+    propertyId: { $in: propertyIdCandidates as any },
+    status: { $nin: NON_OCCUPYING_STATUSES },
+    leaseStartDate: { $ne: null, $lte: todayISO },
+    leaseEndDate: { $ne: null, $gte: todayISO },
+  } as any;
+
   const tenants = await db.collection<Tenant>('tenants')
     .find(
-      { propertyId: { $in: propertyIdCandidates as any }, status: { $nin: NON_OCCUPYING_STATUSES } },
+      tenantFilter,
       { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } }
     )
     .toArray();
@@ -220,9 +229,10 @@ export async function GET(request: NextRequest) {
         .toArray();
 
       // Enrich each property with occupied units count
+      const now = new Date();
       const enrichedProperties = await Promise.all(
         properties.map(async (prop) => {
-          const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, prop._id.toString());
+          const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, prop._id.toString(), now);
           const occupiedCount = Array.from(occupiedByUnit.values()).reduce((sum, count) => sum + count, 0);
           const unitTypes = (prop.unitTypes || []).map((unit, index) => {
             const uniqueType = unit.uniqueType || `${unit.type}-${index}`;

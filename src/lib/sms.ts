@@ -22,21 +22,35 @@ interface SendSmsOptions {
   senderId?: string; // Must be approved in BlessedTexts dashboard
 }
 
-/**
- * Send SMS via BlessedTexts Bulk SMS API
- */
-export async function sendWelcomeSms({
+const MAX_SMS_LENGTH = 160;
+
+const splitSmsMessage = (message: string, maxLength = MAX_SMS_LENGTH): string[] => {
+  const normalized = message.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+  if (normalized.length <= maxLength) return [normalized];
+
+  const parts: string[] = [];
+  let remaining = normalized;
+
+  while (remaining.length > maxLength) {
+    let cut = remaining.lastIndexOf("\n", maxLength);
+    if (cut < Math.floor(maxLength * 0.6)) {
+      cut = remaining.lastIndexOf(" ", maxLength);
+    }
+    if (cut <= 0) cut = maxLength;
+    parts.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+
+  if (remaining.length) parts.push(remaining);
+  return parts;
+};
+
+const sendSingleSms = async ({
   phone,
   message,
   senderId,
-}: SendSmsOptions): Promise<void> {
-  // === VALIDATION ===
-  if (!phone?.trim()) throw new Error("Phone number is required");
-  if (!message?.trim()) throw new Error("Message is required");
-  if (message.trim().length > 160) {
-    throw new Error("SMS message exceeds 160 characters");
-  }
-
+}: SendSmsOptions): Promise<void> => {
   const apiKey = process.env.BLESSEDTEXTS_API_KEY;
   if (!apiKey) {
     throw new Error("BLESSEDTEXTS_API_KEY is missing in environment");
@@ -132,14 +146,35 @@ export async function sendWelcomeSms({
       message_id: successItem.message_id,
       cost: successItem.message_cost,
     });
-
   } catch (error) {
     logger.error("sendWelcomeSms() Failed", {
-      phone: recipient,
+      phone: phone,
       error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
     });
     throw error; // Re-throw for caller to handle
+  }
+};
+
+/**
+ * Send SMS via BlessedTexts Bulk SMS API
+ */
+export async function sendWelcomeSms({
+  phone,
+  message,
+  senderId,
+}: SendSmsOptions): Promise<void> {
+  // === VALIDATION ===
+  if (!phone?.trim()) throw new Error("Phone number is required");
+  if (!message?.trim()) throw new Error("Message is required");
+
+  const parts = splitSmsMessage(message.trim());
+  if (parts.length === 0) {
+    throw new Error("Message is required");
+  }
+
+  for (const part of parts) {
+    await sendSingleSms({ phone, message: part, senderId });
   }
 }
 

@@ -35,16 +35,20 @@ const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "m
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
   propertyId: string,
-  excludeTenantId?: ObjectId
+  excludeTenantId?: ObjectId,
+  now: Date = new Date()
 ): Promise<Map<string, number>> => {
   const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
   if (ObjectId.isValid(propertyId)) {
     propertyIdCandidates.push(new ObjectId(propertyId));
   }
 
+  const todayISO = now.toISOString();
   const query: any = {
     propertyId: { $in: propertyIdCandidates },
     status: { $nin: NON_OCCUPYING_STATUSES },
+    leaseStartDate: { $ne: null, $lte: todayISO },
+    leaseEndDate: { $ne: null, $gte: todayISO },
   };
   if (excludeTenantId) {
     query._id = { $ne: excludeTenantId };
@@ -340,7 +344,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, body.propertyId);
+    const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, body.propertyId, undefined, new Date());
 
     for (const [unitIdentifier, count] of requestedCounts.entries()) {
       const config = configById.get(unitIdentifier);
@@ -410,12 +414,15 @@ export async function POST(request: NextRequest) {
       .map((unit) => `${unit.houseNumber} (${unit.unitType})`)
       .join(", ");
 
-    // Short version just for SMS (aim < 160 chars)
+    // Full SMS (auto-split into multi-part messages if needed)
     const smsMessage =
-      `Welcome ${body.name.trim()}! Added to ${property.name} ${unitSummary}\n` +
+      `Welcome ${body.name.trim()}!\n` +
+      `Property: ${property.name}\n` +
+      `Units: ${unitSummary}\n` +
       `Login: ${loginUrl}\n` +
-      `Pass: ${body.password!}\n` +
-      `Change it after 1st login!`;
+      `Email: ${body.email.trim()}\n` +
+      `Password: ${body.password!}\n` +
+      `Please change your password after first login.`;
 
     // Longer version for Email + WhatsApp
     const fullMessage =
