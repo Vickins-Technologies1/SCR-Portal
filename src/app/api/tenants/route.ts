@@ -30,6 +30,49 @@ const validateCsrfToken = async (request: NextRequest): Promise<boolean> => {
 
 const toISO = (date?: Date | string): string | undefined => date ? new Date(date).toISOString() : undefined;
 
+const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out"];
+
+const buildOccupiedByUnitIdentifier = async (
+  db: any,
+  propertyId: string,
+  excludeTenantId?: ObjectId
+): Promise<Map<string, number>> => {
+  const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
+  if (ObjectId.isValid(propertyId)) {
+    propertyIdCandidates.push(new ObjectId(propertyId));
+  }
+
+  const query: any = {
+    propertyId: { $in: propertyIdCandidates },
+    status: { $nin: NON_OCCUPYING_STATUSES },
+  };
+  if (excludeTenantId) {
+    query._id = { $ne: excludeTenantId };
+  }
+
+  const tenants = await db.collection<Tenant>("tenants")
+    .find(query, { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } })
+    .toArray();
+
+  const occupiedByUnit = new Map<string, number>();
+  const bump = (key?: string) => {
+    if (!key) return;
+    occupiedByUnit.set(key, (occupiedByUnit.get(key) || 0) + 1);
+  };
+
+  for (const tenant of tenants) {
+    if (Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0) {
+      for (const unit of tenant.leasedUnits) {
+        bump(unit?.unitIdentifier || unit?.unitType);
+      }
+    } else {
+      bump(tenant.unitIdentifier || tenant.unitType);
+    }
+  }
+
+  return occupiedByUnit;
+};
+
 // GET: List Tenants (with pagination & filters)
 export async function GET(request: NextRequest) {
   try {
@@ -297,14 +340,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, body.propertyId);
+
     for (const [unitIdentifier, count] of requestedCounts.entries()) {
       const config = configById.get(unitIdentifier);
       if (!config) continue;
-      if (config.quantity < count) {
+      const occupied = occupiedByUnit.get(unitIdentifier) ?? occupiedByUnit.get(config.type) ?? 0;
+      const totalQuantity = typeof config.quantity === "number" ? config.quantity : 0;
+      const available = Math.max(0, totalQuantity - occupied);
+      if (available < count) {
         return NextResponse.json(
           {
             success: false,
-            message: `Not enough available units for ${config.type} (${config.price.toLocaleString()} Ksh). Requested ${count}, available ${config.quantity}.`,
+            message: `Not enough available units for ${config.type} (${config.price.toLocaleString()} Ksh). Requested ${count}, available ${available}.`,
           },
           { status: 400 }
         );
@@ -351,15 +399,6 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await db.collection<Tenant>("tenants").insertOne(tenantData);
-
-    // Decrement unit quantities
-    for (const [unitIdentifier, count] of requestedCounts.entries()) {
-      await db.collection<Property>("properties").updateOne(
-        { _id: new ObjectId(body.propertyId) },
-        { $inc: { "unitTypes.$[elem].quantity": -count } },
-        { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
-      );
-    }
 
     // ────────────────────────────────────────────────
     //          Welcome notifications with password

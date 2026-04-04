@@ -31,6 +31,7 @@ interface ClientProperty {
     managementType: "RentCollection" | "FullManagement";
     managementFee: number;
     quantity: number;
+    available?: number;
   }[];
   managementFee: number;
   createdAt: string;

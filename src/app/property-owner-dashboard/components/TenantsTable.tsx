@@ -18,6 +18,7 @@ interface ClientProperty {
     deposit: number;
     managementType: "RentCollection" | "FullManagement";
     quantity: number;
+    available?: number;
   }[];
   managementFee: number;
   createdAt: string;

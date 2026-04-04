@@ -6,7 +6,43 @@ import { ObjectId } from 'mongodb';
 import { UNIT_TYPES } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
-
+
+const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out"];
+
+const buildOccupiedByUnitIdentifier = async (
+  db: any,
+  propertyId: string
+): Promise<Map<string, number>> => {
+  const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
+  if (ObjectId.isValid(propertyId)) {
+    propertyIdCandidates.push(new ObjectId(propertyId));
+  }
+
+  const tenants = await db.collection<Tenant>('tenants')
+    .find(
+      { propertyId: { $in: propertyIdCandidates }, status: { $nin: NON_OCCUPYING_STATUSES } },
+      { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } }
+    )
+    .toArray();
+
+  const occupiedByUnit = new Map<string, number>();
+  const bump = (key?: string) => {
+    if (!key) return;
+    occupiedByUnit.set(key, (occupiedByUnit.get(key) || 0) + 1);
+  };
+
+  for (const tenant of tenants) {
+    if (Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0) {
+      for (const unit of tenant.leasedUnits) {
+        bump(unit?.unitIdentifier || unit?.unitType);
+      }
+    } else {
+      bump(tenant.unitIdentifier || tenant.unitType);
+    }
+  }
+
+  return occupiedByUnit;
+};
 
 // Logger (aligned with tenant route handler)
 interface LogMeta {
@@ -186,9 +222,18 @@ export async function GET(request: NextRequest) {
       // Enrich each property with occupied units count
       const enrichedProperties = await Promise.all(
         properties.map(async (prop) => {
-          const occupiedCount = await db.collection<Tenant>('tenants').countDocuments({
-            propertyId: prop._id.toString(),
-            status: { $in: ['active', 'inactive'] },
+          const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, prop._id.toString());
+          const occupiedCount = Array.from(occupiedByUnit.values()).reduce((sum, count) => sum + count, 0);
+          const unitTypes = (prop.unitTypes || []).map((unit, index) => {
+            const uniqueType = unit.uniqueType || `${unit.type}-${index}`;
+            const occupied = occupiedByUnit.get(uniqueType) ?? occupiedByUnit.get(unit.type) ?? 0;
+            const totalQuantity = typeof unit.quantity === 'number' ? unit.quantity : 0;
+            const available = Math.max(0, totalQuantity - occupied);
+            return {
+              ...unit,
+              uniqueType,
+              available,
+            };
           });
 
           return {
@@ -197,6 +242,7 @@ export async function GET(request: NextRequest) {
             createdAt: toISOStringSafe(prop.createdAt, 'property.createdAt'),
             updatedAt: toISOStringSafe(prop.updatedAt, 'property.updatedAt'),
             occupiedUnits: occupiedCount,
+            unitTypes,
           };
         })
       );

@@ -9,6 +9,7 @@ interface UnitType {
   price: number;
   deposit: number;
   quantity: number;
+  available?: number;
   uniqueType?: string;
   managementType: "RentCollection" | "FullManagement";
   managementFee?: number;
@@ -107,16 +108,22 @@ export default function TenantFormContent({
 
   // Safe label generator
   type UnitWithUnique = UnitType & { uniqueType: string };
+  const getAvailableCount = (unit?: UnitType) => {
+    if (!unit) return 0;
+    if (typeof unit.available === "number") return unit.available;
+    return typeof unit.quantity === "number" ? unit.quantity : 0;
+  };
+
   const getUnitDisplayLabel = (unit: UnitWithUnique): string => {
     const type = unit.type || "Unknown";
     const price = unit.price ?? 0;
     const deposit = unit.deposit ?? 0;
-    const quantity = unit.quantity ?? 0;
+    const availableCount = getAvailableCount(unit);
     const uniqueType = unit.uniqueType || "unknown-0";
 
     const base = `${type} - Ksh ${price.toLocaleString()}/mo`;
     const depositText = deposit > 0 ? ` | Deposit: Ksh ${deposit.toLocaleString()}` : "";
-    const availability = quantity > 0 ? ` (${quantity} available)` : " (Sold Out)";
+    const availability = availableCount > 0 ? ` (${availableCount} available)` : " (Sold Out)";
 
     const sameTypeCount = selectedProperty?.unitTypes.filter((u) => u.type === type).length || 0;
     const configTag = sameTypeCount > 1
@@ -170,7 +177,8 @@ export default function TenantFormContent({
           : "Enter a house number";
       }
       const config = getUnitConfig(unit.unitIdentifier);
-      if (config && config.quantity <= 0 && !existingLeaseUnitIds.has(unit.unitIdentifier)) {
+      const availableCount = getAvailableCount(config);
+      if (config && availableCount <= 0 && !existingLeaseUnitIds.has(unit.unitIdentifier)) {
         newErrors[`leaseUnit_${index}`] = "This unit is fully booked";
       }
     });
@@ -320,8 +328,9 @@ export default function TenantFormContent({
           <div className="space-y-4">
             {leaseUnits.map((unit, index) => {
               const config = getUnitConfig(unit.unitIdentifier);
+              const availableCount = getAvailableCount(config);
               const isSoldOut = config
-                ? config.quantity <= 0 && !existingLeaseUnitIds.has(config.uniqueType)
+                ? availableCount <= 0 && !existingLeaseUnitIds.has(config.uniqueType)
                 : false;
 
               return (
@@ -352,7 +361,8 @@ export default function TenantFormContent({
                           const alreadySelected = leaseUnits.some(
                             (entry, i) => entry.unitIdentifier === option.uniqueType && i !== index
                           );
-                          const allowOption = option.quantity > 0 || existingLeaseUnitIds.has(option.uniqueType) || alreadySelected;
+                          const optionAvailable = getAvailableCount(option);
+                          const allowOption = optionAvailable > 0 || existingLeaseUnitIds.has(option.uniqueType) || alreadySelected;
                           return (
                             <option
                               key={option.uniqueType}
@@ -397,7 +407,7 @@ export default function TenantFormContent({
                       </p>
                       {config && (
                         <p className="text-[11px] text-slate-500 mt-1">
-                          {isSoldOut ? "Sold Out" : `${config.quantity} available`}
+                          {isSoldOut ? "Sold Out" : `${availableCount} available`}
                         </p>
                       )}
                     </div>

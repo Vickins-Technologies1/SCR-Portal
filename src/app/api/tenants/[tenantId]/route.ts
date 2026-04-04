@@ -37,6 +37,49 @@ const formatDate = (date: any): string => {
   return isNaN(d.getTime()) ? "" : d.toISOString();
 };
 
+const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out"];
+
+const buildOccupiedByUnitIdentifier = async (
+  db: any,
+  propertyId: string,
+  excludeTenantId?: ObjectId
+): Promise<Map<string, number>> => {
+  const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
+  if (ObjectId.isValid(propertyId)) {
+    propertyIdCandidates.push(new ObjectId(propertyId));
+  }
+
+  const query: any = {
+    propertyId: { $in: propertyIdCandidates },
+    status: { $nin: NON_OCCUPYING_STATUSES },
+  };
+  if (excludeTenantId) {
+    query._id = { $ne: excludeTenantId };
+  }
+
+  const tenants = await db.collection<Tenant>("tenants")
+    .find(query, { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } })
+    .toArray();
+
+  const occupiedByUnit = new Map<string, number>();
+  const bump = (key?: string) => {
+    if (!key) return;
+    occupiedByUnit.set(key, (occupiedByUnit.get(key) || 0) + 1);
+  };
+
+  for (const tenant of tenants) {
+    if (Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0) {
+      for (const unit of tenant.leasedUnits) {
+        bump(unit?.unitIdentifier || unit?.unitType);
+      }
+    } else {
+      bump(tenant.unitIdentifier || tenant.unitType);
+    }
+  }
+
+  return occupiedByUnit;
+};
+
 // GET: Fetch single tenant
 export async function GET(
   request: NextRequest,
@@ -153,16 +196,6 @@ export async function PUT(
     if (body.leaseEndDate) updateData.leaseEndDate = body.leaseEndDate;
     if (body.password?.trim()) updateData.password = await bcrypt.hash(body.password.trim(), 10);
 
-    const currentLeases = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits
-      : [{
-          unitIdentifier: tenant.unitIdentifier,
-          unitType: tenant.unitType,
-          houseNumber: tenant.houseNumber,
-          price: tenant.price,
-          deposit: tenant.deposit,
-        }];
-
     const wantsLeaseUpdate = Boolean(
       (Array.isArray(body.leasedUnits) && body.leasedUnits.length > 0) ||
       body.unitIdentifier ||
@@ -252,18 +285,14 @@ export async function PUT(
         );
       }
 
-      const currentCounts = new Map<string, number>();
-      for (const unit of currentLeases) {
-        const count = currentCounts.get(unit.unitIdentifier) || 0;
-        currentCounts.set(unit.unitIdentifier, count + 1);
-      }
+      const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, targetPropertyId, tenant._id);
 
       for (const [unitIdentifier, count] of requestedCounts.entries()) {
         const config = configById.get(unitIdentifier);
         if (!config) continue;
-        const available = tenant.propertyId === targetPropertyId
-          ? config.quantity + (currentCounts.get(unitIdentifier) || 0)
-          : config.quantity;
+        const occupied = occupiedByUnit.get(unitIdentifier) ?? occupiedByUnit.get(config.type) ?? 0;
+        const totalQuantity = typeof config.quantity === "number" ? config.quantity : 0;
+        const available = Math.max(0, totalQuantity - occupied);
         if (available < count) {
           return NextResponse.json(
             {
@@ -271,43 +300,6 @@ export async function PUT(
               message: `Not enough available units for ${config.type}. Requested ${count}, available ${available}.`,
             },
             { status: 400 }
-          );
-        }
-      }
-
-      const oldPropertyId = tenant.propertyId;
-
-      if (oldPropertyId === targetPropertyId) {
-        const allIds = new Set<string>([
-          ...Array.from(currentCounts.keys()),
-          ...Array.from(requestedCounts.keys()),
-        ]);
-
-        for (const unitIdentifier of allIds) {
-          const oldCount = currentCounts.get(unitIdentifier) || 0;
-          const newCount = requestedCounts.get(unitIdentifier) || 0;
-          const diff = newCount - oldCount;
-          if (diff === 0) continue;
-          await db.collection<Property>("properties").updateOne(
-            { _id: new ObjectId(targetPropertyId) },
-            { $inc: { "unitTypes.$[elem].quantity": -diff } },
-            { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
-          );
-        }
-      } else {
-        for (const [unitIdentifier, count] of currentCounts.entries()) {
-          await db.collection<Property>("properties").updateOne(
-            { _id: new ObjectId(oldPropertyId) },
-            { $inc: { "unitTypes.$[elem].quantity": count } },
-            { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
-          );
-        }
-
-        for (const [unitIdentifier, count] of requestedCounts.entries()) {
-          await db.collection<Property>("properties").updateOne(
-            { _id: new ObjectId(targetPropertyId) },
-            { $inc: { "unitTypes.$[elem].quantity": -count } },
-            { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
           );
         }
       }
@@ -353,7 +345,7 @@ export async function PUT(
   }
 }
 
-// DELETE: Remove tenant and restore unit quantity
+// DELETE: Remove tenant
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string }> }
@@ -542,28 +534,8 @@ export async function DELETE(
     // Keep payments for recordkeeping (do not delete tenant payments)
     const deletedCount = 0;
 
-    // Restore unit quantities
-    const leasedUnits = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits
-      : [{ unitIdentifier: tenant.unitIdentifier } as any];
-    const restoreCounts = new Map<string, number>();
-    for (const unit of leasedUnits) {
-      if (!unit?.unitIdentifier) continue;
-      const count = restoreCounts.get(unit.unitIdentifier) || 0;
-      restoreCounts.set(unit.unitIdentifier, count + 1);
-    }
-
-    for (const [unitIdentifier, count] of restoreCounts.entries()) {
-      await db.collection<Property>("properties").updateOne(
-        { _id: new ObjectId(tenant.propertyId) },
-        { $inc: { "unitTypes.$[elem].quantity": count } },
-        { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
-      );
-    }
-
     logger.info("Tenant deleted", {
       tenantId,
-      restoredUnit: tenant.unitIdentifier,
       deletedPayments: deletedCount,
       paymentsPreserved: true,
     });
