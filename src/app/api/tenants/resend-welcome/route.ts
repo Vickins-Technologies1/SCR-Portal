@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     // Generate secure reset token
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     await db.collection("passwordResets").insertOne({
       tenantId: tenant._id,
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     // ────────────────────────────────────────────────
     const smsMessage =
       `Hello ${tenant.name},\n` +
-      `Reset your tenant portal password using this link (expires in 1 hour):\n` +
+      `Reset your tenant portal password using this link (expires in 24 hours):\n` +
       `${resetLink}\n` +
       `Property: ${propertyName}\n` +
       `Unit(s): ${unitSummary}\n` +
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       `Hello ${tenant.name},\n\n` +
       `A secure link has been generated for you to set or reset your password for your tenant account.\n\n` +
       `Click here: ${resetLink}\n\n` +
-      `This link expires in 1 hour.\n` +
+      `This link expires in 24 hours.\n` +
       `Property: ${propertyName}\n` +
       `Unit/House: ${unitSummary}\n\n` +
       `If you did not request this, please contact your property manager immediately.\n\n` +
