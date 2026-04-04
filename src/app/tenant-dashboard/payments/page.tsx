@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 import PayWithMpesaButton from "@/components/PayWithMpesaButton";
 import { Toaster } from "react-hot-toast";
 
