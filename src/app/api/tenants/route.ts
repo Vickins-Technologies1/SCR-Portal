@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";
-import { ObjectId } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { sendWelcomeEmail } from "../../../lib/email";
 import { sendWelcomeSms } from "../../../lib/sms";
@@ -30,10 +30,10 @@ const validateCsrfToken = async (request: NextRequest): Promise<boolean> => {
 
 const toISO = (date?: Date | string): string | undefined => date ? new Date(date).toISOString() : undefined;
 
-const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out"];
+const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out"];
 
 const buildOccupiedByUnitIdentifier = async (
-  db: any,
+  db: Db,
   propertyId: string,
   excludeTenantId?: ObjectId
 ): Promise<Map<string, number>> => {

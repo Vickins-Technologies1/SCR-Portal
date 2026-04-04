@@ -135,13 +135,49 @@ const getTenantLeaseUnits = (tenant: {
   deposit?: number;
 }): TenantLeaseUnit[] => {
   if (tenant.leasedUnits && tenant.leasedUnits.length > 0) {
-    return tenant.leasedUnits.map((unit) => ({
+    const normalized = tenant.leasedUnits.map((unit) => ({
       unitIdentifier: unit.unitIdentifier,
       unitType: unit.unitType,
       houseNumber: unit.houseNumber,
-      price: unit.price || 0,
-      deposit: unit.deposit || 0,
+      price: unit.price ?? 0,
+      deposit: unit.deposit ?? 0,
     }));
+
+    const totalUnitPrice = normalized.reduce((sum, unit) => sum + (unit.price || 0), 0);
+    const totalUnitDeposit = normalized.reduce((sum, unit) => sum + (unit.deposit || 0), 0);
+    const tenantPrice = tenant.price ?? 0;
+    const tenantDeposit = tenant.deposit ?? 0;
+
+    const missingPriceIndexes = tenant.leasedUnits
+      .map((unit, index) => {
+        const candidate = unit.price == null || (normalized[index].price <= 0 && tenantPrice > totalUnitPrice);
+        return candidate ? index : -1;
+      })
+      .filter((index) => index >= 0);
+    const missingDepositIndexes = tenant.leasedUnits
+      .map((unit, index) => {
+        const candidate = unit.deposit == null || (normalized[index].deposit <= 0 && tenantDeposit > totalUnitDeposit);
+        return candidate ? index : -1;
+      })
+      .filter((index) => index >= 0);
+
+    if (missingPriceIndexes.length > 0 && tenantPrice > totalUnitPrice) {
+      const remaining = tenantPrice - totalUnitPrice;
+      const perUnit = remaining / missingPriceIndexes.length;
+      for (const index of missingPriceIndexes) {
+        normalized[index].price = perUnit;
+      }
+    }
+
+    if (missingDepositIndexes.length > 0 && tenantDeposit > totalUnitDeposit) {
+      const remaining = tenantDeposit - totalUnitDeposit;
+      const perUnit = remaining / missingDepositIndexes.length;
+      for (const index of missingDepositIndexes) {
+        normalized[index].deposit = perUnit;
+      }
+    }
+
+    return normalized;
   }
 
   if (!tenant.unitIdentifier && !tenant.unitType && !tenant.houseNumber) {

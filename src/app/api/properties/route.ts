@@ -2,15 +2,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
-import { ObjectId } from 'mongodb';
+import { Db, ObjectId } from 'mongodb';
 import { UNIT_TYPES } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
 
-const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out"];
+const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out"];
 
 const buildOccupiedByUnitIdentifier = async (
-  db: any,
+  db: Db,
   propertyId: string
 ): Promise<Map<string, number>> => {
   const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
@@ -20,7 +20,7 @@ const buildOccupiedByUnitIdentifier = async (
 
   const tenants = await db.collection<Tenant>('tenants')
     .find(
-      { propertyId: { $in: propertyIdCandidates }, status: { $nin: NON_OCCUPYING_STATUSES } },
+      { propertyId: { $in: propertyIdCandidates as any }, status: { $nin: NON_OCCUPYING_STATUSES } },
       { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } }
     )
     .toArray();
