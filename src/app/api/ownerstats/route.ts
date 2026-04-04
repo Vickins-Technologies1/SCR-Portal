@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
-import { calculateRentDueToDate, resolveMonthlyRentForDate } from "@/lib/utils";
+import { calculateOverduePenalty, calculateRentDueToDate, resolveMonthlyRentForDate } from "@/lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds } from "@/lib/payment-totals";
 
@@ -15,6 +15,8 @@ interface Property {
   ownerId: string;
   createdAt: string;
   rentPaymentDate?: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
 }
 
 interface Stats {
@@ -94,6 +96,7 @@ export async function GET(request: NextRequest) {
       .find<WithId<Property>>({ ownerId: effectiveOwnerId })
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
+    const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
 
     if (properties.length === 0) {
       const stats: Stats = {
@@ -301,6 +304,7 @@ export async function GET(request: NextRequest) {
     let totalOverdueAmount = 0;
 
     const bulkOps = activeTenantsForDues.map((tenant) => {
+      const property = propertyMap.get(tenant.propertyId);
       const overrides = filterOverridesForUnit(
         rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
         tenant.unitIdentifier
@@ -311,14 +315,22 @@ export async function GET(request: NextRequest) {
         today,
         overrides,
       });
-
-      const totalDue = rentDue + (tenant.deposit || 0);
       const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString()) || {
         rentPaid: 0,
         depositPaid: 0,
         utilityPaid: 0,
         totalPaid: 0,
       };
+      const rentDues = Math.max(0, rentDue - tenantTotals.rentPaid);
+      const penaltyDues = calculateOverduePenalty({
+        rentDues,
+        today,
+        rentPaymentDate: property?.rentPaymentDate,
+        leaseStartDate: tenant.leaseStartDate,
+        penaltyAmount: property?.penaltyAmount,
+        penaltyFrequency: property?.penaltyFrequency,
+      });
+      const totalDue = rentDue + (tenant.deposit || 0) + penaltyDues;
       const totalPaid =
         tenantTotals.rentPaid + tenantTotals.depositPaid + tenantTotals.utilityPaid;
       const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid);

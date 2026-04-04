@@ -54,6 +54,7 @@ export interface ResponseTenant {
   deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
   dues?: {
     rentDues: number;
+    penaltyDues?: number;
     utilityDues: number;
     depositDues: number;
     totalRemainingDues: number;

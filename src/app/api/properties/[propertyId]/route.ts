@@ -26,6 +26,8 @@ export interface Property {
   managementFee?: number;
   status: string;
   rentPaymentDate?: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
   createdAt: Date | string;
   updatedAt?: Date | string;
 }
@@ -56,6 +58,8 @@ interface PropertyRequest {
   address?: string;
   unitTypes?: UnitType[];
   billingType?: "RentCollection" | "FullManagement";
+  penaltyAmount?: number | string | null;
+  penaltyFrequency?: "daily" | "weekly" | null;
 }
 
 // ===============================================
@@ -225,6 +229,7 @@ export async function PUT(
 
     const allowed: Array<keyof PropertyRequest> = ['name', 'address', 'unitTypes', 'billingType'];
     const update: Partial<Property> = {};
+    const unset: Record<string, "" | 1> = {};
 
     for (const field of allowed) {
       if (payload[field] !== undefined) {
@@ -246,6 +251,36 @@ export async function PUT(
         );
       }
       update.billingType = requestedBillingType;
+    }
+
+    if (payload.penaltyAmount !== undefined || payload.penaltyFrequency !== undefined) {
+      const parsedPenaltyAmount =
+        payload.penaltyAmount === null || payload.penaltyAmount === "" || payload.penaltyAmount === undefined
+          ? 0
+          : Number(payload.penaltyAmount);
+
+      if (Number.isNaN(parsedPenaltyAmount) || parsedPenaltyAmount < 0) {
+        return NextResponse.json(
+          { success: false, message: 'penaltyAmount must be a non-negative number' },
+          { status: 400 }
+        );
+      }
+
+      const incomingFrequency = payload.penaltyFrequency ?? undefined;
+
+      if (parsedPenaltyAmount > 0) {
+        if (!['daily', 'weekly'].includes(incomingFrequency as string)) {
+          return NextResponse.json(
+            { success: false, message: 'penaltyFrequency must be daily or weekly when a penalty amount is set' },
+            { status: 400 }
+          );
+        }
+        update.penaltyAmount = parsedPenaltyAmount;
+        update.penaltyFrequency = incomingFrequency as "daily" | "weekly";
+      } else {
+        unset.penaltyAmount = "";
+        unset.penaltyFrequency = "";
+      }
     }
 
 
@@ -316,7 +351,7 @@ export async function PUT(
         managementFee: u.managementFee ?? 0,
       }));
     }
-    if (Object.keys(update).length === 0) {
+    if (Object.keys(update).length === 0 && Object.keys(unset).length === 0) {
       return NextResponse.json(
         { success: false, message: 'No fields provided for update' },
         { status: 400 }
@@ -325,9 +360,14 @@ export async function PUT(
 
     update.updatedAt = new Date();
 
+    const updateDoc: Record<string, unknown> = { $set: update };
+    if (Object.keys(unset).length > 0) {
+      updateDoc.$unset = unset;
+    }
+
     const result = await db.collection<Property>('properties').findOneAndUpdate(
       { _id: propId, ownerId: userId },
-      { $set: update },
+      updateDoc,
       { returnDocument: 'after' }
     );
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { validateCsrfToken } from "../../../../lib/csrf";
-import { calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "../../../../lib/utils";
+import { calculateOverduePenalty, calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "../../../../lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 
 interface Tenant {
@@ -209,6 +209,9 @@ export async function GET(request: NextRequest) {
 
     if (shouldCalculateDues) {
       const today = new Date();
+      const property = ObjectId.isValid(tenantDoc.propertyId)
+        ? await db.collection<PropertyPenaltyConfig>("properties").findOne({ _id: new ObjectId(tenantDoc.propertyId) })
+        : null;
       const { rentDue, monthsStayed } = calculateRentDueToDate({
         leaseStartDate: tenantDoc.leaseStartDate,
         monthlyRent: tenantDoc.price,
@@ -243,7 +246,16 @@ export async function GET(request: NextRequest) {
         utilityDue: 0,
       });
 
-      const rentDues = Math.max(0, rentDue - updatedTotalRentPaid);
+      const baseRentDues = Math.max(0, rentDue - updatedTotalRentPaid);
+      const penaltyDues = calculateOverduePenalty({
+        rentDues: baseRentDues,
+        today,
+        rentPaymentDate: property?.rentPaymentDate,
+        leaseStartDate: tenantDoc.leaseStartDate,
+        penaltyAmount: property?.penaltyAmount,
+        penaltyFrequency: property?.penaltyFrequency,
+      });
+      const rentDues = Math.max(0, baseRentDues + penaltyDues);
       const depositDues = Math.max(0, depositDue - depositPaid);
       const utilityDues = 0;
       const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
@@ -281,6 +293,7 @@ export async function GET(request: NextRequest) {
         paymentStatus,
         dues: {
           rentDues,
+          penaltyDues,
           utilityDues,
           depositDues,
           totalRemainingDues,
@@ -313,6 +326,13 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+interface PropertyPenaltyConfig {
+  _id: ObjectId;
+  rentPaymentDate?: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
 }
 
 export async function PUT(request: NextRequest) {

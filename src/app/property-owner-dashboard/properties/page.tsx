@@ -19,6 +19,8 @@ interface Property {
   billingType?: "RentCollection" | "FullManagement";
   status: "Active" | "Inactive";
   rentPaymentDate: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
   createdAt: string;
 }
 
@@ -133,6 +135,8 @@ export default function PropertiesPage() {
   const [address, setAddress] = useState("");
   const [status, setStatus] = useState<"Active" | "Inactive">("Active");
   const [rentPaymentDate, setRentPaymentDate] = useState<string>("");
+  const [penaltyAmount, setPenaltyAmount] = useState<string>("");
+  const [penaltyFrequency, setPenaltyFrequency] = useState<"" | "daily" | "weekly">("");
   const [unitTypes, setUnitTypes] = useState<
     { type: string; price: string; deposit: string; quantity: string }[]
   >([{ type: "", price: "", deposit: "", quantity: "" }]);
@@ -243,6 +247,8 @@ export default function PropertiesPage() {
     setAddress("");
     setStatus("Active");
     setRentPaymentDate("");
+    setPenaltyAmount("");
+    setPenaltyFrequency("");
     setUnitTypes([{ type: "", price: "", deposit: "", quantity: "" }]);
     setBillingType("RentCollection");
     setFormErrors({});
@@ -265,6 +271,8 @@ export default function PropertiesPage() {
       setAddress(property.address);
       setStatus(property.status);
       setRentPaymentDate(property.rentPaymentDate.toString());
+      setPenaltyAmount(property.penaltyAmount ? property.penaltyAmount.toString() : "");
+      setPenaltyFrequency(property.penaltyFrequency ?? "");
       setUnitTypes(
         property.unitTypes.map((u) => ({
           type: u.type,
@@ -333,6 +341,16 @@ export default function PropertiesPage() {
     if (!address.trim()) errors.address = "Address is required";
     if (!rentPaymentDate || isNaN(parseInt(rentPaymentDate)) || parseInt(rentPaymentDate) < 1 || parseInt(rentPaymentDate) > 28)
       errors.rentPaymentDate = "Rent payment date must be a number between 1 and 28";
+    const parsedPenaltyAmount = penaltyAmount.trim() === "" ? 0 : parseFloat(penaltyAmount);
+    if (Number.isNaN(parsedPenaltyAmount) || parsedPenaltyAmount < 0) {
+      errors.penaltyAmount = "Penalty amount must be a non-negative number";
+    }
+    if (parsedPenaltyAmount > 0 && !penaltyFrequency) {
+      errors.penaltyFrequency = "Select daily or weekly for penalty frequency";
+    }
+    if (penaltyFrequency && parsedPenaltyAmount <= 0) {
+      errors.penaltyAmount = "Enter a penalty amount greater than 0";
+    }
     if (unitTypes.length === 0 || unitTypes.every((unit) => !unit.type || parseInt(unit.quantity) === 0))
       errors.unitTypes = "At least one valid unit type with non-zero quantity is required";
 
@@ -349,7 +367,7 @@ export default function PropertiesPage() {
     });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [propertyName, address, rentPaymentDate, unitTypes]);
+  }, [propertyName, address, rentPaymentDate, penaltyAmount, penaltyFrequency, unitTypes]);
   const calculateTotalUnits = useCallback(() => {
     return unitTypes.reduce((sum, unit) => sum + (parseInt(unit.quantity) || 0), 0);
   }, [unitTypes]);
@@ -380,6 +398,8 @@ export default function PropertiesPage() {
         address,
         status,
         rentPaymentDate: parseInt(rentPaymentDate),
+        penaltyAmount: penaltyAmount.trim() === "" ? 0 : parseFloat(penaltyAmount),
+        penaltyFrequency: penaltyFrequency || null,
         unitTypes: unitTypes.map((u) => ({
           type: u.type,
           price: parseFloat(u.price) || 0,
@@ -418,7 +438,7 @@ export default function PropertiesPage() {
         setIsLoading(false);
       }
     },
-    [userId, effectiveOwnerId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, unitTypes, billingType, fetchProperties, resetForm, validateForm, csrfToken, canListProperties, canEditProperties]
+    [userId, effectiveOwnerId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, penaltyAmount, penaltyFrequency, unitTypes, billingType, fetchProperties, resetForm, validateForm, csrfToken, canListProperties, canEditProperties]
   );
 
   const sortedProperties = useMemo(() => {
@@ -701,6 +721,52 @@ export default function PropertiesPage() {
                     {formErrors.rentPaymentDate && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.rentPaymentDate}</p>
                     )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Late Payment Penalty (Optional)</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input
+                        placeholder="Penalty amount (Ksh)"
+                        value={penaltyAmount}
+                        onChange={(e) => {
+                          setPenaltyAmount(e.target.value);
+                          setFormErrors((prev) => ({
+                            ...prev,
+                            penaltyAmount: undefined,
+                          }));
+                        }}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.penaltyAmount ? "border-red-500" : "border-gray-300"
+                          } text-sm sm:text-base`}
+                      />
+                      <select
+                        value={penaltyFrequency}
+                        onChange={(e) => {
+                          setPenaltyFrequency(e.target.value as "" | "daily" | "weekly");
+                          setFormErrors((prev) => ({
+                            ...prev,
+                            penaltyFrequency: undefined,
+                          }));
+                        }}
+                        className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.penaltyFrequency ? "border-red-500" : "border-gray-300"
+                          } text-sm sm:text-base`}
+                      >
+                        <option value="">Penalty frequency</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </div>
+                    {formErrors.penaltyAmount && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.penaltyAmount}</p>
+                    )}
+                    {formErrors.penaltyFrequency && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.penaltyFrequency}</p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      If set, penalties apply when rent is overdue.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Status</label>

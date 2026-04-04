@@ -297,7 +297,7 @@ export async function POST(request: NextRequest) {
 
     const { db } = await connectToDatabase();
     logger.debug('Connected to MongoDB database: rentaldb');
-    const { name, address, unitTypes, status, rentPaymentDate, billingType } = body;
+    const { name, address, unitTypes, status, rentPaymentDate, billingType, penaltyAmount, penaltyFrequency } = body;
 
     if (
       !name ||
@@ -319,6 +319,25 @@ export async function POST(request: NextRequest) {
     if (billingType && !['RentCollection', 'FullManagement'].includes(billingType)) {
       return NextResponse.json(
         { success: false, message: 'Invalid billingType. Must be RentCollection or FullManagement.' },
+        { status: 400 }
+      );
+    }
+
+    const parsedPenaltyAmount =
+      penaltyAmount === null || penaltyAmount === undefined || penaltyAmount === ""
+        ? 0
+        : Number(penaltyAmount);
+
+    if (Number.isNaN(parsedPenaltyAmount) || parsedPenaltyAmount < 0) {
+      return NextResponse.json(
+        { success: false, message: 'Penalty amount must be a non-negative number.' },
+        { status: 400 }
+      );
+    }
+
+    if (parsedPenaltyAmount > 0 && !['daily', 'weekly'].includes(penaltyFrequency)) {
+      return NextResponse.json(
+        { success: false, message: 'Penalty frequency must be daily or weekly when a penalty amount is set.' },
         { status: 400 }
       );
     }
@@ -363,6 +382,9 @@ export async function POST(request: NextRequest) {
       status,
       ownerId,
       rentPaymentDate,
+      ...(parsedPenaltyAmount > 0 && penaltyFrequency
+        ? { penaltyAmount: parsedPenaltyAmount, penaltyFrequency }
+        : {}),
       billingType: billingPlan,
       managementFee,
       createdAt: new Date(),

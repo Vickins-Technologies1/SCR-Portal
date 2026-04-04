@@ -54,6 +54,7 @@ export const normalizeUnitTypes = (unitTypes: UnitType[]): UnitType[] => {
 
 export interface TenantDues {
   rentDues: number;
+  penaltyDues?: number;
   depositDues: number;
   utilityDues: number;
   totalRemainingDues: number;
@@ -83,6 +84,7 @@ export interface RentDueResult {
 }
 
 const roundCurrency = (value: number): number => Math.round(value);
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 const toValidDate = (value?: Date | string): Date | null => {
   if (!value) return null;
@@ -91,6 +93,77 @@ const toValidDate = (value?: Date | string): Date | null => {
 };
 
 const toMonthStart = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
+const startOfDay = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const getDueDateForMonth = (year: number, month: number, paymentDay: number): Date => {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const day = Math.min(Math.max(1, paymentDay), daysInMonth);
+  return new Date(year, month, day);
+};
+
+const getMostRecentDueDate = (today: Date, paymentDay: number): Date => {
+  const currentMonthDue = getDueDateForMonth(today.getFullYear(), today.getMonth(), paymentDay);
+  if (startOfDay(today) >= startOfDay(currentMonthDue)) {
+    return currentMonthDue;
+  }
+  const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  return getDueDateForMonth(prevMonth.getFullYear(), prevMonth.getMonth(), paymentDay);
+};
+
+const getNextDueDate = (today: Date, paymentDay: number): Date => {
+  const currentMonthDue = getDueDateForMonth(today.getFullYear(), today.getMonth(), paymentDay);
+  if (startOfDay(today) > startOfDay(currentMonthDue)) {
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    return getDueDateForMonth(nextMonth.getFullYear(), nextMonth.getMonth(), paymentDay);
+  }
+  return currentMonthDue;
+};
+
+export const calculateOverduePenalty = ({
+  rentDues,
+  today,
+  rentPaymentDate,
+  leaseStartDate,
+  penaltyAmount,
+  penaltyFrequency,
+}: {
+  rentDues: number;
+  today: Date;
+  rentPaymentDate?: number;
+  leaseStartDate?: string;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
+}): number => {
+  if (!rentPaymentDate || !penaltyAmount || penaltyAmount <= 0) return 0;
+  if (!penaltyFrequency) return 0;
+  if (rentDues <= 0) return 0;
+
+  const todayStart = startOfDay(today);
+  let dueDate = getMostRecentDueDate(todayStart, rentPaymentDate);
+
+  const leaseStart = toValidDate(leaseStartDate);
+  if (leaseStart) {
+    const firstDueDate = getNextDueDate(startOfDay(leaseStart), rentPaymentDate);
+    if (todayStart < startOfDay(firstDueDate)) {
+      return 0;
+    }
+    if (dueDate < firstDueDate) {
+      dueDate = firstDueDate;
+    }
+  }
+
+  const daysOverdue = Math.floor(
+    (todayStart.getTime() - startOfDay(dueDate).getTime()) / MS_PER_DAY
+  );
+  if (daysOverdue <= 0) return 0;
+
+  const periodsOverdue =
+    penaltyFrequency === "weekly" ? Math.floor(daysOverdue / 7) : daysOverdue;
+
+  if (periodsOverdue <= 0) return 0;
+
+  return roundCurrency(periodsOverdue * penaltyAmount);
+};
 
 const normalizeOverrides = (overrides?: RentPriceOverride[]): RentPriceOverride[] => {
   if (!overrides?.length) return [];
@@ -279,7 +352,12 @@ export const calculateTenantDues = async (
   db: Db,
   tenant: Tenant,
   today: Date = new Date(),
-  rentOverrides?: RentPriceOverride[]
+  rentOverrides?: RentPriceOverride[],
+  penaltyConfig?: {
+    penaltyAmount?: number;
+    penaltyFrequency?: "daily" | "weekly";
+    rentPaymentDate?: number;
+  }
 ): Promise<TenantDues> => {
   const { rentDue: totalRentDue, monthsStayed } = calculateRentDueToDate({
     leaseStartDate: tenant.leaseStartDate,
@@ -303,7 +381,16 @@ export const calculateTenantDues = async (
   const walletApplied = 0;
   const walletRemaining = roundCurrency(walletBalance);
 
-  const rentDues = roundCurrency(Math.max(0, totalRentDue - rentPaid));
+  const baseRentDues = roundCurrency(Math.max(0, totalRentDue - rentPaid));
+  const penaltyDues = calculateOverduePenalty({
+    rentDues: baseRentDues,
+    today,
+    rentPaymentDate: penaltyConfig?.rentPaymentDate,
+    leaseStartDate: tenant.leaseStartDate,
+    penaltyAmount: penaltyConfig?.penaltyAmount,
+    penaltyFrequency: penaltyConfig?.penaltyFrequency,
+  });
+  const rentDues = roundCurrency(baseRentDues + penaltyDues);
   const depositDues = roundCurrency(Math.max(0, totalDepositDue - depositPaid));
   const utilityDues = roundCurrency(Math.max(0, totalUtilityDue - utilityPaid));
   const totalRemainingDues = roundCurrency(Math.max(0, rentDues + depositDues + utilityDues));
@@ -311,6 +398,7 @@ export const calculateTenantDues = async (
 
   return {
     rentDues,
+    penaltyDues,
     depositDues,
     utilityDues,
     totalRemainingDues,

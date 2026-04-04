@@ -4,12 +4,12 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
-import { calculateRentDueToDate, calculateTenantDues } from "@/lib/utils";
+import { calculateOverduePenalty, calculateRentDueToDate, calculateTenantDues } from "@/lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
 
 interface Property {
-  _id: string;
+  _id: ObjectId;
   name: string;
   address: string;
   unitTypes: { type: string; price: number; deposit: number; quantity: number }[];
@@ -17,6 +17,8 @@ interface Property {
   ownerId: string;
   createdAt: string;
   rentPaymentDate?: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
 }
 
 interface Stats {
@@ -78,6 +80,7 @@ export async function GET(request: NextRequest) {
       .find<WithId<Property>>({ ownerId: userId })
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
+    const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
 
     if (properties.length === 0) {
       logger.debug("No properties found for user", { userId });
@@ -235,6 +238,7 @@ export async function GET(request: NextRequest) {
 
     const bulkOps = activeTenants.map((tenant) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
+      const property = propertyMap.get(tenant.propertyId);
       const overrides = filterOverridesForUnit(
         rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
         tenant.unitIdentifier
@@ -245,7 +249,16 @@ export async function GET(request: NextRequest) {
         today,
         overrides,
       });
-      const totalDue = rentDue + (tenant.deposit || 0);
+      const rentDues = Math.max(0, rentDue - (paymentTotalsByTenant.get(tenantObjectId.toString())?.rentPaid || 0));
+      const penaltyDues = calculateOverduePenalty({
+        rentDues,
+        today,
+        rentPaymentDate: property?.rentPaymentDate,
+        leaseStartDate: tenant.leaseStartDate,
+        penaltyAmount: property?.penaltyAmount,
+        penaltyFrequency: property?.penaltyFrequency,
+      });
+      const totalDue = rentDue + (tenant.deposit || 0) + penaltyDues;
       const tenantTotals = paymentTotalsByTenant.get(tenantObjectId.toString()) || {
         rentPaid: 0,
         depositPaid: 0,
@@ -358,7 +371,14 @@ export async function POST(request: NextRequest) {
       rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
       tenant.unitIdentifier
     );
-    const dues = await calculateTenantDues(db, tenantWithTotals as any, today, overrides);
+    const property = ObjectId.isValid(tenant.propertyId)
+      ? await db.collection<Property>("properties").findOne({ _id: new ObjectId(tenant.propertyId) })
+      : null;
+    const dues = await calculateTenantDues(db, tenantWithTotals as any, today, overrides, {
+      penaltyAmount: property?.penaltyAmount,
+      penaltyFrequency: property?.penaltyFrequency,
+      rentPaymentDate: property?.rentPaymentDate,
+    });
 
     await db.collection("tenants").updateOne(
       { _id: new ObjectId(tenantId) },

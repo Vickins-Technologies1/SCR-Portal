@@ -30,6 +30,13 @@ interface Notification {
   dues?: TenantDues;
 }
 
+interface PropertyPenaltyConfig {
+  _id: ObjectId;
+  rentPaymentDate?: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
+}
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT || "587", 10),
@@ -202,6 +209,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
     const propertyIds = Array.from(new Set(tenants.map((tenant) => tenant.propertyId)));
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
+    const propertyObjectIds = propertyIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
+    const propertyDocs = await db
+      .collection<PropertyPenaltyConfig>("properties")
+      .find({ _id: { $in: propertyObjectIds } })
+      .toArray();
+    const propertyMap = new Map(propertyDocs.map((p) => [p._id.toString(), p]));
 
     // === PROCESS EACH TENANT ===
     for (const tenant of tenants) {
@@ -212,6 +225,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       // Generate payment message
       if (type === "payment") {
+        const property = propertyMap.get(tenant.propertyId);
         const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString());
         const tenantWithTotals = tenantTotals
           ? {
@@ -225,7 +239,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
           tenant.unitIdentifier
         );
-        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today, overrides);
+        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today, overrides, {
+          penaltyAmount: property?.penaltyAmount,
+          penaltyFrequency: property?.penaltyFrequency,
+          rentPaymentDate: property?.rentPaymentDate,
+        });
         if (dues.paymentStatus === "up-to-date") {
           logger.info("Skipping up-to-date tenant", { tenantId: tenant._id.toString() });
           continue;

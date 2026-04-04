@@ -21,6 +21,8 @@ interface Property {
   name: string;
   unitTypes: UnitType[];
   rentPaymentDate: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
   requiresAdminApproval?: boolean;
   createdAt: Date;
   updatedAt?: Date;
@@ -154,6 +156,8 @@ export async function GET(request: NextRequest) {
             uniqueType: ut.uniqueType || `${ut.type}-${i}`, // fallback for old data
           })),
           rentPaymentDate: p.rentPaymentDate,
+          penaltyAmount: p.penaltyAmount,
+          penaltyFrequency: p.penaltyFrequency,
           requiresAdminApproval: p.requiresAdminApproval,
           createdAt: p.createdAt.toISOString(),
           updatedAt: p.updatedAt?.toISOString(),

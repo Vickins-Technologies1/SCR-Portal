@@ -40,6 +40,8 @@ export interface Property {
   managementFeePercent?: number;
   status: string;
   rentPaymentDate?: number;
+  penaltyAmount?: number;
+  penaltyFrequency?: "daily" | "weekly";
   createdAt: Date;
   updatedAt?: Date;
 
