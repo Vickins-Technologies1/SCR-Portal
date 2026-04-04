@@ -601,11 +601,13 @@ export default function PropertiesPage() {
 
           {/* Edit Modal */}
           {showEditModal && editProperty && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
-                <h2 className="text-base font-semibold text-foreground mb-4">Edit Property</h2>
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
+              <div className="modal-panel max-w-sm w-full overflow-hidden">
+                <div className="modal-header px-4 sm:px-5 py-3">
+                  <h2 className="text-base font-semibold text-foreground">Edit Property</h2>
+                </div>
 
-                <form onSubmit={handleUpdate} className="space-y-4">
+                <form onSubmit={handleUpdate} className="modal-body modal-stagger space-y-4">
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1.5">
                       Property Name
@@ -653,49 +655,51 @@ export default function PropertiesPage() {
 
           {/* Delete Confirmation Modal */}
           {showDeleteModal && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5 relative"
+                className="modal-panel max-w-sm w-full overflow-hidden relative"
               >
                 <button
                   onClick={closeDeleteModal}
-                  className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition"
+                  className="modal-close absolute top-4 right-4 rounded-full p-1"
                   aria-label="Close"
                 >
                   <X size={24} />
                 </button>
 
-                <div className="text-center mb-5">
-                  <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-3">
-                    <Trash2 className="h-6 w-6 text-red-600" />
+                <div className="modal-body modal-stagger">
+                  <div className="text-center mb-5">
+                    <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-3">
+                      <Trash2 className="h-6 w-6 text-red-600" />
+                    </div>
+                    <h2 className="text-base font-semibold text-foreground mb-2">
+                      Delete Property
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Are you sure you want to delete this property? This action cannot be undone.
+                    </p>
                   </div>
-                  <h2 className="text-base font-semibold text-foreground mb-2">
-                    Delete Property
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Are you sure you want to delete this property? This action cannot be undone.
-                  </p>
-                </div>
 
-                <div className="flex justify-end gap-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={closeDeleteModal}
-                    className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={confirmDelete}
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-xs font-medium shadow-md flex items-center gap-2"
-                  >
-                    <Trash2 size={16} />
-                    Delete Property
-                  </button>
+                  <div className="flex justify-end gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={closeDeleteModal}
+                      className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmDelete}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-xs font-medium shadow-md flex items-center gap-2"
+                    >
+                      <Trash2 size={16} />
+                      Delete Property
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </div>

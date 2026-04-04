@@ -494,6 +494,14 @@ export default function PropertiesPage() {
     setUnitTypes((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const fieldBase =
+    "w-full rounded-xl border border-border bg-white px-3 py-2 text-sm sm:text-base text-foreground shadow-sm focus:ring-4 focus:ring-primary/10 focus:border-primary transition";
+  const fieldError = "border-red-500 focus:border-red-500 focus:ring-red-200/70";
+  const labelBase = "block text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground";
+  const sectionBase = "rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-sm";
+  const sectionTitle = "text-sm sm:text-base font-semibold text-foreground";
+  const sectionSubtitle = "text-xs sm:text-sm text-muted-foreground";
+
   return (
     <div className="min-h-screen">
       <Navbar />
@@ -654,246 +662,321 @@ export default function PropertiesPage() {
                   setIsModalOpen(false);
                   resetForm();
                 }}
+                className="bg-gradient-to-br from-white via-white to-primary/5"
               >
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Property Name</label>
-                    <input
-                      placeholder="Enter property name"
-                      value={propertyName}
-                      onChange={(e) => {
-                        setPropertyName(e.target.value);
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          propertyName: e.target.value.trim() ? undefined : "Property name is required",
-                        }));
-                      }}
-                      required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.propertyName ? "border-red-500" : "border-gray-300"
-                        } text-sm sm:text-base`}
-                    />
-                    {formErrors.propertyName && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.propertyName}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Address</label>
-                    <input
-                      placeholder="Enter address"
-                      value={address}
-                      onChange={(e) => {
-                        setAddress(e.target.value);
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          address: e.target.value.trim() ? undefined : "Address is required",
-                        }));
-                      }}
-                      required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.address ? "border-red-500" : "border-gray-300"
-                        } text-sm sm:text-base`}
-                    />
-                    {formErrors.address && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Rent Payment Date (Day of Month)</label>
-                    <input
-                      placeholder="Enter day (1-28)"
-                      value={rentPaymentDate}
-                      onChange={(e) => {
-                        setRentPaymentDate(e.target.value);
-                        setFormErrors((prev) => ({
-                          ...prev,
-                          rentPaymentDate:
-                            e.target.value && !isNaN(parseInt(e.target.value)) && parseInt(e.target.value) >= 1 && parseInt(e.target.value) <= 28
-                              ? undefined
-                              : "Rent payment date must be a number between 1 and 28",
-                        }));
-                      }}
-                      type="number"
-                      min="1"
-                      max="28"
-                      required
-                      className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.rentPaymentDate ? "border-red-500" : "border-gray-300"
-                        } text-sm sm:text-base`}
-                    />
-                    {formErrors.rentPaymentDate && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.rentPaymentDate}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Late Payment Penalty (Optional)</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <input
-                        placeholder="Penalty amount (Ksh)"
-                        value={penaltyAmount}
-                        onChange={(e) => {
-                          setPenaltyAmount(e.target.value);
-                          setFormErrors((prev) => ({
-                            ...prev,
-                            penaltyAmount: undefined,
-                          }));
-                        }}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.penaltyAmount ? "border-red-500" : "border-gray-300"
-                          } text-sm sm:text-base`}
-                      />
-                      <select
-                        value={penaltyFrequency}
-                        onChange={(e) => {
-                          setPenaltyFrequency(e.target.value as "" | "daily" | "weekly");
-                          setFormErrors((prev) => ({
-                            ...prev,
-                            penaltyFrequency: undefined,
-                          }));
-                        }}
-                        className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors.penaltyFrequency ? "border-red-500" : "border-gray-300"
-                          } text-sm sm:text-base`}
-                      >
-                        <option value="">Penalty frequency</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                      </select>
+                                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="rounded-2xl border border-border bg-white/80 p-4 sm:p-5 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Property intake</p>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          Capture accurate property details so billing and unit management stay consistent.
+                        </p>
+                      </div>
+                      <div className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                        Required fields
+                      </div>
                     </div>
-                    {formErrors.penaltyAmount && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.penaltyAmount}</p>
-                    )}
-                    {formErrors.penaltyFrequency && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.penaltyFrequency}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-1">
-                      If set, penalties apply when rent is overdue.
-                    </p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Status</label>
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value as "Active" | "Inactive")}
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition border-gray-300 text-sm sm:text-base"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Billing Plan</label>
-                    <select
-                      value={billingType}
-                      onChange={(e) => setBillingType(e.target.value as "RentCollection" | "FullManagement")}
-                      className="mt-1 w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition border-gray-300 text-sm sm:text-base"
-                    >
-                      <option value="RentCollection">Software Leasing (1% of expected income)</option>
-                      <option value="FullManagement">Full Property Management</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Unit Types</label>
-                    {unitTypes.map((unit, index) => (
-                      <div
-                        key={index}
-                        className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4 sm:mb-2"
+
+                  <section className={sectionBase}>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <p className={sectionTitle}>Property Basics</p>
+                        <p className={sectionSubtitle}>Name, address, and availability status.</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="property-name" className={labelBase}>
+                          Property Name
+                        </label>
+                        <input
+                          id="property-name"
+                          placeholder="Eg. Cedar Heights"
+                          value={propertyName}
+                          onChange={(e) => {
+                            setPropertyName(e.target.value);
+                            setFormErrors((prev) => ({
+                              ...prev,
+                              propertyName: e.target.value.trim() ? undefined : "Property name is required",
+                            }));
+                          }}
+                          required
+                          className={`${fieldBase} ${formErrors.propertyName ? fieldError : ""}`}
+                        />
+                        {formErrors.propertyName && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.propertyName}</p>
+                        )}
+                      </div>
+                      <div className="md:col-span-2">
+                        <label htmlFor="property-address" className={labelBase}>
+                          Address
+                        </label>
+                        <input
+                          id="property-address"
+                          placeholder="Street, neighborhood, and city"
+                          value={address}
+                          onChange={(e) => {
+                            setAddress(e.target.value);
+                            setFormErrors((prev) => ({
+                              ...prev,
+                              address: e.target.value.trim() ? undefined : "Address is required",
+                            }));
+                          }}
+                          required
+                          className={`${fieldBase} ${formErrors.address ? fieldError : ""}`}
+                        />
+                        {formErrors.address && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label htmlFor="property-status" className={labelBase}>
+                          Status
+                        </label>
+                        <select
+                          id="property-status"
+                          value={status}
+                          onChange={(e) => setStatus(e.target.value as "Active" | "Inactive")}
+                          className={fieldBase}
+                        >
+                          <option value="Active">Active</option>
+                          <option value="Inactive">Inactive</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="rent-date" className={labelBase}>
+                          Rent Payment Day
+                        </label>
+                        <input
+                          id="rent-date"
+                          placeholder="1 - 28"
+                          value={rentPaymentDate}
+                          onChange={(e) => {
+                            setRentPaymentDate(e.target.value);
+                            setFormErrors((prev) => ({
+                              ...prev,
+                              rentPaymentDate:
+                                e.target.value && !isNaN(parseInt(e.target.value)) && parseInt(e.target.value) >= 1 && parseInt(e.target.value) <= 28
+                                  ? undefined
+                                  : "Rent payment date must be a number between 1 and 28",
+                            }));
+                          }}
+                          type="number"
+                          min="1"
+                          max="28"
+                          required
+                          className={`${fieldBase} ${formErrors.rentPaymentDate ? fieldError : ""}`}
+                        />
+                        {formErrors.rentPaymentDate && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.rentPaymentDate}</p>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={sectionBase}>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <p className={sectionTitle}>Billing & Policies</p>
+                        <p className={sectionSubtitle}>Set the billing plan and late payment penalties.</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="billing-plan" className={labelBase}>
+                          Billing Plan
+                        </label>
+                        <select
+                          id="billing-plan"
+                          value={billingType}
+                          onChange={(e) => setBillingType(e.target.value as "RentCollection" | "FullManagement")}
+                          className={fieldBase}
+                        >
+                          <option value="RentCollection">Software Leasing (1% of expected income)</option>
+                          <option value="FullManagement">Full Property Management</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="penalty-amount" className={labelBase}>
+                          Late Payment Penalty
+                        </label>
+                        <input
+                          id="penalty-amount"
+                          placeholder="Penalty amount (Ksh)"
+                          value={penaltyAmount}
+                          onChange={(e) => {
+                            setPenaltyAmount(e.target.value);
+                            setFormErrors((prev) => ({
+                              ...prev,
+                              penaltyAmount: undefined,
+                            }));
+                          }}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className={`${fieldBase} ${formErrors.penaltyAmount ? fieldError : ""}`}
+                        />
+                        {formErrors.penaltyAmount && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.penaltyAmount}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label htmlFor="penalty-frequency" className={labelBase}>
+                          Penalty Frequency
+                        </label>
+                        <select
+                          id="penalty-frequency"
+                          value={penaltyFrequency}
+                          onChange={(e) => {
+                            setPenaltyFrequency(e.target.value as "" | "daily" | "weekly");
+                            setFormErrors((prev) => ({
+                              ...prev,
+                              penaltyFrequency: undefined,
+                            }));
+                          }}
+                          className={`${fieldBase} ${formErrors.penaltyFrequency ? fieldError : ""}`}
+                        >
+                          <option value="">Select frequency</option>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                        </select>
+                        {formErrors.penaltyFrequency && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.penaltyFrequency}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Optional: penalties only apply when rent is overdue.
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={sectionBase}>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <p className={sectionTitle}>Unit Types</p>
+                        <p className={sectionSubtitle}>Define the unit mix, pricing, and deposits.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addUnitType}
+                        className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/10 transition"
+                        aria-label="Add another unit type"
                       >
-                        <div className="flex items-center w-full sm:flex-1">
-                          <select
-                            value={unit.type}
-                            onChange={(e) => updateUnitType(index, "type", e.target.value)}
-                            className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitType_${index}`] ? "border-red-500" : "border-gray-300"
-                              } text-sm sm:text-base`}
-                          >
-                            <option value="" disabled>
-                              Select unit type
-                            </option>
-                            {UNIT_TYPES.map((ut) => (
-                              <option key={ut.type} value={ut.type}>
-                                {ut.type} {unitTypes.filter(u => u.type === ut.type).length > 1 ? `#${index + 1}` : ''}
-                              </option>
-                            ))}
-                          </select>
+                        + Add Unit Type
+                      </button>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        <span>Unit Type</span>
+                        <span>Price</span>
+                        <span>Deposit</span>
+                        <span>Quantity</span>
+                        <span></span>
+                      </div>
+                      {unitTypes.map((unit, index) => (
+                        <div key={index} className="space-y-2">
+                          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-end">
+                            <div>
+                              <span className="md:hidden text-xs font-semibold text-muted-foreground">Unit Type</span>
+                              <select
+                                value={unit.type}
+                                onChange={(e) => updateUnitType(index, "type", e.target.value)}
+                                className={`${fieldBase} ${formErrors[`unitType_${index}`] ? fieldError : ""}`}
+                              >
+                                <option value="" disabled>
+                                  Select unit type
+                                </option>
+                                {UNIT_TYPES.map((ut) => (
+                                  <option key={ut.type} value={ut.type}>
+                                    {ut.type} {unitTypes.filter((u) => u.type === ut.type).length > 1 ? `#${index + 1}` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <span className="md:hidden text-xs font-semibold text-muted-foreground">Price</span>
+                              <input
+                                placeholder="Ksh/month"
+                                value={unit.price}
+                                onChange={(e) => updateUnitType(index, "price", e.target.value)}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className={`${fieldBase} ${formErrors[`unitPrice_${index}`] ? fieldError : ""}`}
+                              />
+                            </div>
+                            <div>
+                              <span className="md:hidden text-xs font-semibold text-muted-foreground">Deposit</span>
+                              <input
+                                placeholder="Ksh"
+                                value={unit.deposit}
+                                onChange={(e) => updateUnitType(index, "deposit", e.target.value)}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className={`${fieldBase} ${formErrors[`unitDeposit_${index}`] ? fieldError : ""}`}
+                              />
+                            </div>
+                            <div>
+                              <span className="md:hidden text-xs font-semibold text-muted-foreground">Quantity</span>
+                              <input
+                                placeholder="Units"
+                                value={unit.quantity}
+                                onChange={(e) => updateUnitType(index, "quantity", e.target.value)}
+                                type="number"
+                                min="0"
+                                step="1"
+                                className={`${fieldBase} ${formErrors[`unitQuantity_${index}`] ? fieldError : ""}`}
+                              />
+                            </div>
+                            {unitTypes.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeUnitType(index)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition"
+                                aria-label={`Remove unit type ${index + 1}`}
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </button>
+                            )}
+                          </div>
+                          {(formErrors[`unitType_${index}`] ||
+                            formErrors[`unitPrice_${index}`] ||
+                            formErrors[`unitDeposit_${index}`] ||
+                            formErrors[`unitQuantity_${index}`]) && (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs text-red-500">
+                              <div>{formErrors[`unitType_${index}`]}</div>
+                              <div>{formErrors[`unitPrice_${index}`]}</div>
+                              <div>{formErrors[`unitDeposit_${index}`]}</div>
+                              <div>{formErrors[`unitQuantity_${index}`]}</div>
+                            </div>
+                          )}
                         </div>
-                        <input
-                          placeholder="Price (Ksh/month)"
-                          value={unit.price}
-                          onChange={(e) => updateUnitType(index, "price", e.target.value)}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitPrice_${index}`] ? "border-red-500" : "border-gray-300"
-                            } text-sm sm:text-base`}
-                        />
-                        <input
-                          placeholder="Deposit (Ksh)"
-                          value={unit.deposit}
-                          onChange={(e) => updateUnitType(index, "deposit", e.target.value)}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className={`w-full sm:w-24 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitDeposit_${index}`] ? "border-red-500" : "border-gray-300"
-                            } text-sm sm:text-base`}
-                        />
-                        <input
-                          placeholder="Quantity"
-                          value={unit.quantity}
-                          onChange={(e) => updateUnitType(index, "quantity", e.target.value)}
-                          type="number"
-                          min="0"
-                          step="1"
-                          className={`w-full sm:w-20 border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition ${formErrors[`unitQuantity_${index}`] ? "border-red-500" : "border-gray-300"
-                            } text-sm sm:text-base`}
-                        />
-                        {unitTypes.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeUnitType(index)}
-                            className="text-red-600 hover:text-red-800 transition self-start sm:self-center"
-                            aria-label={`Remove unit type ${index + 1}`}
-                          >
-                            <Trash2 className="h-6 w-6 sm:h-5 sm:w-5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {unitTypes.map((_, index) => (
-                      <div key={index} className="space-y-1">
-                        {formErrors[`unitType_${index}`] && (
-                          <p className="text-red-500 text-xs">{formErrors[`unitType_${index}`]}</p>
-                        )}
-                        {formErrors[`unitPrice_${index}`] && (
-                          <p className="text-red-500 text-xs">{formErrors[`unitPrice_${index}`]}</p>
-                        )}
-                        {formErrors[`unitDeposit_${index}`] && (
-                          <p className="text-red-500 text-xs">{formErrors[`unitDeposit_${index}`]}</p>
-                        )}
-                        {formErrors[`unitQuantity_${index}`] && (
-                          <p className="text-red-500 text-xs">{formErrors[`unitQuantity_${index}`]}</p>
-                        )}
-                      </div>
-                    ))}
-                    {formErrors.unitTypes && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.unitTypes}</p>
-                    )}
-                    <div className="mt-2">
-                      <p className="text-sm font-medium text-gray-700">
-                        Total Units: {calculateTotalUnits()}
-                      </p>
-                      <p className="text-sm font-medium text-gray-700">
-                        Billing Plan: {billingType === "RentCollection"
-                          ? "Software leasing (1% of expected income)"
-                          : "Full management (admin-set % of expected income)"}
-                      </p>
+                      ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={addUnitType}
-                      className="text-primary hover:text-primary-hover transition text-sm"
-                      aria-label="Add another unit type"
-                    >
-                      + Add Unit Type
-                    </button>
-                  </div>
+
+                    {formErrors.unitTypes && (
+                      <p className="text-red-500 text-xs mt-2">{formErrors.unitTypes}</p>
+                    )}
+
+                    <div className="mt-4 rounded-xl border border-border bg-muted px-4 py-3 text-xs sm:text-sm text-muted-foreground">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <p>
+                          <span className="text-foreground font-semibold">Total Units:</span> {calculateTotalUnits()}
+                        </p>
+                        <p>
+                          <span className="text-foreground font-semibold">Billing Plan:</span>{" "}
+                          {billingType === "RentCollection"
+                            ? "Software leasing (1% of expected income)"
+                            : "Full management (admin-set % of expected income)"}
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+
                   <div className="flex flex-col sm:flex-row justify-end gap-3">
                     <button
                       type="button"
@@ -901,7 +984,7 @@ export default function PropertiesPage() {
                         setIsModalOpen(false);
                         resetForm();
                       }}
-                      className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition text-sm sm:text-base"
+                      className="px-4 py-2 rounded-xl border border-border bg-white hover:bg-muted transition text-sm sm:text-base font-semibold text-foreground"
                       aria-label="Cancel property form"
                     >
                       Cancel
@@ -909,7 +992,7 @@ export default function PropertiesPage() {
                     <button
                       type="submit"
                       disabled={isLoading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken}
-                      className={`px-4 py-2 text-white rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base ${isLoading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken
+                      className={`px-5 py-2 text-white rounded-xl transition flex items-center justify-center gap-2 text-sm sm:text-base font-semibold ${isLoading || Object.values(formErrors).some((v) => v !== undefined) || !csrfToken
                           ? "bg-gray-400 cursor-not-allowed"
                           : "bg-primary hover:bg-primary-hover"
                         }`}
@@ -922,6 +1005,7 @@ export default function PropertiesPage() {
                     </button>
                   </div>
                 </form>
+
               </Modal>
             )}
             {isDeleteModalOpen && (
@@ -977,6 +1061,7 @@ export default function PropertiesPage() {
     </div>
   );
 }
+
 
 
 

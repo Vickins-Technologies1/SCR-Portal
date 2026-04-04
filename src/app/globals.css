@@ -198,6 +198,65 @@ body {
     background-clip: text;
     color: transparent;
   }
+  .modal-backdrop {
+    background: rgba(15, 23, 42, 0.62);
+    backdrop-filter: blur(10px);
+  }
+  .modal-panel {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+    border: 1px solid var(--color-border);
+    box-shadow: 0 34px 90px -60px rgba(15, 23, 42, 0.7);
+    border-radius: 1.75rem;
+  }
+  .modal-header {
+    background: rgba(255, 255, 255, 0.76);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .modal-body {
+    padding: 1.25rem;
+  }
+  .modal-close {
+    color: var(--color-muted-foreground);
+    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .modal-close:hover {
+    color: var(--color-foreground);
+    background: rgba(15, 23, 42, 0.08);
+  }
+  .modal-close:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-ring);
+  }
+  .modal-stagger > *,
+  .modal-stagger > form > * {
+    animation: modalFadeUp 0.35s ease both;
+  }
+  .modal-stagger > *:nth-child(2),
+  .modal-stagger > form > *:nth-child(2) {
+    animation-delay: 0.06s;
+  }
+  .modal-stagger > *:nth-child(3),
+  .modal-stagger > form > *:nth-child(3) {
+    animation-delay: 0.12s;
+  }
+  .modal-stagger > *:nth-child(4),
+  .modal-stagger > form > *:nth-child(4) {
+    animation-delay: 0.18s;
+  }
+  .modal-stagger > *:nth-child(5),
+  .modal-stagger > form > *:nth-child(5) {
+    animation-delay: 0.24s;
+  }
+  .modal-stagger > *:nth-child(6),
+  .modal-stagger > form > *:nth-child(6) {
+    animation-delay: 0.3s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .modal-stagger > *,
+    .modal-stagger > form > * {
+      animation: none;
+    }
+  }
   .animate-fade-up {
     animation: fadeUp 0.9s ease-out both;
   }
@@ -313,6 +372,17 @@ body {
   from {
     opacity: 0;
     transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modalFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
   }
   to {
     opacity: 1;

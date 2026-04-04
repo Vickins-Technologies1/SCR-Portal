@@ -288,33 +288,33 @@ export default function PendingApprovals() {
       {/* Confirmation Modal */}
       <AnimatePresence>
         {showConfirmModal && selectedOwner && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3">
+          <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3">
             <motion.div
               ref={modalRef}
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={{ duration: 0.2 }}
-              className="surface-card rounded-xl shadow-2xl max-w-sm w-full overflow-hidden focus:outline-none"
+              className="modal-panel max-w-sm w-full overflow-hidden focus:outline-none"
               tabIndex={-1}
             >
-              <div className="p-4">
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Confirm Approval
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setShowConfirmModal(false);
-                      setSelectedOwner(null);
-                    }}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label="Close modal"
-                  >
-                    <X size={24} />
-                  </button>
-                </div>
+              <div className="modal-header flex items-start justify-between px-4 py-3">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Confirm Approval
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setSelectedOwner(null);
+                  }}
+                  className="modal-close rounded-full p-1.5"
+                  aria-label="Close modal"
+                >
+                  <X size={20} />
+                </button>
+              </div>
 
+              <div className="modal-body modal-stagger">
                 <div className="mb-5 space-y-2 text-xs">
                   <p className="text-foreground">
                     You are about to approve <strong>{selectedOwner.name}</strong>.

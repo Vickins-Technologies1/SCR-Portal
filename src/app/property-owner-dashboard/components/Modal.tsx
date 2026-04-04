@@ -33,25 +33,25 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in px-3 sm:px-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop animate-fade-in px-3 sm:px-4 overflow-y-auto"
       onClick={disableClose ? undefined : onClose}
     >
       <div
-        className={`bg-white rounded-2xl sm:rounded-3xl border border-border p-4 sm:p-6 w-full max-w-[94vw] sm:max-w-lg lg:max-w-5xl mx-auto transform transition-all duration-300 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto text-foreground shadow-2xl ${className}`}
+        className={`modal-panel w-full max-w-[94vw] sm:max-w-lg lg:max-w-5xl mx-auto max-h-[85vh] sm:max-h-[90vh] overflow-y-auto text-foreground ${className}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="modal-title"
         aria-modal="true"
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="modal-header flex items-center justify-between px-4 sm:px-5 py-3">
           <h2 id="modal-title" className="text-base sm:text-lg font-semibold text-foreground">
             {title}
           </h2>
           {!disableClose && (
             <button
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors duration-200"
+              className="modal-close rounded-full p-1.5"
               aria-label="Close modal"
             >
               <svg
@@ -67,25 +67,8 @@ export default function Modal({
         </div>
 
         {/* Content */}
-        <div className="text-sm sm:text-base">{children}</div>
+        <div className="modal-body modal-stagger text-sm sm:text-base">{children}</div>
       </div>
-
-      <style jsx global>{`
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
-        .animate-fade-in {
-          animation: fadeIn 0.3s ease-in-out;
-        }
-        @keyframes fadeIn {
-          0% {
-            opacity: 0;
-            transform: scale(0.95);
-          }
-          100% {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-      `}</style>
     </div>
   );
 }

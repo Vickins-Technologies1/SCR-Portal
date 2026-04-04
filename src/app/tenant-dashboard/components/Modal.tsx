@@ -54,7 +54,7 @@ export default function Modal({ title, isOpen, onClose, children }: ModalProps) 
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -62,19 +62,19 @@ export default function Modal({ title, isOpen, onClose, children }: ModalProps) 
         >
         <motion.div
           ref={modalRef}
-          className="surface-card rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-[92vw] sm:max-w-lg mx-3 sm:mx-6 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto"
+          className="modal-panel w-full max-w-[92vw] sm:max-w-lg mx-3 sm:mx-6 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto"
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.3, ease: "easeInOut" }}
         >
-          <div className="flex justify-between items-center p-4 sm:p-5 border-b border-border bg-white/60">
+          <div className="modal-header flex justify-between items-center px-4 sm:px-5 py-3">
             <h2 className="text-base sm:text-lg md:text-xl font-semibold text-foreground tracking-tight">
               {title}
             </h2>
               <button
                 onClick={onClose}
-                className="text-gray-500 hover:text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-full p-1"
+                className="modal-close rounded-full p-1"
                 aria-label="Close modal"
               >
                 <svg
@@ -93,7 +93,7 @@ export default function Modal({ title, isOpen, onClose, children }: ModalProps) 
                 </svg>
               </button>
             </div>
-            <div className="p-4 sm:p-6 bg-white/80">{children}</div>
+            <div className="modal-body modal-stagger text-sm sm:text-base">{children}</div>
           </motion.div>
         </motion.div>
       )}

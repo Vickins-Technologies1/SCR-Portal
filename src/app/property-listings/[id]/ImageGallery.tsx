@@ -136,7 +136,7 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
 
       {/* Full-screen modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/90 backdrop-blur-sm transition-opacity duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop transition-opacity duration-300">
           <div
             ref={modalRef}
             className="relative w-full max-w-6xl px-4 animate-in fade-in zoom-in-95 duration-300"

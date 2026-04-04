@@ -330,23 +330,23 @@ export default function MaintenanceRequestsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4"
+            className="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-3 sm:p-4"
             onClick={() => setIsModalOpen(false)}
           >
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="surface-card rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 w-full max-w-[92vw] sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto"
+              className="modal-panel w-full max-w-[92vw] sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-6">
+              <div className="modal-header flex justify-between items-center px-4 sm:px-5 py-3">
                 <h2 className="text-xl sm:text-2xl font-semibold text-foreground">New Maintenance Request</h2>
-                <button onClick={() => setIsModalOpen(false)}>
+                <button onClick={() => setIsModalOpen(false)} className="modal-close rounded-full p-1">
                   <X size={24} />
                 </button>
               </div>
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="modal-body modal-stagger space-y-5">
                 <div>
                   <input
                     type="text"

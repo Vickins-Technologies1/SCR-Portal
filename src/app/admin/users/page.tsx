@@ -579,18 +579,21 @@ export default function PropertyOwnersPage() {
 
           {/* Create Modal */}
           {showCreateModal && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
-                <h2 className="text-base font-semibold text-foreground mb-4">Add New Property Owner</h2>
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
+              <div className="modal-panel max-w-sm w-full overflow-hidden">
+                <div className="modal-header px-4 sm:px-5 py-3">
+                  <h2 className="text-base font-semibold text-foreground">Add New Property Owner</h2>
+                </div>
 
-                {createError && (
-                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
-                    <AlertCircle size={20} />
-                    <span>{createError}</span>
-                  </div>
-                )}
+                <div className="modal-body modal-stagger">
+                  {createError && (
+                    <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
+                      <AlertCircle size={20} />
+                      <span>{createError}</span>
+                    </div>
+                  )}
 
-                <form onSubmit={handleCreate} className="space-y-3.5">
+                  <form onSubmit={handleCreate} className="space-y-3.5">
                   <input
                     type="text"
                     placeholder="Full Name"
@@ -644,18 +647,21 @@ export default function PropertyOwnersPage() {
                       Create Owner
                     </button>
                   </div>
-                </form>
+                  </form>
+                </div>
               </div>
             </div>
           )}
 
           {/* Edit Modal */}
           {showEditModal && editUser && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
-                <h2 className="text-base font-semibold text-foreground mb-4">Edit Property Owner</h2>
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
+              <div className="modal-panel max-w-sm w-full overflow-hidden">
+                <div className="modal-header px-4 sm:px-5 py-3">
+                  <h2 className="text-base font-semibold text-foreground">Edit Property Owner</h2>
+                </div>
 
-                <form onSubmit={handleUpdate} className="space-y-4">
+                <form onSubmit={handleUpdate} className="modal-body modal-stagger space-y-4">
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1.5">Name</label>
                     <input
@@ -706,9 +712,9 @@ export default function PropertyOwnersPage() {
 
           {/* Impersonate Modal */}
           {showImpersonateModal && impersonateTarget && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
-                <div className="flex items-center gap-3 mb-4">
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
+              <div className="modal-panel max-w-sm w-full overflow-hidden">
+                <div className="modal-header flex items-center gap-3 px-4 sm:px-5 py-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Shield size={20} />
                   </div>
@@ -718,45 +724,47 @@ export default function PropertyOwnersPage() {
                   </div>
                 </div>
 
-                {impersonateError && (
-                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
-                    <AlertCircle size={18} />
-                    <span>{impersonateError}</span>
+                <div className="modal-body modal-stagger">
+                  {impersonateError && (
+                    <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
+                      <AlertCircle size={18} />
+                      <span>{impersonateError}</span>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-3 text-xs text-foreground">
+                    <p className="font-semibold">You are about to impersonate:</p>
+                    <p className="mt-1">{impersonateTarget.name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{impersonateTarget.email}</p>
                   </div>
-                )}
 
-                <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-3 text-xs text-foreground">
-                  <p className="font-semibold">You are about to impersonate:</p>
-                  <p className="mt-1">{impersonateTarget.name}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{impersonateTarget.email}</p>
-                </div>
+                  {!impersonateTarget.isApproved && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                      This owner is not approved yet. Approve the account before impersonating.
+                    </div>
+                  )}
 
-                {!impersonateTarget.isApproved && (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                    This owner is not approved yet. Approve the account before impersonating.
+                  <div className="flex justify-end gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowImpersonateModal(false);
+                        setImpersonateTarget(null);
+                        setImpersonateError(null);
+                      }}
+                      className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleImpersonate}
+                      disabled={isImpersonating || !impersonateTarget.isApproved}
+                      className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md disabled:opacity-60"
+                    >
+                      {isImpersonating ? "Switching..." : "Impersonate Owner"}
+                    </button>
                   </div>
-                )}
-
-                <div className="flex justify-end gap-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowImpersonateModal(false);
-                      setImpersonateTarget(null);
-                      setImpersonateError(null);
-                    }}
-                    className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleImpersonate}
-                    disabled={isImpersonating || !impersonateTarget.isApproved}
-                    className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md disabled:opacity-60"
-                  >
-                    {isImpersonating ? "Switching..." : "Impersonate Owner"}
-                  </button>
                 </div>
               </div>
             </div>
@@ -764,9 +772,9 @@ export default function PropertyOwnersPage() {
 
           {/* Delete Modal */}
           {showDeleteModal && deleteTarget && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3">
-              <div className="surface-card rounded-xl shadow-2xl max-w-sm w-full p-5">
-                <div className="flex items-center gap-3 mb-4">
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
+              <div className="modal-panel max-w-sm w-full overflow-hidden">
+                <div className="modal-header flex items-center gap-3 px-4 sm:px-5 py-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-700">
                     <Trash2 size={20} />
                   </div>
@@ -776,45 +784,47 @@ export default function PropertyOwnersPage() {
                   </div>
                 </div>
 
-                {deleteError && (
-                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
-                    <AlertCircle size={18} />
-                    <span>{deleteError}</span>
+                <div className="modal-body modal-stagger">
+                  {deleteError && (
+                    <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md flex items-center gap-2 text-xs">
+                      <AlertCircle size={18} />
+                      <span>{deleteError}</span>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border border-border bg-white/70 px-3 py-3 text-xs text-foreground">
+                    <p className="font-semibold">You are about to delete:</p>
+                    <p className="mt-1">{deleteTarget.name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{deleteTarget.email}</p>
                   </div>
-                )}
 
-                <div className="rounded-lg border border-border bg-white/70 px-3 py-3 text-xs text-foreground">
-                  <p className="font-semibold">You are about to delete:</p>
-                  <p className="mt-1">{deleteTarget.name}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{deleteTarget.email}</p>
-                </div>
+                  {deleteTarget.isApproved && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                      Approved owners cannot be deleted. Only pending sign-ups can be removed.
+                    </div>
+                  )}
 
-                {deleteTarget.isApproved && (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                    Approved owners cannot be deleted. Only pending sign-ups can be removed.
+                  <div className="flex justify-end gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDeleteModal(false);
+                        setDeleteTarget(null);
+                        setDeleteError(null);
+                      }}
+                      className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={isDeleting || deleteTarget.isApproved}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-xs font-medium shadow-md disabled:opacity-60"
+                    >
+                      {isDeleting ? "Deleting..." : "Delete Owner"}
+                    </button>
                   </div>
-                )}
-
-                <div className="flex justify-end gap-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowDeleteModal(false);
-                      setDeleteTarget(null);
-                      setDeleteError(null);
-                    }}
-                    className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={isDeleting || deleteTarget.isApproved}
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-xs font-medium shadow-md disabled:opacity-60"
-                  >
-                    {isDeleting ? "Deleting..." : "Delete Owner"}
-                  </button>
                 </div>
               </div>
             </div>

@@ -626,7 +626,7 @@ export default function LoginPage() {
     <AnimatePresence>
       {showResetModal && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop px-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -636,9 +636,9 @@ export default function LoginPage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.98 }}
             transition={{ duration: 0.25 }}
-            className="w-full max-w-[92vw] sm:max-w-md bg-white border border-border rounded-2xl shadow-2xl overflow-hidden"
+            className="modal-panel w-full max-w-[92vw] sm:max-w-md overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-border">
+            <div className="modal-header flex items-center justify-between px-4 sm:px-5 py-3">
               <div>
                 <h2 className="text-sm sm:text-base font-bold text-foreground">Reset Owner Password</h2>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">
@@ -648,14 +648,14 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowResetModal(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="modal-close rounded-full p-1"
                 aria-label="Close reset modal"
               >
                 <FaTimes />
               </button>
             </div>
 
-            <form onSubmit={handleResetRequest} className="p-4 sm:p-5 space-y-3 sm:space-y-4">
+            <form onSubmit={handleResetRequest} className="modal-body modal-stagger space-y-3 sm:space-y-4">
               {resetError && (
                 <div className="p-2.5 sm:p-3 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl">
                   {resetError}

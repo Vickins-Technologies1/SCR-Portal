@@ -470,7 +470,7 @@ export default function PaymentsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4"
+              className="fixed inset-0 modal-backdrop z-50 flex items-end sm:items-center justify-center p-4"
               onClick={() => setIsModalOpen(false)}
             >
               <motion.div
@@ -478,12 +478,17 @@ export default function PaymentsPage() {
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 100, opacity: 0 }}
                 transition={{ type: "spring", damping: 30 }}
-                className="surface-card rounded-t-3xl sm:rounded-3xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
+                className="modal-panel rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="p-6 sm:p-8">
-                  <h2 className="text-xl sm:text-2xl font-bold text-[#1E3A8A] mb-6">Make a Payment</h2>
+                <div className="modal-header flex items-center justify-between px-6 sm:px-8 py-5">
+                  <h2 className="text-xl sm:text-2xl font-bold text-[#1E3A8A]">Make a Payment</h2>
+                  <button onClick={() => setIsModalOpen(false)} className="modal-close rounded-full p-1">
+                    <X size={22} />
+                  </button>
+                </div>
 
+                <div className="modal-body modal-stagger">
                   <div className="space-y-5">
                     <label className="block">
                       <span className="text-sm font-semibold text-[#1E3A8A]">Payment Type</span>
@@ -579,7 +584,7 @@ export default function PaymentsPage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4"
               onClick={() => {
                 if (!isProcessing) {
                   setMessages([]);
@@ -590,51 +595,53 @@ export default function PaymentsPage() {
               <motion.div
                 initial={{ scale: 0.9 }}
                 animate={{ scale: 1 }}
-                className="surface-card rounded-3xl p-7 w-full max-w-sm shadow-2xl text-center"
+                className="modal-panel p-7 w-full max-w-sm text-center"
                 onClick={(e) => e.stopPropagation()}
               >
-                {isProcessing && (
-                  <div className="w-20 h-20 mx-auto mb-6 relative">
-                    <motion.div
-                      className="absolute inset-0 border-8 border-primary/30 rounded-full"
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                    />
-                    <motion.div
-                      className="absolute inset-0 border-8 border-t-[#1E3A8A] border-l-[#1E3A8A] border-b-transparent border-r-transparent rounded-full"
-                      animate={{ rotate: -360 }}
-                      transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                    />
-                  </div>
-                )}
-
-                <h3 className="text-xl font-bold text-[#1E3A8A] mb-3">
-                  {isProcessing ? "Processing Payment..." : "Payment Update"}
-                </h3>
-
-                {isProcessing && (
-                  <p className="text-sm text-gray-600 mb-6">
-                    Please complete the payment prompt on your phone
-                  </p>
-                )}
-
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {messages.map((msg, i) => (
-                    <div
-                      key={i}
-                      className={`p-4 rounded-xl flex items-start gap-3 text-left text-sm ${
-                        msg.type === "success" ? "bg-primary/10 text-primary" : "bg-red-50 text-red-700"
-                      }`}
-                    >
-                      {msg.type === "success" ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
-                      <div>
-                        <p className="font-medium">{msg.text}</p>
-                        <p className="text-xs opacity-75 mt-1">
-                          {new Date(msg.timestamp).toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" })}
-                        </p>
-                      </div>
+                <div className="modal-stagger">
+                  {isProcessing && (
+                    <div className="w-20 h-20 mx-auto mb-6 relative">
+                      <motion.div
+                        className="absolute inset-0 border-8 border-primary/30 rounded-full"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                      />
+                      <motion.div
+                        className="absolute inset-0 border-8 border-t-[#1E3A8A] border-l-[#1E3A8A] border-b-transparent border-r-transparent rounded-full"
+                        animate={{ rotate: -360 }}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                      />
                     </div>
-                  ))}
+                  )}
+
+                  <h3 className="text-xl font-bold text-[#1E3A8A] mb-3">
+                    {isProcessing ? "Processing Payment..." : "Payment Update"}
+                  </h3>
+
+                  {isProcessing && (
+                    <p className="text-sm text-gray-600 mb-6">
+                      Please complete the payment prompt on your phone
+                    </p>
+                  )}
+
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {messages.map((msg, i) => (
+                      <div
+                        key={i}
+                        className={`p-4 rounded-xl flex items-start gap-3 text-left text-sm ${
+                          msg.type === "success" ? "bg-primary/10 text-primary" : "bg-red-50 text-red-700"
+                        }`}
+                      >
+                        {msg.type === "success" ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                        <div>
+                          <p className="font-medium">{msg.text}</p>
+                          <p className="text-xs opacity-75 mt-1">
+                            {new Date(msg.timestamp).toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {!isProcessing && messages.length > 0 && (

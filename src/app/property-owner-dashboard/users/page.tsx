@@ -724,20 +724,20 @@ export default function UsersPage() {
 
       {/* ADD MODAL */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            className="modal-panel w-full max-w-lg max-h-[90vh] overflow-y-auto"
           >
-            <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-6 py-5 border-b border-gray-200">
+            <div className="modal-header sticky top-0 z-10 flex items-center justify-between px-6 py-5">
               <h2 className="text-xl font-bold text-gray-900">Add Team Member</h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setIsAddModalOpen(false)} className="modal-close rounded-full p-2">
                 <X size={20} className="text-gray-600" />
               </button>
             </div>
 
-            <form onSubmit={handleAddMember} className="p-6 space-y-6">
+            <form onSubmit={handleAddMember} className="modal-body modal-stagger space-y-6">
               {addError && (
                 <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3">
                   <AlertCircle size={18} />
@@ -890,26 +890,26 @@ export default function UsersPage() {
       )}
 
       {isEditModalOpen && editMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            className="modal-panel w-full max-w-lg max-h-[90vh] overflow-y-auto"
           >
-            <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-6 py-5 border-b border-gray-200">
+            <div className="modal-header sticky top-0 z-10 flex items-center justify-between px-6 py-5">
               <h2 className="text-xl font-bold text-gray-900">Edit Team Member</h2>
               <button
                 onClick={() => {
                   setIsEditModalOpen(false);
                   setEditMember(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="modal-close rounded-full p-2"
               >
                 <X size={20} className="text-gray-600" />
               </button>
             </div>
 
-            <form onSubmit={handleEditMember} className="p-6 space-y-6">
+            <form onSubmit={handleEditMember} className="modal-body modal-stagger space-y-6">
               {editError && (
                 <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3">
                   <AlertCircle size={18} />
@@ -1033,30 +1033,32 @@ export default function UsersPage() {
 
       {/* DELETE CONFIRMATION */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center"
+            className="modal-panel p-8 max-w-sm w-full text-center"
           >
-            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Team Member?</h3>
-            <p className="text-gray-600 mb-6">
-              This action cannot be undone. The member will lose all access.
-            </p>
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteMember}
-                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors shadow-md"
-              >
-                Delete
-              </button>
+            <div className="modal-stagger">
+              <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Team Member?</h3>
+              <p className="text-gray-600 mb-6">
+                This action cannot be undone. The member will lose all access.
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteMember}
+                  className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-colors shadow-md"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>

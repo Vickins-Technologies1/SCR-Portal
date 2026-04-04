@@ -30,14 +30,14 @@ export default function PropertyModal({ property, onClose }: PropertyModalProps)
   return (
     <>
       <motion.div
-        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"
+        className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
       >
         <motion.div
-          className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-6 relative shadow-2xl"
+          className="modal-panel max-w-5xl w-full max-h-[90vh] overflow-y-auto p-6 relative"
           initial={{ scale: 0.85, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.85, opacity: 0 }}
@@ -45,7 +45,7 @@ export default function PropertyModal({ property, onClose }: PropertyModalProps)
         >
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 text-gray-600 hover:text-gray-900 z-10"
+            className="modal-close absolute top-5 right-5 rounded-full p-1.5 z-10"
             aria-label="Close modal"
           >
             <X className="h-7 w-7" />
@@ -182,7 +182,7 @@ export default function PropertyModal({ property, onClose }: PropertyModalProps)
       <AnimatePresence>
         {isFullScreen && (
           <motion.div
-            className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-60 p-4"
+            className="fixed inset-0 modal-backdrop flex items-center justify-center z-60 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -205,7 +205,7 @@ export default function PropertyModal({ property, onClose }: PropertyModalProps)
               />
               <button
                 onClick={() => setIsFullScreen(false)}
-                className="absolute top-5 right-5 bg-primary text-white p-3 rounded-full hover:bg-primary-hover"
+                className="absolute top-5 right-5 bg-primary text-white p-3 rounded-full hover:bg-primary-hover shadow-lg"
               >
                 <X className="h-6 w-6" />
               </button>

@@ -712,7 +712,7 @@ export default function TenantDetailsPage() {
     <>
       {/* Recording Payment Overlay */}
       {isRecordingPayment && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4">
           <div className="text-center">
             <h3 className="text-2xl font-bold text-white mb-6">Recording Payment...</h3>
             <div className="grid grid-cols-3 gap-3">

@@ -237,23 +237,23 @@ export default function VacateRequestsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4"
             onClick={() => setIsModalOpen(false)}
           >
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="surface-card rounded-3xl shadow-2xl p-5 sm:p-6 w-full max-w-lg"
+              className="modal-panel w-full max-w-lg overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-6">
+              <div className="modal-header flex justify-between items-center px-5 sm:px-6 py-4">
                 <h2 className="text-xl sm:text-2xl font-semibold text-foreground">Submit Vacate Request</h2>
-                <button onClick={() => setIsModalOpen(false)}>
+                <button onClick={() => setIsModalOpen(false)} className="modal-close rounded-full p-1">
                   <X size={24} />
                 </button>
               </div>
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="modal-body modal-stagger space-y-5">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">Preferred Move-out Date</label>
                   <input
