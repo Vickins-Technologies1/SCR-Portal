@@ -78,7 +78,15 @@ export async function GET(request: NextRequest) {
     if (searchParams.get("name")) filters.name = { $regex: searchParams.get("name")!, $options: "i" };
     if (searchParams.get("email")) filters.email = { $regex: searchParams.get("email")!, $options: "i" };
     if (searchParams.get("propertyId")) filters.propertyId = searchParams.get("propertyId");
-    if (searchParams.get("unitType")) filters.unitType = { $regex: searchParams.get("unitType")!, $options: "i" };
+    const unitTypeFilter = searchParams.get("unitType");
+    if (unitTypeFilter) {
+      const regex = { $regex: unitTypeFilter, $options: "i" };
+      filters.$or = [
+        { unitType: regex },
+        { "leasedUnits.unitType": regex },
+        { "leasedUnits.unitIdentifier": regex },
+      ];
+    }
 
     const total = await db.collection<Tenant>("tenants").countDocuments(filters);
     const tenants = await db.collection<Tenant>("tenants")
@@ -102,6 +110,7 @@ export async function GET(request: NextRequest) {
         price: t.price,
         deposit: t.deposit,
         houseNumber: t.houseNumber,
+        leasedUnits: t.leasedUnits,
         leaseStartDate: t.leaseStartDate,
         leaseEndDate: t.leaseEndDate,
         status: t.status,
@@ -141,10 +150,23 @@ export async function POST(request: NextRequest) {
     const body: TenantRequest = await request.json();
 
     // Required fields
-    const required = ["name", "email", "phone", "password", "propertyId", "unitIdentifier", "houseNumber", "leaseStartDate", "leaseEndDate"];
+    const required = ["name", "email", "phone", "password", "propertyId", "leaseStartDate", "leaseEndDate"];
     const missing = required.filter(f => !body[f as keyof TenantRequest]);
     if (missing.length > 0) {
       return NextResponse.json({ success: false, message: `Missing fields: ${missing.join(", ")}` }, { status: 400 });
+    }
+
+    const leaseUnitInputs = Array.isArray(body.leasedUnits) && body.leasedUnits.length > 0
+      ? body.leasedUnits
+      : (body.unitIdentifier && body.houseNumber
+          ? [{ unitIdentifier: body.unitIdentifier, houseNumber: body.houseNumber }]
+          : []);
+
+    if (leaseUnitInputs.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "At least one unit (type and house number) is required." },
+        { status: 400 }
+      );
     }
 
     // Basic validation
@@ -191,21 +213,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedLeases = leaseUnitInputs.map((unit) => ({
+      unitIdentifier: (unit.unitIdentifier || "").trim(),
+      houseNumber: (unit.houseNumber || "").trim(),
+    }));
+
+    if (normalizedLeases.some((unit) => !unit.unitIdentifier || !unit.houseNumber)) {
+      return NextResponse.json(
+        { success: false, message: "Each leased unit must include a unit type and house number." },
+        { status: 400 }
+      );
+    }
+
+    const houseNumbers = normalizedLeases.map((unit) => unit.houseNumber);
+    const uniqueHouseNumbers = new Set(houseNumbers.map((h) => h.toLowerCase()));
+    if (uniqueHouseNumbers.size !== houseNumbers.length) {
+      return NextResponse.json(
+        { success: false, message: "House numbers must be unique within the same tenant." },
+        { status: 400 }
+      );
+    }
+
     // 3. Unit already occupied in this property
     const duplicateUnit = await db.collection("tenants").findOne({
-      propertyId: new ObjectId(body.propertyId),
+      propertyId: { $in: [body.propertyId, new ObjectId(body.propertyId)] },
+      status: { $nin: ["terminated", "inactive", "moved out"] },
       $or: [
-        { houseNumber: body.houseNumber?.trim() },
-        { unitIdentifier: body.unitIdentifier }
+        { houseNumber: { $in: houseNumbers } },
+        { "leasedUnits.houseNumber": { $in: houseNumbers } },
       ],
-      status: { $nin: ["terminated", "inactive", "moved out"] }
     });
 
     if (duplicateUnit) {
       return NextResponse.json(
         {
           success: false,
-          message: `This unit (${body.houseNumber || body.unitIdentifier}) is already occupied`
+          message: `One or more unit numbers (${houseNumbers.join(", ")}) are already occupied`,
         },
         { status: 409 }
       );
@@ -226,22 +269,46 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle properties with and without uniqueType
-    const unitConfigWithUnique = property.unitTypes
-      .map((unit, index) => ({
-        ...unit,
-        uniqueType: unit.uniqueType || `${unit.type}-${index}`,
-      }))
-      .find(u => u.uniqueType === body.unitIdentifier);
+    const unitConfigs = property.unitTypes.map((unit, index) => ({
+      ...unit,
+      uniqueType: unit.uniqueType || `${unit.type}-${index}`,
+    }));
 
-    if (!unitConfigWithUnique) {
-      return NextResponse.json({ success: false, message: "Invalid unit type selected" }, { status: 400 });
+    const configById = new Map(unitConfigs.map((unit) => [unit.uniqueType, unit]));
+    const requestedCounts = new Map<string, number>();
+    const leasedUnits: Tenant["leasedUnits"] = [];
+
+    for (const lease of normalizedLeases) {
+      const config = configById.get(lease.unitIdentifier);
+      if (!config) {
+        return NextResponse.json(
+          { success: false, message: `Invalid unit type selected: ${lease.unitIdentifier}` },
+          { status: 400 }
+        );
+      }
+      const count = requestedCounts.get(lease.unitIdentifier) || 0;
+      requestedCounts.set(lease.unitIdentifier, count + 1);
+      leasedUnits.push({
+        unitIdentifier: config.uniqueType,
+        unitType: config.type,
+        houseNumber: lease.houseNumber,
+        price: config.price,
+        deposit: config.deposit,
+      });
     }
 
-    if (unitConfigWithUnique.quantity <= 0) {
-      return NextResponse.json({
-        success: false,
-        message: `No available units for ${unitConfigWithUnique.type} (Ksh ${unitConfigWithUnique.price}/mo)`,
-      }, { status: 400 });
+    for (const [unitIdentifier, count] of requestedCounts.entries()) {
+      const config = configById.get(unitIdentifier);
+      if (!config) continue;
+      if (config.quantity < count) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Not enough available units for ${config.type} (${config.price.toLocaleString()} Ksh). Requested ${count}, available ${config.quantity}.`,
+          },
+          { status: 400 }
+        );
+      }
     }
     const dueStatus = await getOwnerDueStatus(db, userId, new Date());
     if (dueStatus.isDue) {
@@ -251,6 +318,10 @@ export async function POST(request: NextRequest) {
       );
     }
     // Create tenant
+    const totalRent = leasedUnits.reduce((sum: number, unit: { price?: number }) => sum + (unit.price || 0), 0);
+    const totalDeposit = leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0);
+    const primaryLease = leasedUnits[0];
+
     const tenantData: Tenant = {
       _id: new ObjectId(),
       ownerId: userId,
@@ -260,11 +331,12 @@ export async function POST(request: NextRequest) {
       password: await bcrypt.hash(body.password!, 10),
       role: "tenant",
       propertyId: body.propertyId,
-      unitType: unitConfigWithUnique.type,
-      unitIdentifier: unitConfigWithUnique.uniqueType,
-      price: unitConfigWithUnique.price,
-      deposit: unitConfigWithUnique.deposit,
-      houseNumber: body.houseNumber.trim(),
+      unitType: primaryLease.unitType,
+      unitIdentifier: primaryLease.unitIdentifier,
+      price: totalRent,
+      deposit: totalDeposit,
+      houseNumber: primaryLease.houseNumber,
+      leasedUnits,
       leaseStartDate: body.leaseStartDate,
       leaseEndDate: body.leaseEndDate,
       status: "active",
@@ -280,22 +352,28 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection<Tenant>("tenants").insertOne(tenantData);
 
-    // Decrement unit quantity
-    await db.collection<Property>("properties").updateOne(
-      { _id: new ObjectId(body.propertyId) },
-      { $inc: { "unitTypes.$[elem].quantity": -1 } },
-      { arrayFilters: [{ "elem.uniqueType": unitConfigWithUnique.uniqueType }] }
-    );
+    // Decrement unit quantities
+    for (const [unitIdentifier, count] of requestedCounts.entries()) {
+      await db.collection<Property>("properties").updateOne(
+        { _id: new ObjectId(body.propertyId) },
+        { $inc: { "unitTypes.$[elem].quantity": -count } },
+        { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
+      );
+    }
 
     // ────────────────────────────────────────────────
     //          Welcome notifications with password
     // ────────────────────────────────────────────────
-   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-   const loginUrl = `${baseUrl}/tenant-login`;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const loginUrl = `${baseUrl}/tenant-login`;
+
+    const unitSummary = leasedUnits
+      .map((unit) => `${unit.houseNumber} (${unit.unitType})`)
+      .join(", ");
 
     // Short version just for SMS (aim < 160 chars)
     const smsMessage =
-      `Welcome ${body.name.trim()}! Added to ${property.name} ${body.houseNumber.trim()}\n` +
+      `Welcome ${body.name.trim()}! Added to ${property.name} ${unitSummary}\n` +
       `Login: ${loginUrl}\n` +
       `Pass: ${body.password!}\n` +
       `Change it after 1st login!`;
@@ -303,7 +381,8 @@ export async function POST(request: NextRequest) {
     // Longer version for Email + WhatsApp
     const fullMessage =
       `Welcome ${body.name.trim()}!\n\n` +
-      `You've been added as a tenant to ${property.name}, Unit ${body.houseNumber.trim()}.\n\n` +
+      `You've been added as a tenant to ${property.name}.\n` +
+      `Units: ${unitSummary}\n\n` +
       `Login here: ${loginUrl}\n` +
       `Email:    ${body.email.trim()}\n` +
       `Password: ${body.password!}\n\n` +
@@ -339,7 +418,7 @@ export async function POST(request: NextRequest) {
 
     logger.info("Tenant created successfully", {
       tenantId: result.insertedId.toString(),
-      unitIdentifier: body.unitIdentifier,
+      unitIdentifier: primaryLease.unitIdentifier,
     });
 
     return NextResponse.json({

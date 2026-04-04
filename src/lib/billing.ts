@@ -1,6 +1,7 @@
 import { Db, ObjectId } from "mongodb";
-import { resolveMonthlyRentForDate } from "./utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "./rent-overrides";
+import { resolveTenantMonthlyRentForDate } from "./utils";
+import { Tenant } from "../types/tenant";
+import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 
 export type BillingPlan = "RentCollection" | "FullManagement";
 
@@ -44,7 +45,7 @@ export async function computeExpectedMonthlyIncome(db: Db, propertyId: string, n
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const tenants = await db.collection("tenants").find({
+  const tenants = await db.collection<Tenant>("tenants").find({
     propertyId,
     status: { $ne: "inactive" },
   }).toArray();
@@ -61,14 +62,10 @@ export async function computeExpectedMonthlyIncome(db: Db, propertyId: string, n
     if (leaseStart > endOfMonth || leaseEnd < startOfMonth) {
       return sum;
     }
-    const overrides = filterOverridesForUnit(
-      rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-      tenant.unitIdentifier
-    );
-    const effectiveMonthlyRent = resolveMonthlyRentForDate({
-      monthlyRent: tenant.price || 0,
+    const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
+      tenant,
       date: now,
-      overrides,
+      rentOverrideMap,
     });
     return sum + effectiveMonthlyRent;
   }, 0);

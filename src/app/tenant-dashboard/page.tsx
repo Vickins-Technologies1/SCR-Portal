@@ -36,6 +36,7 @@ interface Tenant {
   phone: string;
   propertyId: string;
   houseNumber: string;
+  unitIdentifier?: string;
   unitType: string;
   price: number;
   deposit: number;
@@ -45,6 +46,13 @@ interface Tenant {
   updatedAt?: string;
   wallet?: number;
   walletBalance?: number;
+  leasedUnits?: Array<{
+    unitIdentifier: string;
+    unitType: string;
+    houseNumber: string;
+    price: number;
+    deposit: number;
+  }>;
   leaseStartDate?: string;
   leaseEndDate?: string;
   totalRentPaid?: number;
@@ -449,6 +457,26 @@ export default function TenantDashboardPage() {
       ? new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
       : "—";
 
+  const leaseUnits = tenant?.leasedUnits && tenant.leasedUnits.length > 0
+    ? tenant.leasedUnits
+    : tenant
+      ? [{
+          unitIdentifier: tenant.unitIdentifier,
+          unitType: tenant.unitType,
+          houseNumber: tenant.houseNumber,
+          price: tenant.price,
+          deposit: tenant.deposit,
+        }]
+      : [];
+
+  const unitNumbers = leaseUnits.map((unit) => unit.houseNumber).filter(Boolean);
+  const unitBadgeText = unitNumbers.length > 1
+    ? `Units ${unitNumbers.join(", ")}`
+    : `Unit ${unitNumbers[0] || "—"}`;
+
+  const rentLabel = leaseUnits.length > 1 ? "Total Rent" : "Rent";
+  const depositLabel = leaseUnits.length > 1 ? "Total Deposit" : "Deposit";
+
   const walletBalance = tenant?.walletBalance ?? tenant?.wallet ?? 0;
   const totalPaid =
     (tenant?.totalRentPaid ?? 0) +
@@ -544,7 +572,7 @@ export default function TenantDashboardPage() {
                     {property?.name || "Your Property"}
                   </span>
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
-                    Unit {tenant?.houseNumber || "—"}
+                    {unitBadgeText}
                   </span>
                   <Badge status={paymentStatusLabel}>{paymentStatusLabel}</Badge>
                 </div>
@@ -613,35 +641,65 @@ export default function TenantDashboardPage() {
               </div>
 
               {property && tenant ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-foreground">{property.name}</p>
-                    <p className="text-xs sm:text-sm text-muted-foreground">{property.address}</p>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-                        {tenant.unitType}
-                      </span>
-                      <span className="px-3 py-1 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-xs font-semibold">
-                        Unit {tenant.houseNumber}
-                      </span>
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-foreground">{property.name}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">{property.address}</p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {leaseUnits.map((unit, index) => (
+                          <span
+                            key={`${unit.unitIdentifier}-${index}`}
+                            className="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold"
+                          >
+                            {unit.unitType} • {unit.houseNumber}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
+                      <p>
+                        {rentLabel}: <span className="font-semibold text-foreground">Ksh {tenant.price.toLocaleString()}</span>
+                      </p>
+                      <p>
+                        {depositLabel}: <span className="font-semibold text-foreground">Ksh {tenant.deposit.toLocaleString()}</span>
+                      </p>
+                      <p>
+                        Lease: <span className="font-semibold text-foreground">{fmt(tenant.leaseStartDate)} – {fmt(tenant.leaseEndDate)}</span>
+                      </p>
+                      <p>
+                        Months stayed: <span className="font-semibold text-foreground">{tenant.monthsStayed ?? "—"}</span>
+                      </p>
                     </div>
                   </div>
-
-                  <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
-                    <p>
-                      Rent: <span className="font-semibold text-foreground">Ksh {tenant.price.toLocaleString()}</span>
-                    </p>
-                    <p>
-                      Deposit: <span className="font-semibold text-foreground">Ksh {tenant.deposit.toLocaleString()}</span>
-                    </p>
-                    <p>
-                      Lease: <span className="font-semibold text-foreground">{fmt(tenant.leaseStartDate)} – {fmt(tenant.leaseEndDate)}</span>
-                    </p>
-                    <p>
-                      Months stayed: <span className="font-semibold text-foreground">{tenant.monthsStayed ?? "—"}</span>
-                    </p>
-                  </div>
-                </div>
+                  {leaseUnits.length > 1 && (
+                    <div className="mt-4 rounded-2xl border border-slate-200/70 bg-white/70 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Units Leased</p>
+                      <div className="mt-3 space-y-2 text-xs sm:text-sm text-muted-foreground">
+                        {leaseUnits.map((unit, index) => (
+                          <div
+                            key={`${unit.unitIdentifier}-${index}-details`}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/70 px-3 py-2"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">Unit {unit.houseNumber}</p>
+                              <p className="text-[11px] text-muted-foreground">{unit.unitType}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-foreground">
+                                Ksh {unit.price.toLocaleString()}/mo
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                Deposit Ksh {unit.deposit.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : isLoading ? (
                 <SkeletonCard />
               ) : (

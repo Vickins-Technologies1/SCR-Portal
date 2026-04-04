@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { validateCsrfToken } from "../../../../lib/csrf";
-import { calculateOverduePenalty, calculateRentDueToDate, calculateWalletBalanceFromPayments, resolveMonthlyRentForDate } from "../../../../lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
+import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
 interface Tenant {
   _id: ObjectId;
@@ -16,6 +16,13 @@ interface Tenant {
   propertyId: string;
   unitType: string;
   unitIdentifier?: string;
+  leasedUnits?: Array<{
+    unitIdentifier: string;
+    unitType: string;
+    houseNumber: string;
+    price: number;
+    deposit: number;
+  }>;
   price: number;
   deposit: number;
   houseNumber: string;
@@ -202,21 +209,16 @@ export async function GET(request: NextRequest) {
 
     let analytics = null;
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenantDoc.propertyId]);
-    const rentOverrides = filterOverridesForUnit(
-      rentOverrideMap.get(buildOverrideKey(tenantDoc.propertyId, tenantDoc.unitType)) ?? [],
-      tenantDoc.unitIdentifier
-    );
 
     if (shouldCalculateDues) {
       const today = new Date();
       const property = ObjectId.isValid(tenantDoc.propertyId)
         ? await db.collection<PropertyPenaltyConfig>("properties").findOne({ _id: new ObjectId(tenantDoc.propertyId) })
         : null;
-      const { rentDue, monthsStayed } = calculateRentDueToDate({
-        leaseStartDate: tenantDoc.leaseStartDate,
-        monthlyRent: tenantDoc.price,
+      const { rentDue, monthsStayed } = calculateTenantRentDueToDate({
+        tenant: tenantDoc as any,
         today,
-        overrides: rentOverrides,
+        rentOverrideMap,
       });
 
       const payments = await db
@@ -234,7 +236,9 @@ export async function GET(request: NextRequest) {
         else if (p.type === "Utility") utilityPaid += p.amount;
       }
 
-      const depositDue = tenantDoc.deposit || 0;
+      const depositDue = tenantDoc.leasedUnits && tenantDoc.leasedUnits.length > 0
+        ? tenantDoc.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
+        : (tenantDoc.deposit || 0);
 
       const updatedTotalRentPaid = rentPaid;
       const updatedWalletBalance = calculateWalletBalanceFromPayments({
@@ -277,10 +281,10 @@ export async function GET(request: NextRequest) {
       );
 
       const monthlyPayments = await getMonthlyPayments(db, targetTenantId, monthsStayed);
-      const effectiveMonthlyRent = resolveMonthlyRentForDate({
-        monthlyRent: tenantDoc.price,
+      const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
+        tenant: tenantDoc as any,
         date: today,
-        overrides: rentOverrides,
+        rentOverrideMap,
       });
 
       Object.assign(tenant, {

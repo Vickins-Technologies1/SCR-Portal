@@ -1,6 +1,14 @@
 // src/types/tenant.ts
 import { ObjectId } from "mongodb";
 
+export interface TenantLeaseUnit {
+  unitIdentifier: string;
+  unitType: string;
+  houseNumber: string;
+  price: number;
+  deposit: number;
+}
+
 export interface Tenant {
   _id: ObjectId;
   ownerId: string;
@@ -15,9 +23,10 @@ export interface Tenant {
   price: number;
   deposit: number;
   houseNumber: string;
+  leasedUnits?: TenantLeaseUnit[];
   leaseStartDate: string;
   leaseEndDate: string;
-  status: "active" | "inactive" | "evicted";
+  status: "active" | "inactive" | "evicted" | "terminated" | "moved out";
   paymentStatus: "current" | "overdue" | "paid";
   createdAt: Date;
   updatedAt?: Date;
@@ -41,6 +50,7 @@ export interface ResponseTenant {
   price: number;
   deposit: number;
   houseNumber: string;
+  leasedUnits?: TenantLeaseUnit[];
   leaseStartDate: string;
   leaseEndDate: string;
   status: string;
@@ -73,6 +83,10 @@ export interface TenantRequest {
   propertyId: string;
   unitIdentifier: string;        // REQUIRED: uniqueType like "1-Bedroom-0"
   houseNumber: string;
+  leasedUnits?: Array<{
+    unitIdentifier: string;
+    houseNumber: string;
+  }>;
   leaseStartDate: string;
   leaseEndDate: string;
   price?: number;

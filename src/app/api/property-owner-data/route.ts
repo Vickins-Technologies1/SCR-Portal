@@ -56,6 +56,13 @@ interface TenantFromDB {
   walletBalance: number;
   deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
   unitIdentifier?: string;
+  leasedUnits?: Array<{
+    unitIdentifier: string;
+    unitType: string;
+    houseNumber: string;
+    price: number;
+    deposit: number;
+  }>;
 }
 
 interface LogMeta {
@@ -127,6 +134,7 @@ export async function GET(request: NextRequest) {
           propertyId: tenant.propertyId,
           unitType: tenant.unitType,
           unitIdentifier: tenant.unitIdentifier || "", // add if missing in old data
+          leasedUnits: tenant.leasedUnits,
           price: tenant.price,
           deposit: tenant.deposit,
           houseNumber: tenant.houseNumber,

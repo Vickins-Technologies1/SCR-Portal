@@ -221,22 +221,40 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       continue;
     }
 
-    const unitKey = tenant.unitIdentifier || tenant.unitType;
-    const unitConfig = property.unitTypes.find((unit) =>
-      unit.uniqueType === unitKey || unit.type === unitKey
-    );
+    const leaseUnits = tenant.leasedUnits && tenant.leasedUnits.length > 0
+      ? tenant.leasedUnits
+      : [{
+          unitIdentifier: tenant.unitIdentifier,
+          unitType: tenant.unitType,
+          houseNumber: tenant.houseNumber,
+          price: tenant.price,
+          deposit: tenant.deposit,
+        }];
 
-    const baseRentAmount = unitConfig?.price ?? tenant.price;
-    const overrides = filterOverridesForUnit(
-      rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-      tenant.unitIdentifier
-    );
-    const rentAmount = resolveMonthlyRentForDate({
-      monthlyRent: baseRentAmount,
-      date: dueDate,
-      overrides,
-    });
-    const depositAmount = unitConfig?.deposit ?? tenant.deposit ?? 0;
+    const rentAmount = leaseUnits.reduce((sum, unit) => {
+      const unitKey = unit.unitIdentifier || unit.unitType;
+      const unitConfig = property.unitTypes.find((config) =>
+        config.uniqueType === unitKey || config.type === unit.unitType
+      );
+      const baseRentAmount = unitConfig?.price ?? unit.price ?? tenant.price ?? 0;
+      const overrides = filterOverridesForUnit(
+        rentOverrideMap.get(buildOverrideKey(tenant.propertyId, unit.unitType)) ?? [],
+        unit.unitIdentifier
+      );
+      return sum + resolveMonthlyRentForDate({
+        monthlyRent: baseRentAmount,
+        date: dueDate,
+        overrides,
+      });
+    }, 0);
+
+    const depositAmount = leaseUnits.reduce((sum, unit) => {
+      const unitKey = unit.unitIdentifier || unit.unitType;
+      const unitConfig = property.unitTypes.find((config) =>
+        config.uniqueType === unitKey || config.type === unit.unitType
+      );
+      return sum + (unitConfig?.deposit ?? unit.deposit ?? 0);
+    }, 0);
 
     const rangeStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
     const rangeEnd = endOfDay(new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0));
@@ -279,11 +297,16 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       year: "numeric",
     });
 
+    const unitLabel = leaseUnits
+      .map((unit) => unit.houseNumber)
+      .filter(Boolean)
+      .join(", ") || tenant.houseNumber || "Unit";
+
     const { smsMessage, whatsappMessage, appMessage } = buildReminderMessages(
       reminderType,
       tenant.name,
       property.name,
-      tenant.houseNumber,
+      unitLabel,
       formattedDueDate,
       rentDue,
       utilityDue,

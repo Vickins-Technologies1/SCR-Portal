@@ -239,7 +239,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
           tenant.unitIdentifier
         );
-        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today, overrides, {
+        const overridesOrMap = tenantWithTotals.leasedUnits && tenantWithTotals.leasedUnits.length > 0
+          ? rentOverrideMap
+          : overrides;
+        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today, overridesOrMap, {
           penaltyAmount: property?.penaltyAmount,
           penaltyFrequency: property?.penaltyFrequency,
           rentPaymentDate: property?.rentPaymentDate,

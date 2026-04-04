@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
-import { calculateOverduePenalty, calculateRentDueToDate, resolveMonthlyRentForDate } from "@/lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "@/lib/utils";
+import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds } from "@/lib/payment-totals";
 
 interface Property {
@@ -305,15 +305,10 @@ export async function GET(request: NextRequest) {
 
     const bulkOps = activeTenantsForDues.map((tenant) => {
       const property = propertyMap.get(tenant.propertyId);
-      const overrides = filterOverridesForUnit(
-        rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-        tenant.unitIdentifier
-      );
-      const { rentDue } = calculateRentDueToDate({
-        leaseStartDate: tenant.leaseStartDate,
-        monthlyRent: tenant.price || 0,
+      const { rentDue } = calculateTenantRentDueToDate({
+        tenant: tenant as any,
         today,
-        overrides,
+        rentOverrideMap,
       });
       const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString()) || {
         rentPaid: 0,
@@ -330,7 +325,10 @@ export async function GET(request: NextRequest) {
         penaltyAmount: property?.penaltyAmount,
         penaltyFrequency: property?.penaltyFrequency,
       });
-      const totalDue = rentDue + (tenant.deposit || 0) + penaltyDues;
+      const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
+        ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
+        : (tenant.deposit || 0);
+      const totalDue = rentDue + totalDeposit + penaltyDues;
       const totalPaid =
         tenantTotals.rentPaid + tenantTotals.depositPaid + tenantTotals.utilityPaid;
       const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid);
@@ -360,14 +358,10 @@ export async function GET(request: NextRequest) {
 
     const expectedMonthlyRent = roundMoney(
       activeTenantsForDues.reduce((sum, tenant) => {
-        const overrides = filterOverridesForUnit(
-          rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-          tenant.unitIdentifier
-        );
-        const effectiveMonthlyRent = resolveMonthlyRentForDate({
-          monthlyRent: tenant.price || 0,
+        const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
+          tenant: tenant as any,
           date: today,
-          overrides,
+          rentOverrideMap,
         });
         return sum + effectiveMonthlyRent;
       }, 0)

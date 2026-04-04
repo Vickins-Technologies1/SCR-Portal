@@ -4,8 +4,8 @@ import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
-import { calculateRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
+import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
+import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
@@ -135,20 +135,17 @@ export async function POST(request: NextRequest) {
     }
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const overrides = filterOverridesForUnit(
-      rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-      tenant.unitIdentifier
-    );
-    const { rentDue: totalRentDue } = calculateRentDueToDate({
-      leaseStartDate: tenant.leaseStartDate,
-      monthlyRent: tenant.price || 0,
+    const { rentDue: totalRentDue } = calculateTenantRentDueToDate({
+      tenant: tenant as any,
       today: new Date(),
-      overrides,
+      rentOverrideMap,
     });
 
     const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);
     const amount = metadata.amount || payment.amount || 0;
-    const depositTotal = tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0;
+    const depositTotal = tenant.leasedUnits && tenant.leasedUnits.length > 0
+      ? tenant.leasedUnits.reduce((sum: number, unit: any) => sum + (unit.deposit || 0), 0)
+      : (tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0);
     const rentDueAfter = Math.max(0, totalRentDue - paymentTotals.rentPaid);
     const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
     const utilityDueAfter = 0;

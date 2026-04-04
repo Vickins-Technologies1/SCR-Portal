@@ -56,14 +56,27 @@ export default function TenantFormContent({
     phone: initialData.phone || "",
     password: mode === "add" ? "" : "__________",
     propertyId: initialData.propertyId || "",
-    unitIdentifier: initialData.unitIdentifier || "",
-    houseNumber: initialData.houseNumber || "",
     leaseStartDate: initialData.leaseStartDate?.split("T")[0] || "",
     leaseEndDate: initialData.leaseEndDate?.split("T")[0] || "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [leaseUnits, setLeaseUnits] = useState<Array<{ unitIdentifier: string; houseNumber: string }>>(() => {
+    if (Array.isArray(initialData.leasedUnits) && initialData.leasedUnits.length > 0) {
+      return initialData.leasedUnits.map((unit: any) => ({
+        unitIdentifier: unit.unitIdentifier || "",
+        houseNumber: unit.houseNumber || "",
+      }));
+    }
+    if (initialData.unitIdentifier || initialData.houseNumber) {
+      return [{
+        unitIdentifier: initialData.unitIdentifier || "",
+        houseNumber: initialData.houseNumber || "",
+      }];
+    }
+    return [{ unitIdentifier: "", houseNumber: "" }];
+  });
 
   const selectedProperty = properties.find((p) => p._id === formData.propertyId);
 
@@ -73,18 +86,22 @@ export default function TenantFormContent({
     uniqueType: unit.uniqueType || `${unit.type}-${index}`,
   }));
 
-  // Now correctly find the selected unit config
-  const selectedUnitConfig = enrichedUnitTypes?.find(
-    (u) => u.uniqueType === formData.unitIdentifier
+  const existingLeaseUnitIds = new Set(
+    Array.isArray(initialData.leasedUnits) && initialData.leasedUnits.length > 0
+      ? initialData.leasedUnits.map((unit: any) => unit.unitIdentifier)
+      : [initialData.unitIdentifier].filter(Boolean)
   );
 
   // Reset unitIdentifier if property changes and current one no longer exists
   useEffect(() => {
-    if (selectedProperty && formData.unitIdentifier) {
-      const exists = enrichedUnitTypes?.some((u) => u.uniqueType === formData.unitIdentifier);
-      if (!exists) {
-        setFormData((prev) => ({ ...prev, unitIdentifier: "" }));
-      }
+    if (selectedProperty) {
+      setLeaseUnits((prev) =>
+        prev.map((unit) => {
+          if (!unit.unitIdentifier) return unit;
+          const exists = enrichedUnitTypes?.some((u) => u.uniqueType === unit.unitIdentifier);
+          return exists ? unit : { ...unit, unitIdentifier: "" };
+        })
+      );
     }
   }, [formData.propertyId, selectedProperty, enrichedUnitTypes]);
 
@@ -109,6 +126,19 @@ export default function TenantFormContent({
     return `${base}${depositText}${availability}${configTag}`;
   };
 
+  const getUnitConfig = (unitIdentifier: string) =>
+    enrichedUnitTypes?.find((unit) => unit.uniqueType === unitIdentifier);
+
+  const totalRent = leaseUnits.reduce((sum, unit) => {
+    const config = getUnitConfig(unit.unitIdentifier);
+    return sum + (config?.price ?? 0);
+  }, 0);
+
+  const totalDeposit = leaseUnits.reduce((sum, unit) => {
+    const config = getUnitConfig(unit.unitIdentifier);
+    return sum + (config?.deposit ?? 0);
+  }, 0);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
@@ -123,10 +153,32 @@ export default function TenantFormContent({
     if (mode === "add" && !formData.password.trim())
       newErrors.password = "Password is required";
     if (!formData.propertyId) newErrors.propertyId = "Property is required";
-    if (!formData.unitIdentifier) newErrors.unitIdentifier = "Unit type is required";
-    if (selectedUnitConfig && selectedUnitConfig.quantity <= 0)
-      newErrors.unitIdentifier = "This unit is fully booked";
-    if (!formData.houseNumber.trim()) newErrors.houseNumber = "House number is required";
+    if (!leaseUnits.length) newErrors.leasedUnits = "At least one unit is required";
+
+    const normalizedUnits = leaseUnits.map((unit) => ({
+      unitIdentifier: unit.unitIdentifier.trim(),
+      houseNumber: unit.houseNumber.trim(),
+    }));
+
+    normalizedUnits.forEach((unit, index) => {
+      if (!unit.unitIdentifier) {
+        newErrors[`leaseUnit_${index}`] = "Select a unit type";
+      }
+      if (!unit.houseNumber) {
+        newErrors[`leaseUnit_${index}`] = newErrors[`leaseUnit_${index}`]
+          ? `${newErrors[`leaseUnit_${index}`]} & house number`
+          : "Enter a house number";
+      }
+      const config = getUnitConfig(unit.unitIdentifier);
+      if (config && config.quantity <= 0 && !existingLeaseUnitIds.has(unit.unitIdentifier)) {
+        newErrors[`leaseUnit_${index}`] = "This unit is fully booked";
+      }
+    });
+
+    const houseNumbers = normalizedUnits.map((unit) => unit.houseNumber.toLowerCase());
+    if (houseNumbers.length !== new Set(houseNumbers).size) {
+      newErrors.leasedUnits = "House numbers must be unique for this tenant";
+    }
     if (!formData.leaseStartDate) newErrors.leaseStartDate = "Start date required";
     if (!formData.leaseEndDate) newErrors.leaseEndDate = "End date required";
     if (new Date(formData.leaseEndDate) <= new Date(formData.leaseStartDate))
@@ -135,14 +187,18 @@ export default function TenantFormContent({
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) return;
 
+    const cleanedLeaseUnits = normalizedUnits.filter((unit) => unit.unitIdentifier || unit.houseNumber);
+    const primaryLease = cleanedLeaseUnits[0];
+
     await onSubmit({
       name: formData.name.trim(),
       email: formData.email.trim(),
       phone: formData.phone.trim(),
       password: mode === "add" ? formData.password : undefined,
       propertyId: formData.propertyId,
-      unitIdentifier: formData.unitIdentifier,
-      houseNumber: formData.houseNumber.trim(),
+      unitIdentifier: primaryLease?.unitIdentifier || "",
+      houseNumber: primaryLease?.houseNumber || "",
+      leasedUnits: cleanedLeaseUnits,
       leaseStartDate: formData.leaseStartDate,
       leaseEndDate: formData.leaseEndDate,
     });
@@ -236,8 +292,9 @@ export default function TenantFormContent({
         <select
           value={formData.propertyId}
           onChange={(e) => {
-            setFormData({ ...formData, propertyId: e.target.value, unitIdentifier: "" });
-            setErrors((prev) => ({ ...prev, propertyId: "", unitIdentifier: "" }));
+            setFormData({ ...formData, propertyId: e.target.value });
+            setLeaseUnits([{ unitIdentifier: "", houseNumber: "" }]);
+            setErrors((prev) => ({ ...prev, propertyId: "", leasedUnits: "" }));
           }}
           className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
             errors.propertyId ? "border-red-500" : "border-gray-300"
@@ -253,96 +310,135 @@ export default function TenantFormContent({
         {errors.propertyId && <p className="text-red-500 text-xs mt-1">{errors.propertyId}</p>}
       </div>
 
-      {/* Unit Type — FINAL WORKING VERSION */}
+      {/* Units Leased */}
       {formData.propertyId && selectedProperty && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Unit Type <span className="text-red-500">*</span>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Units Leased <span className="text-red-500">*</span>
           </label>
-          <select
-            value={formData.unitIdentifier}
-            onChange={(e) => setFormData({ ...formData, unitIdentifier: e.target.value })}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
-              errors.unitIdentifier ? "border-red-500" : "border-gray-300"
-            }`}
-          >
-            <option value="">Select unit type</option>
-            {enrichedUnitTypes
-              ?.filter((unit) => {
-                const isSelected = unit.uniqueType === initialData.unitIdentifier;
-                return unit.quantity > 0 || isSelected;
-              })
-              .map((unit) => {
-                const isSoldOut = unit.quantity <= 0 && unit.uniqueType !== initialData.unitIdentifier;
 
-                return (
-                  <option
-                    key={unit.uniqueType}
-                    value={unit.uniqueType}
-                    disabled={isSoldOut}
-                  >
-                    {getUnitDisplayLabel(unit)}
-                    {isSoldOut && " [Sold Out]"}
-                  </option>
-                );
-              })}
-          </select>
-          {errors.unitIdentifier && (
-            <p className="text-red-500 text-xs mt-1">{errors.unitIdentifier}</p>
+          <div className="space-y-4">
+            {leaseUnits.map((unit, index) => {
+              const config = getUnitConfig(unit.unitIdentifier);
+              const isSoldOut = config
+                ? config.quantity <= 0 && !existingLeaseUnitIds.has(config.uniqueType)
+                : false;
+
+              return (
+                <div
+                  key={`${unit.unitIdentifier}-${index}`}
+                  className="rounded-xl border border-slate-200 bg-white/70 p-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-[1.5fr_1fr_1fr] gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Unit Type
+                      </label>
+                      <select
+                        value={unit.unitIdentifier}
+                        onChange={(e) =>
+                          setLeaseUnits((prev) =>
+                            prev.map((entry, i) =>
+                              i === index ? { ...entry, unitIdentifier: e.target.value } : entry
+                            )
+                          )
+                        }
+                        className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
+                          errors[`leaseUnit_${index}`] ? "border-red-500" : "border-gray-300"
+                        }`}
+                      >
+                        <option value="">Select unit type</option>
+                        {enrichedUnitTypes?.map((option) => {
+                          const alreadySelected = leaseUnits.some(
+                            (entry, i) => entry.unitIdentifier === option.uniqueType && i !== index
+                          );
+                          const allowOption = option.quantity > 0 || existingLeaseUnitIds.has(option.uniqueType) || alreadySelected;
+                          return (
+                            <option
+                              key={option.uniqueType}
+                              value={option.uniqueType}
+                              disabled={!allowOption}
+                            >
+                              {getUnitDisplayLabel(option)}
+                              {!allowOption && " [Sold Out]"}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        House / Unit Number
+                      </label>
+                      <input
+                        type="text"
+                        value={unit.houseNumber}
+                        onChange={(e) =>
+                          setLeaseUnits((prev) =>
+                            prev.map((entry, i) =>
+                              i === index ? { ...entry, houseNumber: e.target.value } : entry
+                            )
+                          )
+                        }
+                        placeholder="e.g. A12, 101"
+                        className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
+                          errors[`leaseUnit_${index}`] ? "border-red-500" : "border-gray-300"
+                        }`}
+                      />
+                    </div>
+
+                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+                      <p className="font-semibold text-slate-700">
+                        Rent: Ksh {config?.price?.toLocaleString() || "—"}
+                      </p>
+                      <p>
+                        Deposit: Ksh {config?.deposit?.toLocaleString() || "—"}
+                      </p>
+                      {config && (
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          {isSoldOut ? "Sold Out" : `${config.quantity} available`}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {errors[`leaseUnit_${index}`] && (
+                    <p className="text-red-500 text-xs mt-2">{errors[`leaseUnit_${index}`]}</p>
+                  )}
+
+                  {leaseUnits.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setLeaseUnits((prev) => prev.filter((_, i) => i !== index))}
+                      className="mt-3 text-xs font-semibold text-red-600 hover:text-red-700"
+                    >
+                      Remove Unit
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {errors.leasedUnits && (
+            <p className="text-red-500 text-xs mt-2">{errors.leasedUnits}</p>
           )}
-        </div>
-      )}
 
-      {/* Selected Unit Summary */}
-      {selectedUnitConfig && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
-          <h4 className="font-semibold text-gray-800 mb-3">Selected Unit</h4>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-600">Type:</span>
-              <p className="font-bold text-lg text-primary">{selectedUnitConfig.type}</p>
-            </div>
-            <div>
-              <span className="text-gray-600">Config:</span>
-              <p className="font-bold text-lg text-primary">
-                {selectedUnitConfig.uniqueType.split("-").pop()}
-              </p>
-            </div>
-            <div>
-              <span className="text-gray-600">Rent:</span>
-              <p className="font-bold text-xl text-primary">
-                Ksh {selectedUnitConfig.price.toLocaleString()}/mo
-              </p>
-            </div>
-            <div>
-              <span className="text-gray-600">Deposit:</span>
-              <p className="font-bold text-xl text-primary">
-                Ksh {selectedUnitConfig.deposit.toLocaleString()}
-              </p>
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setLeaseUnits((prev) => [...prev, { unitIdentifier: "", houseNumber: "" }])}
+              className="text-sm font-semibold text-primary hover:text-primary-hover"
+            >
+              + Add another unit
+            </button>
+            <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary">
+              Total rent: Ksh {totalRent.toLocaleString()} • Total deposit: Ksh {totalDeposit.toLocaleString()}
             </div>
           </div>
-          <p className="text-xs text-gray-600 mt-3">
-            Available: {selectedUnitConfig.quantity} unit(s)
-          </p>
         </div>
       )}
-
-      {/* House Number */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          House / Unit Number <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          value={formData.houseNumber}
-          onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
-          placeholder="e.g. A12, 101, Villa 5"
-          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary/30 transition ${
-            errors.houseNumber ? "border-red-500" : "border-gray-300"
-          }`}
-        />
-        {errors.houseNumber && <p className="text-red-500 text-xs mt-1">{errors.houseNumber}</p>}
-      </div>
 
       {/* Lease Dates */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -388,7 +484,7 @@ export default function TenantFormContent({
         </button>
         <button
           type="submit"
-          disabled={isLoading || !selectedUnitConfig}
+          disabled={isLoading}
           className="px-8 py-2.5 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex items-center gap-2"
         >
           {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>}

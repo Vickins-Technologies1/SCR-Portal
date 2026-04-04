@@ -153,9 +153,49 @@ export async function PUT(
     if (body.leaseEndDate) updateData.leaseEndDate = body.leaseEndDate;
     if (body.password?.trim()) updateData.password = await bcrypt.hash(body.password.trim(), 10);
 
-    // Handle property/unit change
-    if (body.propertyId || body.unitIdentifier) {
+    const currentLeases = tenant.leasedUnits && tenant.leasedUnits.length > 0
+      ? tenant.leasedUnits
+      : [{
+          unitIdentifier: tenant.unitIdentifier,
+          unitType: tenant.unitType,
+          houseNumber: tenant.houseNumber,
+          price: tenant.price,
+          deposit: tenant.deposit,
+        }];
+
+    const wantsLeaseUpdate = Boolean(
+      (Array.isArray(body.leasedUnits) && body.leasedUnits.length > 0) ||
+      body.unitIdentifier ||
+      body.houseNumber ||
+      body.propertyId
+    );
+
+    if (wantsLeaseUpdate) {
       const targetPropertyId = body.propertyId || tenant.propertyId;
+
+      const rawLeaseInputs = Array.isArray(body.leasedUnits) && body.leasedUnits.length > 0
+        ? body.leasedUnits
+        : [{
+            unitIdentifier: body.unitIdentifier || tenant.unitIdentifier,
+            houseNumber: body.houseNumber || tenant.houseNumber,
+          }];
+
+      if (!rawLeaseInputs.length || rawLeaseInputs.some((unit) => !unit.unitIdentifier || !unit.houseNumber)) {
+        return NextResponse.json(
+          { success: false, message: "Each leased unit must include a unit type and house number." },
+          { status: 400 }
+        );
+      }
+
+      const houseNumbers = rawLeaseInputs.map((unit) => unit.houseNumber.trim());
+      const uniqueHouseNumbers = new Set(houseNumbers.map((h) => h.toLowerCase()));
+      if (uniqueHouseNumbers.size !== houseNumbers.length) {
+        return NextResponse.json(
+          { success: false, message: "House numbers must be unique within the same tenant." },
+          { status: 400 }
+        );
+      }
+
       const property = await db.collection<Property>("properties").findOne({
         _id: new ObjectId(targetPropertyId),
         ownerId: userId,
@@ -166,38 +206,123 @@ export async function PUT(
       }
 
       const enrichedUnits = enrichUnitTypes(property.unitTypes);
-      const targetUnit = enrichedUnits.find(u => u.uniqueType === (body.unitIdentifier || tenant.unitIdentifier));
+      const configById = new Map(enrichedUnits.map((unit) => [unit.uniqueType, unit]));
 
-      if (!targetUnit) {
-        return NextResponse.json({ success: false, message: "Invalid unit selected" }, { status: 400 });
+      const requestedCounts = new Map<string, number>();
+      const desiredLeases: Tenant["leasedUnits"] = [];
+
+      for (const unit of rawLeaseInputs) {
+        const config = configById.get(unit.unitIdentifier);
+        if (!config) {
+          return NextResponse.json(
+            { success: false, message: `Invalid unit selected: ${unit.unitIdentifier}` },
+            { status: 400 }
+          );
+        }
+        const count = requestedCounts.get(unit.unitIdentifier) || 0;
+        requestedCounts.set(unit.unitIdentifier, count + 1);
+        desiredLeases.push({
+          unitIdentifier: config.uniqueType,
+          unitType: config.type,
+          houseNumber: unit.houseNumber.trim(),
+          price: config.price,
+          deposit: config.deposit,
+        });
       }
 
-      if (targetUnit.quantity <= 0 && targetUnit.uniqueType !== tenant.unitIdentifier) {
-        return NextResponse.json({ success: false, message: "This unit is fully booked" }, { status: 400 });
+      const propertyIdCandidates: Array<string | ObjectId> = [targetPropertyId];
+      if (ObjectId.isValid(targetPropertyId)) {
+        propertyIdCandidates.push(new ObjectId(targetPropertyId));
       }
 
-      // Only decrement old unit if changing
-      if (tenant.propertyId !== targetPropertyId || tenant.unitIdentifier !== targetUnit.uniqueType) {
-        // Increment old unit
-        await db.collection<Property>("properties").updateOne(
-          { _id: new ObjectId(tenant.propertyId) },
-          { $inc: { "unitTypes.$[elem].quantity": 1 } },
-          { arrayFilters: [{ "elem.uniqueType": tenant.unitIdentifier }] }
+      const otherTenant = await db.collection<Tenant>("tenants").findOne({
+        _id: { $ne: tenant._id },
+        propertyId: { $in: propertyIdCandidates as any },
+        status: { $nin: ["terminated", "inactive", "moved out"] },
+        $or: [
+          { houseNumber: { $in: houseNumbers } },
+          { "leasedUnits.houseNumber": { $in: houseNumbers } },
+        ],
+      });
+
+      if (otherTenant) {
+        return NextResponse.json(
+          { success: false, message: `One or more unit numbers (${houseNumbers.join(", ")}) are already occupied.` },
+          { status: 409 }
         );
-
-        // Decrement new unit
-        await db.collection<Property>("properties").updateOne(
-          { _id: new ObjectId(targetPropertyId) },
-          { $inc: { "unitTypes.$[elem].quantity": -1 } },
-          { arrayFilters: [{ "elem.uniqueType": targetUnit.uniqueType }] }
-        );
       }
+
+      const currentCounts = new Map<string, number>();
+      for (const unit of currentLeases) {
+        const count = currentCounts.get(unit.unitIdentifier) || 0;
+        currentCounts.set(unit.unitIdentifier, count + 1);
+      }
+
+      for (const [unitIdentifier, count] of requestedCounts.entries()) {
+        const config = configById.get(unitIdentifier);
+        if (!config) continue;
+        const available = tenant.propertyId === targetPropertyId
+          ? config.quantity + (currentCounts.get(unitIdentifier) || 0)
+          : config.quantity;
+        if (available < count) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Not enough available units for ${config.type}. Requested ${count}, available ${available}.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      const oldPropertyId = tenant.propertyId;
+
+      if (oldPropertyId === targetPropertyId) {
+        const allIds = new Set<string>([
+          ...Array.from(currentCounts.keys()),
+          ...Array.from(requestedCounts.keys()),
+        ]);
+
+        for (const unitIdentifier of allIds) {
+          const oldCount = currentCounts.get(unitIdentifier) || 0;
+          const newCount = requestedCounts.get(unitIdentifier) || 0;
+          const diff = newCount - oldCount;
+          if (diff === 0) continue;
+          await db.collection<Property>("properties").updateOne(
+            { _id: new ObjectId(targetPropertyId) },
+            { $inc: { "unitTypes.$[elem].quantity": -diff } },
+            { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
+          );
+        }
+      } else {
+        for (const [unitIdentifier, count] of currentCounts.entries()) {
+          await db.collection<Property>("properties").updateOne(
+            { _id: new ObjectId(oldPropertyId) },
+            { $inc: { "unitTypes.$[elem].quantity": count } },
+            { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
+          );
+        }
+
+        for (const [unitIdentifier, count] of requestedCounts.entries()) {
+          await db.collection<Property>("properties").updateOne(
+            { _id: new ObjectId(targetPropertyId) },
+            { $inc: { "unitTypes.$[elem].quantity": -count } },
+            { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
+          );
+        }
+      }
+
+      const totalRent = desiredLeases.reduce((sum, unit) => sum + (unit.price || 0), 0);
+      const totalDeposit = desiredLeases.reduce((sum, unit) => sum + (unit.deposit || 0), 0);
+      const primaryLease = desiredLeases[0];
 
       updateData.propertyId = targetPropertyId;
-      updateData.unitType = targetUnit.type;
-      updateData.unitIdentifier = targetUnit.uniqueType;
-      updateData.price = targetUnit.price;
-      updateData.deposit = targetUnit.deposit;
+      updateData.unitType = primaryLease.unitType;
+      updateData.unitIdentifier = primaryLease.unitIdentifier;
+      updateData.houseNumber = primaryLease.houseNumber;
+      updateData.price = totalRent;
+      updateData.deposit = totalDeposit;
+      updateData.leasedUnits = desiredLeases;
     }
 
     const result = await db.collection<Tenant>("tenants").findOneAndUpdate(
@@ -298,6 +423,10 @@ export async function DELETE(
         ? new ObjectId(tenant.propertyId)
         : undefined;
 
+      const leaseUnitSummary = tenant.leasedUnits && tenant.leasedUnits.length > 0
+        ? tenant.leasedUnits.map((unit) => unit.houseNumber).join(", ")
+        : (tenant.houseNumber || tenant.unitType || tenant.unitIdentifier || "unit");
+
       const requestDoc = {
         tenantId: new ObjectId(tenantId),
         ownerId: effectiveOwnerId,
@@ -310,12 +439,13 @@ export async function DELETE(
         houseNumber: tenant.houseNumber,
         unitType: tenant.unitType,
         unitIdentifier: tenant.unitIdentifier,
+        leasedUnits: tenant.leasedUnits,
         requesterName,
       };
 
       const insertResult = await db.collection("tenant_deletion_requests").insertOne(requestDoc as any);
 
-      const unitLabel = tenant.houseNumber || tenant.unitType || tenant.unitIdentifier || "unit";
+      const unitLabel = leaseUnitSummary || "unit";
       const notificationMessage = `${requesterName} requested to delete tenant ${tenant.name}${unitLabel ? ` (${unitLabel})` : ""}. Approval required.`;
 
       await db.collection("notifications").insertOne({
@@ -354,8 +484,7 @@ export async function DELETE(
         `Tenant deletion request`,
         `Tenant: ${tenant.name}`,
         `Property: ${propertyName}`,
-        tenant.houseNumber ? `Unit: ${tenant.houseNumber}` : null,
-        tenant.unitType ? `Unit type: ${tenant.unitType}` : null,
+        unitLabel ? `Units: ${unitLabel}` : null,
         `Requested by: ${requesterName}`,
         `Review in dashboard: ${dashboardUrl}`,
       ].filter(Boolean).join("\n");
@@ -413,12 +542,24 @@ export async function DELETE(
     // Keep payments for recordkeeping (do not delete tenant payments)
     const deletedCount = 0;
 
-    // Restore unit quantity
-    await db.collection<Property>("properties").updateOne(
-      { _id: new ObjectId(tenant.propertyId) },
-      { $inc: { "unitTypes.$[elem].quantity": 1 } },
-      { arrayFilters: [{ "elem.uniqueType": tenant.unitIdentifier }] }
-    );
+    // Restore unit quantities
+    const leasedUnits = tenant.leasedUnits && tenant.leasedUnits.length > 0
+      ? tenant.leasedUnits
+      : [{ unitIdentifier: tenant.unitIdentifier } as any];
+    const restoreCounts = new Map<string, number>();
+    for (const unit of leasedUnits) {
+      if (!unit?.unitIdentifier) continue;
+      const count = restoreCounts.get(unit.unitIdentifier) || 0;
+      restoreCounts.set(unit.unitIdentifier, count + 1);
+    }
+
+    for (const [unitIdentifier, count] of restoreCounts.entries()) {
+      await db.collection<Property>("properties").updateOne(
+        { _id: new ObjectId(tenant.propertyId) },
+        { $inc: { "unitTypes.$[elem].quantity": count } },
+        { arrayFilters: [{ "elem.uniqueType": unitIdentifier }] }
+      );
+    }
 
     logger.info("Tenant deleted", {
       tenantId,

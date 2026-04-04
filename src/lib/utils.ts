@@ -1,8 +1,9 @@
 // src/lib/utils.ts
 import { UnitType } from '../types/property';
-import { Tenant, ResponseTenant } from '../types/tenant';
+import { Tenant, ResponseTenant, TenantLeaseUnit } from '../types/tenant';
 import { RentPriceOverride } from '../types/rent-price-override';
 import { Db, ObjectId } from 'mongodb';
+import { buildOverrideKey, filterOverridesForUnit } from './rent-overrides';
 
 interface LogMeta {
   [key: string]: unknown;
@@ -83,6 +84,12 @@ export interface RentDueResult {
   dailyRent: number;
 }
 
+export interface TenantRentContext {
+  totalMonthlyRent: number;
+  totalDeposit: number;
+  leaseUnits: TenantLeaseUnit[];
+}
+
 const roundCurrency = (value: number): number => Math.round(value);
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -117,6 +124,175 @@ const getNextDueDate = (today: Date, paymentDay: number): Date => {
     return getDueDateForMonth(nextMonth.getFullYear(), nextMonth.getMonth(), paymentDay);
   }
   return currentMonthDue;
+};
+
+const getTenantLeaseUnits = (tenant: {
+  leasedUnits?: TenantLeaseUnit[];
+  unitIdentifier?: string;
+  unitType?: string;
+  houseNumber?: string;
+  price?: number;
+  deposit?: number;
+}): TenantLeaseUnit[] => {
+  if (tenant.leasedUnits && tenant.leasedUnits.length > 0) {
+    return tenant.leasedUnits.map((unit) => ({
+      unitIdentifier: unit.unitIdentifier,
+      unitType: unit.unitType,
+      houseNumber: unit.houseNumber,
+      price: unit.price || 0,
+      deposit: unit.deposit || 0,
+    }));
+  }
+
+  if (!tenant.unitIdentifier && !tenant.unitType && !tenant.houseNumber) {
+    return [];
+  }
+
+  return [
+    {
+      unitIdentifier: tenant.unitIdentifier || '',
+      unitType: tenant.unitType || '',
+      houseNumber: tenant.houseNumber || '',
+      price: tenant.price || 0,
+      deposit: tenant.deposit || 0,
+    },
+  ];
+};
+
+const resolveMonthlyRentForLeaseUnit = ({
+  unit,
+  date,
+  rentOverrideMap,
+  propertyId,
+}: {
+  unit: TenantLeaseUnit;
+  date: Date;
+  rentOverrideMap?: Map<string, RentPriceOverride[]>;
+  propertyId?: string;
+}): number => {
+  const baseRent = Math.max(0, unit.price || 0);
+  if (!rentOverrideMap || !propertyId || !unit.unitType) {
+    return resolveMonthlyRentForDate({ monthlyRent: baseRent, date, overrides: [] });
+  }
+
+  const overrides = filterOverridesForUnit(
+    rentOverrideMap.get(buildOverrideKey(propertyId, unit.unitType)) ?? [],
+    unit.unitIdentifier
+  );
+
+  return resolveMonthlyRentForDate({
+    monthlyRent: baseRent,
+    date,
+    overrides,
+  });
+};
+
+export const resolveTenantMonthlyRentForDate = ({
+  tenant,
+  date,
+  rentOverrideMap,
+}: {
+  tenant: Tenant;
+  date: Date;
+  rentOverrideMap?: Map<string, RentPriceOverride[]>;
+}): number => {
+  const leaseUnits = getTenantLeaseUnits(tenant);
+  if (!leaseUnits.length) return 0;
+  return leaseUnits.reduce(
+    (sum, unit) =>
+      sum + resolveMonthlyRentForLeaseUnit({ unit, date, rentOverrideMap, propertyId: tenant.propertyId }),
+    0
+  );
+};
+
+export const getTenantRentContext = ({
+  tenant,
+  date,
+  rentOverrideMap,
+}: {
+  tenant: Tenant;
+  date: Date;
+  rentOverrideMap?: Map<string, RentPriceOverride[]>;
+}): TenantRentContext => {
+  const leaseUnits = getTenantLeaseUnits(tenant);
+  const totalMonthlyRent = leaseUnits.reduce(
+    (sum, unit) =>
+      sum + resolveMonthlyRentForLeaseUnit({ unit, date, rentOverrideMap, propertyId: tenant.propertyId }),
+    0
+  );
+  const totalDeposit = leaseUnits.reduce((sum, unit) => sum + (unit.deposit || 0), 0);
+  return {
+    totalMonthlyRent: roundCurrency(totalMonthlyRent),
+    totalDeposit: roundCurrency(totalDeposit),
+    leaseUnits,
+  };
+};
+
+export const calculateTenantRentDueToDate = ({
+  tenant,
+  today = new Date(),
+  rentOverrideMap,
+}: {
+  tenant: Tenant;
+  today?: Date;
+  rentOverrideMap?: Map<string, RentPriceOverride[]>;
+}): RentDueResult => {
+  const leaseUnits = getTenantLeaseUnits(tenant);
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+
+  if (!tenant.leaseStartDate || leaseUnits.length === 0) {
+    return {
+      rentDue: 0,
+      monthsStayed: 0,
+      daysInMonth: daysInCurrentMonth,
+      daysElapsedInMonth: 0,
+      dailyRent: 0,
+    };
+  }
+
+  const start = new Date(tenant.leaseStartDate);
+  if (Number.isNaN(start.getTime()) || today < start) {
+    return {
+      rentDue: 0,
+      monthsStayed: 0,
+      daysInMonth: daysInCurrentMonth,
+      daysElapsedInMonth: 0,
+      dailyRent: 0,
+    };
+  }
+
+  const startMonthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+  const monthDiff =
+    (currentMonthStart.getFullYear() - startMonthStart.getFullYear()) * 12 +
+    (currentMonthStart.getMonth() - startMonthStart.getMonth());
+
+  const monthsStayed = Math.max(1, monthDiff + 1);
+
+  let rentDueTotal = 0;
+  for (let i = 0; i < monthsStayed; i += 1) {
+    const monthStart = new Date(startMonthStart.getFullYear(), startMonthStart.getMonth() + i, 1);
+    const monthRent = leaseUnits.reduce(
+      (sum, unit) =>
+        sum + resolveMonthlyRentForLeaseUnit({ unit, date: monthStart, rentOverrideMap, propertyId: tenant.propertyId }),
+      0
+    );
+    rentDueTotal += monthRent;
+  }
+
+  const currentMonthlyRent = leaseUnits.reduce(
+    (sum, unit) =>
+      sum + resolveMonthlyRentForLeaseUnit({ unit, date: today, rentOverrideMap, propertyId: tenant.propertyId }),
+    0
+  );
+
+  return {
+    rentDue: roundCurrency(rentDueTotal),
+    monthsStayed,
+    daysInMonth: daysInCurrentMonth,
+    daysElapsedInMonth: Math.min(daysInCurrentMonth, today.getDate()),
+    dailyRent: currentMonthlyRent > 0 ? currentMonthlyRent / daysInCurrentMonth : 0,
+  };
 };
 
 export const calculateOverduePenalty = ({
@@ -352,25 +528,36 @@ export const calculateTenantDues = async (
   db: Db,
   tenant: Tenant,
   today: Date = new Date(),
-  rentOverrides?: RentPriceOverride[],
+  rentOverridesOrMap?: RentPriceOverride[] | Map<string, RentPriceOverride[]>,
   penaltyConfig?: {
     penaltyAmount?: number;
     penaltyFrequency?: "daily" | "weekly";
     rentPaymentDate?: number;
   }
 ): Promise<TenantDues> => {
-  const { rentDue: totalRentDue, monthsStayed } = calculateRentDueToDate({
-    leaseStartDate: tenant.leaseStartDate,
-    monthlyRent: tenant.price,
-    today,
-    overrides: rentOverrides,
-  });
-  const currentMonthlyRent = resolveMonthlyRentForDate({
-    monthlyRent: tenant.price,
-    date: today,
-    overrides: rentOverrides,
-  });
-  const totalDepositDue = tenant.deposit || 0;
+  const rentOverrideMap = rentOverridesOrMap instanceof Map ? rentOverridesOrMap : undefined;
+  const rentOverrides = Array.isArray(rentOverridesOrMap) ? rentOverridesOrMap : undefined;
+  const rentDueResult = tenant.leasedUnits && tenant.leasedUnits.length > 0
+    ? calculateTenantRentDueToDate({ tenant, today, rentOverrideMap })
+    : calculateRentDueToDate({
+        leaseStartDate: tenant.leaseStartDate,
+        monthlyRent: tenant.price,
+        today,
+        overrides: rentOverrides,
+      });
+  const { rentDue: totalRentDue, monthsStayed } = rentDueResult;
+
+  const currentMonthlyRent = tenant.leasedUnits && tenant.leasedUnits.length > 0
+    ? resolveTenantMonthlyRentForDate({ tenant, date: today, rentOverrideMap })
+    : resolveMonthlyRentForDate({
+        monthlyRent: tenant.price,
+        date: today,
+        overrides: rentOverrides,
+      });
+
+  const totalDepositDue = tenant.leasedUnits && tenant.leasedUnits.length > 0
+    ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
+    : tenant.deposit || 0;
   const totalUtilityDue = 0;
 
   const walletBalance = tenant.walletBalance || 0;
@@ -424,6 +611,7 @@ export const convertTenantToResponse = (tenant: Tenant & { unitIdentifier?: stri
   propertyId: tenant.propertyId,
   unitType: tenant.unitType,
   unitIdentifier: tenant.unitIdentifier || "", // ← REQUIRED FIELD, safe fallback
+  leasedUnits: tenant.leasedUnits,
   price: tenant.price,
   deposit: tenant.deposit,
   houseNumber: tenant.houseNumber,

@@ -334,13 +334,31 @@ export async function PUT(
         }
       }
 
+      const validatedWithUnique = validated.map((unit, index) => ({
+        ...unit,
+        uniqueType: unit.uniqueType || `${unit.type}-${index}`,
+      }));
+
       for (const t of tenants) {
-        const newUnit = validated.find(v => v.type === t.unitType);
-        if (newUnit && (newUnit.price !== t.price || newUnit.deposit !== t.deposit)) {
-          return NextResponse.json(
-            { success: false, message: `Cannot change price or deposit for unit type '${t.unitType}' – tenants are assigned` },
-            { status: 400 }
+        const leasedUnits = (t as any).leasedUnits && (t as any).leasedUnits.length > 0
+          ? (t as any).leasedUnits
+          : [{
+              unitType: t.unitType,
+              unitIdentifier: (t as any).unitIdentifier,
+              price: t.price,
+              deposit: t.deposit,
+            }];
+
+        for (const lease of leasedUnits) {
+          const newUnit = validatedWithUnique.find((v) =>
+            lease.unitIdentifier ? v.uniqueType === lease.unitIdentifier : v.type === lease.unitType
           );
+          if (newUnit && (newUnit.price !== lease.price || newUnit.deposit !== lease.deposit)) {
+            return NextResponse.json(
+              { success: false, message: `Cannot change price or deposit for unit type '${lease.unitType}' – tenants are assigned` },
+              { status: 400 }
+            );
+          }
         }
       }
     }

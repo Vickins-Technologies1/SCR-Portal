@@ -22,9 +22,17 @@ interface Tenant {
   role: string;
   propertyId: string;
   unitType: string;
+  unitIdentifier?: string;
   price: number;
   deposit: number;
   houseNumber: string;
+  leasedUnits?: Array<{
+    unitIdentifier: string;
+    unitType: string;
+    houseNumber: string;
+    price: number;
+    deposit: number;
+  }>;
   leaseStartDate: string;
   leaseEndDate: string;
   status: string;
@@ -110,6 +118,28 @@ interface ApiResponse<T = any> {
   message?: string;
   csrfToken?: string;
 }
+
+const resolveTenantLeaseUnits = (tenant: Tenant) => {
+  if (Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0) {
+    return tenant.leasedUnits;
+  }
+  return [
+    {
+      unitIdentifier: tenant.unitIdentifier || tenant.unitType,
+      unitType: tenant.unitType,
+      houseNumber: tenant.houseNumber,
+      price: tenant.price,
+      deposit: tenant.deposit,
+    },
+  ];
+};
+
+const resolveTenantUnitNumbers = (tenant: Tenant) => {
+  const numbers = resolveTenantLeaseUnits(tenant)
+    .map((unit) => unit.houseNumber)
+    .filter(Boolean);
+  return numbers.length > 0 ? numbers.join(", ") : "—";
+};
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -325,9 +355,12 @@ export default function NotificationsPage() {
         const property = fetchedProperties.find((p) => p._id === tenant.propertyId);
         if (!property || !property.rentPaymentDate) continue;
 
-        const unit = property.unitTypes.find((u) => u.uniqueType === tenant.unitType || u.type === tenant.unitType);
-        const rentAmount = unit ? unit.price : tenant.price;
-        const depositAmount = unit ? unit.deposit : tenant.deposit;
+        const leaseUnits = resolveTenantLeaseUnits(tenant);
+        const totalRent = leaseUnits.reduce((sum, unit) => sum + (unit.price || 0), 0);
+        const totalDeposit = leaseUnits.reduce((sum, unit) => sum + (unit.deposit || 0), 0);
+        const rentAmount = totalRent > 0 ? totalRent : tenant.price;
+        const depositAmount = totalDeposit > 0 ? totalDeposit : tenant.deposit;
+        const unitNumbers = resolveTenantUnitNumbers(tenant);
 
         const dueDate = getNextDueDate(property.rentPaymentDate);
         const reminderDate = addDays(dueDate, -5);
@@ -366,7 +399,7 @@ export default function NotificationsPage() {
             tenantId: tenant._id,
             tenantName: tenant.name,
             propertyName: property.name,
-            houseNumber: tenant.houseNumber,
+            houseNumber: unitNumbers,
             rentDue,
             utilityDue,
             depositDue,
@@ -738,7 +771,7 @@ export default function NotificationsPage() {
               <div className="space-y-4">
                 <div><p className="font-medium text-gray-600">Tenant</p><p>{selectedReminder.tenantName}</p></div>
                 <div><p className="font-medium text-gray-600">Property</p><p>{selectedReminder.propertyName}</p></div>
-                <div><p className="font-medium text-gray-600">House Number</p><p>{selectedReminder.houseNumber}</p></div>
+                <div><p className="font-medium text-gray-600">Units</p><p>{selectedReminder.houseNumber}</p></div>
                 <div><p className="font-medium text-gray-600">Rent Due</p><p>Ksh. {selectedReminder.rentDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Utilities Due</p><p>Ksh. {selectedReminder.utilityDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Deposit Due</p><p>Ksh. {selectedReminder.depositDue.toFixed(2)}</p></div>
@@ -794,7 +827,7 @@ export default function NotificationsPage() {
                             }
                             className="w-4 h-4 text-primary rounded focus:ring-primary/40"
                           />
-                          <span>{tenant.name} ({tenant.houseNumber})</span>
+                          <span>{tenant.name} ({resolveTenantUnitNumbers(tenant)})</span>
                         </label>
                       ))}
                     </div>

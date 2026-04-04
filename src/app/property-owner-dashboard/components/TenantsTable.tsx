@@ -84,13 +84,29 @@ export default function TenantsTable({
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
   const pendingDeletionSet = useMemo(() => new Set(pendingDeletionIds), [pendingDeletionIds]);
 
-  const getUnitDisplayName = (tenant: ResponseTenant): string => {
-    if (!tenant.unitIdentifier) return "—";
+  const getTenantLeaseUnits = (tenant: ResponseTenant) => {
+    if (tenant.leasedUnits && tenant.leasedUnits.length > 0) {
+      return tenant.leasedUnits;
+    }
+    return [{
+      unitIdentifier: tenant.unitIdentifier,
+      unitType: tenant.unitType,
+      houseNumber: tenant.houseNumber,
+      price: tenant.price,
+      deposit: tenant.deposit,
+    }];
+  };
+
+  const getUnitDisplayName = (tenant: ResponseTenant, unitIdentifier?: string, unitType?: string): string => {
+    if (!unitIdentifier && !unitType) return "—";
     const property = properties.find((p) => p._id === tenant.propertyId);
-    const unit = property?.unitTypes.find((u) => u.uniqueType === tenant.unitIdentifier);
-    if (!unit) return tenant.unitIdentifier;
-    const configNumber = unit.uniqueType.includes("-") ? unit.uniqueType.split("-").pop() : unit.uniqueType;
-    return `${unit.type} (Config ${configNumber})`;
+    const unit = unitIdentifier
+      ? property?.unitTypes.find((u) => u.uniqueType === unitIdentifier)
+      : undefined;
+    const baseType = unit?.type || unitType || unitIdentifier || "—";
+    if (!unitIdentifier) return baseType;
+    const configNumber = unitIdentifier.includes("-") ? unitIdentifier.split("-").pop() : unitIdentifier;
+    return `${baseType} (Config ${configNumber})`;
   };
 
   const displayedTenants = useMemo(() => {
@@ -358,6 +374,7 @@ export default function TenantsTable({
               <tbody>
                 {displayedTenants.map((tenant) => {
                   const property = properties.find((p) => p._id === tenant.propertyId);
+                  const leaseUnits = getTenantLeaseUnits(tenant);
                   const paymentSnapshot = getPaymentSnapshot(tenant);
                   const hasPendingDeletion = pendingDeletionSet.has(tenant._id);
                   return (
@@ -378,9 +395,25 @@ export default function TenantsTable({
                       </td>
                       <td className="text-gray-600">{tenant.email}</td>
                       <td className="text-gray-600">{property?.name || "—"}</td>
-                      <td className="text-gray-600">{getUnitDisplayName(tenant)}</td>
+                      <td className="text-gray-600">
+                        <div className="space-y-1">
+                          {leaseUnits.map((unit, idx) => (
+                            <div key={`${unit.unitIdentifier}-${idx}`} className="text-xs text-gray-600">
+                              {getUnitDisplayName(tenant, unit.unitIdentifier, unit.unitType)}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
                       <td className="text-gray-600">Ksh {tenant.price.toLocaleString()}</td>
-                      <td className="text-gray-600">{tenant.houseNumber || "—"}</td>
+                      <td className="text-gray-600">
+                        <div className="space-y-1">
+                          {leaseUnits.map((unit, idx) => (
+                            <div key={`${unit.houseNumber}-${idx}`} className="text-xs text-gray-600">
+                              {unit.houseNumber || "—"}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
                       <td className="text-gray-600">
                         {new Date(tenant.leaseStartDate).toLocaleDateString()}
                       </td>

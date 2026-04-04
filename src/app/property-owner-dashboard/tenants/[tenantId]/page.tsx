@@ -100,6 +100,34 @@ export default function TenantDetailsPage() {
 
   const formatCurrency = (amount: number) => `Ksh ${amount.toLocaleString()}`;
 
+  const getTenantUnitSummary = (currentTenant: ResponseTenant) => {
+    const units = currentTenant.leasedUnits && currentTenant.leasedUnits.length > 0
+      ? currentTenant.leasedUnits
+      : [{
+          unitIdentifier: currentTenant.unitIdentifier,
+          unitType: currentTenant.unitType,
+          houseNumber: currentTenant.houseNumber,
+          price: currentTenant.price,
+          deposit: currentTenant.deposit,
+        }];
+
+    const unitNumbers = units
+      .map((unit) => unit.houseNumber)
+      .filter(Boolean)
+      .join(", ");
+
+    const unitTypes = units
+      .map((unit) => unit.unitType)
+      .filter(Boolean)
+      .join(", ");
+
+    return {
+      units,
+      unitNumbers: unitNumbers || "—",
+      unitTypes: unitTypes || "—",
+    };
+  };
+
   const getStatementReference = (statement: PaymentStatement) => {
     const isManual = statement.isManual ?? statement.transactionId?.startsWith("MANUAL-");
     if (isManual) {
@@ -124,6 +152,7 @@ export default function TenantDetailsPage() {
     currentProperty: Property | null,
     statements: PaymentStatement[]
   ): PaymentReport => {
+    const unitSummary = getTenantUnitSummary(currentTenant);
     const snapshot = getPaymentSnapshot(currentTenant);
     const totalPaid =
       (currentTenant.totalRentPaid || 0) +
@@ -176,7 +205,7 @@ export default function TenantDetailsPage() {
       "",
       `Tenant: ${currentTenant.name}`,
       `Property: ${currentProperty?.name || "—"}`,
-      `Unit: ${currentTenant.houseNumber || "—"}`,
+      `Units: ${unitSummary.unitNumbers}`,
       `Lease: ${leaseRange}`,
       "",
       "Summary",
@@ -227,6 +256,7 @@ export default function TenantDetailsPage() {
     currentTenant: ResponseTenant,
     currentProperty: Property | null
   ) => {
+    const unitSummary = getTenantUnitSummary(currentTenant);
     const sanitizePdfText = (input: string) =>
       input
         .replace(/→/g, "->")
@@ -289,7 +319,7 @@ export default function TenantDetailsPage() {
     [
       ["Tenant", currentTenant.name],
       ["Property", currentProperty?.name || "—"],
-      ["Unit", currentTenant.houseNumber || "—"],
+      ["Units", unitSummary.unitNumbers],
       ["Lease", report.leaseRange],
       ["Payment status", report.paymentStatusLabel],
       ["Overdue balance", formatCurrency(report.overdueBalance)],
@@ -676,6 +706,7 @@ export default function TenantDetailsPage() {
   }
 
   const paymentSnapshot = getPaymentSnapshot(tenant);
+  const unitSummary = getTenantUnitSummary(tenant);
 
   return (
     <>
@@ -725,7 +756,7 @@ export default function TenantDetailsPage() {
                   <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Tenant Profile</p>
                   <h1 className="text-xl sm:text-2xl font-semibold text-foreground">{tenant.name}</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                    {property?.name ? `${property.name} • ${tenant.houseNumber}` : "Property"}
+                    {property?.name ? `${property.name} • ${unitSummary.unitNumbers}` : "Property"}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">
                     Lease {new Date(tenant.leaseStartDate).toLocaleDateString()} →{" "}
@@ -856,7 +887,7 @@ export default function TenantDetailsPage() {
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Payment Health Snapshot</p>
                     <h3 className="text-2xl font-semibold mt-2">{tenant.name}</h3>
                     <p className="text-sm text-slate-200 mt-1">
-                      {property?.name || "Property"} • {tenant.houseNumber || "—"}
+                      {property?.name || "Property"} • {unitSummary.unitNumbers}
                     </p>
                   </div>
                   <span

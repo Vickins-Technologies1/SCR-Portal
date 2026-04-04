@@ -4,7 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
-import { calculateOverduePenalty, calculateRentDueToDate, calculateTenantDues } from "@/lib/utils";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateTenantDues } from "@/lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
 
@@ -42,6 +42,13 @@ interface Tenant {
   propertyId: string;
   unitType: string;
   unitIdentifier?: string;
+  leasedUnits?: Array<{
+    unitIdentifier: string;
+    unitType: string;
+    houseNumber: string;
+    price: number;
+    deposit: number;
+  }>;
   price: number;
   deposit: number;
   leaseStartDate: string | null;
@@ -239,15 +246,10 @@ export async function GET(request: NextRequest) {
     const bulkOps = activeTenants.map((tenant) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
       const property = propertyMap.get(tenant.propertyId);
-      const overrides = filterOverridesForUnit(
-        rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-        tenant.unitIdentifier
-      );
-      const { rentDue } = calculateRentDueToDate({
-        leaseStartDate: tenant.leaseStartDate,
-        monthlyRent: tenant.price || 0,
+      const { rentDue } = calculateTenantRentDueToDate({
+        tenant: tenant as any,
         today,
-        overrides,
+        rentOverrideMap,
       });
       const rentDues = Math.max(0, rentDue - (paymentTotalsByTenant.get(tenantObjectId.toString())?.rentPaid || 0));
       const penaltyDues = calculateOverduePenalty({
@@ -258,7 +260,10 @@ export async function GET(request: NextRequest) {
         penaltyAmount: property?.penaltyAmount,
         penaltyFrequency: property?.penaltyFrequency,
       });
-      const totalDue = rentDue + (tenant.deposit || 0) + penaltyDues;
+      const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
+        ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
+        : (tenant.deposit || 0);
+      const totalDue = rentDue + totalDeposit + penaltyDues;
       const tenantTotals = paymentTotalsByTenant.get(tenantObjectId.toString()) || {
         rentPaid: 0,
         depositPaid: 0,
@@ -374,7 +379,10 @@ export async function POST(request: NextRequest) {
     const property = ObjectId.isValid(tenant.propertyId)
       ? await db.collection<Property>("properties").findOne({ _id: new ObjectId(tenant.propertyId) })
       : null;
-    const dues = await calculateTenantDues(db, tenantWithTotals as any, today, overrides, {
+    const overridesOrMap = tenant.leasedUnits && tenant.leasedUnits.length > 0
+      ? rentOverrideMap
+      : overrides;
+    const dues = await calculateTenantDues(db, tenantWithTotals as any, today, overridesOrMap, {
       penaltyAmount: property?.penaltyAmount,
       penaltyFrequency: property?.penaltyFrequency,
       rentPaymentDate: property?.rentPaymentDate,

@@ -12,6 +12,26 @@ interface TenantInfoGridProps {
 }
 
 export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps) {
+  const leaseUnits = tenant.leasedUnits && tenant.leasedUnits.length > 0
+    ? tenant.leasedUnits
+    : [{
+        unitIdentifier: tenant.unitIdentifier,
+        unitType: tenant.unitType,
+        houseNumber: tenant.houseNumber,
+        price: tenant.price,
+        deposit: tenant.deposit,
+      }];
+
+  const unitTypesLabel = leaseUnits
+    .map((unit) => unit.unitType || unit.unitIdentifier || "—")
+    .join(", ");
+
+  const unitNumbersLabel = leaseUnits
+    .map((unit) => unit.houseNumber || "—")
+    .join(", ");
+
+  const unitTypeLabelTitle = leaseUnits.length > 1 ? "Unit Types" : "Unit Type";
+  const unitNumberLabelTitle = leaseUnits.length > 1 ? "Unit Numbers" : "House Number";
   const formatCurrency = (amount: number) => {
     return `Ksh ${amount.toLocaleString("en-KE", {
       minimumFractionDigits: 2,
@@ -72,8 +92,8 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     { label: "Email", value: tenant.email },
     { label: "Phone", value: tenant.phone },
     { label: "Property", value: property?.name || "Loading..." },
-    { label: "Unit Type", value: tenant.unitType },
-    { label: "House Number", value: tenant.houseNumber },
+    { label: unitTypeLabelTitle, value: unitTypesLabel },
+    { label: unitNumberLabelTitle, value: unitNumbersLabel },
     { label: "Monthly Rent", value: formatCurrency(tenant.price) },
     { label: "Security Deposit", value: formatCurrency(tenant.deposit) },
 
