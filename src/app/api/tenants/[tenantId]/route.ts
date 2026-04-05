@@ -475,7 +475,7 @@ export async function DELETE(
       const dashboardUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/property-owner-dashboard`;
 
       const smsBase = `Deletion request: ${tenant.name} (${unitLabel}) at ${propertyName}. Requested by ${requesterName}. Review in dashboard.`;
-      const smsMessage = smsBase.length > 160 ? `${smsBase.slice(0, 157)}...` : smsBase;
+      const smsMessage = smsBase;
       const waMessage = [
         `Tenant deletion request`,
         `Tenant: ${tenant.name}`,

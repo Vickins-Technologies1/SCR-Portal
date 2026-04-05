@@ -19,23 +19,71 @@ interface Property {
   penaltyFrequency?: "daily" | "weekly";
 }
 
+interface TenantDoc {
+  _id: string;
+  propertyId: string;
+  leasedUnits?: Array<{
+    unitIdentifier?: string;
+    unitType?: string;
+    houseNumber?: string;
+    price?: number;
+    deposit?: number;
+  }>;
+  unitIdentifier?: string;
+  unitType?: string;
+  houseNumber?: string;
+  price?: number;
+  deposit?: number;
+  leaseStartDate?: string | null;
+  leaseEndDate?: string | null;
+  status?: string;
+}
+
 interface Stats {
   activeProperties: number;
   totalTenants: number;
   totalUnits: number;
   occupiedUnits: number;
   expectedMonthlyRent: number;
-  totalMonthlyRent: number;
-  totalRentPaid: number;
+  rentCollectedThisMonth: number;
+  rentAppliedThisMonth: number;
   overduePayments: number;
-  totalPayments: number;
   totalOverdueAmount: number;
-  totalDepositPaid: number;
-  totalUtilityPaid: number;
 }
 
 const roundMoney = (value: number) => Math.round(value || 0);
-const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out"] as const;
+const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out", "evicted"] as const;
+const ACTIVE_PROPERTY_STATUSES = ["Active", "active"] as const;
+
+const parseDate = (value?: string | Date | null): Date | null => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+const endOfDay = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+
+const isTenantActiveOnDate = (tenant: { leaseStartDate?: string | null; leaseEndDate?: string | null }, date: Date) => {
+  const leaseStart = parseDate(tenant.leaseStartDate);
+  const leaseEnd = parseDate(tenant.leaseEndDate);
+  if (leaseStart && startOfDay(date) < startOfDay(leaseStart)) return false;
+  if (leaseEnd && startOfDay(date) > endOfDay(leaseEnd)) return false;
+  return true;
+};
+
+const doesTenantOverlapMonth = (
+  tenant: { leaseStartDate?: string | null; leaseEndDate?: string | null },
+  monthStart: Date,
+  monthEnd: Date
+) => {
+  const leaseStart = parseDate(tenant.leaseStartDate);
+  const leaseEnd = parseDate(tenant.leaseEndDate);
+  if (leaseStart && monthEnd < startOfDay(leaseStart)) return false;
+  if (leaseEnd && monthStart > endOfDay(leaseEnd)) return false;
+  return true;
+};
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -91,10 +139,18 @@ export async function GET(request: NextRequest) {
   try {
     const { db } = await connectToDatabase();
 
-    // Fetch properties for the owner
+    const propertyFilter = {
+      ownerId: effectiveOwnerId,
+      $or: [
+        { status: { $in: ACTIVE_PROPERTY_STATUSES } },
+        { status: { $exists: false } },
+      ],
+    };
+
+    // Fetch active properties for the owner
     const properties = await db
       .collection("properties")
-      .find<WithId<Property>>({ ownerId: effectiveOwnerId })
+      .find<WithId<Property>>(propertyFilter)
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
     const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
@@ -106,13 +162,10 @@ export async function GET(request: NextRequest) {
         totalUnits: 0,
         occupiedUnits: 0,
         expectedMonthlyRent: 0,
-        totalMonthlyRent: 0,
-        totalRentPaid: 0,
+        rentCollectedThisMonth: 0,
+        rentAppliedThisMonth: 0,
         overduePayments: 0,
-        totalPayments: 0,
         totalOverdueAmount: 0,
-        totalDepositPaid: 0,
-        totalUtilityPaid: 0,
       };
       return NextResponse.json({ success: true, stats });
     }
@@ -128,7 +181,7 @@ export async function GET(request: NextRequest) {
     const totalUnitsResult = await db
       .collection("properties")
       .aggregate<{ totalUnits: number }>([
-        { $match: { ownerId: effectiveOwnerId } },
+        { $match: propertyFilter },
         { $unwind: "$unitTypes" },
         {
           $group: {
@@ -142,19 +195,16 @@ export async function GET(request: NextRequest) {
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
-    const activeTenantsForOccupancy = await db.collection("tenants").find({
+    const tenantCollection = db.collection<TenantDoc>("tenants");
+    const tenants = await tenantCollection.find<WithId<TenantDoc>>({
       propertyId: { $in: propertyIds },
       status: { $nin: NON_OCCUPYING_STATUSES },
-      leaseStartDate: { $ne: null, $lte: todayISO },
-      leaseEndDate: { $ne: null, $gte: todayISO },
     }).toArray();
 
-    const activeTenantsForMonth = await db.collection("tenants").find({
-      propertyId: { $in: propertyIds },
-      status: { $nin: NON_OCCUPYING_STATUSES },
-      leaseStartDate: { $ne: null, $lte: endOfMonthISO },
-      leaseEndDate: { $ne: null, $gte: startOfMonthISO },
-    }).toArray();
+    const activeTenantsForOccupancy = tenants.filter((tenant) => isTenantActiveOnDate(tenant, today));
+    const activeTenantsForMonth = tenants.filter((tenant) =>
+      doesTenantOverlapMonth(tenant, startOfMonth, endOfMonth)
+    );
 
     const totalTenants = activeTenantsForOccupancy.length;
     const occupiedUnits = activeTenantsForOccupancy.reduce((sum, tenant: any) => {
@@ -189,7 +239,11 @@ export async function GET(request: NextRequest) {
       rentPaidThisMonthResult.map((row: any) => [String(row._id), Number(row.total || 0)])
     );
 
-    const totalMonthlyRent = roundMoney(
+    const rentCollectedThisMonth = roundMoney(
+      rentPaidThisMonthResult.reduce((sum: number, row: any) => sum + Number(row.total || 0), 0)
+    );
+
+    const rentAppliedThisMonth = roundMoney(
       activeTenantsForMonth.reduce((sum: number, tenant: any) => {
         const currentMonthRent = resolveTenantMonthlyRentForDate({
           tenant,
@@ -200,89 +254,6 @@ export async function GET(request: NextRequest) {
         return sum + Math.min(currentMonthRent, paidThisMonth);
       }, 0)
     );
-
-    // Total rent paid (all time)
-    const totalRentPaidResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            type: "Rent",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalRentPaid: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalRentPaid = roundMoney(totalRentPaidResult[0]?.totalRentPaid || 0);
-
-    // Total payments (all time)
-    const paymentsResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalPayments: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalPayments = roundMoney(paymentsResult[0]?.totalPayments || 0);
-
-    // Deposits
-    const depositPaymentsResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            type: "Deposit",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalDepositPaid: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalDepositPaid = roundMoney(depositPaymentsResult[0]?.totalDepositPaid || 0);
-
-    // Utilities
-    const utilityPaymentsResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            type: "Utility",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalUtilityPaid: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalUtilityPaid = roundMoney(utilityPaymentsResult[0]?.totalUtilityPaid || 0);
 
     // === Overdue Logic ===
     const activeTenantsForDues = activeTenantsForOccupancy;
@@ -313,17 +284,15 @@ export async function GET(request: NextRequest) {
         rentDues,
         today,
         rentPaymentDate: property?.rentPaymentDate,
-        leaseStartDate: tenant.leaseStartDate,
+        leaseStartDate: tenant.leaseStartDate ?? undefined,
         penaltyAmount: property?.penaltyAmount,
         penaltyFrequency: property?.penaltyFrequency,
       });
       const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
         ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
         : (tenant.deposit || 0);
-      const totalDue = rentDue + totalDeposit + penaltyDues;
-      const totalPaid =
-        tenantTotals.rentPaid + tenantTotals.depositPaid + tenantTotals.utilityPaid;
-      const totalOverdueAmountForTenant = Math.max(0, totalDue - totalPaid);
+      const depositDues = Math.max(0, totalDeposit - tenantTotals.depositPaid);
+      const totalOverdueAmountForTenant = roundMoney(rentDues + depositDues + penaltyDues);
       const roundedOverdue = roundMoney(totalOverdueAmountForTenant);
 
       if (roundedOverdue > 0) {
@@ -345,7 +314,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (bulkOps.length > 0) {
-      await db.collection("tenants").bulkWrite(bulkOps);
+      await tenantCollection.bulkWrite(bulkOps);
     }
 
     const expectedMonthlyRent = roundMoney(
@@ -366,13 +335,10 @@ export async function GET(request: NextRequest) {
       totalUnits,
       occupiedUnits,
       expectedMonthlyRent,
-      totalMonthlyRent,
-      totalRentPaid,
+      rentCollectedThisMonth,
+      rentAppliedThisMonth,
       overduePayments,
-      totalPayments,
       totalOverdueAmount: roundMoney(totalOverdueAmount),
-      totalDepositPaid,
-      totalUtilityPaid,
     };
 
     return NextResponse.json({ success: true, stats });

@@ -312,7 +312,7 @@ export async function POST(request: NextRequest) {
         const smsMessage = `Payment of Ksh. ${amount} for ${property.name} (${type}) confirmed on ${formattedDate}. Ref: ${transactionId}`;
         await sendWelcomeSms({
           phone: tenant.phone,
-          message: smsMessage.slice(0, 160),
+          message: smsMessage,
         });
         logger.info("Payment confirmation SMS sent to tenant", {
           tenantId,
@@ -358,7 +358,7 @@ export async function POST(request: NextRequest) {
           const smsMessage = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${type}) confirmed on ${formattedDate}. Ref: ${transactionId}`;
           await sendWelcomeSms({
             phone: owner.phone,
-            message: smsMessage.slice(0, 160),
+            message: smsMessage,
           });
           logger.info("Payment confirmation SMS sent to property owner", {
             ownerId: userId,

@@ -8,6 +8,7 @@ import bcrypt from "bcrypt";
 import validator from "validator";
 import sanitizeHtml from "sanitize-html";
 import { validateCsrfToken } from "@/lib/csrf";
+import { sendWelcomeSms } from "@/lib/sms";
 
 // Rate limiter (unchanged)
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
@@ -189,6 +190,27 @@ export async function POST(req: NextRequest) {
       email: sanitizedEmail,
       teamRole,
     });
+
+    if (sanitizedPhone) {
+      const origin = req.headers.get("origin");
+      const baseUrl = origin || process.env.APP_URL || "https://app.soranapropertymanagers.com";
+      const loginUrl = `${baseUrl.replace(/\/$/, "")}/login`;
+      const smsMessage =
+        `Welcome ${sanitizedName}! Your team member account is ready.\n` +
+        `Login: ${sanitizedEmail}\n` +
+        `Password: ${password}\n` +
+        `Sign in: ${loginUrl}`;
+      try {
+        await sendWelcomeSms({ phone: sanitizedPhone, message: smsMessage });
+      } catch (smsError) {
+        logger.error("Failed to send team member login SMS", {
+          ownerId: requestedOwnerId,
+          memberId: result.insertedId.toString(),
+          phone: sanitizedPhone,
+          error: smsError instanceof Error ? smsError.message : String(smsError),
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, member: createdMember }, { status: 201 });
   } catch (error) {

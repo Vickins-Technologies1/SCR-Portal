@@ -11,7 +11,7 @@ import { connectToDatabase } from "../../../../lib/mongodb";
 import { validateCsrfToken } from "../../../../lib/csrf";
 import logger from "../../../../lib/logger";
 import { Tenant } from "../../../../types/tenant";
-import { sendPaymentReminders } from "../../../../lib/reminders";
+import { getUpcomingPaymentReminders, sendPaymentReminders } from "../../../../lib/reminders";
 import { resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
@@ -130,7 +130,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     const { searchParams } = new URL(req.url);
+    const mode = searchParams.get("mode");
     const type = searchParams.get("type");
+
+    if (mode === "upcoming") {
+      const reminders = await getUpcomingPaymentReminders({ ownerId: effectiveOwnerId });
+      return NextResponse.json({ success: true, data: reminders }, { status: 200 });
+    }
 
     const { db } = await connectToDatabase();
     const query: Partial<Notification> = { ownerId: effectiveOwnerId };
@@ -346,7 +352,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           try {
             await sendWelcomeSms({
               phone: tenant.phone,
-              message: finalMessage.slice(0, 160),
+              message: finalMessage,
             });
             logger.info("SMS sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
             deliveryStatus = "success";

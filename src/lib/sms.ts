@@ -187,6 +187,9 @@ export async function sendOtpSms({
   code: string;
   senderId?: string;
 }): Promise<void> {
-  const message = `Your login verification code is ${code}. It expires in 10 minutes.`;
+  const message =
+    `Your login verification code:\n` +
+    `${code}\n` +
+    `It expires in 10 minutes.`;
   await sendWelcomeSms({ phone, message, senderId });
 }

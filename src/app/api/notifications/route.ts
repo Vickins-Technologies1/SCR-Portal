@@ -266,13 +266,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         finalMessage = message || templates[type] || finalMessage;
       }
 
-      const shortMessage = finalMessage.slice(0, 160);
       const effectiveMethod = deliveryMethod;
 
       // === SEND SMS (BlessedTexts) ===
       if (["sms", "both"].includes(effectiveMethod) && tenant.phone) {
         try {
-          await sendWelcomeSms({ phone: tenant.phone, message: shortMessage });
+          await sendWelcomeSms({ phone: tenant.phone, message: finalMessage });
           deliveryStatus = "success";
           logger.info("SMS sent", { phone: tenant.phone });
         } catch (err: any) {

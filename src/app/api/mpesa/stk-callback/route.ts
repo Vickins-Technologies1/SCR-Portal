@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
     if (tenant.phone) {
       try {
         const smsText = `Payment of Ksh. ${amount} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
-        await sendWelcomeSms({ phone: tenant.phone, message: smsText.slice(0, 160) });
+        await sendWelcomeSms({ phone: tenant.phone, message: smsText });
       } catch (smsError) {
         logger.error("Failed to send payment confirmation SMS to tenant", {
           tenantId: payment.tenantId,
@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
       if (owner.phone) {
         try {
           const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${payment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
-          await sendWelcomeSms({ phone: owner.phone, message: smsText.slice(0, 160) });
+          await sendWelcomeSms({ phone: owner.phone, message: smsText });
         } catch (smsError) {
           logger.error("Failed to send payment confirmation SMS to owner", {
             ownerId: property.ownerId,

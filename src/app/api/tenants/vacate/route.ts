@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
     const dashboardUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/property-owner-dashboard`;
 
     const smsMessageBase = `Vacate request: ${tenant.name} (${tenant.houseNumber || "Unit"}) at ${propertyName}, move-out ${moveOutLabel}. Check dashboard.`;
-    const smsMessage = smsMessageBase.length > 160 ? `${smsMessageBase.slice(0, 157)}...` : smsMessageBase;
+    const smsMessage = smsMessageBase;
 
     const waMessage = [
       `Vacate request from ${tenant.name}`,

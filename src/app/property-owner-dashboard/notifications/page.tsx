@@ -46,26 +46,6 @@ interface Tenant {
   deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
 }
 
-interface Property {
-  _id: string;
-  ownerId: string;
-  name: string;
-  unitTypes: Array<{
-    type: string;
-    price: number;
-    uniqueType: string;
-    deposit: number;
-    quantity: number;
-    managementType: "RentCollection" | "FullManagement";
-    managementFee: number;
-  }>;
-  rentPaymentDate: number;
-  requiresAdminApproval?: boolean;
-  createdAt: string;
-  updatedAt?: string;
-  managementFee: number;
-}
-
 interface Notification {
   _id: string;
   message: string;
@@ -78,18 +58,6 @@ interface Notification {
   deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
   deliveryStatus?: "pending" | "success" | "failed";
   errorDetails?: string;
-}
-
-interface Payment {
-  _id: string;
-  tenantId: string | null;
-  amount: number;
-  propertyId: string;
-  paymentDate: string;
-  transactionId: string;
-  status: "completed" | "pending" | "failed";
-  createdAt: string;
-  type?: "Rent" | "Utility" | "Deposit" | "Other";
 }
 
 interface UpcomingReminder {
@@ -272,23 +240,23 @@ export default function NotificationsPage() {
       setViewMode("sent");
     }
   }, [role, canViewNotifications, canViewReminders]);
-  const fetchTenantsAndPayments = useCallback(async () => {
+  const fetchTenantsAndReminders = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
     if (!canViewReminders && !canSendNotifications) return;
     setIsLoading(true);
     try {
-      const propertiesRes = await makeAuthenticatedRequest(
-        `/api/properties?userId=${encodeURIComponent(effectiveOwnerId)}`,
-        { method: "GET" }
-      );
-      const propertiesData: ApiResponse<Property[]> = await propertiesRes.json();
-      if (!propertiesData.success || !propertiesData.properties) {
-        setError(propertiesData.message || "Unable to fetch properties.");
-        setIsLoading(false);
-        return;
+      if (canViewReminders) {
+        const remindersRes = await makeAuthenticatedRequest(
+          "/api/notifications/reminders?mode=upcoming",
+          { method: "GET" }
+        );
+        const remindersData: ApiResponse<UpcomingReminder[]> = await remindersRes.json();
+        if (remindersData.success) {
+          setUpcomingReminders(remindersData.data ?? []);
+        } else if (!canSendNotifications) {
+          setError(remindersData.message || "Unable to fetch upcoming reminders.");
+        }
       }
-      setError(null);
-      const fetchedProperties = propertiesData.properties;
 
       const tenantsRes = await makeAuthenticatedRequest(
         `/api/tenants?userId=${encodeURIComponent(effectiveOwnerId)}&page=1&limit=100`,
@@ -307,111 +275,8 @@ export default function NotificationsPage() {
         ...prev,
         tenantIds: fetchedTenants.length > 0 ? ["all"] : [],
       }));
-
-      const paymentsRes = await makeAuthenticatedRequest(
-        `/api/payments?userId=${encodeURIComponent(effectiveOwnerId)}&page=1&limit=100`,
-        { method: "GET" }
-      );
-      const paymentsData: ApiResponse<Payment[]> = await paymentsRes.json();
-      if (!paymentsData.success || !paymentsData.payments) {
-        setError(paymentsData.message || "Unable to fetch payments.");
-        setIsLoading(false);
-        return;
-      }
-      setError(null);
-      const fetchedPayments = paymentsData.payments;
-
-      const reminders: UpcomingReminder[] = [];
-      const currentDate = new Date();
-      const todayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-      const utilityAmount = 1000;
-
-      const getDueDateForMonth = (year: number, month: number, paymentDay: number) => {
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const day = Math.min(Math.max(1, paymentDay), daysInMonth);
-        return new Date(year, month, day);
-      };
-
-      const getNextDueDate = (paymentDay: number) => {
-        const thisMonthDue = getDueDateForMonth(todayStart.getFullYear(), todayStart.getMonth(), paymentDay);
-        if (todayStart > thisMonthDue) {
-          return getDueDateForMonth(todayStart.getFullYear(), todayStart.getMonth() + 1, paymentDay);
-        }
-        return thisMonthDue;
-      };
-
-      const addDays = (date: Date, days: number) => {
-        const next = new Date(date);
-        next.setDate(next.getDate() + days);
-        return next;
-      };
-
-      const isSameDay = (a: Date, b: Date) =>
-        a.getFullYear() === b.getFullYear() &&
-        a.getMonth() === b.getMonth() &&
-        a.getDate() === b.getDate();
-
-      for (const tenant of fetchedTenants) {
-        const property = fetchedProperties.find((p) => p._id === tenant.propertyId);
-        if (!property || !property.rentPaymentDate) continue;
-
-        const leaseUnits = resolveTenantLeaseUnits(tenant);
-        const totalRent = leaseUnits.reduce((sum, unit) => sum + (unit.price || 0), 0);
-        const totalDeposit = leaseUnits.reduce((sum, unit) => sum + (unit.deposit || 0), 0);
-        const rentAmount = totalRent > 0 ? totalRent : tenant.price;
-        const depositAmount = totalDeposit > 0 ? totalDeposit : tenant.deposit;
-        const unitNumbers = resolveTenantUnitNumbers(tenant);
-
-        const dueDate = getNextDueDate(property.rentPaymentDate);
-        const reminderDate = addDays(dueDate, -5);
-        const formattedDueDate = dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-
-        const tenantPayments = fetchedPayments.filter((p) => p.tenantId === tenant._id);
-        const startOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
-        const endOfMonth = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0);
-
-        const rentPayments = tenantPayments
-          .filter((p) => p.type === "Rent" && p.status === "completed" && new Date(p.paymentDate) >= startOfMonth && new Date(p.paymentDate) <= endOfMonth)
-          .reduce((sum, p) => sum + p.amount, 0);
-        const utilityPayments = tenantPayments
-          .filter((p) => p.type === "Utility" && p.status === "completed" && new Date(p.paymentDate) >= startOfMonth && new Date(p.paymentDate) <= endOfMonth)
-          .reduce((sum, p) => sum + p.amount, 0);
-        const depositPayments = tenantPayments
-          .filter((p) => p.type === "Deposit" && p.status === "completed")
-          .reduce((sum, p) => sum + p.amount, 0);
-
-        const rentDue = Math.max(0, rentAmount - rentPayments);
-        const utilityDue = Math.max(0, utilityAmount - utilityPayments);
-        const depositDue = Math.max(0, depositAmount - depositPayments);
-        const totalDue = rentDue + utilityDue + depositDue;
-
-        if (totalDue <= 0) continue;
-
-        const reminderType =
-          isSameDay(todayStart, dueDate)
-            ? "paymentDate"
-            : isSameDay(todayStart, reminderDate)
-              ? "fiveDaysBefore"
-              : null;
-
-        if (reminderType) {
-          reminders.push({
-            tenantId: tenant._id,
-            tenantName: tenant.name,
-            propertyName: property.name,
-            houseNumber: unitNumbers,
-            rentDue,
-            utilityDue,
-            depositDue,
-            totalDue,
-            dueDate: formattedDueDate,
-            reminderType,
-          });
-        }
-      }
-      setUpcomingReminders(reminders);
     } catch (err) {
-      setError("Unable to fetch tenant, property, or payment data.");
+      setError("Unable to fetch tenant or reminder data.");
     } finally {
       setIsLoading(false);
     }
@@ -592,13 +457,13 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (effectiveOwnerId && csrfToken) {
       if (canViewReminders || canSendNotifications) {
-        fetchTenantsAndPayments();
+        fetchTenantsAndReminders();
       }
       if (canViewNotifications) {
         fetchNotifications();
       }
     }
-  }, [effectiveOwnerId, csrfToken, canViewReminders, canSendNotifications, canViewNotifications, fetchTenantsAndPayments, fetchNotifications]);
+  }, [effectiveOwnerId, csrfToken, canViewReminders, canSendNotifications, canViewNotifications, fetchTenantsAndReminders, fetchNotifications]);
 
   const openNotificationDetails = useCallback((notification: Notification) => {
     const shouldMarkRead = notification.status !== "read" && canViewNotifications;
