@@ -7,6 +7,8 @@ import bcrypt from "bcrypt";
 import validator from "validator";
 import sanitizeHtml from "sanitize-html";
 import { validateCsrfToken } from "@/lib/csrf";
+import { sendWelcomeSms } from "@/lib/sms";
+import { randomBytes } from "crypto";
 
 // ────────────────────────────────────────────────
 // Type Definitions
@@ -32,6 +34,18 @@ interface TeamMember {
 type SafeTeamMember = Omit<TeamMember, "password" | "_id" | "ownerId"> & {
   _id: string;
   ownerId: string;
+};
+
+const PASSWORD_CHARSET =
+  "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@$!%*?&";
+
+const generateTempPassword = (length = 12) => {
+  const bytes = randomBytes(length);
+  let password = "";
+  for (let i = 0; i < length; i += 1) {
+    password += PASSWORD_CHARSET[bytes[i] % PASSWORD_CHARSET.length];
+  }
+  return password;
 };
 
 // ────────────────────────────────────────────────
@@ -251,6 +265,127 @@ export async function PATCH(
       logger.error("Failed to write audit log on PATCH failure", { error: logErr });
     }
 
+    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
+  }
+}
+
+// ────────────────────────────────────────────────
+// POST – Resend team member login SMS (resets password)
+// ────────────────────────────────────────────────
+
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
+  try {
+    const rl = customRateLimiter(ip);
+    if (!rl.success) {
+      return NextResponse.json(
+        { success: false, message: "Too many attempts. Try again later." },
+        { status: 429 }
+      );
+    }
+
+    const { id: memberId } = await context.params;
+    const { db } = await connectToDatabase();
+
+    const body = await req.json().catch(() => ({} as { action?: string }));
+    if (body?.action && body.action !== "resend-login-sms") {
+      return NextResponse.json({ success: false, message: "Invalid action" }, { status: 400 });
+    }
+
+    const submittedCsrf = req.headers.get("x-csrf-token") || "";
+    const storedCsrf = req.cookies.get("csrf-token")?.value || "";
+    if (!submittedCsrf || submittedCsrf !== storedCsrf || !validateCsrfToken(req, submittedCsrf)) {
+      logger.warn("Invalid CSRF token on team member resend SMS", { ip });
+      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    }
+
+    const sessionUserId = req.cookies.get("userId")?.value;
+    const sessionRole = req.cookies.get("role")?.value || "";
+
+    if (!sessionUserId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    const collection = db.collection<TeamMember>("teamMembers");
+    const member = await collection.findOne({ _id: new ObjectId(memberId) });
+
+    if (!member) {
+      return NextResponse.json({ success: false, message: "Member not found" }, { status: 404 });
+    }
+
+    let effectiveOwnerId = sessionUserId;
+
+    if (sessionRole === "teamMember") {
+      const requester = await collection.findOne({
+        _id: new ObjectId(sessionUserId),
+        active: true,
+      });
+
+      if (!requester || !requester.permissions?.includes("users:manage")) {
+        logger.warn("Insufficient permissions for team member resend SMS", { sessionUserId, memberId, ip });
+        return NextResponse.json(
+          { success: false, message: "Insufficient permissions to manage team members" },
+          { status: 403 }
+        );
+      }
+
+      effectiveOwnerId = requester.ownerId.toString();
+    }
+
+    if (member.ownerId.toString() !== effectiveOwnerId) {
+      logger.warn("Unauthorized resend SMS attempt", { sessionUserId, memberId, ip });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    if (!member.phone) {
+      return NextResponse.json({ success: false, message: "Team member has no phone number" }, { status: 400 });
+    }
+
+    const tempPassword = generateTempPassword();
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+
+    await collection.updateOne(
+      { _id: new ObjectId(memberId) },
+      { $set: { password: hashedPassword, updatedAt: new Date() } }
+    );
+
+    const origin = req.headers.get("origin");
+    const baseUrl = origin || process.env.APP_URL || "https://app.soranapropertymanagers.com";
+    const loginUrl = `${baseUrl.replace(/\/$/, "")}/login`;
+    const smsMessage =
+      `Your team member login has been reset.\n` +
+      `Login: ${member.email}\n` +
+      `Password: ${tempPassword}\n` +
+      `Sign in: ${loginUrl}`;
+
+    await sendWelcomeSms({ phone: member.phone, message: smsMessage });
+
+    await db.collection("auditLogs").insertOne({
+      action: "team_member_login_sms_resent",
+      ownerId: member.ownerId.toString(),
+      memberId,
+      email: member.email,
+      ip,
+      timestamp: new Date().toISOString(),
+      status: "success",
+    });
+
+    logger.info("Team member login SMS resent", {
+      memberId,
+      ownerId: member.ownerId.toString(),
+      ip,
+    });
+
+    return NextResponse.json({ success: true, message: "Login SMS resent" });
+  } catch (error) {
+    logger.error("POST /api/team-members/[id] resend SMS failed", {
+      error: error instanceof Error ? error.message : String(error),
+      ip,
+    });
     return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
   }
 }

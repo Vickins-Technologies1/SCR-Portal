@@ -15,6 +15,7 @@ import {
   ShieldOff,
   Edit,
   Trash2,
+  Send,
   AlertCircle,
   X,
   Save,
@@ -282,6 +283,7 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState<Partial<TeamMember>>({});
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [resendSubmittingId, setResendSubmittingId] = useState<string | null>(null);
 
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -548,6 +550,44 @@ export default function UsersPage() {
     }
   };
 
+  const handleResendLoginSms = async (member: TeamMember) => {
+    if (!canManageUsers) return;
+    if (!csrfToken) {
+      setError("Security token missing. Please refresh the page.");
+      return;
+    }
+    if (!member.phone) {
+      setError("This team member does not have a phone number.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Resend login SMS? This will reset the team member password."
+    );
+    if (!confirmed) return;
+
+    setResendSubmittingId(member._id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/team-members/${member._id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({ action: "resend-login-sms" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to resend login SMS");
+      alert("Login SMS resent and password reset.");
+    } catch (err: any) {
+      setError(err.message || "Failed to resend login SMS.");
+    } finally {
+      setResendSubmittingId(null);
+    }
+  };
+
   const getRoleBadge = (teamRole: string) => {
     const colors: Record<string, string> = {
       "Owner": "bg-purple-100 text-purple-800 border-purple-300",
@@ -698,6 +738,16 @@ export default function UsersPage() {
 
                     {canManageUsers && (
                       <div className="mt-6 flex items-center justify-end gap-3">
+                        {member.phone && (
+                          <button
+                            onClick={() => handleResendLoginSms(member)}
+                            className="p-2.5 hover:bg-blue-50 rounded-lg transition-colors text-blue-600 disabled:opacity-60"
+                            title="Resend login SMS"
+                            disabled={resendSubmittingId === member._id}
+                          >
+                            <Send size={18} />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEditModal(member)}
                           className="p-2.5 hover:bg-primary/10 rounded-lg transition-colors text-primary"
