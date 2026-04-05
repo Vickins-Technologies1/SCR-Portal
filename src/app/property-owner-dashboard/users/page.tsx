@@ -284,6 +284,8 @@ export default function UsersPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [resendSubmittingId, setResendSubmittingId] = useState<string | null>(null);
+  const [resendTarget, setResendTarget] = useState<TeamMember | null>(null);
+  const [resendSuccess, setResendSuccess] = useState<string | null>(null);
 
   // Delete confirmation
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -550,6 +552,17 @@ export default function UsersPage() {
     }
   };
 
+  const openResendModal = (member: TeamMember) => {
+    if (!canManageUsers) return;
+    if (!member.phone) {
+      setError("This team member does not have a phone number.");
+      return;
+    }
+    setError(null);
+    setResendSuccess(null);
+    setResendTarget(member);
+  };
+
   const handleResendLoginSms = async (member: TeamMember) => {
     if (!canManageUsers) return;
     if (!csrfToken) {
@@ -561,13 +574,9 @@ export default function UsersPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Resend login SMS? This will reset the team member password."
-    );
-    if (!confirmed) return;
-
     setResendSubmittingId(member._id);
     setError(null);
+    setResendSuccess(null);
     try {
       const res = await fetch(`/api/team-members/${member._id}`, {
         method: "POST",
@@ -580,7 +589,8 @@ export default function UsersPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to resend login SMS");
-      alert("Login SMS resent and password reset.");
+      setResendSuccess(`Login SMS sent to ${member.name}.`);
+      setResendTarget(null);
     } catch (err: any) {
       setError(err.message || "Failed to resend login SMS.");
     } finally {
@@ -674,6 +684,12 @@ export default function UsersPage() {
               <span className="font-medium">{error}</span>
             </div>
           )}
+          {resendSuccess && (
+            <div className="mb-6 bg-green-50 text-green-700 px-5 py-4 rounded-2xl flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5" />
+              <span className="font-medium">{resendSuccess}</span>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -740,7 +756,7 @@ export default function UsersPage() {
                       <div className="mt-6 flex items-center justify-end gap-3">
                         {member.phone && (
                           <button
-                            onClick={() => handleResendLoginSms(member)}
+                            onClick={() => openResendModal(member)}
                             className="p-2.5 hover:bg-blue-50 rounded-lg transition-colors text-blue-600 disabled:opacity-60"
                             title="Resend login SMS"
                             disabled={resendSubmittingId === member._id}
@@ -1077,6 +1093,43 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {resendTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="modal-panel p-8 max-w-sm w-full text-center"
+          >
+            <div className="modal-stagger">
+              <Send className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Resend Login SMS?</h3>
+              <p className="text-gray-600 mb-2">
+                This will reset the password and send new login details to:
+              </p>
+              <p className="text-sm font-semibold text-gray-900 mb-6">
+                {resendTarget.name} {resendTarget.phone ? `(${resendTarget.phone})` : ""}
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={() => setResendTarget(null)}
+                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl transition-colors"
+                  disabled={resendSubmittingId === resendTarget._id}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleResendLoginSms(resendTarget)}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors shadow-md"
+                  disabled={resendSubmittingId === resendTarget._id}
+                >
+                  {resendSubmittingId === resendTarget._id ? "Sending..." : "Resend SMS"}
+                </button>
+              </div>
+            </div>
           </motion.div>
         </div>
       )}
