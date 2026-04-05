@@ -5,8 +5,11 @@ export interface OwnerStats {
   totalUnits: number;
   occupiedUnits: number;
   expectedMonthlyRent: number;
-  rentCollectedThisMonth: number;
-  rentAppliedThisMonth: number;
+  totalMonthlyRent: number;
+  totalRentPaid: number;
   overduePayments: number;
+  totalPayments: number;
   totalOverdueAmount: number;
+  totalDepositPaid: number;
+  totalUtilityPaid: number;
 }

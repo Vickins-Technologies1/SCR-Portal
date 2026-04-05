@@ -45,10 +45,13 @@ interface Stats {
   totalUnits: number;
   occupiedUnits: number;
   expectedMonthlyRent: number;
-  rentCollectedThisMonth: number;
-  rentAppliedThisMonth: number;
+  totalMonthlyRent: number;
+  totalRentPaid: number;
   overduePayments: number;
+  totalPayments: number;
   totalOverdueAmount: number;
+  totalDepositPaid: number;
+  totalUtilityPaid: number;
 }
 
 const roundMoney = (value: number) => Math.round(value || 0);
@@ -162,10 +165,13 @@ export async function GET(request: NextRequest) {
         totalUnits: 0,
         occupiedUnits: 0,
         expectedMonthlyRent: 0,
-        rentCollectedThisMonth: 0,
-        rentAppliedThisMonth: 0,
+        totalMonthlyRent: 0,
+        totalRentPaid: 0,
         overduePayments: 0,
+        totalPayments: 0,
         totalOverdueAmount: 0,
+        totalDepositPaid: 0,
+        totalUtilityPaid: 0,
       };
       return NextResponse.json({ success: true, stats });
     }
@@ -235,25 +241,94 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
 
-    const rentPaidThisMonthByTenant = new Map(
-      rentPaidThisMonthResult.map((row: any) => [String(row._id), Number(row.total || 0)])
-    );
-
     const rentCollectedThisMonth = roundMoney(
       rentPaidThisMonthResult.reduce((sum: number, row: any) => sum + Number(row.total || 0), 0)
     );
 
-    const rentAppliedThisMonth = roundMoney(
-      activeTenantsForMonth.reduce((sum: number, tenant: any) => {
-        const currentMonthRent = resolveTenantMonthlyRentForDate({
-          tenant,
-          date: startOfMonth,
-          rentOverrideMap,
-        });
-        const paidThisMonth = rentPaidThisMonthByTenant.get(tenant._id.toString()) ?? 0;
-        return sum + Math.min(currentMonthRent, paidThisMonth);
-      }, 0)
-    );
+    const totalMonthlyRent = rentCollectedThisMonth;
+
+    // Total rent paid (all time)
+    const totalRentPaidResult = await db
+      .collection("payments")
+      .aggregate([
+        {
+          $match: {
+            propertyId: { $in: propertyIds },
+            status: "completed",
+            type: "Rent",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalRentPaid: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+    const totalRentPaid = roundMoney(totalRentPaidResult[0]?.totalRentPaid || 0);
+
+    // Total payments (all time)
+    const paymentsResult = await db
+      .collection("payments")
+      .aggregate([
+        {
+          $match: {
+            propertyId: { $in: propertyIds },
+            status: "completed",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalPayments: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+    const totalPayments = roundMoney(paymentsResult[0]?.totalPayments || 0);
+
+    // Deposits
+    const depositPaymentsResult = await db
+      .collection("payments")
+      .aggregate([
+        {
+          $match: {
+            propertyId: { $in: propertyIds },
+            status: "completed",
+            type: "Deposit",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalDepositPaid: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+    const totalDepositPaid = roundMoney(depositPaymentsResult[0]?.totalDepositPaid || 0);
+
+    // Utilities
+    const utilityPaymentsResult = await db
+      .collection("payments")
+      .aggregate([
+        {
+          $match: {
+            propertyId: { $in: propertyIds },
+            status: "completed",
+            type: "Utility",
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalUtilityPaid: { $sum: "$amount" },
+          },
+        },
+      ])
+      .toArray();
+    const totalUtilityPaid = roundMoney(utilityPaymentsResult[0]?.totalUtilityPaid || 0);
 
     // === Overdue Logic ===
     const activeTenantsForDues = activeTenantsForOccupancy;
@@ -335,10 +410,13 @@ export async function GET(request: NextRequest) {
       totalUnits,
       occupiedUnits,
       expectedMonthlyRent,
-      rentCollectedThisMonth,
-      rentAppliedThisMonth,
+      totalMonthlyRent,
+      totalRentPaid,
       overduePayments,
+      totalPayments,
       totalOverdueAmount: roundMoney(totalOverdueAmount),
+      totalDepositPaid,
+      totalUtilityPaid,
     };
 
     return NextResponse.json({ success: true, stats });

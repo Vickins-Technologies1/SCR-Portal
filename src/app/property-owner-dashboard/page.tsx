@@ -78,10 +78,13 @@ export default function PropertyOwnerDashboard() {
     totalUnits: 0,
     occupiedUnits: 0,
     expectedMonthlyRent: 0,
-    rentCollectedThisMonth: 0,
-    rentAppliedThisMonth: 0,
+    totalMonthlyRent: 0,
+    totalRentPaid: 0,
     overduePayments: 0,
+    totalPayments: 0,
     totalOverdueAmount: 0,
+    totalDepositPaid: 0,
+    totalUtilityPaid: 0,
   });
 
   const [chartData, setChartData] = useState<ChartData | null>(null);
@@ -234,12 +237,6 @@ export default function PropertyOwnerDashboard() {
     stats.totalUnits > 0 ? Math.round((totalVacantUnits / stats.totalUnits) * 100) : 0;
   const occupancyRate =
     stats.totalUnits > 0 ? Math.round((stats.occupiedUnits / stats.totalUnits) * 100) : 0;
-  const collectionRate =
-    stats.expectedMonthlyRent > 0
-      ? Math.round(
-          (Math.min(stats.rentAppliedThisMonth, stats.expectedMonthlyRent) / stats.expectedMonthlyRent) * 100
-        )
-      : 0;
 
   const pieData = {
     labels: ["Current", "Overdue", "Lease Expired"],
@@ -407,7 +404,7 @@ export default function PropertyOwnerDashboard() {
                   <div className="bg-white/70 border border-white/50 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
                     <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Monthly revenue</p>
                     <p className="text-lg sm:text-xl font-semibold text-foreground mt-1">
-                      {formatCurrency(stats.rentCollectedThisMonth)}
+                      {formatCurrency(stats.totalMonthlyRent)}
                     </p>
                     <p className="text-[11px] text-muted-foreground mt-1">
                       Expected {formatCurrency(stats.expectedMonthlyRent)}
@@ -488,18 +485,33 @@ export default function PropertyOwnerDashboard() {
                           explanation: "Projected rent for this month based on active tenants and their current rent.",
                         },
                         {
-                          title: "Rent Collected (This Month)",
-                          value: formatCurrency(stats.rentCollectedThisMonth),
+                          title: "Monthly Rent",
+                          value: formatCurrency(stats.totalMonthlyRent),
                           icon: DollarSign,
                           color: "emerald",
-                          explanation: "Cash collected from completed rent payments this month.",
+                          explanation: "Total rent collected in the current month (completed rent payments only).",
                         },
                         {
-                          title: "Collection Rate",
-                          value: `${collectionRate}%`,
-                          icon: BarChart2,
+                          title: "Total Rent Paid",
+                          value: formatCurrency(stats.totalRentPaid),
+                          icon: DollarSign,
                           color: "blue",
-                          explanation: "Share of expected rent applied by payments made this month.",
+                          explanation: "All-time rent payments received from tenants (completed rent transactions only).",
+                        },
+                        {
+                          title: "Overdue Amount",
+                          value: formatCurrency(stats.totalOverdueAmount),
+                          icon: AlertCircle,
+                          color: "red",
+                          subtitle: `${stats.overduePayments} tenants overdue`,
+                          explanation: "Total unpaid rent + deposits that are currently past due across all tenants.",
+                        },
+                        {
+                          title: "Total Revenue",
+                          value: formatCurrency(stats.totalPayments),
+                          icon: DollarSign,
+                          color: "blue",
+                          explanation: "Cumulative amount of all completed payments received to date.",
                         },
                         {
                           title: "Active Tenants",
@@ -508,14 +520,6 @@ export default function PropertyOwnerDashboard() {
                           color: "green",
                           subtitle: `${stats.occupiedUnits} units occupied`,
                           explanation: "Total number of tenants with active leases across all your properties.",
-                        },
-                        {
-                          title: "Overdue Balance",
-                          value: formatCurrency(stats.totalOverdueAmount),
-                          icon: AlertCircle,
-                          color: "red",
-                          subtitle: `${stats.overduePayments} tenants overdue`,
-                          explanation: "Total unpaid rent and deposits currently past due across all active tenants.",
                         },
                         {
                           title: "Vacant Units",
@@ -531,6 +535,20 @@ export default function PropertyOwnerDashboard() {
                           icon: Building2,
                           color: "purple",
                           explanation: "Number of properties currently listed and managed under your account.",
+                        },
+                        {
+                          title: "Deposits",
+                          value: formatCurrency(stats.totalDepositPaid),
+                          icon: DollarSign,
+                          color: "indigo",
+                          explanation: "Total security deposits collected and marked as paid from all tenants.",
+                        },
+                        {
+                          title: "Utilities Paid",
+                          value: formatCurrency(stats.totalUtilityPaid),
+                          icon: DollarSign,
+                          color: "pink",
+                          explanation: "Total amount tenants have paid for utilities (water, electricity, etc.) to date.",
                         },
                       ].map((s, i) => {
                         const colorClasses = getStatColorClasses(s.color);

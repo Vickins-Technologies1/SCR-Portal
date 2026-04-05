@@ -7,7 +7,7 @@ import { UNIT_TYPES } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
 
-const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out"];
+const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out", "evicted"];
 
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
