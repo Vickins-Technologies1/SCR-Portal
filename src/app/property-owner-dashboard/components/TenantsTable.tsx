@@ -312,7 +312,7 @@ export default function TenantsTable({
       {isLoading ? (
         <div className="table-shell table-compact">
           <div className="table-scroll">
-            <table>
+            <table className="tenants-table">
               <thead>
               <tr>
                 {[...Array(11)].map((_, i) => (
@@ -340,7 +340,7 @@ export default function TenantsTable({
           {/* Tenants Table */}
           <div className="table-shell table-compact" data-tour="owner-tenant-table">
             <div className="table-scroll">
-              <table>
+              <table className="tenants-table">
                 <thead>
                 <tr>
                   {[
