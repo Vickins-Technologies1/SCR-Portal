@@ -75,7 +75,10 @@ export async function computeExpectedMonthlyIncome(db: Db, propertyId: string, n
 
 export async function getOwnerDueStatus(db: Db, ownerId: string, now: Date = new Date()) {
   const properties = await db.collection("properties").find({ ownerId }).toArray();
-  const pendingInvoices = await db.collection("invoices").find({ userId: ownerId, status: "pending" }).toArray();
+  const pendingInvoices = await db.collection("invoices").find({
+    userId: ownerId,
+    status: { $in: ["pending", "unpaid", "overdue"] },
+  }).toArray();
 
   if (properties.length === 0 || pendingInvoices.length === 0) {
     return {
@@ -85,22 +88,38 @@ export async function getOwnerDueStatus(db: Db, ownerId: string, now: Date = new
     };
   }
 
-  const pendingByProperty = new Set(pendingInvoices.map((inv: any) => inv.propertyId));
+  const propertyMap = new Map<string, { name?: string; createdAt?: Date }>();
+  properties.forEach((property: any) => {
+    propertyMap.set(property._id.toString(), {
+      name: property.name,
+      createdAt: property.createdAt ? new Date(property.createdAt) : undefined,
+    });
+  });
+
+  const pendingByProperty = new Set(pendingInvoices.map((inv: any) => inv.propertyId?.toString()));
   const dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] = [];
+  const duePropertyIds = new Set<string>();
 
-  for (const property of properties) {
-    const propertyId = property._id.toString();
-    if (!pendingByProperty.has(propertyId)) continue;
+  for (const invoice of pendingInvoices as any[]) {
+    const propertyId = invoice.propertyId?.toString();
+    if (!propertyId || !pendingByProperty.has(propertyId)) continue;
 
-    const createdAt = property.createdAt ? new Date(property.createdAt) : now;
-    const dueDate = getGracePeriodEndDate(createdAt, now);
+    const propertyInfo = propertyMap.get(propertyId);
+    const fallbackDate = propertyInfo?.createdAt || now;
+    const invoiceDue = invoice.expiresAt ? new Date(invoice.expiresAt) : getGracePeriodEndDate(fallbackDate, now);
+    if (Number.isNaN(invoiceDue.getTime())) {
+      continue;
+    }
 
-    if (now > dueDate) {
-      dueProperties.push({
-        propertyId,
-        propertyName: property.name || "Property",
-        dueDate: dueDate.toISOString(),
-      });
+    if (now > invoiceDue) {
+      if (!duePropertyIds.has(propertyId)) {
+        dueProperties.push({
+          propertyId,
+          propertyName: propertyInfo?.name || "Property",
+          dueDate: invoiceDue.toISOString(),
+        });
+        duePropertyIds.add(propertyId);
+      }
     }
   }
 

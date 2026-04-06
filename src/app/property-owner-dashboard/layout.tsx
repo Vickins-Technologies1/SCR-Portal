@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import SupportWidget from "./components/SupportWidget";
 import Cookies from "js-cookie";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
+import InvoiceRestrictionGate from "./components/InvoiceRestrictionGate";
 
 export default function PropertyOwnerDashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -172,6 +173,7 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
   return (
     <PublicThemeWrapper>
       <SidebarProvider>
+        <InvoiceRestrictionGate />
         <div className="owner-portal relative min-h-screen bg-background text-foreground text-[12px] sm:text-[13px] lg:text-sm overflow-x-hidden">
           <div className="pointer-events-none absolute -top-24 right-[-12%] h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-32 left-[-10%] h-80 w-80 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
