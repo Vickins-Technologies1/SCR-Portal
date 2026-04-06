@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trash2, AlertCircle, CheckCircle2, XCircle, User, Home, Calendar } from "lucide-react";
 import { TenantDeletionRequest } from "../../../types/tenant-deletion";
+import Cookies from "js-cookie";
 
 interface TenantDeletionRequestsProps {
   csrfToken: string;
@@ -23,6 +24,7 @@ export default function TenantDeletionRequests({ csrfToken }: TenantDeletionRequ
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [activeCsrfToken, setActiveCsrfToken] = useState<string | null>(csrfToken);
+  const canDecide = Cookies.get("role") === "propertyOwner";
 
   useEffect(() => {
     setActiveCsrfToken(csrfToken);
@@ -66,6 +68,10 @@ export default function TenantDeletionRequests({ csrfToken }: TenantDeletionRequ
           }
         }
         const data = await res.json();
+        if (res.status === 401 || data?.message?.toLowerCase?.().includes("unauthorized")) {
+          setRequests([]);
+          return;
+        }
         if (!res.ok || !data.success) {
           throw new Error(data.message || "Failed to load deletion requests");
         }
@@ -81,6 +87,7 @@ export default function TenantDeletionRequests({ csrfToken }: TenantDeletionRequ
   }, [activeCsrfToken]);
 
   const updateStatus = async (id: string, status: "Approved" | "Rejected") => {
+    if (!canDecide) return;
     const token = activeCsrfToken || (await fetchCsrfToken());
     if (!token) return;
     const targetRequest = requests.find((req) => req._id === id);
@@ -109,8 +116,10 @@ export default function TenantDeletionRequests({ csrfToken }: TenantDeletionRequ
           });
         }
       }
-
       const data = await res.json();
+      if (res.status === 401 || data?.message?.toLowerCase?.().includes("unauthorized")) {
+        return;
+      }
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Failed to update deletion request");
       }
@@ -259,7 +268,7 @@ export default function TenantDeletionRequests({ csrfToken }: TenantDeletionRequ
                 </div>
               </div>
 
-              {req.status === "Pending" && (
+              {req.status === "Pending" && canDecide && (
                 <div className="mt-4 flex gap-2">
                   <button
                     onClick={() => updateStatus(req._id, "Approved")}

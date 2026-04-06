@@ -1,11 +1,15 @@
 // src/app/api/csrf-token/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { generateCsrfToken } from "../../../lib/csrf";
+import {
+  CSRF_COOKIE_NAME,
+  generateCsrfToken,
+  getCsrfCookieOptions,
+} from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 
 export async function GET(request: NextRequest) {
   try {
-    const existingToken = request.cookies.get("csrf-token")?.value;
+    const existingToken = request.cookies.get(CSRF_COOKIE_NAME)?.value;
     if (existingToken) {
       return NextResponse.json({ success: true, csrfToken: existingToken });
     }
@@ -14,13 +18,7 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.json({ success: true, csrfToken });
 
-    response.cookies.set("csrf-token", csrfToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      path: "/",
-      maxAge: 60 * 60,
-    });
+    response.cookies.set(CSRF_COOKIE_NAME, csrfToken, getCsrfCookieOptions());
 
     logger.debug("Generated CSRF token");
 

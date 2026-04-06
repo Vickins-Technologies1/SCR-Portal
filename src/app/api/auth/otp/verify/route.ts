@@ -2,10 +2,10 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { v4 as uuidv4 } from "uuid";
 import { getDefaultPermissions } from "@/lib/permissions";
 import { hashOtpCode } from "@/lib/otp";
 import { createSessionToken, getSessionCookieOptions } from "@/lib/session";
+import { generateCsrfToken, setCsrfCookie } from "@/lib/csrf";
 
 type OtpDoc = {
   _id: ObjectId;
@@ -184,12 +184,7 @@ export async function POST(request: Request) {
       });
     }
 
-    response.cookies.set("csrf-token", uuidv4(), {
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 60 * 60,
-      path: "/",
-    });
+    setCsrfCookie(response, generateCsrfToken());
 
     await db.collection(otp.collection).updateOne(
       { _id: user._id },

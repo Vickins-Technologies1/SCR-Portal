@@ -3,10 +3,10 @@ import { NextResponse, NextRequest } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcrypt";
 import { ObjectId } from "mongodb";
-import { v4 as uuidv4 } from "uuid";
 import { getDefaultPermissions } from "../../../lib/permissions";
 import { deliverOtp } from "../../../lib/otp-delivery";
 import { createSessionToken, getSessionCookieOptions } from "../../../lib/session";
+import { generateCsrfToken, setCsrfCookie } from "../../../lib/csrf";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -242,12 +242,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        response.cookies.set("csrf-token", uuidv4(), {
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
-          maxAge: 60 * 60,
-          path: "/",
-        });
+        setCsrfCookie(response, generateCsrfToken());
 
         await db.collection(userCollection).updateOne(
           { _id: user._id },
@@ -498,12 +493,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        response.cookies.set("csrf-token", uuidv4(), {
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
-          maxAge: 60 * 60,
-          path: "/",
-        });
+        setCsrfCookie(response, generateCsrfToken());
 
         await db.collection(userCollection).updateOne(
           { _id: user._id },

@@ -1,9 +1,13 @@
 // src/proxy.ts (or middleware.ts)
 import { NextRequest, NextResponse } from "next/server";
-import { v4 as uuidv4 } from "uuid";
 import logger from "./lib/logger";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./lib/session";
-import { buildInvalidCsrfResponse } from "./lib/csrf";
+import {
+  buildInvalidCsrfResponse,
+  CSRF_COOKIE_NAME,
+  generateCsrfToken,
+  getCsrfCookieOptions,
+} from "./lib/csrf";
 
 type Role = "admin" | "propertyOwner" | "teamMember" | "tenant" | null;
 
@@ -47,10 +51,6 @@ function rateLimiter(ip: string): { success: boolean; remaining: number } {
   return { success: true, remaining: RATE_LIMIT_MAX - record.count };
 }
 
-function generateCsrfToken(): string {
-  return uuidv4();
-}
-
 function buildCookieHeader(
   request: NextRequest,
   overrides: Record<string, string | null | undefined>
@@ -74,7 +74,7 @@ function buildCookieHeader(
 }
 
 async function validateCsrfToken(req: NextRequest): Promise<boolean> {
-  const storedToken = req.cookies.get("csrf-token")?.value;
+  const storedToken = req.cookies.get(CSRF_COOKIE_NAME)?.value;
   const headerToken = req.headers.get("x-csrf-token");
   return !!storedToken && storedToken === headerToken;
 }
@@ -249,15 +249,12 @@ export async function proxy(request: NextRequest) {
 
     // CSRF token generation (always allowed)
     if (path === "/api/csrf-token") {
-      const token = generateCsrfToken();
+      const existingToken = request.cookies.get(CSRF_COOKIE_NAME)?.value;
+      const token = existingToken || generateCsrfToken();
       const res = NextResponse.json({ success: true, csrfToken: token });
-      res.cookies.set("csrf-token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 3600,
-        path: "/",
-      });
+      if (!existingToken) {
+        res.cookies.set(CSRF_COOKIE_NAME, token, getCsrfCookieOptions());
+      }
       return res;
     }
 

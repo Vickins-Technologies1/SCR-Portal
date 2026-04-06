@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Home, AlertCircle, CheckCircle2, XCircle, Calendar } from "lucide-react";
 import { VacateRequest } from "../../../types/vacate";
+import Cookies from "js-cookie";
 
 interface VacateRequestsProps {
   csrfToken: string;
@@ -23,6 +24,7 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [activeCsrfToken, setActiveCsrfToken] = useState<string | null>(csrfToken);
+  const canDecide = Cookies.get("role") === "propertyOwner";
 
   useEffect(() => {
     setActiveCsrfToken(csrfToken);
@@ -66,6 +68,10 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
           }
         }
         const data = await res.json();
+        if (res.status === 401 || data?.message?.toLowerCase?.().includes("unauthorized")) {
+          setRequests([]);
+          return;
+        }
         if (!res.ok || !data.success) {
           throw new Error(data.message || "Failed to load vacate requests");
         }
@@ -81,6 +87,7 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
   }, [activeCsrfToken]);
 
   const updateStatus = async (id: string, status: "Approved" | "Rejected") => {
+    if (!canDecide) return;
     const token = activeCsrfToken || (await fetchCsrfToken());
     if (!token) return;
     try {
@@ -107,8 +114,10 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
           });
         }
       }
-
       const data = await res.json();
+      if (res.status === 401 || data?.message?.toLowerCase?.().includes("unauthorized")) {
+        return;
+      }
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Failed to update vacate request");
       }
@@ -233,7 +242,7 @@ export default function VacateRequests({ csrfToken }: VacateRequestsProps) {
 
               <p className="mt-4 text-xs sm:text-sm text-gray-600 line-clamp-3">{req.message}</p>
 
-              {req.status === "Pending" && (
+              {req.status === "Pending" && canDecide && (
                 <div className="mt-4 flex gap-2">
                   <button
                     onClick={() => updateStatus(req._id, "Approved")}
