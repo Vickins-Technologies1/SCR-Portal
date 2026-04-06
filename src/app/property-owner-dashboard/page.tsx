@@ -92,13 +92,13 @@ export default function PropertyOwnerDashboard() {
   // ─── AUTH CHECK + PERMISSION CHECK ──────────────────────────────────────────
   useEffect(() => {
     if (!loggedInUserId) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 
     // Only allow property owners and team members at all
     if (!["propertyOwner", "teamMember"].includes(role ?? "")) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 

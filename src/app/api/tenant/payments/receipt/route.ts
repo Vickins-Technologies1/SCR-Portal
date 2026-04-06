@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
-import { validateCsrfToken } from "../../../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import * as fs from "fs";
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
   if (!validateCsrfToken(request, csrfToken)) {
     logger.error("Invalid CSRF token", { userId });
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   if (!paymentId || !ObjectId.isValid(paymentId)) {

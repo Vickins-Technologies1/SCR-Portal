@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 
 interface ChartData {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   const {cookies} = request;

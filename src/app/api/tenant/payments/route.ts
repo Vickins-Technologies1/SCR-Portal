@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { connectMongoose } from "@/lib/mongoose";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
 import { z } from "zod";
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
 
   if (!validateCsrfToken(request, csrfToken)) {
     logger.error("Invalid CSRF token", { userId, csrfToken });
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   try {
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
 
   if (!validateCsrfToken(request, csrfToken)) {
     logger.error("Invalid CSRF token", { userId });
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   let payload: unknown;

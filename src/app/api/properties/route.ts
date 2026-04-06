@@ -6,6 +6,7 @@ import { Db, ObjectId } from 'mongodb';
 import { UNIT_TYPES } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
+import { buildInvalidCsrfResponse } from '../../../lib/csrf';
 
 const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out", "evicted"];
 
@@ -337,10 +338,7 @@ export async function POST(request: NextRequest) {
     const csrfToken = body.csrfToken || request.headers.get('x-csrf-token');
     if (!await validateCsrfToken(request, csrfToken)) {
       logger.warn('Invalid CSRF token', { ownerId, csrfToken });
-      return NextResponse.json(
-        { success: false, message: 'Invalid CSRF token' },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     if (role !== 'propertyOwner' || !ownerId || !ObjectId.isValid(ownerId)) {

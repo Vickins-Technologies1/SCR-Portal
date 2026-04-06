@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { Db, ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { Tenant } from "@/types/tenant";
 import { Property } from "@/types/property";
 
@@ -72,7 +72,7 @@ const restoreUnitQuantity = async (db: Db, propertyId: string, unitIdentifier?: 
 export async function GET(req: NextRequest) {
   const csrfHeader = req.headers.get("x-csrf-token");
   if (!csrfHeader || !validateCsrfToken(req, csrfHeader)) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(req);
   }
 
   const ownerId = await resolveOwnerIdForGet();
@@ -156,7 +156,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const csrfHeader = req.headers.get("x-csrf-token");
   if (!csrfHeader || !validateCsrfToken(req, csrfHeader)) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(req);
   }
 
   const ownerId = await resolveOwnerIdForUpdate();

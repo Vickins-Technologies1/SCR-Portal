@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
-import { validateCsrfToken } from "../../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 import logger from "../../../../lib/logger";
 import bcrypt from "bcrypt";
 
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   // CSRF validation
   if (!validateCsrfToken(request, csrfToken)) {
     logger.error("Invalid CSRF token", { userId, timestamp: "2025-08-07T14:59:00+03:00" });
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   try {

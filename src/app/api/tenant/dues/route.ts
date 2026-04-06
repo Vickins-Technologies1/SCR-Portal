@@ -1,7 +1,7 @@
 // src/app/api/tenant/dues/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateTenantDues } from "@/lib/utils";
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
     logger.error("Invalid CSRF token in ownerstats request", { userId });
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   try {
@@ -326,7 +326,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
     logger.error("Invalid CSRF token in tenant dues request");
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   try {

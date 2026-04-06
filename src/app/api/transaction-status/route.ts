@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Db } from "mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { z } from "zod";
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!csrfToken || !validateCsrfToken(request, csrfToken)) {
-    return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
   }
 
   let payload: unknown;

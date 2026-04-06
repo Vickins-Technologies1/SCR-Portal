@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import logger from '@/lib/logger';
+import { buildInvalidCsrfResponse } from '@/lib/csrf';
 
 interface UnitType {
   type: string;
@@ -149,10 +150,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!await validateCsrf(request)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid CSRF token' },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     const body = await request.json();
@@ -282,10 +280,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (!await validateCsrf(request)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid CSRF token' },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     const body = await request.json();
@@ -366,10 +361,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (!await validateCsrf(request)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid CSRF token' },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     const { searchParams } = new URL(request.url);

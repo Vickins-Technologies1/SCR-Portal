@@ -24,7 +24,7 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
       Cookies.remove("csrf-token");
       Cookies.remove("impersonatingTenantId", { path: "/" });
       Cookies.remove("isImpersonating", { path: "/" });
-      router.replace("/login");
+      router.replace("/");
     },
   });
   const steps: TourStep[] = [

@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { createPayRecipient } from "@/lib/kopokopo";
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
-    return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
   }
 
   type Payload = {

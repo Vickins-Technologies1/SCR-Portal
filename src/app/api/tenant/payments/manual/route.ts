@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
-import { validateCsrfToken } from "../../../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { sendConfirmationEmail } from "../../../../../lib/email";
 import { sendWelcomeSms } from "../../../../../lib/sms";
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     if (!validateCsrfToken(request, csrfToken)) {
       logger.error("Invalid CSRF token", { userId, csrfToken });
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(request);
     }
 
     // Input validation

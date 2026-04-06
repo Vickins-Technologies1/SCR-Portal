@@ -33,7 +33,7 @@ export default function OwnerSettingsPage() {
     if (!id || !["propertyOwner", "teamMember"].includes(role || "")) {
       console.log("[OwnerSettingsPage] Invalid userId or role:", { id, role });
       toast.error("Unauthorized access. Please log in as a property owner or team member.");
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 
@@ -46,7 +46,7 @@ export default function OwnerSettingsPage() {
     const ownerIdToUse = role === "propertyOwner" ? id : (ownerIdFromCookie || id);
     if (!ownerIdToUse) {
       toast.error("Could not determine property owner. Please log in again.");
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 

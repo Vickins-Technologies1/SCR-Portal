@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
-import { validateCsrfToken } from "../../../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments } from "../../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     if (!validateCsrfToken(request, paymentId)) {
       logger.error("Invalid CSRF token", { userId, paymentId });
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(request);
     }
 
     if (!paymentId || !ObjectId.isValid(paymentId)) {

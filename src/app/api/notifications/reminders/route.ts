@@ -8,7 +8,7 @@ import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
 import { generateStyledTemplate } from "../../../../lib/email-template";
 import nodemailer from "nodemailer";
 import { connectToDatabase } from "../../../../lib/mongodb";
-import { validateCsrfToken } from "../../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 import logger from "../../../../lib/logger";
 import { Tenant } from "../../../../types/tenant";
 import { getUpcomingPaymentReminders, sendPaymentReminders } from "../../../../lib/reminders";
@@ -67,7 +67,7 @@ const authenticateUser = async (req: NextRequest) => {
 
   if (!csrfToken) {
     logger.warn("Missing CSRF token", { userId, path: req.nextUrl.pathname });
-    return { isValid: false, error: "Missing CSRF token", userId, effectiveOwnerId: null };
+    return { isValid: false, error: "Missing CSRF token", userId, effectiveOwnerId: null, csrfInvalid: true };
   }
 
   if (!(await validateCsrfToken(req, csrfToken))) {
@@ -76,7 +76,7 @@ const authenticateUser = async (req: NextRequest) => {
       receivedToken: csrfToken,
       expectedToken: storedCsrfToken,
     });
-    return { isValid: false, error: "Invalid CSRF token", userId, effectiveOwnerId: null };
+    return { isValid: false, error: "Invalid CSRF token", userId, effectiveOwnerId: null, csrfInvalid: true };
   }
 
   let effectiveOwnerId = userId;
@@ -124,8 +124,11 @@ const sanitizeInput = (input: string): string => {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const { isValid, effectiveOwnerId, error } = await authenticateUser(req);
+    const { isValid, effectiveOwnerId, error, csrfInvalid } = await authenticateUser(req);
     if (!isValid || !effectiveOwnerId) {
+      if (csrfInvalid) {
+        return buildInvalidCsrfResponse(req);
+      }
       return NextResponse.json({ success: false, message: error }, { status: 401 });
     }
 
@@ -176,8 +179,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const { isValid, effectiveOwnerId, error } = await authenticateUser(req);
+    const { isValid, effectiveOwnerId, error, csrfInvalid } = await authenticateUser(req);
     if (!isValid || !effectiveOwnerId) {
+      if (csrfInvalid) {
+        return buildInvalidCsrfResponse(req);
+      }
       return NextResponse.json({ success: false, message: error }, { status: 401 });
     }
 
@@ -464,8 +470,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
   try {
-    const { isValid, effectiveOwnerId, error } = await authenticateUser(req);
+    const { isValid, effectiveOwnerId, error, csrfInvalid } = await authenticateUser(req);
     if (!isValid || !effectiveOwnerId) {
+      if (csrfInvalid) {
+        return buildInvalidCsrfResponse(req);
+      }
       return NextResponse.json({ success: false, message: error }, { status: 401 });
     }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     const csrfToken = request.headers.get("X-CSRF-Token");
     if (!validateCsrfToken(request, csrfToken)) {
       logger.warn("Invalid CSRF token", { userId, csrfToken });
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(request);
     }
 
     const formData = await request.formData();

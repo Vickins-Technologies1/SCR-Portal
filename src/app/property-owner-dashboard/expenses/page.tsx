@@ -118,7 +118,7 @@ export default function ExpensesPage() {
     const oid = Cookies.get("ownerId") || uid;
 
     if (!uid || !["propertyOwner", "teamMember"].includes(r || "")) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 

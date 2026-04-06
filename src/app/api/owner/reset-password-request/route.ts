@@ -1,7 +1,7 @@
 // src/app/api/owner/reset-password-request/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
-import { validateCsrfToken } from "../../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
 import validator from "validator";
@@ -49,10 +49,7 @@ export async function POST(request: NextRequest) {
     const csrfHeader = request.headers.get("x-csrf-token");
     if (!csrfHeader || !validateCsrfToken(request, csrfHeader)) {
       logger.warn("Invalid CSRF token in owner reset request", { ip });
-      return NextResponse.json(
-        { success: false, message: "Invalid CSRF token" },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     const body = await request.json().catch(() => ({}));

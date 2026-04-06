@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
 import validator from "validator";
 import sanitizeHtml from "sanitize-html";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { sendWelcomeSms } from "@/lib/sms";
 
 // Rate limiter (unchanged)
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     const storedCsrf = req.cookies.get("csrf-token")?.value || "";
     if (!submittedCsrf || submittedCsrf !== storedCsrf || !validateCsrfToken(req, submittedCsrf)) {
       logger.warn("Invalid CSRF token for team member creation", { ip });
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(req);
     }
 
     const sessionUserId = req.cookies.get("userId")?.value;
@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
     if (sanitizedPhone) {
       const origin = req.headers.get("origin");
       const baseUrl = origin || process.env.APP_URL || "https://app.soranapropertymanagers.com";
-      const loginUrl = `${baseUrl.replace(/\/$/, "")}/login`;
+      const loginUrl = baseUrl.replace(/\/$/, "");
       const smsMessage =
         `Welcome ${sanitizedName}! Your team member account is ready.\n` +
         `Login: ${sanitizedEmail}\n` +

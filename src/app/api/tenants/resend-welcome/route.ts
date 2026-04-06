@@ -4,7 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
 
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 
 import { sendPasswordResetEmail } from "@/lib/email";
@@ -16,10 +16,7 @@ export async function POST(request: NextRequest) {
   const csrfHeader = request.headers.get("x-csrf-token");
   if (!validateCsrfToken(request, csrfHeader)) {
     logger.warn("Invalid CSRF token in /api/tenants/resend-welcome");
-    return NextResponse.json(
-      { success: false, message: "Invalid CSRF token" },
-      { status: 403 }
-    );
+    return buildInvalidCsrfResponse(request);
   }
 
   // Parse body

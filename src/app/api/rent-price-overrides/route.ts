@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { RentPriceOverride } from "@/types/rent-price-override";
 
 const normalizeStartOfMonth = (value: string | Date): Date | null => {
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
   try {
     const csrfHeader = request.headers.get("x-csrf-token");
     if (!validateCsrfToken(request, csrfHeader)) {
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(request);
     }
 
     const cookies = request.cookies;

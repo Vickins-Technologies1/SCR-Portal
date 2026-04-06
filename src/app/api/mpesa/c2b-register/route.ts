@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAccessToken, getMpesaBaseUrl, getMpesaShortcode } from "@/lib/mpesa";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 
 const RegisterSchema = z.object({
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
-    return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
   }
 
   let payload: unknown;

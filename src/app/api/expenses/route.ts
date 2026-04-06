@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
 import { ObjectId } from "mongodb";
+import { buildInvalidCsrfResponse } from "@/lib/csrf";
 
 // ────────────────────────────────────────────────
 // Types
@@ -173,7 +174,7 @@ export async function POST(req: NextRequest) {
     const storedCsrf = req.cookies.get("csrf-token")?.value || "";
     if (!submittedCsrf || submittedCsrf !== storedCsrf) {
       logger.warn("CSRF validation failed on expense creation");
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(req);
     }
 
     const sessionUserId = req.cookies.get("userId")?.value;

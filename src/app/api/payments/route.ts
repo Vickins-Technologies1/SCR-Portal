@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { ObjectId, Db, Filter } from "mongodb";
-import { validateCsrfToken } from "../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 
 interface Payment {
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     try {
       if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
         logger.error("Invalid or missing CSRF token", { loggedInUserId, csrfToken });
-        return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+        return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
       }
     } catch (error) {
       logger.error("CSRF validation error", { loggedInUserId, error: error instanceof Error ? error.message : String(error) });

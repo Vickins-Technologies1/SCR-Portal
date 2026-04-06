@@ -192,7 +192,7 @@ function ReportsAndInvoicesPageInner() {
 
     if (!uid || !["propertyOwner", "teamMember"].includes(userRole || "")) {
       setError("Unauthorized. Please log in as a property owner or team member.");
-      router.push("/login");
+      router.push("/");
       return;
     }
 

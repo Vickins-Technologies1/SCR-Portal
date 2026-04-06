@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
-import { validateCsrfToken } from '@/lib/csrf';
+import { buildInvalidCsrfResponse, validateCsrfToken } from '@/lib/csrf';
 import { ObjectId } from 'mongodb';
 
 // ===============================================
@@ -186,10 +186,7 @@ export async function PUT(
     const isValidCsrf = validateCsrfToken(request, csrfHeader);
 
     if (!isValidCsrf) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid CSRF token' },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     const { propertyId } = await params;
@@ -428,10 +425,7 @@ export async function DELETE(
     const isValidCsrf = validateCsrfToken(request, csrfHeader);
 
     if (!isValidCsrf) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid CSRF token' },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     const { propertyId } = await params;

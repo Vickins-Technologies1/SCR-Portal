@@ -14,7 +14,7 @@ import {
   isValidKenyanMsisdn,
   normalizePhoneNumber,
 } from "@/lib/mpesa";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
   // CSRF protection for payment initiation
   if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
-    return NextResponse.json({ success: false, message: "Invalid or missing CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
   }
 
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";

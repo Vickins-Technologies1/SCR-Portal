@@ -319,7 +319,7 @@ export default function UsersPage() {
     }
 
     if (!uid || !role) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 
@@ -334,7 +334,7 @@ export default function UsersPage() {
       }
 
       if (!ownerId) {
-        router.replace("/login");
+        router.replace("/");
         return;
       }
 
@@ -342,7 +342,7 @@ export default function UsersPage() {
       setSessionRole("teamMember");
       setSessionPermissions(parsedPermissions);
     } else {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 

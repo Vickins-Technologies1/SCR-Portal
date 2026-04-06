@@ -553,7 +553,7 @@ export default function TenantDetailsPage() {
     const ownerIdFromCookie = Cookies.get("ownerId");
 
     if (!uid || !["propertyOwner", "teamMember"].includes(role || "")) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 
@@ -564,7 +564,7 @@ export default function TenantDetailsPage() {
 
     const ownerIdToUse = role === "propertyOwner" ? uid : (ownerIdFromCookie || uid);
     if (!ownerIdToUse) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 

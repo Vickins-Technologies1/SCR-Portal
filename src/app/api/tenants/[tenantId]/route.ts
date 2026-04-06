@@ -9,6 +9,7 @@ import { Property } from "../../../../types/property";
 import { sendTenantDeletionRequestEmail } from "../../../../lib/email";
 import { sendWelcomeSms } from "../../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
+import { buildInvalidCsrfResponse } from "../../../../lib/csrf";
 
 const logger = {
   info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
@@ -99,7 +100,7 @@ export async function GET(
   }
 
   if (!(await validateCsrfToken(request))) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   if (!ObjectId.isValid(tenantId)) {
@@ -173,7 +174,7 @@ export async function PUT(
   }
 
   if (!(await validateCsrfToken(request))) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   try {
@@ -369,7 +370,7 @@ export async function DELETE(
   }
 
   if (!(await validateCsrfToken(request))) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   try {

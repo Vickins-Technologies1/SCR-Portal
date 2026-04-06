@@ -22,6 +22,16 @@ const applyCookies = (jar: CookieJar, res: Response) => {
   }
 };
 
+const getSetCookies = (res: Response) => {
+  const headerAny = res.headers as unknown as { getSetCookie?: () => string[] };
+  const setCookies = headerAny.getSetCookie?.() || [];
+  const fallback = res.headers.get("set-cookie");
+  return setCookies.length > 0 ? setCookies : fallback ? [fallback] : [];
+};
+
+const hasExpiredCookie = (cookie: string, name: string) =>
+  cookie.startsWith(`${name}=`) && (/Max-Age=0/i.test(cookie) || /Expires=/i.test(cookie));
+
 const cookieHeader = (jar: CookieJar) =>
   Array.from(jar.entries())
     .map(([name, value]) => `${name}=${value}`)
@@ -101,6 +111,44 @@ describe("support CSRF middleware (E2E)", () => {
         expect(deleteRes.ok).toBe(true);
         expect(deleteData.success).toBe(true);
       }
+    },
+    30000
+  );
+
+  it(
+    "logs out and clears cookies on invalid CSRF token",
+    async () => {
+      const jar: CookieJar = new Map();
+
+      const signinRes = await fetch(`${baseUrl}/api/signin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: ownerEmail, password: ownerPassword }),
+      });
+
+      applyCookies(jar, signinRes);
+      expect(signinRes.ok).toBe(true);
+
+      const badRes = await fetch(`${baseUrl}/api/support/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": "bad-token",
+          Cookie: cookieHeader(jar),
+        },
+        body: JSON.stringify({ message: `E2E CSRF logout ${Date.now()}` }),
+      });
+
+      expect(badRes.status).toBe(403);
+      const badData = await badRes.json();
+      expect(badData.logout).toBe(true);
+      expect(badData.redirect).toBe("/");
+
+      const setCookies = getSetCookies(badRes);
+      expect(setCookies.some((cookie) => hasExpiredCookie(cookie, "session"))).toBe(true);
+      expect(setCookies.some((cookie) => hasExpiredCookie(cookie, "userId"))).toBe(true);
+      expect(setCookies.some((cookie) => hasExpiredCookie(cookie, "role"))).toBe(true);
+      expect(setCookies.some((cookie) => hasExpiredCookie(cookie, "csrf-token"))).toBe(true);
     },
     30000
   );

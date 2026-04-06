@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { RentPriceOverride } from "@/types/rent-price-override";
 
 export async function DELETE(
@@ -11,7 +11,7 @@ export async function DELETE(
   try {
     const csrfHeader = request.headers.get("x-csrf-token");
     if (!validateCsrfToken(request, csrfHeader)) {
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(request);
     }
 
     const { overrideId } = await params;

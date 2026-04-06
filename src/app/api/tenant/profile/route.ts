@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
-import { validateCsrfToken } from "../../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
@@ -349,7 +349,7 @@ export async function PUT(request: NextRequest) {
   }
 
   if (!validateCsrfToken(request, csrfToken)) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(request);
   }
 
   let body: { tenantId?: string; name?: string; email?: string; phone?: string } | null = null;

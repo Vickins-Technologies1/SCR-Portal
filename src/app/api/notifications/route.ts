@@ -4,7 +4,7 @@ import { Db, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 import { v4 as uuidv4 } from "uuid";
 import { connectToDatabase } from "../../../lib/mongodb";
-import { validateCsrfToken } from "../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import { sendWelcomeSms } from "../../../lib/sms"; // Uses BlessedTexts
 import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 import { generateStyledTemplate } from "../../../lib/email-template";
@@ -50,7 +50,7 @@ const transporter = nodemailer.createTransport({
 const authenticateUser = async (
   req: NextRequest,
   { requireCsrf = true }: { requireCsrf?: boolean } = {}
-): Promise<{ isValid: boolean; userId: string | null; effectiveOwnerId: string | null; error?: string }> => {
+): Promise<{ isValid: boolean; userId: string | null; effectiveOwnerId: string | null; error?: string; csrfInvalid?: boolean }> => {
   const cookieStore = await cookies();
   const loggedInUserId = cookieStore.get("userId")?.value;
   const role = cookieStore.get("role")?.value;
@@ -68,7 +68,7 @@ const authenticateUser = async (
 
   if (requireCsrf && (!csrfToken || !(await validateCsrfToken(req, csrfToken)))) {
     logger.warn("Invalid or missing CSRF token", { loggedInUserId });
-    return { isValid: false, userId: null, effectiveOwnerId: null, error: "Invalid CSRF token" };
+    return { isValid: false, userId: null, effectiveOwnerId: null, error: "Invalid CSRF token", csrfInvalid: true };
   }
 
   let effectiveOwnerId = loggedInUserId;
@@ -104,6 +104,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const auth = await authenticateUser(req, { requireCsrf: false });
     if (!auth.isValid || !auth.effectiveOwnerId) {
+      if (auth.csrfInvalid) {
+        return buildInvalidCsrfResponse(req);
+      }
       return NextResponse.json({ success: false, message: auth.error }, { status: auth.error?.includes("CSRF") ? 403 : 401 });
     }
 
@@ -160,6 +163,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const auth = await authenticateUser(req);
     if (!auth.isValid || !auth.effectiveOwnerId) {
+      if (auth.csrfInvalid) {
+        return buildInvalidCsrfResponse(req);
+      }
       return NextResponse.json({ success: false, message: auth.error }, { status: auth.error?.includes("CSRF") ? 403 : 401 });
     }
     effectiveOwnerId = auth.effectiveOwnerId;
@@ -412,6 +418,9 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   try {
     const auth = await authenticateUser(req);
     if (!auth.isValid || !auth.effectiveOwnerId) {
+      if (auth.csrfInvalid) {
+        return buildInvalidCsrfResponse(req);
+      }
       return NextResponse.json(
         { success: false, message: auth.error },
         { status: auth.error?.includes("CSRF") ? 403 : 401 }
@@ -460,6 +469,9 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   try {
     const auth = await authenticateUser(req);
     if (!auth.isValid || !auth.effectiveOwnerId) {
+      if (auth.csrfInvalid) {
+        return buildInvalidCsrfResponse(req);
+      }
       return NextResponse.json({ success: false, message: auth.error }, { status: auth.error?.includes("CSRF") ? 403 : 401 });
     }
 

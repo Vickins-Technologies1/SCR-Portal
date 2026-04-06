@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import logger from "./lib/logger";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./lib/session";
+import { buildInvalidCsrfResponse } from "./lib/csrf";
 
 type Role = "admin" | "propertyOwner" | "teamMember" | "tenant" | null;
 
@@ -86,7 +87,7 @@ function csrfMiddleware(handler: (req: NextRequest) => Promise<NextResponse>) {
         method: req.method,
         ip: req.headers.get("x-forwarded-for") || "unknown",
       });
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(req);
     }
     return handler(req);
   };

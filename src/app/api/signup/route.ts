@@ -3,7 +3,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import validator from "validator";
 import sanitizeHtml from "sanitize-html";
-import { validateCsrfToken } from "../../../lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 import bcrypt from "bcrypt";
 
@@ -97,10 +97,7 @@ export async function POST(request: NextRequest) {
     const headerCsrf = request.headers.get("x-csrf-token");
     if (!headerCsrf || headerCsrf !== csrfToken || !validateCsrfToken(request, csrfToken)) {
       logger.warn("Invalid CSRF token", { provided: csrfToken });
-      return NextResponse.json(
-        { success: false, message: "Invalid CSRF token" },
-        { status: 403 }
-      );
+      return buildInvalidCsrfResponse(request);
     }
 
     // 5. Role validation (strict)

@@ -10,6 +10,7 @@ import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 import { TenantRequest, ResponseTenant, Tenant } from "../../../types/tenant";
 import { Property } from "../../../types/property";
 import { getOwnerDueStatus } from "../../../lib/billing";
+import { buildInvalidCsrfResponse } from "../../../lib/csrf";
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -184,7 +185,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     if (!(await validateCsrfToken(request))) {
-      return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+      return buildInvalidCsrfResponse(request);
     }
 
     const userId = (await cookies()).get("userId")?.value;

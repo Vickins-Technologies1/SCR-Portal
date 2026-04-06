@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { validateCsrfToken } from "@/lib/csrf";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import { sendWelcomeSms } from "@/lib/sms";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const csrfHeader = req.headers.get("x-csrf-token");
   if (!csrfHeader || !(await validateCsrfToken(req, csrfHeader))) {
-    return NextResponse.json({ success: false, message: "Invalid CSRF token" }, { status: 403 });
+    return buildInvalidCsrfResponse(req);
   }
 
   const userId = req.cookies.get("userId")?.value;

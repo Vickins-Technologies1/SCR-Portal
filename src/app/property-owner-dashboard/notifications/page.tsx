@@ -215,13 +215,13 @@ export default function NotificationsPage() {
 
     if (!uid || !["propertyOwner", "teamMember"].includes(userRole || "")) {
       setError("Please log in as a property owner or team member.");
-      router.push("/login");
+      router.push("/");
       return;
     }
 
     if (!ownerIdToUse) {
       setError("Could not determine property owner. Please log in again.");
-      router.push("/login");
+      router.push("/");
       return;
     }
 
