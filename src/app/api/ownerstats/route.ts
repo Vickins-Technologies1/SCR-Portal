@@ -50,6 +50,7 @@ interface Stats {
   overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
+  totalPenaltyAmount: number;
   totalDepositPaid: number;
   totalUtilityPaid: number;
 }
@@ -170,6 +171,7 @@ export async function GET(request: NextRequest) {
         overduePayments: 0,
         totalPayments: 0,
         totalOverdueAmount: 0,
+        totalPenaltyAmount: 0,
         totalDepositPaid: 0,
         totalUtilityPaid: 0,
       };
@@ -340,6 +342,7 @@ export async function GET(request: NextRequest) {
 
     let overduePayments = 0;
     let totalOverdueAmount = 0;
+    let totalPenaltyAmount = 0;
 
     const bulkOps = activeTenantsForDues.map((tenant) => {
       const property = propertyMap.get(tenant.propertyId);
@@ -363,6 +366,7 @@ export async function GET(request: NextRequest) {
         penaltyAmount: property?.penaltyAmount,
         penaltyFrequency: property?.penaltyFrequency,
       });
+      totalPenaltyAmount += penaltyDues;
       const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
         ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
         : (tenant.deposit || 0);
@@ -415,6 +419,7 @@ export async function GET(request: NextRequest) {
       overduePayments,
       totalPayments,
       totalOverdueAmount: roundMoney(totalOverdueAmount),
+      totalPenaltyAmount: roundMoney(totalPenaltyAmount),
       totalDepositPaid,
       totalUtilityPaid,
     };

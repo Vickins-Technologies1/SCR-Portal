@@ -83,6 +83,7 @@ export default function PropertyOwnerDashboard() {
     overduePayments: 0,
     totalPayments: 0,
     totalOverdueAmount: 0,
+    totalPenaltyAmount: 0,
     totalDepositPaid: 0,
     totalUtilityPaid: 0,
   });
@@ -507,11 +508,11 @@ export default function PropertyOwnerDashboard() {
                           explanation: "Total unpaid rent + deposits that are currently past due across all tenants.",
                         },
                         {
-                          title: "Total Revenue",
-                          value: formatCurrency(stats.totalPayments),
-                          icon: DollarSign,
-                          color: "blue",
-                          explanation: "Cumulative amount of all completed payments received to date.",
+                          title: "Late Payment Penalties",
+                          value: formatCurrency(stats.totalPenaltyAmount),
+                          icon: AlertCircle,
+                          color: "orange",
+                          explanation: "Total penalties accrued from overdue rent based on property penalty rules.",
                         },
                         {
                           title: "Active Tenants",

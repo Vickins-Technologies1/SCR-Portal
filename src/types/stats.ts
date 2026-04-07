@@ -10,6 +10,7 @@ export interface OwnerStats {
   overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
+  totalPenaltyAmount: number;
   totalDepositPaid: number;
   totalUtilityPaid: number;
 }
