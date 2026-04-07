@@ -350,7 +350,6 @@ export default function TenantsTable({
                     { key: "unitIdentifier", label: "Unit Type" },
                     { key: "price", label: "Rent" },
                     { key: "houseNumber", label: "House No." },
-                    { key: "leaseStartDate", label: "Lease Start" },
                     { key: "paymentStatus", label: "Payment Status" },
                     { key: "overdueBalance", label: "Overdue Balance" },
                     { key: "status", label: "Status" },
@@ -414,9 +413,6 @@ export default function TenantsTable({
                             </div>
                           ))}
                         </div>
-                      </td>
-                      <td className="text-gray-600">
-                        {new Date(tenant.leaseStartDate).toLocaleDateString()}
                       </td>
                       <td>
                         <span

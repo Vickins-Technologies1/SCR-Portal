@@ -402,15 +402,15 @@ body {
   }
   .tenants-table th:nth-child(6),
   .tenants-table td:nth-child(6) {
-    width: 7%;
+    width: 8%;
   }
   .tenants-table th:nth-child(7),
   .tenants-table td:nth-child(7) {
-    width: 8%;
+    width: 9%;
   }
   .tenants-table th:nth-child(8),
   .tenants-table td:nth-child(8) {
-    width: 8%;
+    width: 9%;
   }
   .tenants-table th:nth-child(9),
   .tenants-table td:nth-child(9) {
@@ -418,13 +418,9 @@ body {
   }
   .tenants-table th:nth-child(10),
   .tenants-table td:nth-child(10) {
-    width: 5%;
+    width: 8%;
   }
-  .tenants-table th:nth-child(11),
-  .tenants-table td:nth-child(11) {
-    width: 6%;
-  }
-  .tenants-table td:nth-child(11) {
+  .tenants-table td:nth-child(10) {
     white-space: nowrap;
   }
 }
