@@ -370,6 +370,16 @@ body {
     white-space: normal;
     word-break: break-word;
   }
+  .tenants-table th {
+    padding: 0.55rem 0.6rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.18em;
+  }
+  .tenants-table td {
+    padding: 0.55rem 0.6rem;
+    font-size: 0.74rem;
+    line-height: 1.2;
+  }
   .tenants-table th:nth-child(1),
   .tenants-table td:nth-child(1) {
     width: 12%;

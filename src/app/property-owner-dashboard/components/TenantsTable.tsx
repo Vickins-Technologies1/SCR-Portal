@@ -420,7 +420,7 @@ export default function TenantsTable({
                       </td>
                       <td>
                         <span
-                          className={`px-2.5 py-1 text-[11px] rounded-full font-semibold ${
+                          className={`px-2 py-0.5 text-[10px] rounded-full font-semibold ${
                             paymentSnapshot.isOverdue
                               ? "bg-red-100 text-red-800"
                               : "bg-primary/10 text-primary"
@@ -440,7 +440,7 @@ export default function TenantsTable({
                       </td>
                       <td>
                         <span
-                          className={`px-2.5 py-1 text-[11px] rounded-full font-semibold ${
+                          className={`px-2 py-0.5 text-[10px] rounded-full font-semibold ${
                             tenant.status === "active"
                               ? "bg-primary/10 text-primary"
                               : "bg-red-100 text-red-800"
