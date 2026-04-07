@@ -95,7 +95,7 @@ export async function GET(
   try {
     const { propertyId } = await params;
     const cookies = request.cookies;
-    const role = cookies.get('role')?.value as 'admin' | 'tenant' | 'propertyOwner' | undefined;
+    const role = cookies.get('role')?.value as 'admin' | 'tenant' | 'propertyOwner' | 'teamMember' | undefined;
     const userId = cookies.get('userId')?.value;
 
     if (!role || !userId || !ObjectId.isValid(userId)) {
@@ -126,21 +126,42 @@ export async function GET(
           { status: 403 }
         );
       }
-    } else if (role !== 'admin' && role !== 'propertyOwner') {
+    } else if (!['admin', 'propertyOwner', 'teamMember'].includes(role)) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Insufficient role permissions' },
         { status: 403 }
       );
     }
 
-    const query = role === 'tenant' ? { _id: propId } : { _id: propId, ownerId: userId };
-    const property = await db.collection<Property>('properties').findOne(query);
+    const property = await db.collection<Property>('properties').findOne({ _id: propId });
 
     if (!property) {
       return NextResponse.json(
         { success: false, message: 'Property not found or not authorized' },
         { status: 404 }
       );
+    }
+
+    if (role === 'propertyOwner' && property.ownerId !== userId) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized: Property not owned by user' },
+        { status: 403 }
+      );
+    }
+
+    if (role === 'teamMember') {
+      const teamMember = await db.collection('teamMembers').findOne({
+        _id: new ObjectId(userId),
+        ownerId: new ObjectId(property.ownerId),
+        active: true,
+      });
+
+      if (!teamMember) {
+        return NextResponse.json(
+          { success: false, message: 'Unauthorized: Team member not assigned to this property owner' },
+          { status: 403 }
+        );
+      }
     }
 
     const tenants = await db.collection<Tenant>('tenants').find({ propertyId }).toArray();
