@@ -123,17 +123,57 @@ export async function GET(request: NextRequest) {
     }
 
     const filters: any = { ownerId: effectiveOwnerId };
+    const andFilters: any[] = [];
     if (searchParams.get("name")) filters.name = { $regex: searchParams.get("name")!, $options: "i" };
     if (searchParams.get("email")) filters.email = { $regex: searchParams.get("email")!, $options: "i" };
+    if (searchParams.get("phone")) filters.phone = { $regex: searchParams.get("phone")!, $options: "i" };
     if (searchParams.get("propertyId")) filters.propertyId = searchParams.get("propertyId");
     const unitTypeFilter = searchParams.get("unitType");
     if (unitTypeFilter) {
       const regex = { $regex: unitTypeFilter, $options: "i" };
-      filters.$or = [
+      andFilters.push({
+        $or: [
         { unitType: regex },
         { "leasedUnits.unitType": regex },
         { "leasedUnits.unitIdentifier": regex },
-      ];
+        ],
+      });
+    }
+
+    const houseNumberFilter = searchParams.get("houseNumber");
+    if (houseNumberFilter) {
+      const regex = { $regex: houseNumberFilter, $options: "i" };
+      andFilters.push({
+        $or: [
+          { houseNumber: regex },
+          { "leasedUnits.houseNumber": regex },
+        ],
+      });
+    }
+
+    const statusFilter = searchParams.get("status");
+    if (statusFilter) {
+      filters.status = statusFilter;
+    }
+
+    const paymentStatusFilter = searchParams.get("paymentStatus");
+    if (paymentStatusFilter) {
+      filters.paymentStatus = paymentStatusFilter;
+    }
+
+    const minRentRaw = searchParams.get("minRent");
+    const maxRentRaw = searchParams.get("maxRent");
+    const minRent = minRentRaw ? Number(minRentRaw) : undefined;
+    const maxRent = maxRentRaw ? Number(maxRentRaw) : undefined;
+    if (!Number.isNaN(minRent) || !Number.isNaN(maxRent)) {
+      filters.price = {
+        ...(Number.isFinite(minRent) ? { $gte: minRent } : {}),
+        ...(Number.isFinite(maxRent) ? { $lte: maxRent } : {}),
+      };
+    }
+
+    if (andFilters.length > 0) {
+      filters.$and = andFilters;
     }
 
     const total = await db.collection<Tenant>("tenants").countDocuments(filters);

@@ -44,8 +44,14 @@ interface ClientProperty {
 interface FilterConfig {
   tenantName: string;
   tenantEmail: string;
+  tenantPhone: string;
   propertyId: string;
   unitType: string;
+  status: string;
+  paymentStatus: string;
+  houseNumber: string;
+  minRent: string;
+  maxRent: string;
 }
 
 export default function TenantsPage() {
@@ -89,8 +95,14 @@ export default function TenantsPage() {
   const [filters, setFilters] = useState<FilterConfig>({
     tenantName: "",
     tenantEmail: "",
+    tenantPhone: "",
     propertyId: "",
     unitType: "",
+    status: "",
+    paymentStatus: "",
+    houseNumber: "",
+    minRent: "",
+    maxRent: "",
   });
 
   // Fetch CSRF token
@@ -211,8 +223,14 @@ export default function TenantsPage() {
         limit: limit.toString(),
         ...(filters.tenantName && { name: filters.tenantName }),
         ...(filters.tenantEmail && { email: filters.tenantEmail }),
+        ...(filters.tenantPhone && { phone: filters.tenantPhone }),
         ...(filters.propertyId && { propertyId: filters.propertyId }),
         ...(filters.unitType && { unitType: filters.unitType }),
+        ...(filters.status && { status: filters.status }),
+        ...(filters.paymentStatus && { paymentStatus: filters.paymentStatus }),
+        ...(filters.houseNumber && { houseNumber: filters.houseNumber }),
+        ...(filters.minRent && { minRent: filters.minRent }),
+        ...(filters.maxRent && { maxRent: filters.maxRent }),
       }).toString();
 
       const res = await fetch(`/api/tenants?${query}`, {

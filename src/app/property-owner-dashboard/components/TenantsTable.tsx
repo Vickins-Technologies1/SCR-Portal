@@ -31,8 +31,14 @@ interface ClientProperty {
 interface FilterConfig {
   tenantName: string;
   tenantEmail: string;
+  tenantPhone: string;
   propertyId: string;
   unitType: string;
+  status: string;
+  paymentStatus: string;
+  houseNumber: string;
+  minRent: string;
+  maxRent: string;
 }
 
 interface SortConfig {
@@ -84,6 +90,13 @@ export default function TenantsTable({
   const router = useRouter();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
   const pendingDeletionSet = useMemo(() => new Set(pendingDeletionIds), [pendingDeletionIds]);
+  const [filtersOpen, setFiltersOpen] = useState(true);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setFiltersOpen(false);
+    }
+  }, []);
 
   const getTenantLeaseUnits = (tenant: ResponseTenant) => {
     if (tenant.leasedUnits && tenant.leasedUnits.length > 0) {
@@ -168,7 +181,18 @@ export default function TenantsTable({
   );
 
   const clearFilters = useCallback(() => {
-    setFilters({ tenantName: "", tenantEmail: "", propertyId: "", unitType: "" });
+    setFilters({
+      tenantName: "",
+      tenantEmail: "",
+      tenantPhone: "",
+      propertyId: "",
+      unitType: "",
+      status: "",
+      paymentStatus: "",
+      houseNumber: "",
+      minRent: "",
+      maxRent: "",
+    });
     setPage(1);
   }, [setFilters, setPage]);
 
@@ -233,64 +257,147 @@ export default function TenantsTable({
     <div className="space-y-5">
       {/* Filters */}
       <div className="surface-card rounded-2xl p-5 sm:p-6" data-tour="owner-tenant-filters">
-        <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4">Filter Tenants</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <input
-            name="tenantName"
-            value={filters.tenantName}
-            onChange={handleFilterChange}
-            placeholder="Name"
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
-          />
-          <input
-            name="tenantEmail"
-            value={filters.tenantEmail}
-            onChange={handleFilterChange}
-            placeholder="Email"
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
-          />
-          <select
-            name="propertyId"
-            value={filters.propertyId}
-            onChange={handleFilterChange}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
-          >
-            <option value="">All Properties</option>
-            {properties.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <select
-            name="unitType"
-            value={filters.unitType}
-            onChange={handleFilterChange}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
-          >
-            <option value="">All Unit Types</option>
-            {uniqueUnitIdentifiers.map((uniqueType) => {
-              const unitConfig = properties
-                .flatMap((p) => p.unitTypes)
-                .find((u) => u.uniqueType === uniqueType);
-              const displayName = unitConfig
-                ? `${unitConfig.type} (${uniqueType})`
-                : uniqueType;
-
-              return (
-                <option key={uniqueType} value={uniqueType}>
-                  {displayName}
-                </option>
-              );
-            })}
-          </select>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-base sm:text-lg font-semibold text-foreground">Filter Tenants</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Refine by tenant, unit, status, and payments.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={clearFilters}
+              className="px-4 py-2 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-hover transition"
+            >
+              Clear Filters
+            </button>
+            <button
+              onClick={() => setFiltersOpen((prev) => !prev)}
+              className="px-4 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+              aria-expanded={filtersOpen}
+              type="button"
+            >
+              {filtersOpen ? "Hide Filters" : "Show Filters"}
+            </button>
+          </div>
         </div>
-        <button
-          onClick={clearFilters}
-          className="mt-4 px-4 py-2 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-hover transition"
+
+        <div
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            filtersOpen ? "max-h-[900px] opacity-100 mt-4" : "max-h-0 opacity-0 pointer-events-none"
+          }`}
         >
-          Clear Filters
-        </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <input
+              name="tenantName"
+              value={filters.tenantName}
+              onChange={handleFilterChange}
+              placeholder="Name"
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            />
+            <input
+              name="tenantEmail"
+              value={filters.tenantEmail}
+              onChange={handleFilterChange}
+              placeholder="Email"
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            />
+            <input
+              name="tenantPhone"
+              value={filters.tenantPhone}
+              onChange={handleFilterChange}
+              placeholder="Phone"
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            />
+            <select
+              name="propertyId"
+              value={filters.propertyId}
+              onChange={handleFilterChange}
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            >
+              <option value="">All Properties</option>
+              {properties.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              name="unitType"
+              value={filters.unitType}
+              onChange={handleFilterChange}
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            >
+              <option value="">All Unit Types</option>
+              {uniqueUnitIdentifiers.map((uniqueType) => {
+                const unitConfig = properties
+                  .flatMap((p) => p.unitTypes)
+                  .find((u) => u.uniqueType === uniqueType);
+                const displayName = unitConfig
+                  ? `${unitConfig.type} (${uniqueType})`
+                  : uniqueType;
+
+                return (
+                  <option key={uniqueType} value={uniqueType}>
+                    {displayName}
+                  </option>
+                );
+              })}
+            </select>
+            <input
+              name="houseNumber"
+              value={filters.houseNumber}
+              onChange={handleFilterChange}
+              placeholder="House Number"
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            />
+            <select
+              name="status"
+              value={filters.status}
+              onChange={handleFilterChange}
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            >
+              <option value="">All Tenant Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="evicted">Evicted</option>
+              <option value="terminated">Terminated</option>
+              <option value="moved out">Moved Out</option>
+            </select>
+            <select
+              name="paymentStatus"
+              value={filters.paymentStatus}
+              onChange={handleFilterChange}
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            >
+              <option value="">All Payment Status</option>
+              <option value="current">Current</option>
+              <option value="overdue">Overdue</option>
+              <option value="paid">Paid</option>
+            </select>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <input
+              name="minRent"
+              value={filters.minRent}
+              onChange={handleFilterChange}
+              placeholder="Min Rent (Ksh)"
+              type="number"
+              min="0"
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            />
+            <input
+              name="maxRent"
+              value={filters.maxRent}
+              onChange={handleFilterChange}
+              placeholder="Max Rent (Ksh)"
+              type="number"
+              min="0"
+              className="px-3 py-2.5 border border-gray-200 rounded-xl text-xs sm:text-sm bg-white/80 focus:ring-4 focus:ring-primary/30 focus:border-primary outline-none"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Entries per page */}
