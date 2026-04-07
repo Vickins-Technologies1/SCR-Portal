@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
     const maxRentRaw = searchParams.get("maxRent");
     const minRent = minRentRaw ? Number(minRentRaw) : undefined;
     const maxRent = maxRentRaw ? Number(maxRentRaw) : undefined;
-    if (!Number.isNaN(minRent) || !Number.isNaN(maxRent)) {
+    if (Number.isFinite(minRent) || Number.isFinite(maxRent)) {
       filters.price = {
         ...(Number.isFinite(minRent) ? { $gte: minRent } : {}),
         ...(Number.isFinite(maxRent) ? { $lte: maxRent } : {}),
