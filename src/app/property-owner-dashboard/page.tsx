@@ -21,12 +21,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import Cookies from "js-cookie";
-import { Line, Pie } from "react-chartjs-2";
+import { Bar, Pie } from "react-chartjs-2";
 import { motion } from "framer-motion";
 import {
   Chart as ChartJS,
-  LineElement,
-  PointElement,
+  BarElement,
   LinearScale,
   Title,
   CategoryScale,
@@ -40,7 +39,7 @@ import { OwnerStats } from "../../types/stats";
 import { usePermissions } from "@/hooks/usePermissions"; // ← import your permissions hook
 import PaymentModal from "./components/PaymentModal";
 
-ChartJS.register(LineElement, PointElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
+ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
 interface ChartData {
   months: string[];
@@ -255,32 +254,26 @@ export default function PropertyOwnerDashboard() {
     ],
   };
 
-  const lineData = {
+  const barData = {
     labels: chartData?.months || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
     datasets: [
       {
         label: "Rent",
         data: chartData?.rentPayments || [],
-        borderColor: "#42c775",
-        backgroundColor: "rgba(66,199,117,0.15)",
-        fill: true,
-        tension: 0.4,
+        backgroundColor: "rgba(66,199,117,0.7)",
+        borderRadius: 6,
       },
       {
         label: "Utility",
         data: chartData?.utilityPayments || [],
-        borderColor: "#1e3a8a",
-        backgroundColor: "rgba(30,58,138,0.12)",
-        fill: true,
-        tension: 0.4,
+        backgroundColor: "rgba(30,58,138,0.7)",
+        borderRadius: 6,
       },
       {
         label: "Deposit",
         data: chartData?.depositPayments || [],
-        borderColor: "#f59e0b",
-        backgroundColor: "rgba(245,158,11,0.18)",
-        fill: true,
-        tension: 0.4,
+        backgroundColor: "rgba(245,158,11,0.7)",
+        borderRadius: 6,
       },
     ],
   };
@@ -610,7 +603,16 @@ export default function PropertyOwnerDashboard() {
                     <div className="surface-card rounded-3xl p-5 sm:p-6">
                       <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment Trends</h2>
                       <div className="h-64 sm:h-72">
-                        <Line data={lineData} options={{ responsive: true, maintainAspectRatio: false }} />
+                        <Bar
+                          data={barData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                              y: { beginAtZero: true },
+                            },
+                          }}
+                        />
                       </div>
                     </div>
                     <div className="surface-card rounded-3xl p-5 sm:p-6">
