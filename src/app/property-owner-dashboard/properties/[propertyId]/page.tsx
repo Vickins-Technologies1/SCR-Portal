@@ -58,10 +58,12 @@ type Tenant = {
   unitType?: string;
   unitIdentifier?: string;
   houseNumber?: string;
+  price?: number;
   leasedUnits?: Array<{
     unitIdentifier?: string;
     unitType?: string;
     houseNumber?: string;
+    price?: number;
   }>;
   status?: string;
   leaseStartDate?: string;
