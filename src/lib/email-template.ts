@@ -44,7 +44,7 @@ export const generateStyledTemplate = ({ intro, details, title }: EmailTemplateO
     <body>
       <div class="container">
         <div class="header">
-          <img class="logo" src="https://app.soranapropertymanagers.com/logo.png" alt="Smart Choice Rental Management Logo">
+          <img class="logo" src="https://app.soranapropertymanagers.com/logo.png" alt="Sorana Property Managers Logo">
           <h1 class="title">${title}</h1>
           <div class="subtle">Sorana Property Managers Ltd.</div>
         </div>

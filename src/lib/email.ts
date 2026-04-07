@@ -99,6 +99,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+
 export async function sendWelcomeEmail({
   to,
   name,
@@ -130,7 +131,7 @@ export async function sendWelcomeEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: "Welcome to Your New Home!",
       html,
@@ -181,7 +182,7 @@ export async function sendPasswordResetEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: "Set / Reset Your Tenant Password",
       html,
@@ -219,7 +220,7 @@ export async function sendUpdateEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: "Your Account Details Have Been Updated",
       html,
@@ -280,7 +281,7 @@ export async function sendReminderEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: title,
       html,
@@ -339,7 +340,7 @@ export async function sendConfirmationEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: title,
       html,
@@ -384,7 +385,7 @@ export async function sendOwnerPasswordResetEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: "Reset Your Owner Portal Password",
       html,
@@ -424,7 +425,7 @@ export async function sendOtpEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: "Your OTP Code",
       html,
@@ -483,7 +484,7 @@ export async function sendVacateRequestEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: "Tenant Vacate Request Submitted",
       html,
@@ -531,7 +532,7 @@ export async function sendTenantDeletionRequestEmail({
     });
 
     await transporter.sendMail({
-      from: `"Smart Choice Rental Management" <${process.env.SMTP_USER}>`,
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
       subject: "Tenant Deletion Request Submitted",
       html,
@@ -542,3 +543,4 @@ export async function sendTenantDeletionRequestEmail({
     throw new Error("Failed to send tenant deletion request email");
   }
 }
+

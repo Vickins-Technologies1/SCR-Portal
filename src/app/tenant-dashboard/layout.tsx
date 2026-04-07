@@ -336,7 +336,7 @@ export default function TenantDashboardLayout({
             <div className="flex justify-center mb-5">
               <img
                 src="/logo.png"
-                alt="Smart Choice Logo"
+                alt="Sorana Property Managers Logo"
                 className="h-12 w-auto drop-shadow-md"
               />
             </div>
