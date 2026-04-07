@@ -112,9 +112,40 @@ export default function PropertyDetailsPage() {
   const vacancyRate = totalUnits > 0 ? Math.round((vacancyCount / totalUnits) * 100) : 0;
 
   const expectedMonthlyRent = useMemo(() => {
-    if (!property?.unitTypes?.length) return 0;
-    return property.unitTypes.reduce((sum, unit) => sum + unit.price * (unit.quantity || 0), 0);
-  }, [property]);
+    if (!property) return 0;
+
+    const priceByUnit = new Map<string, number>();
+    property.unitTypes?.forEach((unit: any) => {
+      if (unit.uniqueType) {
+        priceByUnit.set(unit.uniqueType, Number(unit.price) || 0);
+      }
+      if (unit.type) {
+        priceByUnit.set(unit.type, Number(unit.price) || 0);
+      }
+    });
+
+    const tenantTotals = activeTenants.map((tenant) => {
+      if (tenant.leasedUnits && tenant.leasedUnits.length > 0) {
+        const sumUnits = tenant.leasedUnits.reduce((sum, unit) => {
+          if (unit.price) return sum + Number(unit.price);
+          const key = unit.unitIdentifier || unit.unitType || "";
+          if (key && priceByUnit.has(key)) {
+            return sum + (priceByUnit.get(key) || 0);
+          }
+          return sum;
+        }, 0);
+        if (sumUnits > 0) return sumUnits;
+      }
+
+      if (tenant.price) return Number(tenant.price);
+      if (tenant.unitType && priceByUnit.has(tenant.unitType)) {
+        return priceByUnit.get(tenant.unitType) || 0;
+      }
+      return 0;
+    });
+
+    return tenantTotals.reduce((sum, value) => sum + value, 0);
+  }, [property, activeTenants]);
 
   const fetchCsrfToken = useCallback(async () => {
     const tokenFromCookie = Cookies.get("csrf-token");
