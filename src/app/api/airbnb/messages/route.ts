@@ -7,7 +7,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { sendAirbnbGuestMessageEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { getAirbnbTemplateById, renderAirbnbTemplate } from "@/lib/airbnb-messaging";
+import { renderAirbnbTemplate } from "@/lib/airbnb-messaging";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -171,20 +171,26 @@ export async function POST(request: NextRequest) {
     { sort: { updatedAt: -1, createdAt: -1 } }
   );
 
-  const template = getAirbnbTemplateById(parsed.data.templateId);
+  type TemplateDoc = { title?: string; body?: string };
+  let template: TemplateDoc | null = null;
+  if (parsed.data.templateId) {
+    const templateId = parsed.data.templateId;
+    const templateFilter = ObjectId.isValid(templateId)
+      ? { _id: new ObjectId(templateId), ownerId }
+      : { externalId: templateId, ownerId };
+    template = await db
+      .collection<TemplateDoc>("airbnbMessageTemplates")
+      .findOne(templateFilter as Record<string, unknown>, { projection: { title: 1, body: 1 } });
+  }
+  const templateBody = typeof template?.body === "string" ? template.body : "";
   const messageBody =
     parsed.data.message ||
-    (template
-      ? renderAirbnbTemplate(template.body, {
+    (templateBody
+      ? renderAirbnbTemplate(templateBody, {
           name: convoDetails.guestName,
           listingName: convoDetails.listingName,
           checkInDate: booking?.checkIn ? new Date(booking.checkIn).toLocaleDateString("en-KE") : "",
           checkOutDate: booking?.checkOut ? new Date(booking.checkOut).toLocaleDateString("en-KE") : "",
-          checkInTime: "2:00 PM",
-          checkOutTime: "10:00 AM",
-          accessCode: "XXXX",
-          wifiName: "Sorana Wi-Fi",
-          wifiPassword: "welcome123",
         })
       : "");
 
@@ -279,7 +285,7 @@ export async function POST(request: NextRequest) {
     conversationId,
     message: messageBody,
     sender: "host",
-    templateId: template?.id,
+    templateId: parsed.data.templateId || undefined,
     deliveryChannels,
     createdAt: now,
   });

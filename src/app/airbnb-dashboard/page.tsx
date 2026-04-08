@@ -246,35 +246,41 @@ export default function AirbnbDashboard() {
 
               <section className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">
                 <div className="surface-card rounded-3xl p-5 sm:p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-sm sm:text-base font-semibold text-foreground">Mini calendar</h2>
-                    <span className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Next 7 nights</span>
-                  </div>
-                  <div className="grid grid-cols-7 gap-2">
-                    {overview?.calendarPreview.map((day) => {
-                      const date = new Date(day.date);
-                      const label = date.toLocaleDateString("en-US", { weekday: "short" });
-                      const dateLabel = date.getDate();
-                      const statusStyles =
-                        day.status === "booked"
-                          ? "bg-primary/15 text-primary"
-                          : day.status === "blocked"
-                            ? "bg-amber-100/70 text-amber-700"
-                            : "bg-emerald-100/60 text-emerald-700";
-                      return (
-                        <div
-                          key={day.date}
-                          className={`rounded-2xl px-3 py-3 text-center text-[11px] font-semibold ${statusStyles}`}
-                        >
-                          <p className="uppercase tracking-[0.2em] text-[9px] text-muted-foreground">{label}</p>
-                          <p className="text-base text-foreground mt-1">{dateLabel}</p>
-                          <p className="text-[10px] mt-1">
-                            {day.status === "available" ? formatKes(day.rate) : day.status}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm sm:text-base font-semibold text-foreground">Mini calendar</h2>
+                  <span className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Next 7 nights</span>
+                </div>
+                  {overview?.calendarPreview.length ? (
+                    <div className="grid grid-cols-7 gap-2">
+                      {overview.calendarPreview.map((day) => {
+                        const date = new Date(day.date);
+                        const label = date.toLocaleDateString("en-US", { weekday: "short" });
+                        const dateLabel = date.getDate();
+                        const statusStyles =
+                          day.status === "booked"
+                            ? "bg-primary/15 text-primary"
+                            : day.status === "blocked"
+                              ? "bg-amber-100/70 text-amber-700"
+                              : "bg-emerald-100/60 text-emerald-700";
+                        return (
+                          <div
+                            key={day.date}
+                            className={`rounded-2xl px-3 py-3 text-center text-[11px] font-semibold ${statusStyles}`}
+                          >
+                            <p className="uppercase tracking-[0.2em] text-[9px] text-muted-foreground">{label}</p>
+                            <p className="text-base text-foreground mt-1">{dateLabel}</p>
+                            <p className="text-[10px] mt-1">
+                              {day.status === "available" ? formatKes(day.rate) : day.status}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">
+                      No calendar data yet.
+                    </div>
+                  )}
                 </div>
 
                 <div className="surface-card rounded-3xl p-5 sm:p-6">
@@ -283,23 +289,29 @@ export default function AirbnbDashboard() {
                     <span className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Live feed</span>
                   </div>
                   <div className="space-y-3">
-                    {overview?.recentActivity.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-2xl border border-border bg-white/70 px-4 py-3"
-                      >
-                        <p className="text-xs font-semibold text-foreground">{item.title}</p>
-                        <p className="text-[11px] text-muted-foreground mt-1">{item.description}</p>
-                        <p className="text-[10px] text-muted-foreground mt-2">
-                          {new Date(item.createdAt).toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
+                    {overview?.recentActivity.length ? (
+                      overview.recentActivity.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-2xl border border-border bg-white/70 px-4 py-3"
+                        >
+                          <p className="text-xs font-semibold text-foreground">{item.title}</p>
+                          <p className="text-[11px] text-muted-foreground mt-1">{item.description}</p>
+                          <p className="text-[10px] text-muted-foreground mt-2">
+                            {new Date(item.createdAt).toLocaleString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-[11px] text-muted-foreground">
+                        No recent activity yet.
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               </section>
@@ -328,28 +340,36 @@ export default function AirbnbDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {overview?.compliance.map((item) => (
-                          <tr key={item.propertyId}>
-                            <td className="font-semibold">{item.propertyName}</td>
-                            <td>{new Date(item.ktraExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
-                            <td>{new Date(item.countyPermitExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
-                            <td>{new Date(item.nemaExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
-                            <td>
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                                  item.status === "compliant"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : item.status === "due"
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-red-100 text-red-700"
-                                }`}
-                              >
-                                {item.status}
-                              </span>
+                        {overview?.compliance.length ? (
+                          overview.compliance.map((item) => (
+                            <tr key={item.propertyId}>
+                              <td className="font-semibold">{item.propertyName}</td>
+                              <td>{new Date(item.ktraExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                              <td>{new Date(item.countyPermitExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                              <td>{new Date(item.nemaExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                              <td>
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                                    item.status === "compliant"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : item.status === "due"
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {item.status}
+                                </span>
+                              </td>
+                              <td className="text-muted-foreground">{item.nextAction}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6} className="text-center text-muted-foreground py-6">
+                              No compliance data yet.
                             </td>
-                            <td className="text-muted-foreground">{item.nextAction}</td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>

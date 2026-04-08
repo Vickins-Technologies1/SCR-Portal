@@ -20,6 +20,7 @@ export default function AirbnbPricingPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions] = useState<string[]>([]);
 
   const fetchRules = useCallback(async () => {
     if (!ownerId) return;
@@ -203,13 +204,16 @@ export default function AirbnbPricingPage() {
               <h2 className="text-sm sm:text-base font-semibold text-foreground">Smart pricing calendar</h2>
               <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-xs text-muted-foreground space-y-2">
                 <p className="font-semibold text-foreground">Upcoming demand signals</p>
-                <p>• Easter holiday uplift: +22%</p>
-                <p>• Mombasa Jazz Festival: +18% (Apr 22-24)</p>
-                <p>• Nairobi summit week: +15%</p>
+                {suggestions.length === 0 ? (
+                  <p>No demand signals available yet.</p>
+                ) : (
+                  suggestions.map((signal) => <p key={signal}>• {signal}</p>)
+                )}
               </div>
               <button
                 onClick={() => setShowSuggestions(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+                disabled={suggestions.length === 0}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
               >
                 <CalendarClock size={14} />
                 Review rate suggestions
@@ -269,9 +273,11 @@ export default function AirbnbPricingPage() {
                   </button>
                 </div>
                 <div className="modal-body modal-stagger space-y-3 text-xs text-muted-foreground">
-                  <p>• Easter holiday uplift: +22%</p>
-                  <p>• Mombasa Jazz Festival: +18% (Apr 22-24)</p>
-                  <p>• Nairobi summit week: +15%</p>
+                  {suggestions.length === 0 ? (
+                    <p>No rate suggestions available yet.</p>
+                  ) : (
+                    suggestions.map((signal) => <p key={signal}>• {signal}</p>)
+                  )}
                   <div className="flex justify-end gap-3 pt-4">
                     <button
                       onClick={() => setShowSuggestions(false)}
@@ -284,7 +290,8 @@ export default function AirbnbPricingPage() {
                         await handleApplySmartRates();
                         setShowSuggestions(false);
                       }}
-                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+                      disabled={suggestions.length === 0}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
                     >
                       Apply suggestions
                     </button>

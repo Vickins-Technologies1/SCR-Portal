@@ -20,6 +20,11 @@ export default function AirbnbCompliancePage() {
     documentType: "KTRA License",
     files: [] as File[],
   });
+  const [summary, setSummary] = useState<{
+    guestIdsVerified: number;
+    guestIdsPending: number;
+    safetyDueThisQuarter: number;
+  } | null>(null);
 
   const fetchCompliance = useCallback(async () => {
     if (!ownerId) return;
@@ -37,6 +42,25 @@ export default function AirbnbCompliancePage() {
       fetchCompliance();
     }
   }, [hasAccess, fetchCompliance]);
+
+  const fetchComplianceSummary = useCallback(async () => {
+    if (!ownerId) return;
+    const res = await fetch(`/api/airbnb/compliance/summary?ownerId=${ownerId}`, { credentials: "include" });
+    const data = await res.json();
+    if (data.success) {
+      setSummary({
+        guestIdsVerified: Number(data.guestIdsVerified || 0),
+        guestIdsPending: Number(data.guestIdsPending || 0),
+        safetyDueThisQuarter: Number(data.safetyDueThisQuarter || 0),
+      });
+    }
+  }, [ownerId]);
+
+  useEffect(() => {
+    if (hasAccess) {
+      fetchComplianceSummary();
+    }
+  }, [hasAccess, fetchComplianceSummary]);
 
   const handleUploadDocuments = async () => {
     if (!csrfToken) {
@@ -202,7 +226,11 @@ export default function AirbnbCompliancePage() {
                 Log ID types, capture photos, and confirm guest records for security compliance.
               </p>
               <div className="mt-4 rounded-2xl border border-border bg-white/70 px-4 py-3 text-xs text-muted-foreground">
-                24 guest IDs verified this month • 2 pending uploads
+                {summary ? (
+                  `${summary.guestIdsVerified} guest IDs verified this month • ${summary.guestIdsPending} pending uploads`
+                ) : (
+                  "Guest ID verification data not available yet."
+                )}
               </div>
             </div>
             <div className="surface-card rounded-3xl p-5 sm:p-6">
@@ -211,7 +239,13 @@ export default function AirbnbCompliancePage() {
                 Track fire safety, health clearance, and emergency contacts per listing.
               </p>
               <div className="mt-4 rounded-2xl border border-border bg-white/70 px-4 py-3 text-xs text-muted-foreground">
-                3 properties due for safety checklist refresh this quarter.
+                {summary ? (
+                  summary.safetyDueThisQuarter > 0
+                    ? `${summary.safetyDueThisQuarter} properties due for safety checklist refresh this quarter.`
+                    : "No safety checklist updates due this quarter."
+                ) : (
+                  "Safety protocol status not available yet."
+                )}
               </div>
             </div>
           </section>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, ShieldCheck } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -110,8 +110,8 @@ export default function AirbnbPaymentsPage() {
             <div className="surface-card rounded-3xl p-5 sm:p-6">
               <h2 className="text-sm sm:text-base font-semibold text-foreground mb-2">M-Pesa status</h2>
               <p className="text-[11px] text-muted-foreground">Primary payment rail for Kenyan guests.</p>
-              <div className="mt-4 rounded-2xl bg-emerald-100/70 px-4 py-3 text-xs font-semibold text-emerald-700">
-                Connected • Daraja API live
+              <div className="mt-4 rounded-2xl border border-border bg-white/70 px-4 py-3 text-xs text-muted-foreground">
+                M-Pesa connection status not available yet.
               </div>
               <button
                 onClick={() => router.push("/property-owner-dashboard/settings")}
@@ -169,10 +169,6 @@ export default function AirbnbPaymentsPage() {
           <section className="surface-card rounded-3xl p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm sm:text-base font-semibold text-foreground">Payout schedule</h2>
-              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary">
-                <ShieldCheck size={12} />
-                Trust accounting enabled
-              </span>
             </div>
             <div className="table-shell table-compact">
               <div className="table-scroll">

@@ -13,6 +13,14 @@ export default function AirbnbOperationsPage() {
   const [tasks, setTasks] = useState<AirbnbTask[]>([]);
   const [listingOptions, setListingOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [inventoryItems, setInventoryItems] = useState<{ id: string; name: string; quantity: number; unit?: string }[]>([]);
+  const [smartLockSummary, setSmartLockSummary] = useState<{
+    ready: number;
+    pending: number;
+    offline: number;
+    unknown: number;
+    total: number;
+  } | null>(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,6 +49,22 @@ export default function AirbnbOperationsPage() {
       fetchTasks();
     }
   }, [hasAccess, fetchTasks]);
+
+  const fetchOperationsSummary = useCallback(async () => {
+    if (!ownerId) return;
+    const res = await fetch(`/api/airbnb/operations/summary?ownerId=${ownerId}`, { credentials: "include" });
+    const data = await res.json();
+    if (data.success) {
+      setInventoryItems(data.inventory || []);
+      setSmartLockSummary(data.smartLocks || null);
+    }
+  }, [ownerId]);
+
+  useEffect(() => {
+    if (hasAccess) {
+      fetchOperationsSummary();
+    }
+  }, [hasAccess, fetchOperationsSummary]);
 
   const fetchListings = useCallback(async () => {
     if (!ownerId) return;
@@ -201,23 +225,34 @@ export default function AirbnbOperationsPage() {
             <div className="surface-card rounded-3xl p-5 sm:p-6 space-y-4">
               <h2 className="text-sm sm:text-base font-semibold text-foreground">Inventory snapshot</h2>
               <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-xs text-muted-foreground space-y-2">
-                <div className="flex items-center justify-between">
-                  <span>Fresh linens</span>
-                  <span className="font-semibold text-foreground">48 sets</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Toiletries kits</span>
-                  <span className="font-semibold text-foreground">120 kits</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Replacement bulbs</span>
-                  <span className="font-semibold text-foreground">22 units</span>
-                </div>
+                {inventoryItems.length === 0 ? (
+                  <>
+                    <p className="font-semibold text-foreground">Inventory data not available yet.</p>
+                    <p>Connect your inventory tracker to see live stock levels.</p>
+                  </>
+                ) : (
+                  inventoryItems.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between">
+                      <span>{item.name}</span>
+                      <span className="font-semibold text-foreground">
+                        {item.quantity} {item.unit || ""}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
               <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-xs text-muted-foreground space-y-2">
                 <p className="font-semibold text-foreground">Smart lock readiness</p>
-                <p>• 2 properties ready for lock integration.</p>
-                <p>• 1 property awaiting hardware install.</p>
+                {smartLockSummary && smartLockSummary.total > 0 ? (
+                  <>
+                    <p>Ready: {smartLockSummary.ready}</p>
+                    <p>Pending install: {smartLockSummary.pending}</p>
+                    <p>Offline: {smartLockSummary.offline}</p>
+                    {smartLockSummary.unknown > 0 && <p>Unknown status: {smartLockSummary.unknown}</p>}
+                  </>
+                ) : (
+                  <p>No smart lock status reported yet.</p>
+                )}
               </div>
               <button
                 onClick={() => setShowReviewModal(true)}

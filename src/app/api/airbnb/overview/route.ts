@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { calculateAdr, calculateOccupancyRate, calculateRevpar } from "@/lib/airbnb-metrics";
-import { addDays, getMonthRange, isSameDay, parseDate, toIso } from "@/lib/airbnb-utils";
+import { addDays, getMonthRange, isSameDay, parseDate } from "@/lib/airbnb-utils";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -100,13 +100,7 @@ export async function GET(request: NextRequest) {
       adr: calculateAdr(monthlyRevenue, bookedNights),
       revpar: calculateRevpar(monthlyRevenue, availableNights),
     },
-    calendarPreview: calendarPreview.length
-      ? calendarPreview
-      : Array.from({ length: 7 }).map((_, index) => ({
-          date: toIso(addDays(today, index)),
-          status: "available",
-          rate: listings[0]?.baseRate || 0,
-        })),
+    calendarPreview,
     recentActivity,
     compliance: compliance.map((item) => ({
       propertyId: item.externalId || item._id?.toString?.() || "",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MessageCircle, Send, Sparkles, Mail, Phone, MessageSquareText } from "lucide-react";
+import { MessageCircle, Send, Sparkles, Mail, Phone, MessageSquareText, X } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -19,6 +19,10 @@ export default function AirbnbInboxPage() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [templates, setTemplates] = useState<AirbnbMessageTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ id: "", title: "", body: "", language: "en" });
+  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [deliveryChannels, setDeliveryChannels] = useState({
     email: false,
     sms: false,
@@ -54,6 +58,96 @@ export default function AirbnbInboxPage() {
     };
     fetchTemplates();
   }, [ownerId, hasAccess]);
+
+  const refreshTemplates = useCallback(async () => {
+    if (!ownerId) return;
+    const res = await fetch(`/api/airbnb/message-templates?ownerId=${ownerId}`, { credentials: "include" });
+    const data = await res.json();
+    if (data.success) {
+      setTemplates(data.templates || []);
+    }
+  }, [ownerId]);
+
+  const openTemplateModal = (template?: AirbnbMessageTemplate) => {
+    setTemplateMessage(null);
+    if (template) {
+      setTemplateForm({
+        id: template.id,
+        title: template.title,
+        body: template.body,
+        language: template.language || "en",
+      });
+    } else {
+      setTemplateForm({ id: "", title: "", body: "", language: "en" });
+    }
+    setShowTemplateModal(true);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!csrfToken) {
+      setTemplateMessage("Missing session token. Refresh and try again.");
+      return;
+    }
+    if (!templateForm.title.trim() || !templateForm.body.trim()) {
+      setTemplateMessage("Template title and body are required.");
+      return;
+    }
+
+    setIsSavingTemplate(true);
+    setTemplateMessage(null);
+    try {
+      const isEditing = Boolean(templateForm.id);
+      const res = await fetch("/api/airbnb/message-templates", {
+        method: isEditing ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          id: templateForm.id || undefined,
+          title: templateForm.title,
+          body: templateForm.body,
+          language: templateForm.language as "en" | "sw",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to save template");
+      }
+      setShowTemplateModal(false);
+      await refreshTemplates();
+    } catch (err) {
+      setTemplateMessage(err instanceof Error ? err.message : "Failed to save template");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!csrfToken) {
+      setTemplateMessage("Missing session token. Refresh and try again.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/airbnb/message-templates", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({ id: templateId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete template");
+      }
+      await refreshTemplates();
+    } catch (err) {
+      setTemplateMessage(err instanceof Error ? err.message : "Failed to delete template");
+    }
+  };
 
   useEffect(() => {
     if (!selectedId && conversations.length > 0) {
@@ -99,12 +193,8 @@ export default function AirbnbInboxPage() {
       setMessageStatus("Select a conversation to draft an AI reply.");
       return;
     }
-    setIsAiLoading(true);
-    const suggestion = `Hi ${selectedConversation.guestName}, thanks for reaching out! Here are the details for ${selectedConversation.listingName}. Let us know if you need anything else.`;
-    setTimeout(() => {
-      setMessageBody(suggestion);
-      setIsAiLoading(false);
-    }, 400);
+    setIsAiLoading(false);
+    setMessageStatus("AI reply drafting is not configured yet.");
   };
 
   const handleSendMessage = async () => {
@@ -315,20 +405,59 @@ export default function AirbnbInboxPage() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.3em] mb-3">
                   Templates
                 </p>
+                <button
+                  onClick={() => openTemplateModal()}
+                  className="mb-3 inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Add template
+                </button>
+                {templateMessage && !showTemplateModal && (
+                  <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                    {templateMessage}
+                  </div>
+                )}
                 <div className="space-y-2">
-                  {templates.map((template) => (
-                    <div
-                      key={template.id}
-                      onClick={() => {
-                        handleTemplateClick(template.body);
-                        setSelectedTemplateId(template.id);
-                      }}
-                      className="rounded-2xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground cursor-pointer hover:bg-white"
-                    >
-                      <p className="font-semibold text-foreground">{template.title}</p>
-                      <p className="mt-1 line-clamp-2">{template.body}</p>
+                  {templates.length === 0 ? (
+                    <div className="rounded-2xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground">
+                      No message templates yet.
                     </div>
-                  ))}
+                  ) : (
+                    templates.map((template) => (
+                      <div
+                        key={template.id}
+                        onClick={() => {
+                          handleTemplateClick(template.body);
+                          setSelectedTemplateId(template.id);
+                        }}
+                        className="rounded-2xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground cursor-pointer hover:bg-white"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-foreground">{template.title}</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTemplateModal(template);
+                              }}
+                              className="text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteTemplate(template.id);
+                              }}
+                              className="text-[10px] font-semibold text-red-600 hover:text-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                        <p className="mt-1 line-clamp-2">{template.body}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
               <div>
@@ -364,6 +493,67 @@ export default function AirbnbInboxPage() {
               </div>
             </div>
           </section>
+
+          {showTemplateModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+              <div className="modal-panel w-full max-w-lg overflow-hidden">
+                <div className="modal-header flex items-center justify-between px-5 py-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      {templateForm.id ? "Edit template" : "Create template"}
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground">Save reusable Airbnb messages.</p>
+                  </div>
+                  <button onClick={() => setShowTemplateModal(false)} className="modal-close rounded-full p-1">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="modal-body modal-stagger space-y-4">
+                  {templateMessage && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                      {templateMessage}
+                    </div>
+                  )}
+                  <input
+                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                    placeholder="Template title"
+                    value={templateForm.title}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, title: event.target.value }))}
+                  />
+                  <textarea
+                    rows={5}
+                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                    placeholder="Template body"
+                    value={templateForm.body}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, body: event.target.value }))}
+                  />
+                  <select
+                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                    value={templateForm.language}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, language: event.target.value }))}
+                  >
+                    <option value="en">English</option>
+                    <option value="sw">Swahili</option>
+                  </select>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowTemplateModal(false)}
+                      className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveTemplate}
+                      disabled={isSavingTemplate}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
+                    >
+                      {isSavingTemplate ? "Saving..." : "Save template"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
