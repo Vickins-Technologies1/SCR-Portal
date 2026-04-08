@@ -21,13 +21,13 @@ export async function GET(request: NextRequest) {
 
   const payoutsRaw = await db
     .collection("airbnbPayouts")
-    .find({ ownerId })
+    .find({ ownerId, status: "paid" })
     .sort({ createdAt: -1 })
     .toArray();
 
   const directPaymentsRaw = await db
     .collection("payments")
-    .find({ ownerId, type: "AirbnbDirect" })
+    .find({ ownerId, type: "AirbnbDirect", status: "completed" })
     .sort({ paymentDate: -1 })
     .toArray();
 

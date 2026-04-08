@@ -5,6 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
+import { sendAirbnbBookingConfirmationEmail } from "@/lib/email";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -108,11 +109,46 @@ export async function POST(request: NextRequest) {
     status: "pending",
     source: "Direct",
     payoutStatus: "pending",
+    checkInReminderSent: false,
+    checkOutReminderSent: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
   await db.collection("airbnbBookings").insertOne(booking);
+
+  const settings = await db.collection("airbnbSettings").findOne({ ownerId });
+  const shouldSendConfirmation = settings?.sendBookingConfirmation !== false;
+
+  if (parsed.data.guestEmail && shouldSendConfirmation) {
+    try {
+      await sendAirbnbBookingConfirmationEmail({
+        to: parsed.data.guestEmail,
+        guestName: booking.guestName,
+        listingName: booking.listingName,
+        checkIn: new Date(booking.checkIn).toLocaleDateString("en-KE", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+        checkOut: new Date(booking.checkOut).toLocaleDateString("en-KE", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+        nights: booking.nights,
+        total: booking.total,
+        supportEmail: settings?.supportEmail,
+      });
+    } catch (error) {
+      console.error("Failed to send Airbnb booking confirmation email", {
+        message: error instanceof Error ? error.message : String(error),
+        bookingId: booking.externalId,
+      });
+    }
+  }
 
   return NextResponse.json({
     success: true,

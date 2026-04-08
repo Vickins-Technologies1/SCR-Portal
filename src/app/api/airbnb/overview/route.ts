@@ -18,6 +18,14 @@ export async function GET(request: NextRequest) {
     .collection("airbnbBookings")
     .find({ ownerId })
     .toArray();
+  const directPayments = await db
+    .collection("payments")
+    .find({ ownerId, type: "AirbnbDirect", status: "completed" })
+    .toArray();
+  const payouts = await db
+    .collection("airbnbPayouts")
+    .find({ ownerId, status: "paid" })
+    .toArray();
   const conversations = await db.collection("airbnbConversations").find({ ownerId }).toArray();
   const listings = await db.collection("airbnbListings").find({ ownerId }).toArray();
   const compliance = await db.collection("airbnbCompliance").find({ ownerId }).toArray();
@@ -52,7 +60,20 @@ export async function GET(request: NextRequest) {
     return checkIn && checkIn >= start && checkIn <= end && booking.status !== "cancelled";
   });
 
-  const monthlyRevenue = monthlyBookings.reduce((sum, booking) => sum + Number(booking.total || 0), 0);
+  const inMonth = (value?: string | Date | null) => {
+    const parsed = parseDate(value || null);
+    return parsed && parsed >= start && parsed <= end;
+  };
+
+  const monthlyDirectRevenue = directPayments
+    .filter((payment) => inMonth(payment.paymentDate || payment.createdAt))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+  const monthlyPayoutRevenue = payouts
+    .filter((payout) => inMonth(payout.createdAt || payout.period))
+    .reduce((sum, payout) => sum + Number(payout.amount || 0), 0);
+
+  const monthlyRevenue = monthlyDirectRevenue + monthlyPayoutRevenue;
   const bookedNights = monthlyBookings.reduce((sum, booking) => sum + Number(booking.nights || 0), 0);
   const availableNights = listings.reduce((sum, listing) => sum + (listing.units || 1) * days, 0);
 

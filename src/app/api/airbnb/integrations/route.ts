@@ -21,9 +21,68 @@ export async function GET(request: NextRequest) {
     .sort({ createdAt: 1 })
     .toArray();
 
-  return NextResponse.json({
-    success: true,
-    integrations: integrations.map((integration) => ({
+  const defaults = [
+    {
+      id: "stripe",
+      name: "Stripe Payments",
+      status: process.env.STRIPE_WEBHOOK_SECRET || process.env.STRIPE_SECRET_KEY || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        ? "connected"
+        : "available",
+      description: "Accept card payments and handle completed payment webhooks.",
+      provider: "stripe",
+    },
+    {
+      id: "email",
+      name: "Email Notifications",
+      status: process.env.SMTP_USER && process.env.SMTP_PASS ? "connected" : "available",
+      description: "Send booking confirmations, payment receipts, and reminders.",
+      provider: "smtp",
+    },
+    {
+      id: "ical",
+      name: "iCal Sync",
+      status: "available",
+      description: "Export availability and import external calendars.",
+      provider: "ical",
+    },
+    {
+      id: "ga",
+      name: "Google Analytics",
+      status: process.env.NEXT_PUBLIC_GA_ID ? "connected" : "available",
+      description: "Measure traffic and conversions on public listing pages.",
+      provider: "ga",
+    },
+    {
+      id: "meta",
+      name: "Meta Pixel",
+      status: process.env.NEXT_PUBLIC_META_PIXEL_ID ? "connected" : "available",
+      description: "Enable Meta ads conversion tracking.",
+      provider: "meta",
+    },
+  ];
+
+  const defaultProviders = new Set(defaults.map((item) => item.provider));
+  const existingByProvider = new Map(
+    integrations.map((integration) => [integration.provider || integration.name?.toLowerCase(), integration])
+  );
+
+  const merged = defaults.map((item) => {
+    const match = existingByProvider.get(item.provider);
+    if (!match) return item;
+    return {
+      id: match.externalId || match._id?.toString?.() || item.id,
+      name: match.name || item.name,
+      status: match.status || item.status,
+      description: match.description || item.description,
+      provider: match.provider || item.provider,
+      config: match.config || {},
+      health: match.health || undefined,
+    };
+  });
+
+  const custom = integrations
+    .filter((integration) => !defaultProviders.has(integration.provider))
+    .map((integration) => ({
       id: integration.externalId || integration._id?.toString?.() || "",
       name: integration.name,
       status: integration.status,
@@ -31,7 +90,11 @@ export async function GET(request: NextRequest) {
       provider: integration.provider,
       config: integration.config || {},
       health: integration.health || undefined,
-    })),
+    }));
+
+  return NextResponse.json({
+    success: true,
+    integrations: [...merged, ...custom],
   });
 }
 
@@ -66,7 +129,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid integration payload" }, { status: 400 });
   }
 
-  if (parsed.data.status === "connected") {
+  if (parsed.data.status === "connected" && parsed.data.provider === "airbnb-api") {
     const baseUrl = parsed.data.config?.baseUrl?.trim?.() || "";
     const accessToken = parsed.data.config?.accessToken?.trim?.() || "";
     if (!baseUrl || !accessToken) {

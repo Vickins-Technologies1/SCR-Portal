@@ -11,6 +11,8 @@ import {
   Star,
   SlidersHorizontal,
   X,
+  ArrowUpRight,
+  Sparkles,
 } from "lucide-react";
 import { PublicListing, AirbnbPublicListing, AvailabilitySummary } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
@@ -133,6 +135,16 @@ export default function PropertyListings() {
     });
   }, [filteredListings]);
 
+  const heroImages = useMemo(() => {
+    const images = sortedListings
+      .flatMap((listing) => listing.images || [])
+      .filter(Boolean)
+      .slice(0, 4);
+    if (images.length >= 4) return images;
+    const fallback = "/logo.png";
+    return [...images, ...Array.from({ length: 4 - images.length }).map(() => fallback)];
+  }, [sortedListings]);
+
   const hasActiveFilters =
     filters.listingType !== "all" ||
     filters.unitType ||
@@ -153,24 +165,76 @@ export default function PropertyListings() {
   };
 
   return (
-    <main className="min-h-screen pt-28 pb-16">
+    <main className="min-h-screen bg-[#f6f3ef] text-slate-900">
+      <section className="relative overflow-hidden pt-28 pb-16">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%)]" />
+        <div className="absolute -right-40 top-16 h-72 w-72 rounded-full bg-emerald-200/40 blur-[120px]" />
+        <div className="absolute -left-32 bottom-8 h-72 w-72 rounded-full bg-amber-200/40 blur-[120px]" />
+
+        <div className="relative max-w-7xl mx-auto px-6">
+          <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr] items-center">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.4em] text-emerald-700">Sorana curated stays</p>
+              <h1 className="mt-4 text-4xl sm:text-5xl lg:text-6xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
+                Elevated stays and rentals designed for discerning guests.
+              </h1>
+              <p className="mt-5 text-sm sm:text-base text-slate-600 max-w-xl">
+                Discover premium long-term residences and Airbnb-grade short-term stays with concierge-level
+                property management, transparent pricing, and instant booking confidence.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href="#listings"
+                  className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white shadow-[0_18px_40px_-20px_rgba(15,23,42,0.6)] transition hover:bg-slate-800"
+                >
+                  Browse listings
+                  <ArrowUpRight size={14} />
+                </Link>
+                <a
+                  href="mailto:bookings@soranapropertymanagers.com"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white/80 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-700 transition hover:border-slate-400"
+                >
+                  Talk to concierge
+                </a>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {[0, 1, 2, 3].map((idx) => (
+                <div
+                  key={`hero-${idx}`}
+                  className={`relative overflow-hidden rounded-3xl ${idx === 0 ? "row-span-2 h-64" : "h-32"} shadow-[0_20px_45px_-30px_rgba(15,23,42,0.6)]`}
+                >
+                  <Image
+                    src={heroImages[idx]}
+                    alt="Featured property"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 45vw, 20vw"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="max-w-7xl mx-auto px-6">
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="eyebrow">Properties</p>
-            <h1 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-semibold text-display">
-              Explore curated listings across Kenya
-            </h1>
-            <p className="mt-4 text-sm sm:text-base text-muted-foreground max-w-2xl">
-              Browse verified homes and investment-ready rentals managed with Sorana&apos;s
-              concierge-level care. Filter by location, pricing, and unit mix to match your needs.
+            <p className="text-[11px] uppercase tracking-[0.4em] text-slate-500">Properties</p>
+            <h2 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
+              Curated inventory for every stay length
+            </h2>
+            <p className="mt-3 text-sm text-slate-600 max-w-2xl">
+              All listings are verified, professionally managed, and ready for move-in or immediate booking.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className="flex items-center gap-2 rounded-full border border-border bg-background/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:text-foreground"
+              className="flex items-center gap-2 rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition hover:text-slate-900"
               aria-expanded={isFilterOpen}
               aria-controls="filter-panel"
             >
@@ -184,7 +248,7 @@ export default function PropertyListings() {
                   resetFilters();
                   setIsFilterOpen(false);
                 }}
-                className="flex items-center gap-2 rounded-full border border-border bg-muted/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:text-foreground"
+                className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 transition hover:text-slate-800"
               >
                 <X size={16} />
                 Clear
@@ -204,17 +268,21 @@ export default function PropertyListings() {
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className="max-w-7xl mx-auto px-6 mt-6"
           >
-            <div className="glass-panel rounded-3xl p-6 sm:p-7">
+            <div className="rounded-3xl border border-slate-200/70 bg-white/90 p-6 sm:p-7 shadow-[0_20px_45px_-40px_rgba(15,23,42,0.4)] backdrop-blur">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <h2 className="text-xl sm:text-2xl font-semibold text-foreground flex items-center gap-3">
-                  <SlidersHorizontal size={22} className="text-primary" />
+                <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 flex items-center gap-3">
+                  <SlidersHorizontal size={22} className="text-emerald-600" />
                   Refine your search
-                </h2>
+                </h3>
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1 text-[10px] uppercase tracking-[0.3em] text-emerald-700">
+                  <Sparkles size={12} />
+                  Premium filters
+                </div>
               </div>
 
               <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     Stay Type
                   </label>
                   <select
@@ -225,7 +293,7 @@ export default function PropertyListings() {
                         listingType: e.target.value as FilterState["listingType"],
                       }))
                     }
-                    className="w-full rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm text-foreground focus:border-primary focus:ring-4 focus:ring-primary/20 outline-none transition"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                   >
                     <option value="all">All stays</option>
                     <option value="rentals">Long-term rentals</option>
@@ -233,7 +301,7 @@ export default function PropertyListings() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     Location
                   </label>
                   <input
@@ -241,18 +309,18 @@ export default function PropertyListings() {
                     value={filters.location}
                     onChange={(e) => setFilters((prev) => ({ ...prev, location: e.target.value }))}
                     placeholder="e.g. Westlands, Kilimani..."
-                    className="w-full rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/20 outline-none transition"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     Unit Type
                   </label>
                   <select
                     value={filters.unitType}
                     onChange={(e) => setFilters((prev) => ({ ...prev, unitType: e.target.value }))}
-                    className="w-full rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm text-foreground focus:border-primary focus:ring-4 focus:ring-primary/20 outline-none transition"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                   >
                     <option value="">All types</option>
                     {unitTypeOptions.map((type) => (
@@ -264,7 +332,7 @@ export default function PropertyListings() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     Min Price (Ksh)
                   </label>
                   <input
@@ -272,12 +340,12 @@ export default function PropertyListings() {
                     value={filters.minPrice}
                     onChange={(e) => setFilters((prev) => ({ ...prev, minPrice: e.target.value }))}
                     placeholder="0"
-                    className="w-full rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/20 outline-none transition"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     Max Price (Ksh)
                   </label>
                   <input
@@ -285,12 +353,12 @@ export default function PropertyListings() {
                     value={filters.maxPrice}
                     onChange={(e) => setFilters((prev) => ({ ...prev, maxPrice: e.target.value }))}
                     placeholder="50000"
-                    className="w-full rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/20 outline-none transition"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     Featured
                   </label>
                   <select
@@ -301,7 +369,7 @@ export default function PropertyListings() {
                         featured: e.target.value as FilterState["featured"],
                       }))
                     }
-                    className="w-full rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm text-foreground focus:border-primary focus:ring-4 focus:ring-primary/20 outline-none transition"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                   >
                     <option value="all">All listings</option>
                     <option value="featured">Featured only</option>
@@ -314,29 +382,29 @@ export default function PropertyListings() {
         )}
       </AnimatePresence>
 
-      <section className="max-w-7xl mx-auto px-6 mt-10">
+      <section id="listings" className="max-w-7xl mx-auto px-6 mt-12 pb-16">
         {error && (
-          <div className="mb-8 rounded-2xl border border-border bg-card px-6 py-5 text-foreground shadow-sm">
+          <div className="mb-8 rounded-2xl border border-rose-200 bg-rose-50 px-6 py-5 text-rose-900">
             {error}
           </div>
         )}
 
         {isLoading ? (
-          <div className="flex justify-center items-center min-h-[50vh]">
-            <div className="h-14 w-14 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="flex justify-center items-center min-h-[45vh]">
+            <div className="h-14 w-14 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
           </div>
         ) : sortedListings.length === 0 ? (
-          <div className="surface-card rounded-3xl px-6 sm:px-10 py-16 sm:py-20 text-center">
-            <Building2 className="mx-auto mb-6 h-16 w-16 sm:h-20 sm:w-20 text-muted-foreground" />
-            <h3 className="text-xl sm:text-2xl font-semibold text-foreground mb-4">
+          <div className="rounded-[32px] border border-slate-200 bg-white/90 px-6 sm:px-10 py-16 sm:py-20 text-center shadow-[0_20px_45px_-35px_rgba(15,23,42,0.4)]">
+            <Building2 className="mx-auto mb-6 h-16 w-16 sm:h-20 sm:w-20 text-slate-400" />
+            <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-4">
               {hasActiveFilters ? "No matching properties found" : "No listings available yet"}
             </h3>
-            <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
+            <p className="text-slate-500 mb-8 max-w-lg mx-auto">
               {hasActiveFilters
                 ? "Try adjusting your filters or clear them to see all available properties."
                 : "We are constantly adding new verified listings. Please check back soon."}
             </p>
-            <p className="text-xs text-muted-foreground/80">
+            <p className="text-xs text-slate-400">
               Pricing reflects monthly rates for long-term rentals and nightly rates for short-term stays.
             </p>
             {hasActiveFilters && (
@@ -345,7 +413,7 @@ export default function PropertyListings() {
                   resetFilters();
                   setIsFilterOpen(false);
                 }}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-primary-foreground text-xs font-semibold uppercase tracking-[0.2em] shadow-[0_16px_30px_-18px_rgba(66,199,117,0.6)] hover:bg-primary-hover transition-all"
+                className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.6)] hover:bg-slate-800 transition-all"
               >
                 <X size={16} />
                 Clear Filters
@@ -363,10 +431,6 @@ export default function PropertyListings() {
     </main>
   );
 }
-
-// ──────────────────────────────────────────────
-// PropertyCard (unchanged – included for completeness)
-// ──────────────────────────────────────────────
 
 interface PropertyCardProps {
   property: PublicListing;
@@ -394,18 +458,14 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
 
   const statusTone = isAirbnb
     ? property.status === "published"
-      ? "border-primary/30 bg-primary/10 text-primary"
-      : "border-border bg-muted/70 text-muted-foreground"
+      ? "bg-emerald-100 text-emerald-700"
+      : "bg-slate-100 text-slate-600"
     : property.status === "Active"
-      ? "border-primary/30 bg-primary/10 text-primary"
-      : property.status === "Inactive"
-        ? "border-border bg-muted/80 text-muted-foreground"
-        : "border-border bg-muted/60 text-muted-foreground";
+      ? "bg-emerald-100 text-emerald-700"
+      : "bg-slate-100 text-slate-600";
 
   const images = property.images?.length ? property.images : ["/logo.png"];
   const heroImage = images[0];
-  const sideImageOne = images[1] || images[0];
-  const sideImageTwo = images[2] || images[0];
 
   const featuredLabel = !isAirbnb ? property.isAdvertised : (property.rating ?? 0) >= 4.6;
   const badgeLabel = isAirbnb ? "Short-term" : "Long-term";
@@ -415,65 +475,56 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05 }}
-      className="group overflow-hidden rounded-3xl border border-border bg-card shadow-[0_20px_50px_-35px_rgba(30,58,138,0.45)] transition-all duration-300 hover:shadow-[0_30px_70px_-40px_rgba(30,58,138,0.55)]"
+      className="group overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_22px_50px_-40px_rgba(15,23,42,0.5)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_70px_-45px_rgba(15,23,42,0.55)]"
     >
-      <div className="relative h-48 grid grid-cols-6 grid-rows-2 gap-2 p-4">
-        <div className="relative col-span-4 row-span-2 overflow-hidden rounded-2xl">
-          <Image
-            src={heroImage}
-            alt={property.name}
-            fill
-            className="object-cover transition-transform duration-700 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+      <div className="relative h-56 overflow-hidden">
+        <Image
+          src={heroImage}
+          alt={property.name}
+          fill
+          className="object-cover transition-transform duration-700 group-hover:scale-105"
+          sizes="(max-width: 1024px) 50vw, 25vw"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
+        <div className="absolute left-4 top-4 flex flex-wrap gap-2">
           {featuredLabel && (
-            <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-primary/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-foreground backdrop-blur-sm">
-              <Star size={12} fill="white" />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-900">
+              <Star size={12} fill="#111827" />
               Featured
             </span>
           )}
-          <span className="absolute right-4 top-4 inline-flex items-center rounded-full bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground">
+          <span className="inline-flex items-center rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-700">
             {badgeLabel}
           </span>
         </div>
-        <div className="relative col-span-2 row-span-1 overflow-hidden rounded-2xl">
-          <Image src={sideImageOne} alt="" fill className="object-cover" />
-        </div>
-        <div className="relative col-span-2 row-span-1 overflow-hidden rounded-2xl">
-          <Image src={sideImageTwo} alt="" fill className="object-cover" />
-        </div>
+        <span className={`absolute right-4 top-4 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusTone}`}>
+          {property.status}
+        </span>
       </div>
 
       <div className="space-y-4 px-6 pb-6 pt-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h2 className="text-xl font-semibold text-foreground line-clamp-2">{property.name}</h2>
-            <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-              <MapPin size={15} className="flex-shrink-0" />
-              <span className="line-clamp-1">{property.address}</span>
-            </p>
-          </div>
-          <span
-            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${statusTone}`}
-          >
-            {property.status}
-          </span>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 line-clamp-2">{property.name}</h2>
+          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-slate-500">
+            <MapPin size={15} className="flex-shrink-0" />
+            <span className="line-clamp-1">{property.address}</span>
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-500">
           <div className="flex items-center gap-1.5">
-            <DollarSign size={16} className="text-primary" />
+            <DollarSign size={16} className="text-emerald-600" />
             {priceLabel ? (
-              <span className="font-medium text-foreground">
-                Starting from Ksh {priceLabel}/{isAirbnb ? "night" : "mo"}
+              <span className="font-medium text-slate-900">
+                From Ksh {priceLabel}/{isAirbnb ? "night" : "mo"}
               </span>
             ) : (
               <span>Pricing on request</span>
             )}
           </div>
-          <span className="text-muted-foreground font-medium">{vacancyBadge}</span>
+          <span className="text-slate-500 font-medium">{vacancyBadge}</span>
           {isAirbnb && (
-            <span className="text-muted-foreground font-medium">
+            <span className="text-slate-500 font-medium">
               {(property.rating ?? 0).toFixed(1)}★ ({property.reviewCount ?? 0})
             </span>
           )}
@@ -481,11 +532,12 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
 
         <Link
           href={`/property-listings/${property._id}`}
-          className="mt-3 block w-full rounded-full bg-primary px-6 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground shadow-[0_16px_30px_-18px_rgba(66,199,117,0.6)] hover:bg-primary-hover transition-all duration-300"
+          className="mt-3 inline-flex w-full items-center justify-between rounded-full bg-slate-900 px-6 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-slate-800"
         >
-          View Details
+          {isAirbnb ? "Reserve stay" : "View details"}
+          <ArrowUpRight size={14} />
         </Link>
       </div>
     </motion.article>
   );
-}
+};

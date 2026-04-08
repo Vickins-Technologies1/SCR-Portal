@@ -114,7 +114,7 @@ export default function AirbnbPaymentsPage() {
                 M-Pesa connection status not available yet.
               </div>
               <button
-                onClick={() => router.push("/property-owner-dashboard/settings")}
+                onClick={() => router.push("/airbnb-dashboard/settings")}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
               >
                 Manage M-Pesa settings

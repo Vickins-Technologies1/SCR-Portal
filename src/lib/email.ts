@@ -96,6 +96,36 @@ interface AirbnbGuestMessageOptions {
   subject?: string;
 }
 
+interface AirbnbBookingEmailOptions {
+  to: string;
+  guestName: string;
+  listingName: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  total: number;
+  supportEmail?: string;
+}
+
+interface AirbnbPaymentEmailOptions {
+  to: string;
+  guestName: string;
+  listingName: string;
+  amount: number;
+  paymentDate: string;
+  reference?: string;
+  supportEmail?: string;
+}
+
+interface AirbnbReminderEmailOptions {
+  to: string;
+  guestName: string;
+  listingName: string;
+  date: string;
+  supportEmail?: string;
+  type: "checkin" | "checkout";
+}
+
 // Reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -492,6 +522,142 @@ export async function sendAirbnbGuestMessageEmail({
   } catch (error) {
     console.error(`Error sending Airbnb guest email to ${to}:`, error);
     throw new Error("Failed to send Airbnb guest email");
+  }
+}
+
+export async function sendAirbnbBookingConfirmationEmail({
+  to,
+  guestName,
+  listingName,
+  checkIn,
+  checkOut,
+  nights,
+  total,
+  supportEmail,
+}: AirbnbBookingEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const html = generateStyledTemplate({
+      name: guestName,
+      title: "Booking Confirmation",
+      intro: `Your booking at ${listingName} is confirmed.`,
+      details: `
+        <ul>
+          <li><strong>Check-in:</strong> ${checkIn}</li>
+          <li><strong>Check-out:</strong> ${checkOut}</li>
+          <li><strong>Nights:</strong> ${nights}</li>
+          <li><strong>Total:</strong> Ksh ${total.toLocaleString("en-KE")}</li>
+        </ul>
+        <p style="font-size: 14px; margin-top: 16px;">
+          Need help? Reach us at ${supportEmail || process.env.SMTP_USER}.
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      to,
+      subject: `Booking confirmed: ${listingName}`,
+      html,
+    });
+    console.log(`Airbnb booking confirmation email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending Airbnb booking confirmation email to ${to}:`, error);
+    throw new Error("Failed to send booking confirmation email");
+  }
+}
+
+export async function sendAirbnbPaymentReceivedEmail({
+  to,
+  guestName,
+  listingName,
+  amount,
+  paymentDate,
+  reference,
+  supportEmail,
+}: AirbnbPaymentEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const detailItems = [
+      `<li><strong>Listing:</strong> ${listingName}</li>`,
+      `<li><strong>Amount:</strong> Ksh ${amount.toLocaleString("en-KE")}</li>`,
+      `<li><strong>Payment date:</strong> ${paymentDate}</li>`,
+      reference ? `<li><strong>Reference:</strong> ${reference}</li>` : "",
+    ]
+      .filter(Boolean)
+      .join("");
+
+    const html = generateStyledTemplate({
+      name: guestName,
+      title: "Payment Received",
+      intro: `We have received your payment for ${listingName}.`,
+      details: `
+        <ul>${detailItems}</ul>
+        <p style="font-size: 14px; margin-top: 16px;">
+          Questions? Reach us at ${supportEmail || process.env.SMTP_USER}.
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      to,
+      subject: `Payment received: ${listingName}`,
+      html,
+    });
+    console.log(`Airbnb payment receipt email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending Airbnb payment receipt email to ${to}:`, error);
+    throw new Error("Failed to send payment receipt email");
+  }
+}
+
+export async function sendAirbnbReminderEmail({
+  to,
+  guestName,
+  listingName,
+  date,
+  supportEmail,
+  type,
+}: AirbnbReminderEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const title = type === "checkin" ? "Check-in Reminder" : "Check-out Reminder";
+    const intro =
+      type === "checkin"
+        ? `Your check-in at ${listingName} is scheduled for ${date}.`
+        : `Your check-out from ${listingName} is scheduled for ${date}.`;
+
+    const html = generateStyledTemplate({
+      name: guestName,
+      title,
+      intro,
+      details: `
+        <p style="font-size: 14px; margin-top: 12px;">
+          If you need assistance, contact ${supportEmail || process.env.SMTP_USER}.
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      to,
+      subject: `${title}: ${listingName}`,
+      html,
+    });
+    console.log(`Airbnb ${type} reminder email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending Airbnb ${type} reminder email to ${to}:`, error);
+    throw new Error("Failed to send reminder email");
   }
 }
 

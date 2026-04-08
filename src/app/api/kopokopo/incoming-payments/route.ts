@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
+import { sendAirbnbPaymentReceivedEmail } from "@/lib/email";
 
 function verifySignature(body: string, signature: string | null, secret: string): boolean {
   if (!signature) return false;
@@ -119,6 +120,39 @@ export async function POST(request: NextRequest) {
           },
         }
       );
+
+      if (normalizedStatus === "completed") {
+        const booking = await db.collection("airbnbBookings").findOne({
+          externalId: payment.airbnbBookingId,
+          ownerId: payment.ownerId,
+        });
+        const settings = await db.collection("airbnbSettings").findOne({ ownerId: payment.ownerId });
+        if (booking?.guestEmail && settings?.sendPaymentReceipt !== false) {
+          try {
+            await sendAirbnbPaymentReceivedEmail({
+              to: booking.guestEmail,
+              guestName: booking.guestName || "Guest",
+              listingName: booking.listingName || "Airbnb Stay",
+              amount: amountValue || payment.amount || 0,
+              paymentDate: originationTime
+                ? new Date(originationTime).toLocaleDateString("en-KE", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                : new Date().toLocaleDateString("en-KE"),
+              reference,
+              supportEmail: settings?.supportEmail,
+            });
+          } catch (emailError) {
+            logger.error("Failed to send Airbnb payment receipt email", {
+              bookingId: booking.externalId,
+              message: emailError instanceof Error ? emailError.message : String(emailError),
+            });
+          }
+        }
+      }
     }
 
     return NextResponse.json({ success: true });

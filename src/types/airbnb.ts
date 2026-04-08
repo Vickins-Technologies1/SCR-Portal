@@ -65,6 +65,8 @@ export interface AirbnbListing {
   amenities: string[];
   houseRules: string[];
   licenseStatus: "valid" | "due" | "missing";
+  description?: string;
+  images?: string[];
 }
 
 export interface AirbnbBooking {

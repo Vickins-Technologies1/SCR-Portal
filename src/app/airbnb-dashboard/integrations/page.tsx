@@ -25,6 +25,7 @@ export default function AirbnbIntegrationsPage() {
     clientId: "",
     clientSecret: "",
   });
+  const managedProviders = ["stripe", "smtp", "ga", "meta", "ical"];
 
   const fetchIntegrations = useCallback(async () => {
     if (!ownerId) return;
@@ -217,6 +218,17 @@ export default function AirbnbIntegrationsPage() {
                       {formMessage}
                     </div>
                   )}
+                  {managedProviders.includes(selectedIntegration.provider || "") && (
+                    <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground space-y-2">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                        Configuration
+                      </p>
+                      <p>
+                        This integration is enabled through environment variables and system settings. Use the
+                        Airbnb Settings page to manage iCal sync and notification preferences.
+                      </p>
+                    </div>
+                  )}
                   {selectedIntegration.health && (
                     <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground space-y-2">
                       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Health check</p>
@@ -236,42 +248,46 @@ export default function AirbnbIntegrationsPage() {
                       ))}
                     </div>
                   )}
-                  <input
-                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
-                    placeholder="Base URL"
-                    value={config.baseUrl}
-                    onChange={(event) => setConfig((prev) => ({ ...prev, baseUrl: event.target.value }))}
-                  />
-                  <input
-                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
-                    placeholder="Access token"
-                    value={config.accessToken}
-                    onChange={(event) => setConfig((prev) => ({ ...prev, accessToken: event.target.value }))}
-                  />
-                  <input
-                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
-                    placeholder="Refresh token"
-                    value={config.refreshToken}
-                    onChange={(event) => setConfig((prev) => ({ ...prev, refreshToken: event.target.value }))}
-                  />
-                  <input
-                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
-                    placeholder="Token URL"
-                    value={config.tokenUrl}
-                    onChange={(event) => setConfig((prev) => ({ ...prev, tokenUrl: event.target.value }))}
-                  />
-                  <input
-                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
-                    placeholder="Client ID"
-                    value={config.clientId}
-                    onChange={(event) => setConfig((prev) => ({ ...prev, clientId: event.target.value }))}
-                  />
-                  <input
-                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
-                    placeholder="Client secret"
-                    value={config.clientSecret}
-                    onChange={(event) => setConfig((prev) => ({ ...prev, clientSecret: event.target.value }))}
-                  />
+                  {!managedProviders.includes(selectedIntegration.provider || "") && (
+                    <>
+                      <input
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="Base URL"
+                        value={config.baseUrl}
+                        onChange={(event) => setConfig((prev) => ({ ...prev, baseUrl: event.target.value }))}
+                      />
+                      <input
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="Access token"
+                        value={config.accessToken}
+                        onChange={(event) => setConfig((prev) => ({ ...prev, accessToken: event.target.value }))}
+                      />
+                      <input
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="Refresh token"
+                        value={config.refreshToken}
+                        onChange={(event) => setConfig((prev) => ({ ...prev, refreshToken: event.target.value }))}
+                      />
+                      <input
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="Token URL"
+                        value={config.tokenUrl}
+                        onChange={(event) => setConfig((prev) => ({ ...prev, tokenUrl: event.target.value }))}
+                      />
+                      <input
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="Client ID"
+                        value={config.clientId}
+                        onChange={(event) => setConfig((prev) => ({ ...prev, clientId: event.target.value }))}
+                      />
+                      <input
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="Client secret"
+                        value={config.clientSecret}
+                        onChange={(event) => setConfig((prev) => ({ ...prev, clientSecret: event.target.value }))}
+                      />
+                    </>
+                  )}
                   <div className="flex justify-end gap-3">
                     {selectedIntegration.status === "connected" && (
                       <button

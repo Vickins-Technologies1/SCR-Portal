@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Home,
@@ -9,6 +10,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
+  GripVertical,
+  ImagePlus,
+  Trash2,
   X,
 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
@@ -27,6 +31,15 @@ export default function AirbnbListingsPage() {
   const [showModal, setShowModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [imageItems, setImageItems] = useState<
+    Array<{ id: string; url: string; file?: File }>
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({
     id: "",
     name: "",
@@ -38,7 +51,15 @@ export default function AirbnbListingsPage() {
     amenities: "",
     houseRules: "",
     licenseStatus: "missing",
+    description: "",
   });
+
+  const maxImages = 10;
+
+  const imageCountLabel = useMemo(
+    () => `${imageItems.length}/${maxImages} images`,
+    [imageItems.length]
+  );
 
   const fetchListings = useCallback(async () => {
     if (!ownerId) return;
@@ -56,6 +77,116 @@ export default function AirbnbListingsPage() {
       fetchListings();
     }
   }, [hasAccess, fetchListings]);
+
+  const createImageId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `img-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
+  const revokeImageUrl = (url: string) => {
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const resetImageItems = useCallback((next: Array<{ id: string; url: string; file?: File }> = []) => {
+    imageItems.forEach((item) => revokeImageUrl(item.url));
+    setImageItems(next);
+    setImageError(null);
+  }, [imageItems]);
+
+  const appendFiles = (files: File[]) => {
+    if (!files.length) return;
+    const valid: File[] = [];
+    const errors: string[] = [];
+
+    files.forEach((file) => {
+      if (!["image/jpeg", "image/png"].includes(file.type)) {
+        errors.push(`${file.name}: JPEG or PNG only`);
+      } else if (file.size > 5 * 1024 * 1024) {
+        errors.push(`${file.name}: Max 5MB`);
+      } else {
+        valid.push(file);
+      }
+    });
+
+    const remainingSlots = maxImages - imageItems.length;
+    const allowedFiles = valid.slice(0, Math.max(0, remainingSlots));
+
+    if (valid.length > remainingSlots) {
+      errors.push(`Only ${maxImages} images allowed.`);
+    }
+
+    if (errors.length > 0) {
+      setImageError(errors.join(" "));
+    } else {
+      setImageError(null);
+    }
+
+    if (allowedFiles.length > 0) {
+      setImageItems((prev) => [
+        ...prev,
+        ...allowedFiles.map((file) => ({
+          id: createImageId(),
+          url: URL.createObjectURL(file),
+          file,
+        })),
+      ]);
+    }
+  };
+
+  const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    appendFiles(files);
+    event.target.value = "";
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    const files = Array.from(event.dataTransfer.files || []);
+    appendFiles(files);
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setImageItems((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed) revokeImageUrl(removed.url);
+      return next;
+    });
+  };
+
+  const reorderImages = (from: number, to: number) => {
+    if (from === to) return;
+    setImageItems((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      if (!moved) return prev;
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const uploadListingImages = async (files: File[]) => {
+    if (!csrfToken || files.length === 0) return [];
+    const formData = new FormData();
+    files.forEach((file) => formData.append("images", file));
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+      headers: { "X-CSRF-Token": csrfToken },
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Failed to upload images");
+    }
+    return data.urls || [];
+  };
 
   const handleSync = async (listingId?: string) => {
     if (!csrfToken) {
@@ -95,7 +226,9 @@ export default function AirbnbListingsPage() {
       amenities: "",
       houseRules: "",
       licenseStatus: "missing",
+      description: "",
     });
+    resetImageItems([]);
     setFormMessage(null);
     setShowModal(true);
   };
@@ -112,7 +245,14 @@ export default function AirbnbListingsPage() {
       amenities: listing.amenities.join(", "),
       houseRules: listing.houseRules.join(", "),
       licenseStatus: listing.licenseStatus,
+      description: listing.description || "",
     });
+    resetImageItems(
+      (listing.images || []).map((url) => ({
+        id: createImageId(),
+        url,
+      }))
+    );
     setFormMessage(null);
     setShowModal(true);
   };
@@ -128,9 +268,32 @@ export default function AirbnbListingsPage() {
       return;
     }
 
+    if (imageItems.length > maxImages) {
+      setFormMessage(`Only ${maxImages} images are allowed.`);
+      return;
+    }
+
     setIsSaving(true);
     setFormMessage(null);
     try {
+      const newFiles = imageItems.filter((item) => item.file).map((item) => item.file!) as File[];
+      let uploadedUrls: string[] = [];
+      if (newFiles.length > 0) {
+        setIsUploadingImages(true);
+        uploadedUrls = await uploadListingImages(newFiles);
+        setIsUploadingImages(false);
+      }
+
+      let uploadIndex = 0;
+      const finalImages = imageItems.map((item) => {
+        if (item.file) {
+          const nextUrl = uploadedUrls[uploadIndex];
+          uploadIndex += 1;
+          return nextUrl || item.url;
+        }
+        return item.url;
+      });
+
       const payload = {
         id: form.id || undefined,
         name: form.name.trim(),
@@ -146,6 +309,8 @@ export default function AirbnbListingsPage() {
           ? form.houseRules.split(",").map((item) => item.trim()).filter(Boolean)
           : [],
         licenseStatus: form.licenseStatus,
+        description: form.description?.trim() || "",
+        images: finalImages,
       };
 
       const res = await fetch("/api/airbnb/listings", {
@@ -163,12 +328,14 @@ export default function AirbnbListingsPage() {
       }
 
       setFormMessage("Listing saved successfully.");
+      resetImageItems([]);
       setShowModal(false);
       await fetchListings();
     } catch (err) {
       setFormMessage(err instanceof Error ? err.message : "Failed to save listing");
     } finally {
       setIsSaving(false);
+      setIsUploadingImages(false);
     }
   };
 
@@ -366,7 +533,10 @@ export default function AirbnbListingsPage() {
                     </p>
                   </div>
                   <button
-                    onClick={() => setShowModal(false)}
+                    onClick={() => {
+                      resetImageItems([]);
+                      setShowModal(false);
+                    }}
                     className="modal-close rounded-full p-1"
                     aria-label="Close"
                   >
@@ -459,6 +629,18 @@ export default function AirbnbListingsPage() {
                       />
                     </div>
                     <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        Description
+                      </label>
+                      <textarea
+                        value={form.description}
+                        onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+                        rows={4}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="Describe the stay, highlights, nearby landmarks..."
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
                       <label className="block text-xs font-semibold text-muted-foreground mb-1">License status</label>
                       <select
                         value={form.licenseStatus}
@@ -471,19 +653,118 @@ export default function AirbnbListingsPage() {
                       </select>
                     </div>
                   </div>
+                  <div className="rounded-2xl border border-dashed border-border bg-white/70 p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">Listing photos</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Drag & drop, reorder, or upload up to {maxImages} high-res images.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-muted px-3 py-1 text-[10px] font-semibold text-muted-foreground">
+                        {imageCountLabel}
+                      </span>
+                    </div>
+                    <div
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        setIsDraggingFiles(true);
+                      }}
+                      onDragLeave={() => setIsDraggingFiles(false)}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`mt-4 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-6 text-center transition ${
+                        isDraggingFiles ? "border-primary/60 bg-primary/5" : "border-border bg-white/80"
+                      }`}
+                    >
+                      <ImagePlus className="h-8 w-8 text-primary mb-2" />
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">Click to upload</span> or drag images here
+                      </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        JPEG/PNG • Max 5MB each • Reorder by dragging
+                      </p>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png"
+                        className="sr-only"
+                        onChange={handleFileInput}
+                        ref={fileInputRef}
+                      />
+                    </div>
+                    {imageError && (
+                      <p className="mt-3 text-[11px] text-amber-700">{imageError}</p>
+                    )}
+                    {imageItems.length > 0 && (
+                      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {imageItems.map((item, index) => (
+                          <div
+                            key={item.id}
+                            draggable
+                            onDragStart={() => setDragIndex(index)}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              setDragOverIndex(index);
+                            }}
+                            onDrop={() => {
+                              if (dragIndex !== null) {
+                                reorderImages(dragIndex, index);
+                                setDragIndex(null);
+                                setDragOverIndex(null);
+                              }
+                            }}
+                            onDragEnd={() => {
+                              setDragIndex(null);
+                              setDragOverIndex(null);
+                            }}
+                            className={`group relative overflow-hidden rounded-2xl border ${
+                              dragOverIndex === index ? "border-primary/60" : "border-border"
+                            } bg-white`}
+                          >
+                            <Image
+                              src={item.url}
+                              alt={`Listing image ${index + 1}`}
+                              width={220}
+                              height={160}
+                              className="h-32 w-full object-cover"
+                              unoptimized
+                            />
+                            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-black/40 px-2 py-1 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
+                              <span className="flex items-center gap-1">
+                                <GripVertical size={12} />
+                                Drag
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(index)}
+                                className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold"
+                              >
+                                <Trash2 size={12} />
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex justify-end gap-3">
                     <button
-                      onClick={() => setShowModal(false)}
+                      onClick={() => {
+                        resetImageItems([]);
+                        setShowModal(false);
+                      }}
                       className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleSaveListing}
-                      disabled={isSaving}
+                      disabled={isSaving || isUploadingImages}
                       className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
                     >
-                      {isSaving ? "Saving..." : "Save listing"}
+                      {isSaving || isUploadingImages ? "Saving..." : "Save listing"}
                     </button>
                   </div>
                 </div>

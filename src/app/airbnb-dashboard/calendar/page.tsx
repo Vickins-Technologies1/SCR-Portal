@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calendar, RefreshCw, X } from "lucide-react";
+import { Calendar, RefreshCw, X, Copy } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -20,6 +20,12 @@ export default function AirbnbCalendarPage() {
     advanceNotice: 1,
     prepTime: 1,
   });
+  const [icalSettings, setIcalSettings] = useState({
+    icalToken: "",
+    icalImportUrl: "",
+  });
+  const [baseUrl, setBaseUrl] = useState("");
+  const [icalMessage, setIcalMessage] = useState<string | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [selectedNight, setSelectedNight] = useState<{
     listingId: string;
@@ -55,6 +61,32 @@ export default function AirbnbCalendarPage() {
       fetchCalendar();
     }
   }, [hasAccess, fetchCalendar]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBaseUrl(window.location.origin);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!ownerId || !hasAccess) return;
+    const fetchSettings = async () => {
+      const res = await fetch(`/api/airbnb/settings?ownerId=${ownerId}`, { credentials: "include" });
+      const data = await res.json();
+      if (data.success) {
+        setIcalSettings({
+          icalToken: data.settings?.icalToken || "",
+          icalImportUrl: data.settings?.icalImportUrl || "",
+        });
+      }
+    };
+    fetchSettings();
+  }, [ownerId, hasAccess]);
+
+  const icalExportUrl = useMemo(() => {
+    if (!baseUrl || !icalSettings.icalToken) return "";
+    return `${baseUrl}/api/airbnb/calendar/ical?token=${icalSettings.icalToken}`;
+  }, [baseUrl, icalSettings.icalToken]);
 
   const days = useMemo(() => {
     if (!calendarRows.length) return [];
@@ -97,6 +129,39 @@ export default function AirbnbCalendarPage() {
       setSettingsMessage("Rules updated.");
     } catch (err) {
       setSettingsMessage(err instanceof Error ? err.message : "Failed to save rules");
+    }
+  };
+
+  const handleSaveIcal = async () => {
+    if (!csrfToken) {
+      setIcalMessage("Missing session token. Refresh and retry.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/airbnb/calendar/ical", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ icalUrl: icalSettings.icalImportUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to save iCal link");
+      }
+      setIcalMessage("iCal import URL saved.");
+    } catch (err) {
+      setIcalMessage(err instanceof Error ? err.message : "Failed to save iCal link");
+    }
+  };
+
+  const handleCopyIcal = async () => {
+    if (!icalExportUrl) return;
+    try {
+      await navigator.clipboard.writeText(icalExportUrl);
+      setIcalMessage("iCal export link copied.");
+      setTimeout(() => setIcalMessage(null), 2000);
+    } catch {
+      setIcalMessage("Copy failed. Select the link and copy manually.");
     }
   };
 
@@ -213,6 +278,60 @@ export default function AirbnbCalendarPage() {
             </div>
             {settingsMessage && (
               <p className="mt-3 text-xs text-muted-foreground">{settingsMessage}</p>
+            )}
+          </section>
+
+          <section className="surface-card rounded-3xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm sm:text-base font-semibold text-foreground">iCal sync</h2>
+                <p className="text-[11px] text-muted-foreground">
+                  Export availability and import external calendars without impacting long-term leases.
+                </p>
+              </div>
+              <button
+                onClick={handleCopyIcal}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+              >
+                <Copy size={14} />
+                Copy export
+              </button>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-2">
+                  Export link
+                </label>
+                <input
+                  value={icalExportUrl}
+                  readOnly
+                  className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-2">
+                  Import link
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={icalSettings.icalImportUrl}
+                    onChange={(event) =>
+                      setIcalSettings((prev) => ({ ...prev, icalImportUrl: event.target.value }))
+                    }
+                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-xs"
+                    placeholder="https://calendar.google.com/calendar/ical/..."
+                  />
+                  <button
+                    onClick={handleSaveIcal}
+                    className="rounded-xl bg-primary px-3 py-2 text-[11px] font-semibold text-white hover:bg-primary-hover"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+            {icalMessage && (
+              <p className="text-[11px] text-muted-foreground">{icalMessage}</p>
             )}
           </section>
 

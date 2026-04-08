@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
       amenities: listing.amenities || [],
       houseRules: listing.houseRules || [],
       licenseStatus: listing.licenseStatus || "missing",
+      description: listing.description || "",
+      images: listing.images || [],
     })),
   });
 }
@@ -53,6 +55,8 @@ const ListingSchema = z.object({
   amenities: z.array(z.string().trim().min(1)).optional(),
   houseRules: z.array(z.string().trim().min(1)).optional(),
   licenseStatus: z.enum(["valid", "due", "missing"]).optional(),
+  description: z.string().trim().max(2000).optional(),
+  images: z.array(z.string().trim().min(1)).max(10).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -95,6 +99,8 @@ export async function POST(request: NextRequest) {
     amenities: parsed.data.amenities || [],
     houseRules: parsed.data.houseRules || [],
     licenseStatus: parsed.data.licenseStatus || "missing",
+    description: parsed.data.description || "",
+    images: parsed.data.images || [],
     lastSyncedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -120,6 +126,8 @@ export async function POST(request: NextRequest) {
       amenities: listingDoc.amenities,
       houseRules: listingDoc.houseRules,
       licenseStatus: listingDoc.licenseStatus,
+      description: listingDoc.description,
+      images: listingDoc.images,
     },
   });
 }
@@ -161,6 +169,8 @@ export async function PUT(request: NextRequest) {
     amenities: parsed.data.amenities || [],
     houseRules: parsed.data.houseRules || [],
     licenseStatus: parsed.data.licenseStatus || "missing",
+    description: parsed.data.description || "",
+    images: parsed.data.images || [],
     updatedAt: new Date().toISOString(),
   };
 
@@ -194,6 +204,8 @@ export async function PUT(request: NextRequest) {
       amenities: updated.amenities || [],
       houseRules: updated.houseRules || [],
       licenseStatus: updated.licenseStatus || "missing",
+      description: updated.description || "",
+      images: updated.images || [],
     },
   });
 }
