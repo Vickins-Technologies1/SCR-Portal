@@ -155,6 +155,10 @@ export default function AdminAirbnbIntegrationsPage() {
                 <div key={i} className="surface-card rounded-2xl h-20 animate-pulse" />
               ))}
             </div>
+          ) : integrations.length === 0 ? (
+            <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+              No Airbnb integrations yet.
+            </div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="table-shell">
               <div className="table-scroll">
@@ -170,45 +174,37 @@ export default function AdminAirbnbIntegrationsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {integrations.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-10 text-center text-xs text-muted-foreground">
-                          No integrations found.
+                    {integrations.map((integration) => (
+                      <tr key={integration._id} className="hover:bg-primary/5 transition-colors">
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{integration.provider}</td>
+                        <td className="py-3 px-4 text-xs font-medium text-foreground">{integration.name}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {integration.ownerEmail || integration.ownerName}
+                        </td>
+                        <td className="py-3 px-4 text-xs">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              integration.status === "connected"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : integration.status === "warning"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-slate-100 text-slate-700"
+                            )}
+                          >
+                            {integration.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {integration.lastSyncedAt
+                            ? new Date(integration.lastSyncedAt).toLocaleString("en-KE")
+                            : "—"}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {integration.description || "—"}
                         </td>
                       </tr>
-                    ) : (
-                      integrations.map((integration) => (
-                        <tr key={integration._id} className="hover:bg-primary/5 transition-colors">
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{integration.provider}</td>
-                          <td className="py-3 px-4 text-xs font-medium text-foreground">{integration.name}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {integration.ownerEmail || integration.ownerName}
-                          </td>
-                          <td className="py-3 px-4 text-xs">
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                integration.status === "connected"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : integration.status === "warning"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-slate-100 text-slate-700"
-                              )}
-                            >
-                              {integration.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {integration.lastSyncedAt
-                              ? new Date(integration.lastSyncedAt).toLocaleString("en-KE")
-                              : "—"}
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {integration.description || "—"}
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>

@@ -226,6 +226,10 @@ export default function AirbnbPricingPage() {
             <div className="space-y-3">
               {isLoading ? (
                 <div className="h-20 rounded-2xl bg-gray-100 animate-pulse" />
+              ) : rules.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-[11px] text-muted-foreground">
+                  No pricing rules configured yet.
+                </div>
               ) : (
                 rules.map((rule) => (
                   <div

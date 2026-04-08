@@ -161,6 +161,10 @@ export default function AdminAirbnbBookingsPage() {
                 <div key={i} className="surface-card rounded-2xl h-20 animate-pulse" />
               ))}
             </div>
+          ) : bookings.length === 0 ? (
+            <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+              No Airbnb bookings yet.
+            </div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="table-shell">
               <div className="table-scroll">
@@ -180,58 +184,50 @@ export default function AdminAirbnbBookingsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bookings.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="py-10 text-center text-xs text-muted-foreground">
-                          No bookings found.
+                    {bookings.map((booking) => (
+                      <tr key={booking._id} className="hover:bg-primary/5 transition-colors">
+                        <td className="py-3 px-4 text-xs font-medium text-foreground">{booking.listingName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{booking.guestName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{booking.ownerEmail || booking.ownerName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {new Date(booking.checkIn).toLocaleDateString("en-KE")}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {new Date(booking.checkOut).toLocaleDateString("en-KE")}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{booking.nights ?? 0}</td>
+                        <td className="py-3 px-4 text-xs font-semibold text-primary">{formatKes(booking.total || 0)}</td>
+                        <td className="py-3 px-4 text-xs">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              booking.status === "confirmed"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : booking.status === "cancelled"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                            )}
+                          >
+                            {booking.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{booking.source}</td>
+                        <td className="py-3 px-4 text-xs">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              booking.payoutStatus === "paid"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : booking.payoutStatus === "failed"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                            )}
+                          >
+                            {booking.payoutStatus}
+                          </span>
                         </td>
                       </tr>
-                    ) : (
-                      bookings.map((booking) => (
-                        <tr key={booking._id} className="hover:bg-primary/5 transition-colors">
-                          <td className="py-3 px-4 text-xs font-medium text-foreground">{booking.listingName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{booking.guestName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{booking.ownerEmail || booking.ownerName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {new Date(booking.checkIn).toLocaleDateString("en-KE")}
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {new Date(booking.checkOut).toLocaleDateString("en-KE")}
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{booking.nights ?? 0}</td>
-                          <td className="py-3 px-4 text-xs font-semibold text-primary">{formatKes(booking.total || 0)}</td>
-                          <td className="py-3 px-4 text-xs">
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                booking.status === "confirmed"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : booking.status === "cancelled"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-amber-100 text-amber-700"
-                              )}
-                            >
-                              {booking.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{booking.source}</td>
-                          <td className="py-3 px-4 text-xs">
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                booking.payoutStatus === "paid"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : booking.payoutStatus === "failed"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-amber-100 text-amber-700"
-                              )}
-                            >
-                              {booking.payoutStatus}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>

@@ -183,15 +183,21 @@ export default function AirbnbPaymentsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan={5} className="text-center text-muted-foreground py-6">
-                          Loading payouts...
-                        </td>
-                      </tr>
-                    ) : (
-                      payouts.map((payout) => (
-                        <tr key={payout.id}>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={5} className="text-center text-muted-foreground py-6">
+                        Loading payouts...
+                      </td>
+                    </tr>
+                  ) : payouts.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center text-muted-foreground py-6">
+                        No payouts yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    payouts.map((payout) => (
+                      <tr key={payout.id}>
                           <td className="font-semibold">{payout.propertyName}</td>
                           <td className="table-muted">{payout.period}</td>
                           <td>{formatKes(payout.amount)}</td>

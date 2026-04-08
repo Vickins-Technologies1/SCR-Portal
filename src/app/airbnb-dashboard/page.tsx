@@ -221,27 +221,33 @@ export default function AirbnbDashboard() {
                   <BarChart3 className="h-5 w-5 text-primary" />
                   <h2 className="text-lg sm:text-xl font-semibold text-foreground">Today at a glance</h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {stats.map((stat, index) => (
-                    <motion.div
-                      key={stat.label}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.04 }}
-                      className="surface-card rounded-2xl p-4 sm:p-5 transition-shadow hover:shadow-lg"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
-                          {stat.label}
-                        </p>
-                        <div className={`h-9 w-9 rounded-2xl flex items-center justify-center ${stat.bg}`}>
-                          <stat.icon className={`h-4 w-4 ${stat.accent}`} />
+                {stats.length === 0 ? (
+                  <div className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-[11px] text-muted-foreground">
+                    No activity stats yet.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {stats.map((stat, index) => (
+                      <motion.div
+                        key={stat.label}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.04 }}
+                        className="surface-card rounded-2xl p-4 sm:p-5 transition-shadow hover:shadow-lg"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                            {stat.label}
+                          </p>
+                          <div className={`h-9 w-9 rounded-2xl flex items-center justify-center ${stat.bg}`}>
+                            <stat.icon className={`h-4 w-4 ${stat.accent}`} />
+                          </div>
                         </div>
-                      </div>
-                      <p className="text-base sm:text-lg font-semibold text-foreground mt-1">{stat.value}</p>
-                    </motion.div>
-                  ))}
-                </div>
+                        <p className="text-base sm:text-lg font-semibold text-foreground mt-1">{stat.value}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">

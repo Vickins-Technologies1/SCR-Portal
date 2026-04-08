@@ -296,31 +296,37 @@ export default function AirbnbInboxPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {conversations.map((convo) => (
-                    <div
-                      key={convo.id}
-                      onClick={() => setSelectedId(convo.id)}
-                      className={`rounded-2xl border border-border px-4 py-3 flex items-center justify-between gap-4 cursor-pointer transition ${
-                        selectedId === convo.id ? "bg-primary/10 border-primary/30" : "bg-white/70 hover:bg-white"
-                      }`}
-                    >
-                      <div>
-                        <p className="font-semibold text-foreground">{convo.guestName}</p>
-                        <p className="text-xs text-muted-foreground">{convo.listingName}</p>
-                        <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">
-                          {convo.lastMessage}
-                        </p>
-                      </div>
-                      <div className="text-right text-[11px] text-muted-foreground space-y-1">
-                        <p>{new Date(convo.lastMessageAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
-                        {convo.unread > 0 && (
-                          <span className="inline-flex items-center justify-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600">
-                            {convo.unread} new
-                          </span>
-                        )}
-                      </div>
+                  {conversations.length === 0 ? (
+                    <div className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-[11px] text-muted-foreground">
+                      No conversations yet.
                     </div>
-                  ))}
+                  ) : (
+                    conversations.map((convo) => (
+                      <div
+                        key={convo.id}
+                        onClick={() => setSelectedId(convo.id)}
+                        className={`rounded-2xl border border-border px-4 py-3 flex items-center justify-between gap-4 cursor-pointer transition ${
+                          selectedId === convo.id ? "bg-primary/10 border-primary/30" : "bg-white/70 hover:bg-white"
+                        }`}
+                      >
+                        <div>
+                          <p className="font-semibold text-foreground">{convo.guestName}</p>
+                          <p className="text-xs text-muted-foreground">{convo.listingName}</p>
+                          <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">
+                            {convo.lastMessage}
+                          </p>
+                        </div>
+                        <div className="text-right text-[11px] text-muted-foreground space-y-1">
+                          <p>{new Date(convo.lastMessageAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                          {convo.unread > 0 && (
+                            <span className="inline-flex items-center justify-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                              {convo.unread} new
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>

@@ -145,6 +145,10 @@ export default function AirbnbIntegrationsPage() {
               [...Array(6)].map((_, i) => (
                 <div key={i} className="surface-card rounded-3xl p-6 animate-pulse" />
               ))
+            ) : integrations.length === 0 ? (
+              <div className="surface-card rounded-3xl p-6 text-xs text-muted-foreground">
+                No integrations available yet.
+              </div>
             ) : (
               integrations.map((integration) => (
                 <div key={integration.id} className="surface-card rounded-3xl p-6 flex flex-col gap-4">

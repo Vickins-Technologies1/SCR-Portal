@@ -156,6 +156,10 @@ export default function AdminAirbnbMessagesPage() {
                 <div key={i} className="surface-card rounded-2xl h-20 animate-pulse" />
               ))}
             </div>
+          ) : conversations.length === 0 ? (
+            <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+              No Airbnb conversations yet.
+            </div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="table-shell">
               <div className="table-scroll">
@@ -172,38 +176,30 @@ export default function AdminAirbnbMessagesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {conversations.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-10 text-center text-xs text-muted-foreground">
-                          No conversations found.
+                    {conversations.map((convo) => (
+                      <tr key={convo._id} className="hover:bg-primary/5 transition-colors">
+                        <td className="py-3 px-4 text-xs font-medium text-foreground">{convo.guestName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{convo.listingName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{convo.ownerEmail || convo.ownerName}</td>
+                        <td className="py-3 px-4 text-xs">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              convo.unread > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                            )}
+                          >
+                            {convo.unread}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{convo.channel}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground truncate max-w-[220px]">
+                          {convo.lastMessage}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {convo.lastMessageAt ? new Date(convo.lastMessageAt).toLocaleString("en-KE") : "—"}
                         </td>
                       </tr>
-                    ) : (
-                      conversations.map((convo) => (
-                        <tr key={convo._id} className="hover:bg-primary/5 transition-colors">
-                          <td className="py-3 px-4 text-xs font-medium text-foreground">{convo.guestName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{convo.listingName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{convo.ownerEmail || convo.ownerName}</td>
-                          <td className="py-3 px-4 text-xs">
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                convo.unread > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
-                              )}
-                            >
-                              {convo.unread}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{convo.channel}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground truncate max-w-[220px]">
-                            {convo.lastMessage}
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {convo.lastMessageAt ? new Date(convo.lastMessageAt).toLocaleString("en-KE") : "—"}
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>

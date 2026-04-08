@@ -242,6 +242,10 @@ export default function AirbnbCalendarPage() {
 
             {isLoading ? (
               <div className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
+            ) : calendarRows.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-xs text-muted-foreground">
+                No calendar data yet. Add a listing to start managing availability.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <div

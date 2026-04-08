@@ -177,7 +177,7 @@ export default function AirbnbBookingsPage() {
                     onChange={(event) => setForm((prev) => ({ ...prev, listingId: event.target.value }))}
                     className="rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
                   >
-                    <option value="">Select listing</option>
+                    <option value="">{listings.length ? "Select listing" : "No listings available"}</option>
                     {listings.map((listing) => (
                       <option key={listing.id} value={listing.id}>
                         {listing.name}
@@ -255,6 +255,12 @@ export default function AirbnbBookingsPage() {
                     <tr>
                       <td colSpan={7} className="text-center text-muted-foreground py-6">
                         Loading bookings...
+                      </td>
+                    </tr>
+                  ) : bookings.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center text-muted-foreground py-6">
+                        No bookings yet.
                       </td>
                     </tr>
                   ) : (

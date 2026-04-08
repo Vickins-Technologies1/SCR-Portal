@@ -130,10 +130,14 @@ export default function AirbnbReportsPage() {
           )}
 
           <section className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {isLoading || !summary ? (
+            {isLoading ? (
               [...Array(6)].map((_, i) => (
                 <div key={i} className="surface-card rounded-2xl p-4 sm:p-5 animate-pulse" />
               ))
+            ) : !summary ? (
+              <div className="surface-card rounded-2xl p-4 sm:p-5 text-xs text-muted-foreground col-span-full">
+                No report data available yet.
+              </div>
             ) : (
               <>
                 <div className="surface-card rounded-2xl p-4 sm:p-5">

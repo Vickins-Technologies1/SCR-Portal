@@ -132,6 +132,24 @@ export default function AdminAirbnbOverviewPage() {
     ];
   }, [overview]);
 
+  const hasActivity = useMemo(() => {
+    if (!overview) return false;
+    const totals = overview.totals;
+    const alerts = overview.alerts;
+    return Boolean(
+      totals.listings ||
+        totals.bookings ||
+        totals.messages ||
+        totals.payouts ||
+        totals.integrations ||
+        totals.owners ||
+        alerts.pendingPayouts ||
+        alerts.unreadMessages ||
+        alerts.upcomingBookings ||
+        overview.recentBookings.length
+    );
+  }, [overview]);
+
   if (status === "checking") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -199,6 +217,7 @@ export default function AdminAirbnbOverviewPage() {
               ))}
             </div>
           ) : overview ? (
+            hasActivity ? (
             <>
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -317,6 +336,11 @@ export default function AdminAirbnbOverviewPage() {
                 </div>
               </motion.div>
             </>
+            ) : (
+              <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+                No Airbnb activity yet.
+              </div>
+            )
           ) : (
             <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
               No Airbnb data available yet.

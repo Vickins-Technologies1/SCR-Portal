@@ -11,9 +11,7 @@ import {
   Building2,
   CreditCard,
   Headphones,
-  ChevronLeft,
   AlertCircle,
-  Settings,
   Home,
   CalendarCheck,
   MessageCircle,
@@ -79,18 +77,42 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
   const firstName = name.split(" ")[0] || "Admin";
 
-  const navLinks: NavLink[] = [
+  const coreLinks: NavLink[] = [
     { key: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     { key: "users", href: "/admin/users", label: "Property Owners", icon: <Users size={20} /> },
     { key: "properties", href: "/admin/properties", label: "Properties", icon: <Building2 size={20} /> },
+    { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
+    { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },
+  ];
+
+  const airbnbLinks: NavLink[] = [
     { key: "airbnb-overview", href: "/admin/airbnb", label: "Airbnb Overview", icon: <Home size={20} /> },
     { key: "airbnb-listings", href: "/admin/airbnb/listings", label: "Airbnb Listings", icon: <Building2 size={20} /> },
     { key: "airbnb-bookings", href: "/admin/airbnb/bookings", label: "Airbnb Bookings", icon: <CalendarCheck size={20} /> },
     { key: "airbnb-messages", href: "/admin/airbnb/messages", label: "Airbnb Messages", icon: <MessageCircle size={20} /> },
     { key: "airbnb-payouts", href: "/admin/airbnb/payouts", label: "Airbnb Payouts", icon: <Wallet size={20} /> },
     { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Airbnb Integrations", icon: <Plug size={20} /> },
-    { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
-    { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },
+  ];
+
+  const navSections = [
+    {
+      title: "Rentals Management",
+      links: coreLinks,
+      badge: {
+        label: "Rentals",
+        icon: <Building2 size={10} />,
+        className: "bg-slate-100 text-slate-700",
+      },
+    },
+    {
+      title: "Airbnb Management",
+      links: airbnbLinks,
+      badge: {
+        label: "Airbnb",
+        icon: <Home size={10} />,
+        className: "bg-primary/10 text-primary",
+      },
+    },
   ];
 
   const isActive = (href: string) =>
@@ -135,54 +157,82 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5">
-            <ul className="space-y-1.5">
-              {navLinks.map(({ key, href, label, icon }) => {
-                const showUnreadBadge = key === "support" && unreadSupportCount > 0;
-                return (
-                <li key={key}>
-                  <Link
-                    href={href}
-                    onClick={onClose}
-                  className={cn(
-                    "group flex items-center rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200",
-                    isCollapsed ? "justify-center" : "gap-3 sm:gap-4",
-                    isActive(href)
-                      ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/30"
-                      : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
-                  )}
-                  >
-                    <span
-                      className={cn(
-                      "relative flex h-5 w-5 items-center justify-center transition-colors",
-                      isActive(href) ? "text-primary" : "text-muted-foreground group-hover:text-primary"
-                      )}
-                    >
-                      {icon}
-                      {showUnreadBadge && (
-                        <span
-                          className="absolute -top-2 -right-2 min-w-[18px] rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow"
-                          aria-label={`${unreadSupportCount} unread support messages`}
-                        >
-                          {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
-                        </span>
-                      )}
-                    </span>
-
+            <div className="space-y-5">
+              {navSections.map((section) => (
+                <div key={section.title} className="space-y-2">
                   {!isCollapsed && (
-                    <span className="truncate">
-                      {label}
-                      {showUnreadBadge && (
-                        <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
-                          {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
-                        </span>
-                      )}
-                    </span>
+                    <div className="px-3 sm:px-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                          {section.title}
+                        </p>
+                        {section.badge && (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                              section.badge.className
+                            )}
+                          >
+                            {section.badge.icon}
+                            {section.badge.label}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2 h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
+                    </div>
                   )}
-                  </Link>
-                </li>
-              )})}
+                  <ul className="space-y-1.5">
+                    {section.links.map(({ key, href, label, icon }) => {
+                      const showUnreadBadge = key === "support" && unreadSupportCount > 0;
+                      return (
+                        <li key={key}>
+                          <Link
+                            href={href}
+                            onClick={onClose}
+                            className={cn(
+                              "group flex items-center rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200",
+                              isCollapsed ? "justify-center" : "gap-3 sm:gap-4",
+                              isActive(href)
+                                ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/30"
+                                : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "relative flex h-5 w-5 items-center justify-center transition-colors",
+                                isActive(href) ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+                              )}
+                            >
+                              {icon}
+                              {showUnreadBadge && (
+                                <span
+                                  className="absolute -top-2 -right-2 min-w-[18px] rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow"
+                                  aria-label={`${unreadSupportCount} unread support messages`}
+                                >
+                                  {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
+                                </span>
+                              )}
+                            </span>
 
-              {navLinks.length === 0 && mounted && (
+                            {!isCollapsed && (
+                              <span className="truncate">
+                                {label}
+                                {showUnreadBadge && (
+                                  <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+                                    {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+
+              {navSections.every((section) => section.links.length === 0) && mounted && (
                 <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
                   <AlertCircle className="mb-5 h-14 w-14 text-amber-500/80" />
                   <h3 className="text-lg font-semibold text-foreground">No Modules Available</h3>
@@ -191,7 +241,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                   </p>
                 </div>
               )}
-            </ul>
+            </div>
           </nav>
 
           {/* Footer */}

@@ -170,6 +170,12 @@ export default function AirbnbCompliancePage() {
                           Loading compliance data...
                         </td>
                       </tr>
+                    ) : items.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="text-center text-muted-foreground py-6">
+                          No compliance records yet.
+                        </td>
+                      </tr>
                     ) : (
                       items.map((item) => (
                         <tr key={item.propertyId}>

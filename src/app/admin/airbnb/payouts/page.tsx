@@ -157,6 +157,10 @@ export default function AdminAirbnbPayoutsPage() {
                 <div key={i} className="surface-card rounded-2xl h-20 animate-pulse" />
               ))}
             </div>
+          ) : payouts.length === 0 ? (
+            <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+              No Airbnb payouts yet.
+            </div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="table-shell">
               <div className="table-scroll">
@@ -173,40 +177,32 @@ export default function AdminAirbnbPayoutsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {payouts.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-10 text-center text-xs text-muted-foreground">
-                          No payouts found.
+                    {payouts.map((payout) => (
+                      <tr key={payout._id} className="hover:bg-primary/5 transition-colors">
+                        <td className="py-3 px-4 text-xs font-medium text-foreground">{payout.propertyName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{payout.ownerEmail || payout.ownerName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{payout.period}</td>
+                        <td className="py-3 px-4 text-xs font-semibold text-primary">{formatKes(payout.amount || 0)}</td>
+                        <td className="py-3 px-4 text-xs">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              payout.status === "paid"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : payout.status === "failed"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                            )}
+                          >
+                            {payout.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{payout.method}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {payout.createdAt ? new Date(payout.createdAt).toLocaleDateString("en-KE") : "—"}
                         </td>
                       </tr>
-                    ) : (
-                      payouts.map((payout) => (
-                        <tr key={payout._id} className="hover:bg-primary/5 transition-colors">
-                          <td className="py-3 px-4 text-xs font-medium text-foreground">{payout.propertyName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{payout.ownerEmail || payout.ownerName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{payout.period}</td>
-                          <td className="py-3 px-4 text-xs font-semibold text-primary">{formatKes(payout.amount || 0)}</td>
-                          <td className="py-3 px-4 text-xs">
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                payout.status === "paid"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : payout.status === "failed"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-amber-100 text-amber-700"
-                              )}
-                            >
-                              {payout.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{payout.method}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {payout.createdAt ? new Date(payout.createdAt).toLocaleDateString("en-KE") : "—"}
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>

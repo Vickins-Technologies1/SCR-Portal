@@ -181,6 +181,10 @@ export default function AirbnbOperationsPage() {
               <h2 className="text-sm sm:text-base font-semibold text-foreground mb-4">Upcoming tasks</h2>
               {isLoading ? (
                 <div className="h-24 rounded-2xl bg-gray-100 animate-pulse" />
+              ) : tasks.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-[11px] text-muted-foreground">
+                  No tasks yet.
+                </div>
               ) : (
                 <div className="space-y-3">
                   {tasks.map((task) => (

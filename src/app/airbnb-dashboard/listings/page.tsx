@@ -239,6 +239,10 @@ export default function AirbnbListingsPage() {
                 </div>
               ))}
             </div>
+          ) : listings.length === 0 ? (
+            <div className="surface-card rounded-3xl p-6 text-xs text-muted-foreground">
+              No listings yet. Add a listing to start syncing with Airbnb.
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {listings.map((listing) => (
@@ -292,20 +296,28 @@ export default function AirbnbListingsPage() {
                       Amenities
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {listing.amenities.slice(0, 3).map((amenity) => (
-                        <span
-                          key={amenity}
-                          className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] text-slate-600"
-                        >
-                          {amenity}
+                      {listing.amenities.length === 0 ? (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] text-slate-600">
+                          No amenities set
                         </span>
-                      ))}
+                      ) : (
+                        listing.amenities.slice(0, 3).map((amenity) => (
+                          <span
+                            key={amenity}
+                            className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] text-slate-600"
+                          >
+                            {amenity}
+                          </span>
+                        ))
+                      )}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">
-                      Last sync {new Date(listing.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {listing.lastSyncedAt
+                        ? `Last sync ${new Date(listing.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                        : "Not synced yet"}
                     </span>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${

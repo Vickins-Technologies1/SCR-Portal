@@ -161,6 +161,10 @@ export default function AdminAirbnbListingsPage() {
                 <div key={i} className="surface-card rounded-2xl h-20 animate-pulse" />
               ))}
             </div>
+          ) : listings.length === 0 ? (
+            <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+              No Airbnb listings yet.
+            </div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="table-shell">
               <div className="table-scroll">
@@ -180,45 +184,37 @@ export default function AdminAirbnbListingsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {listings.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="py-10 text-center text-xs text-muted-foreground">
-                          No listings found.
+                    {listings.map((listing) => (
+                      <tr key={listing._id} className="hover:bg-primary/5 transition-colors">
+                        <td className="py-3 px-4 text-xs font-medium text-foreground">{listing.name}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{listing.ownerEmail || listing.ownerName}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{listing.location}</td>
+                        <td className="py-3 px-4 text-xs">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                              listing.status === "active"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : listing.status === "paused"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-slate-100 text-slate-700"
+                            )}
+                          >
+                            {listing.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{listing.units ?? 0}</td>
+                        <td className="py-3 px-4 text-xs font-semibold text-primary">{formatKes(listing.baseRate || 0)}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{formatKes(listing.weekendRate || 0)}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{Math.round(listing.occupancyRate || 0)}%</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {listing.rating?.toFixed(1) || "0.0"} ({listing.reviewCount || 0})
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {listing.lastSyncedAt ? new Date(listing.lastSyncedAt).toLocaleDateString("en-KE") : "—"}
                         </td>
                       </tr>
-                    ) : (
-                      listings.map((listing) => (
-                        <tr key={listing._id} className="hover:bg-primary/5 transition-colors">
-                          <td className="py-3 px-4 text-xs font-medium text-foreground">{listing.name}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{listing.ownerEmail || listing.ownerName}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{listing.location}</td>
-                          <td className="py-3 px-4 text-xs">
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                                listing.status === "active"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : listing.status === "paused"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-slate-100 text-slate-700"
-                              )}
-                            >
-                              {listing.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{listing.units ?? 0}</td>
-                          <td className="py-3 px-4 text-xs font-semibold text-primary">{formatKes(listing.baseRate || 0)}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{formatKes(listing.weekendRate || 0)}</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">{Math.round(listing.occupancyRate || 0)}%</td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {listing.rating?.toFixed(1) || "0.0"} ({listing.reviewCount || 0})
-                          </td>
-                          <td className="py-3 px-4 text-xs text-muted-foreground">
-                            {listing.lastSyncedAt ? new Date(listing.lastSyncedAt).toLocaleDateString("en-KE") : "—"}
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
