@@ -3,7 +3,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash, FaGoogle, FaCheck, FaTimes, FaChevronDown } from "react-icons/fa";
+import {
+  FaEye,
+  FaEyeSlash,
+  FaGoogle,
+  FaCheck,
+  FaTimes,
+  FaChevronDown,
+  FaBuilding,
+  FaHotel,
+} from "react-icons/fa";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { countries } from "countries-list";
@@ -52,6 +61,7 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
+  const [managementType, setManagementType] = useState<"rentals" | "airbnb">("rentals");
 
   const [criteria, setCriteria] = useState({
     length: false,
@@ -208,6 +218,7 @@ export default function SignUp() {
           password,
           phone: fullPhone,
           role: "propertyOwner",
+          managementType,
           csrfToken,
         }),
         credentials: "include",
@@ -510,6 +521,59 @@ export default function SignUp() {
                       autoComplete="email"
                       className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
                     />
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                        Management Type
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setManagementType("rentals")}
+                          className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all ${
+                            managementType === "rentals"
+                              ? "border-primary/40 bg-primary/10 ring-1 ring-primary/30"
+                              : "border-border bg-muted/30 hover:bg-muted/50"
+                          }`}
+                          aria-pressed={managementType === "rentals"}
+                        >
+                          <span className="h-9 w-9 rounded-2xl bg-white/70 flex items-center justify-center shadow-sm">
+                            <FaBuilding className="text-primary text-lg" />
+                          </span>
+                          <span>
+                            <span className="block text-xs font-semibold text-foreground">
+                              Rentals
+                            </span>
+                            <span className="block text-[10px] text-muted-foreground">
+                              Long-term property management
+                            </span>
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setManagementType("airbnb")}
+                          className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all ${
+                            managementType === "airbnb"
+                              ? "border-primary/40 bg-primary/10 ring-1 ring-primary/30"
+                              : "border-border bg-muted/30 hover:bg-muted/50"
+                          }`}
+                          aria-pressed={managementType === "airbnb"}
+                        >
+                          <span className="h-9 w-9 rounded-2xl bg-white/70 flex items-center justify-center shadow-sm">
+                            <FaHotel className="text-primary text-lg" />
+                          </span>
+                          <span>
+                            <span className="block text-xs font-semibold text-foreground">
+                              Airbnb
+                            </span>
+                            <span className="block text-[10px] text-muted-foreground">
+                              Short-term stays & STR ops
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
                   </motion.div>
                 )}
 
@@ -775,6 +839,24 @@ export default function SignUp() {
                           <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary">
                             Default
                           </span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2 sm:col-span-2">
+                        <p className="text-[10px] text-muted-foreground">Management Type</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-sm">
+                            {managementType === "airbnb" ? "Airbnb / Short-Term" : "Rentals / Long-Term"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setManagementType((prev) => (prev === "airbnb" ? "rentals" : "airbnb"))
+                            }
+                            className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition"
+                          >
+                            Switch
+                          </button>
                         </div>
                       </div>
                     </div>

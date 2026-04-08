@@ -12,6 +12,7 @@ export const config = {
     "/property-listings/:path*",
     "/tenant-dashboard/:path*",
     "/property-owner-dashboard/:path*",
+    "/airbnb-dashboard/:path*",
     "/tenants/:path*",
   ],
 };

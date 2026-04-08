@@ -50,6 +50,7 @@ interface SignupRequestBody {
   phone: string;
   confirmPassword?: string;
   role: string;
+  managementType?: string;
   csrfToken: string;
 }
 
@@ -82,13 +83,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, phone, role, csrfToken } = body;
+    const { name, email, password, phone, role, csrfToken, managementType } = body;
 
     // 3. Required fields
     if (!name || !email || !password || !phone || !role || !csrfToken) {
       logger.warn("Missing required fields", { provided: Object.keys(body) });
       return NextResponse.json(
         { success: false, message: "All fields are required" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedManagementType =
+      typeof managementType === "string" ? managementType.trim().toLowerCase() : "rentals";
+
+    if (!["rentals", "airbnb"].includes(normalizedManagementType)) {
+      logger.warn("Invalid management type", { managementType });
+      return NextResponse.json(
+        { success: false, message: "Invalid management type" },
         { status: 400 }
       );
     }
@@ -196,6 +208,7 @@ export async function POST(request: NextRequest) {
       password: hashedPassword,
       phone: sanitizedPhone.trim(),
       role: "propertyOwner",
+      managementType: normalizedManagementType,
       isApproved: false,
       createdAt: new Date().toISOString(),
     };

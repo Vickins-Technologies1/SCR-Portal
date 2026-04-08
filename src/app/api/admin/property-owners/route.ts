@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
       phone,
       password: hashedPassword,
       role: "propertyOwner",
+      managementType: "rentals",
       isApproved: false,
       createdAt: new Date(),
       updatedAt: new Date(),

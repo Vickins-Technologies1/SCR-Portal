@@ -2,7 +2,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcrypt";
-import { ObjectId } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import { getDefaultPermissions } from "../../../lib/permissions";
 import { deliverOtp } from "../../../lib/otp-delivery";
 import { createSessionToken, getSessionCookieOptions } from "../../../lib/session";
@@ -17,6 +17,41 @@ import {
 } from "../../../lib/otp";
 
 const OTP_COLLECTION = "otpChallenges";
+
+type OwnerManagementType = "rentals" | "airbnb";
+
+const normalizeManagementType = (value: unknown): OwnerManagementType => {
+  if (typeof value !== "string") return "rentals";
+  const normalized = value.trim().toLowerCase();
+  return normalized === "airbnb" ? "airbnb" : "rentals";
+};
+
+const getOwnerRedirectPath = (managementType: OwnerManagementType) =>
+  managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+
+async function resolveOwnerManagementType(
+  db: Db,
+  user: any,
+  finalRole: string,
+  isTeamMember: boolean
+): Promise<OwnerManagementType> {
+  if (finalRole === "propertyOwner") {
+    return normalizeManagementType(user?.managementType);
+  }
+
+  if (isTeamMember) {
+    const ownerId = user?.ownerId?.toString?.() ?? (typeof user?.ownerId === "string" ? user.ownerId : null);
+    if (ownerId && ObjectId.isValid(ownerId)) {
+      const owner = await db.collection("propertyOwners").findOne(
+        { _id: new ObjectId(ownerId) },
+        { projection: { managementType: 1 } }
+      );
+      return normalizeManagementType(owner?.managementType);
+    }
+  }
+
+  return "rentals";
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -99,6 +134,11 @@ export async function POST(request: NextRequest) {
             { success: false, message: "Unable to resolve user collection" },
             { status: 500 }
           );
+        }
+
+        if (finalRole === "propertyOwner" || isTeamMember) {
+          const managementType = await resolveOwnerManagementType(db, user, finalRole, isTeamMember);
+          redirectPath = getOwnerRedirectPath(managementType);
         }
 
         const now = new Date();
@@ -350,6 +390,11 @@ export async function POST(request: NextRequest) {
             { success: false, message: "Unable to resolve user collection" },
             { status: 500 }
           );
+        }
+
+        if (finalRole === "propertyOwner" || isTeamMember) {
+          const managementType = await resolveOwnerManagementType(db, user, finalRole, isTeamMember);
+          redirectPath = getOwnerRedirectPath(managementType);
         }
 
         const now = new Date();

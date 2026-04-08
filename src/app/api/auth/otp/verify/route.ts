@@ -28,6 +28,12 @@ type OtpDoc = {
   resendCount?: number;
 };
 
+const normalizeManagementType = (value: unknown): "rentals" | "airbnb" => {
+  if (typeof value !== "string") return "rentals";
+  const normalized = value.trim().toLowerCase();
+  return normalized === "airbnb" ? "airbnb" : "rentals";
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -112,13 +118,33 @@ export async function POST(request: Request) {
 
     const isTeamMember = otp.collection === "teamMembers" || otp.isTeamMember;
     const isOwner = otp.collection === "propertyOwners" && otp.role === "propertyOwner";
-    const redirectPath =
-      otp.redirectPath ||
-      (otp.role === "admin"
-        ? "/admin/dashboard"
-        : otp.role === "tenant"
-          ? "/tenant-dashboard"
-          : "/property-owner-dashboard");
+
+    let redirectPath = otp.redirectPath;
+    if (otp.role === "propertyOwner" || isTeamMember) {
+      let managementType: "rentals" | "airbnb" = "rentals";
+      if (isTeamMember) {
+        const ownerId = user?.ownerId?.toString?.() ?? (typeof user?.ownerId === "string" ? user.ownerId : null);
+        if (ownerId && ObjectId.isValid(ownerId)) {
+          const owner = await db.collection("propertyOwners").findOne(
+            { _id: new ObjectId(ownerId) },
+            { projection: { managementType: 1 } }
+          );
+          managementType = normalizeManagementType(owner?.managementType);
+        }
+      } else {
+        managementType = normalizeManagementType(user?.managementType);
+      }
+      redirectPath = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+    }
+
+    if (!redirectPath) {
+      redirectPath =
+        otp.role === "admin"
+          ? "/admin/dashboard"
+          : otp.role === "tenant"
+            ? "/tenant-dashboard"
+            : "/property-owner-dashboard";
+    }
 
     let finalPermissions: string[] = [];
 

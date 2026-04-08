@@ -109,6 +109,18 @@ export async function POST(request: NextRequest) {
 
     await db.collection("payments").updateOne({ _id: payment._id }, { $set: update });
 
+    if (payment.airbnbBookingId) {
+      await db.collection("airbnbBookings").updateOne(
+        { externalId: payment.airbnbBookingId, ownerId: payment.ownerId },
+        {
+          $set: {
+            payoutStatus: normalizedStatus === "completed" ? "paid" : normalizedStatus === "failed" ? "failed" : "pending",
+            updatedAt: new Date().toISOString(),
+          },
+        }
+      );
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     logger.error("KopoKopo callback error", {

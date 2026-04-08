@@ -119,6 +119,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Handle Airbnb direct booking payments
+    if (payment.airbnbBookingId) {
+      await db.collection("airbnbBookings").updateOne(
+        { externalId: payment.airbnbBookingId, ownerId: payment.ownerId },
+        {
+          $set: {
+            payoutStatus: status === "completed" ? "paid" : status === "failed" ? "failed" : "pending",
+            updatedAt: new Date().toISOString(),
+          },
+        }
+      );
+    }
+
     // Only complete downstream ledger updates for successful tenant payments
     if (status !== "completed" || !payment.tenantId) {
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });

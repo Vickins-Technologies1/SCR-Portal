@@ -177,9 +177,11 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/ownerstats": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/ownercharts": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/rent-price-overrides": { roles: ["propertyOwner", "teamMember"], isApi: true },
+  "/api/airbnb": { roles: ["propertyOwner", "teamMember"], isApi: true },
 
   // Page routes (client-side routing protection)
   "/property-owner-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
+  "/airbnb-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/admin/support": { roles: ["admin"], isApi: false },
   "/tenant-dashboard": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/tenant-dashboard/vacate": { roles: ["tenant", "propertyOwner"], isApi: false },
@@ -393,6 +395,7 @@ export const config = {
     "/property-listings/:path*",
     "/tenant-dashboard/:path*",
     "/property-owner-dashboard/:path*",
+    "/airbnb-dashboard/:path*",
     "/tenants/:path*",
   ],
 };
