@@ -51,13 +51,19 @@ export async function GET(request: NextRequest) {
 
     const { db } = await connectToDatabase();
 
-    // Fetch active listings
+    // Fetch active long-term listings
     const listings = await db
       .collection("propertyListings")
       .find({ status: "Active" })
       .toArray();
 
-    if (listings.length === 0) {
+    // Fetch published Airbnb listings
+    const airbnbListings = await db
+      .collection("airbnbListings")
+      .find({ status: { $in: ["published", "active"] } })
+      .toArray();
+
+    if (listings.length === 0 && airbnbListings.length === 0) {
       return NextResponse.json({ success: true, properties: [] });
     }
 
@@ -115,8 +121,13 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {});
 
-    // Fetch owners
-    const ownerIds = [...new Set(listings.map((l) => l.ownerId))].filter(Boolean);
+    // Fetch owners (long-term + Airbnb)
+    const ownerIds = [
+      ...new Set([
+        ...listings.map((l) => l.ownerId),
+        ...airbnbListings.map((l) => l.ownerId),
+      ]),
+    ].filter(Boolean);
     const ownerObjectIds = ownerIds
       .map((id) => coerceObjectId(id))
       .filter((id): id is ObjectId => Boolean(id));
@@ -173,6 +184,7 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
           _id: listingId,
           originalPropertyId: listing.originalPropertyId?.toString() || listingId,
           ownerId: ownerIdValue,
+          listingType: "rentals",
           name: listing.name,
           address: listing.address,
           description: listing.description,
@@ -190,7 +202,62 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
       })
       .filter(Boolean);
 
-    const sorted = (enriched as any[]).sort((a, b) =>
+    const airbnbEnriched = airbnbListings
+      .map((listing) => {
+        const listingId = listing.externalId || listing._id?.toString?.() || "";
+        const name = listing.name || "Airbnb Listing";
+        const address = listing.location || listing.address || "Kenya";
+
+        const minRate = Number(listing.baseRate || 0);
+        const matchesPrice = hasPriceFilter
+          ? Number.isFinite(minRate) && minRate >= minPrice && minRate <= maxPrice
+          : true;
+
+        const listingAddress = typeof address === "string" ? address.toLowerCase() : "";
+        const listingName = typeof name === "string" ? name.toLowerCase() : "";
+        const matchesLocation = !location || listingAddress.includes(location) || listingName.includes(location);
+
+        const featuredScore = Number(listing.rating || 0);
+        const featuredReviews = Number(listing.reviewCount || 0);
+        const isFeatured = featuredScore >= 4.6 && featuredReviews >= 8;
+        const matchesFeatured =
+          !featured ||
+          featured === "all" ||
+          ((featured === "true" || featured === "featured") && isFeatured) ||
+          ((featured === "false" || featured === "standard") && !isFeatured);
+
+        if (!matchesPrice || !matchesLocation || !matchesFeatured) {
+          return null;
+        }
+
+        const ownerIdValue = listing.ownerId ? String(listing.ownerId) : "";
+
+        return {
+          _id: listingId,
+          ownerId: ownerIdValue,
+          listingType: "airbnb",
+          name,
+          address,
+          description: listing.description || listing.summary || "",
+          amenities: listing.amenities || [],
+          houseRules: listing.houseRules || [],
+          images: listing.images || [],
+          status: listing.status || "draft",
+          baseRate: Number(listing.baseRate || 0),
+          weekendRate: Number(listing.weekendRate || listing.baseRate || 0),
+          occupancyRate: Number(listing.occupancyRate || 0),
+          rating: Number(listing.rating || 0),
+          reviewCount: Number(listing.reviewCount || 0),
+          units: Number(listing.units || 1),
+          licenseStatus: listing.licenseStatus || "missing",
+          createdAt: toISO(listing.createdAt) || "",
+          updatedAt: toISO(listing.updatedAt),
+          owner: ownerMap[ownerIdValue] || null,
+        };
+      })
+      .filter(Boolean);
+
+    const sorted = [...(enriched as any[]), ...(airbnbEnriched as any[])].sort((a, b) =>
       a.isAdvertised === b.isAdvertised ? 0 : a.isAdvertised ? -1 : 1
     );
 

@@ -82,6 +82,34 @@ export interface Listing {
   availability?: AvailabilitySummary;
 }
 
+// ────────────────────────────────────────────────
+// Public Airbnb Listing (short-term stays)
+// ────────────────────────────────────────────────
+export interface AirbnbPublicListing {
+  _id: string;
+  ownerId: string;
+  name: string;
+  address: string;
+  description?: string;
+  amenities?: string[];
+  houseRules?: string[];
+  images?: string[];
+  status: "published" | "paused" | "draft";
+  baseRate: number;
+  weekendRate: number;
+  occupancyRate?: number;
+  rating?: number;
+  reviewCount?: number;
+  units?: number;
+  licenseStatus?: "valid" | "due" | "missing";
+  createdAt: string;
+  updatedAt?: string;
+  listingType: "airbnb";
+}
+
+export type PublicRentalListing = Listing & { listingType: "rentals" };
+export type PublicListing = PublicRentalListing | AirbnbPublicListing;
+
 
 
 

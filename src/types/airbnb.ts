@@ -89,6 +89,8 @@ export interface AirbnbConversation {
   unread: number;
   channel: "Airbnb" | "In-app";
   lastMessageAt: string;
+  guestEmail?: string;
+  guestPhone?: string;
 }
 
 export interface AirbnbPricingRule {
@@ -123,6 +125,19 @@ export interface AirbnbIntegration {
   name: string;
   status: "connected" | "available" | "coming_soon";
   description: string;
+  provider?: string;
+  config?: Record<string, any>;
+  health?: {
+    status: "healthy" | "degraded" | "down";
+    checkedAt: string;
+    endpoints: Array<{
+      name: string;
+      url: string;
+      ok: boolean;
+      status?: number;
+      message?: string;
+    }>;
+  };
 }
 
 export interface AirbnbReportSummary {
@@ -132,4 +147,21 @@ export interface AirbnbReportSummary {
   revpar: number;
   cancellationRate: number;
   reviewScore: number;
+}
+
+export interface AirbnbMessageTemplate {
+  id: string;
+  title: string;
+  body: string;
+  language?: "en" | "sw";
+}
+
+export interface AirbnbMessageDelivery {
+  id: string;
+  channel: "email" | "sms" | "whatsapp";
+  recipient: string;
+  status: "sent" | "failed" | "skipped";
+  provider?: string;
+  message?: string;
+  createdAt: string;
 }

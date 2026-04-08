@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
+  X,
 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -23,6 +24,21 @@ export default function AirbnbListingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    id: "",
+    name: "",
+    location: "",
+    status: "draft",
+    units: 1,
+    baseRate: 0,
+    weekendRate: 0,
+    amenities: "",
+    houseRules: "",
+    licenseStatus: "missing",
+  });
 
   const fetchListings = useCallback(async () => {
     if (!ownerId) return;
@@ -59,10 +75,100 @@ export default function AirbnbListingsPage() {
         throw new Error(data.message || "Sync failed");
       }
       setSyncMessage(data.message || "Sync completed.");
+      await fetchListings();
     } catch (err) {
       setSyncMessage(err instanceof Error ? err.message : "Sync failed");
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const openCreateModal = () => {
+    setForm({
+      id: "",
+      name: "",
+      location: "",
+      status: "draft",
+      units: 1,
+      baseRate: 0,
+      weekendRate: 0,
+      amenities: "",
+      houseRules: "",
+      licenseStatus: "missing",
+    });
+    setFormMessage(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (listing: AirbnbListing) => {
+    setForm({
+      id: listing.id,
+      name: listing.name,
+      location: listing.location,
+      status: listing.status,
+      units: listing.units,
+      baseRate: listing.baseRate,
+      weekendRate: listing.weekendRate,
+      amenities: listing.amenities.join(", "),
+      houseRules: listing.houseRules.join(", "),
+      licenseStatus: listing.licenseStatus,
+    });
+    setFormMessage(null);
+    setShowModal(true);
+  };
+
+  const handleSaveListing = async () => {
+    if (!csrfToken) {
+      setFormMessage("Missing session token. Refresh the page and try again.");
+      return;
+    }
+
+    if (!form.name.trim() || !form.location.trim()) {
+      setFormMessage("Listing name and location are required.");
+      return;
+    }
+
+    setIsSaving(true);
+    setFormMessage(null);
+    try {
+      const payload = {
+        id: form.id || undefined,
+        name: form.name.trim(),
+        location: form.location.trim(),
+        status: form.status,
+        units: Number(form.units || 1),
+        baseRate: Number(form.baseRate || 0),
+        weekendRate: Number(form.weekendRate || 0),
+        amenities: form.amenities
+          ? form.amenities.split(",").map((item) => item.trim()).filter(Boolean)
+          : [],
+        houseRules: form.houseRules
+          ? form.houseRules.split(",").map((item) => item.trim()).filter(Boolean)
+          : [],
+        licenseStatus: form.licenseStatus,
+      };
+
+      const res = await fetch("/api/airbnb/listings", {
+        method: form.id ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to save listing");
+      }
+
+      setFormMessage("Listing saved successfully.");
+      setShowModal(false);
+      await fetchListings();
+    } catch (err) {
+      setFormMessage(err instanceof Error ? err.message : "Failed to save listing");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -106,7 +212,10 @@ export default function AirbnbListingsPage() {
                   {syncingId ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud size={16} />}
                   Sync all
                 </button>
-                <button className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold">
+                <button
+                  onClick={openCreateModal}
+                  className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold"
+                >
                   <Sparkles size={16} />
                   Add listing
                 </button>
@@ -220,12 +329,153 @@ export default function AirbnbListingsPage() {
                       {syncingId === listing.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud size={14} />}
                       Sync
                     </button>
-                    <button className="flex-1 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover">
+                    <button
+                      onClick={() => openEditModal(listing)}
+                      className="flex-1 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+                    >
                       Edit listing
                     </button>
                   </div>
                 </motion.div>
               ))}
+            </div>
+          )}
+
+          {showModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+              <div className="modal-panel w-full max-w-2xl overflow-hidden">
+                <div className="modal-header flex items-center justify-between px-5 py-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      {form.id ? "Edit listing" : "Add listing"}
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground">
+                      Update Airbnb-ready details and pricing.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="modal-close rounded-full p-1"
+                    aria-label="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="modal-body modal-stagger space-y-4">
+                  {formMessage && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                      {formMessage}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Listing name</label>
+                      <input
+                        value={form.name}
+                        onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Location</label>
+                      <input
+                        value={form.location}
+                        onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Status</label>
+                      <select
+                        value={form.status}
+                        onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                        <option value="paused">Paused</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Units</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={form.units}
+                        onChange={(event) => setForm((prev) => ({ ...prev, units: Number(event.target.value) }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Base rate (KES)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.baseRate}
+                        onChange={(event) => setForm((prev) => ({ ...prev, baseRate: Number(event.target.value) }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">Weekend rate (KES)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.weekendRate}
+                        onChange={(event) => setForm((prev) => ({ ...prev, weekendRate: Number(event.target.value) }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        Amenities (comma separated)
+                      </label>
+                      <input
+                        value={form.amenities}
+                        onChange={(event) => setForm((prev) => ({ ...prev, amenities: event.target.value }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        House rules (comma separated)
+                      </label>
+                      <input
+                        value={form.houseRules}
+                        onChange={(event) => setForm((prev) => ({ ...prev, houseRules: event.target.value }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">License status</label>
+                      <select
+                        value={form.licenseStatus}
+                        onChange={(event) => setForm((prev) => ({ ...prev, licenseStatus: event.target.value }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      >
+                        <option value="valid">Valid</option>
+                        <option value="due">Due</option>
+                        <option value="missing">Missing</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowModal(false)}
+                      className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveListing}
+                      disabled={isSaving}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
+                    >
+                      {isSaving ? "Saving..." : "Save listing"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </main>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calendar, RefreshCw } from "lucide-react";
+import { Calendar, RefreshCw, X } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -14,6 +14,22 @@ export default function AirbnbCalendarPage() {
   const [calendarRows, setCalendarRows] = useState<AirbnbCalendarRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [settings, setSettings] = useState({
+    minNights: 2,
+    maxNights: 21,
+    advanceNotice: 1,
+    prepTime: 1,
+  });
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const [selectedNight, setSelectedNight] = useState<{
+    listingId: string;
+    listingName: string;
+    date: string;
+    status: "available" | "booked" | "blocked";
+    rate: number;
+    note?: string;
+  } | null>(null);
+  const [isSavingNight, setIsSavingNight] = useState(false);
 
   const fetchCalendar = useCallback(async () => {
     if (!ownerId) return;
@@ -22,6 +38,14 @@ export default function AirbnbCalendarPage() {
     const data = await res.json();
     if (data.success) {
       setCalendarRows(data.calendar || []);
+      if (data.settings) {
+        setSettings({
+          minNights: data.settings.minNights ?? 2,
+          maxNights: data.settings.maxNights ?? 21,
+          advanceNotice: data.settings.advanceNotice ?? 1,
+          prepTime: data.settings.prepTime ?? 1,
+        });
+      }
     }
     setIsLoading(false);
   }, [ownerId]);
@@ -49,6 +73,62 @@ export default function AirbnbCalendarPage() {
     });
     const data = await res.json();
     setSyncMessage(data.message || "Sync completed.");
+    if (data.success) {
+      await fetchCalendar();
+    }
+  };
+
+  const handleSettingsSave = async () => {
+    if (!csrfToken) {
+      setSettingsMessage("Missing session token. Refresh and retry.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/airbnb/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ type: "settings", ...settings }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to save rules");
+      }
+      setSettingsMessage("Rules updated.");
+    } catch (err) {
+      setSettingsMessage(err instanceof Error ? err.message : "Failed to save rules");
+    }
+  };
+
+  const handleSaveNight = async () => {
+    if (!csrfToken || !selectedNight) return;
+    setIsSavingNight(true);
+    try {
+      const res = await fetch("/api/airbnb/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({
+          type: "night",
+          listingId: selectedNight.listingId,
+          listingName: selectedNight.listingName,
+          date: selectedNight.date,
+          status: selectedNight.status,
+          rate: selectedNight.rate,
+          note: selectedNight.note,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to update night");
+      }
+      setSelectedNight(null);
+      await fetchCalendar();
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : "Failed to update night");
+    } finally {
+      setIsSavingNight(false);
+    }
   };
 
   return (
@@ -86,7 +166,11 @@ export default function AirbnbCalendarPage() {
                 <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Min nights</p>
                 <input
                   type="number"
-                  defaultValue={2}
+                  value={settings.minNights}
+                  onChange={(event) =>
+                    setSettings((prev) => ({ ...prev, minNights: Number(event.target.value) }))
+                  }
+                  onBlur={handleSettingsSave}
                   className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
                 />
               </div>
@@ -94,7 +178,11 @@ export default function AirbnbCalendarPage() {
                 <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Max nights</p>
                 <input
                   type="number"
-                  defaultValue={21}
+                  value={settings.maxNights}
+                  onChange={(event) =>
+                    setSettings((prev) => ({ ...prev, maxNights: Number(event.target.value) }))
+                  }
+                  onBlur={handleSettingsSave}
                   className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
                 />
               </div>
@@ -102,7 +190,11 @@ export default function AirbnbCalendarPage() {
                 <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Advance notice</p>
                 <input
                   type="number"
-                  defaultValue={1}
+                  value={settings.advanceNotice}
+                  onChange={(event) =>
+                    setSettings((prev) => ({ ...prev, advanceNotice: Number(event.target.value) }))
+                  }
+                  onBlur={handleSettingsSave}
                   className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
                 />
               </div>
@@ -110,11 +202,18 @@ export default function AirbnbCalendarPage() {
                 <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Prep time (days)</p>
                 <input
                   type="number"
-                  defaultValue={1}
+                  value={settings.prepTime}
+                  onChange={(event) =>
+                    setSettings((prev) => ({ ...prev, prepTime: Number(event.target.value) }))
+                  }
+                  onBlur={handleSettingsSave}
                   className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
                 />
               </div>
             </div>
+            {settingsMessage && (
+              <p className="mt-3 text-xs text-muted-foreground">{settingsMessage}</p>
+            )}
           </section>
 
           <section className="surface-card rounded-3xl p-5 sm:p-6">
@@ -178,7 +277,17 @@ export default function AirbnbCalendarPage() {
                         return (
                           <div
                             key={`${row.propertyId}-${night.date}`}
-                            className={`rounded-xl px-2 py-2 text-center text-[10px] font-semibold ${statusClass}`}
+                            onClick={() =>
+                              setSelectedNight({
+                                listingId: row.propertyId,
+                                listingName: row.propertyName,
+                                date: night.date,
+                                status: night.status,
+                                rate: night.rate,
+                                note: night.note,
+                              })
+                            }
+                            className={`rounded-xl px-2 py-2 text-center text-[10px] font-semibold cursor-pointer transition hover:scale-[1.02] ${statusClass}`}
                           >
                             {night.status === "available" ? formatKes(night.rate) : night.status}
                           </div>
@@ -190,6 +299,74 @@ export default function AirbnbCalendarPage() {
               </div>
             )}
           </section>
+
+          {selectedNight && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+              <div className="modal-panel w-full max-w-md overflow-hidden">
+                <div className="modal-header flex items-center justify-between px-5 py-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">Update night</h2>
+                    <p className="text-[11px] text-muted-foreground">
+                      {selectedNight.listingName} • {new Date(selectedNight.date).toLocaleDateString("en-KE")}
+                    </p>
+                  </div>
+                  <button onClick={() => setSelectedNight(null)} className="modal-close rounded-full p-1">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="modal-body modal-stagger space-y-4">
+                  <select
+                    value={selectedNight.status}
+                    onChange={(event) =>
+                      setSelectedNight((prev) =>
+                        prev ? { ...prev, status: event.target.value as typeof prev.status } : prev
+                      )
+                    }
+                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                  >
+                    <option value="available">Available</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="booked">Booked</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    value={selectedNight.rate}
+                    onChange={(event) =>
+                      setSelectedNight((prev) =>
+                        prev ? { ...prev, rate: Number(event.target.value) } : prev
+                      )
+                    }
+                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                    placeholder="Rate"
+                  />
+                  <input
+                    value={selectedNight.note || ""}
+                    onChange={(event) =>
+                      setSelectedNight((prev) => (prev ? { ...prev, note: event.target.value } : prev))
+                    }
+                    className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                    placeholder="Note (optional)"
+                  />
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setSelectedNight(null)}
+                      className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveNight}
+                      disabled={isSavingNight}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
+                    >
+                      {isSavingNight ? "Saving..." : "Save night"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

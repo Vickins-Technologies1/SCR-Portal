@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { calculateAdr, calculateOccupancyRate, calculateRevpar } from "@/lib/airbnb-metrics";
 import { getMonthRange, parseDate } from "@/lib/airbnb-utils";
+import { calculateAirbnbTaxes } from "@/lib/airbnb-taxes";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -51,5 +52,15 @@ export async function GET(request: NextRequest) {
     reviewScore,
   };
 
-  return NextResponse.json({ success: true, summary });
+  const taxes = calculateAirbnbTaxes(summary.revenue);
+
+  return NextResponse.json({
+    success: true,
+    summary,
+    taxes,
+    period: {
+      start: start.toISOString(),
+      end: end.toISOString(),
+    },
+  });
 }

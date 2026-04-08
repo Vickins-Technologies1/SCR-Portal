@@ -1,6 +1,7 @@
 "use client";
 
 import { Settings, Bell, Shield, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -8,6 +9,7 @@ import { useAirbnbAccess } from "../components/useAirbnbAccess";
 
 export default function AirbnbSettingsPage() {
   const { hasAccess } = useAirbnbAccess("settings:view");
+  const router = useRouter();
 
   if (hasAccess === false) {
     return (
@@ -46,7 +48,10 @@ export default function AirbnbSettingsPage() {
               <p className="text-[11px] text-muted-foreground">
                 Define permissions for managers, cleaners, and accountants.
               </p>
-              <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover">
+              <button
+                onClick={() => router.push("/property-owner-dashboard/users")}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+              >
                 Manage access
               </button>
             </div>
@@ -58,7 +63,10 @@ export default function AirbnbSettingsPage() {
               <p className="text-[11px] text-muted-foreground">
                 Control email, SMS, and WhatsApp alerts for guests and staff.
               </p>
-              <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover">
+              <button
+                onClick={() => router.push("/property-owner-dashboard/notifications")}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+              >
                 Update alerts
               </button>
             </div>
@@ -70,7 +78,10 @@ export default function AirbnbSettingsPage() {
               <p className="text-[11px] text-muted-foreground">
                 Enforce OTP, audit logs, and device access policies.
               </p>
-              <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover">
+              <button
+                onClick={() => router.push("/property-owner-dashboard/settings")}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+              >
                 Review security
               </button>
             </div>

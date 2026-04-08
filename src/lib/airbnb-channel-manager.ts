@@ -25,6 +25,18 @@ type AirbnbSyncResult = {
   syncedAt: string;
 };
 
+export type AirbnbChannelHealth = {
+  status: "healthy" | "degraded" | "down";
+  checkedAt: string;
+  endpoints: Array<{
+    name: string;
+    url: string;
+    ok: boolean;
+    status?: number;
+    message?: string;
+  }>;
+};
+
 const DEFAULT_BASE_URL = process.env.AIRBNB_CHANNEL_MANAGER_BASE_URL || "";
 const DEFAULT_LISTINGS_PATH = process.env.AIRBNB_LISTINGS_ENDPOINT || "/listings";
 const DEFAULT_RESERVATIONS_PATH = process.env.AIRBNB_RESERVATIONS_ENDPOINT || "/reservations";
@@ -93,6 +105,118 @@ async function fetchEndpoint(baseUrl: string, path: string, token: string) {
     throw new Error(`Failed to fetch ${url}`);
   }
   return data;
+}
+
+async function probeEndpoint(baseUrl: string, path: string, token: string) {
+  const url = `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
+    const data = await parseJson(res);
+    return {
+      name: path,
+      url,
+      ok: res.ok,
+      status: res.status,
+      message: res.ok ? undefined : data?.message || data?.error || res.statusText,
+    };
+  } catch (error) {
+    return {
+      name: path,
+      url,
+      ok: false,
+      status: 0,
+      message: error instanceof Error ? error.message : "Network error",
+    };
+  }
+}
+
+export async function checkAirbnbChannelHealth(params: {
+  db: Db;
+  ownerId: string;
+  integration: { _id: ObjectId | string; config: Partial<AirbnbChannelConfig> };
+}): Promise<AirbnbChannelHealth> {
+  const { db, ownerId, integration } = params;
+  const integrationId =
+    integration._id instanceof ObjectId
+      ? integration._id
+      : typeof integration._id === "string" && ObjectId.isValid(integration._id)
+        ? new ObjectId(integration._id)
+        : null;
+
+  const config: AirbnbChannelConfig = {
+    baseUrl: integration.config.baseUrl || DEFAULT_BASE_URL,
+    listingsPath: integration.config.listingsPath || DEFAULT_LISTINGS_PATH,
+    reservationsPath: integration.config.reservationsPath || DEFAULT_RESERVATIONS_PATH,
+    calendarPath: integration.config.calendarPath || DEFAULT_CALENDAR_PATH,
+    messagesPath: integration.config.messagesPath || DEFAULT_MESSAGES_PATH,
+    accessToken: integration.config.accessToken || process.env.AIRBNB_ACCESS_TOKEN || "",
+    refreshToken: integration.config.refreshToken || process.env.AIRBNB_REFRESH_TOKEN || "",
+    tokenExpiresAt: integration.config.tokenExpiresAt,
+    tokenUrl: integration.config.tokenUrl || DEFAULT_TOKEN_URL,
+    clientId: integration.config.clientId || DEFAULT_CLIENT_ID,
+    clientSecret: integration.config.clientSecret || DEFAULT_CLIENT_SECRET,
+  };
+
+  if (!config.baseUrl || !config.accessToken) {
+    return {
+      status: "down",
+      checkedAt: new Date().toISOString(),
+      endpoints: [
+        {
+          name: "config",
+          url: config.baseUrl || "missing baseUrl",
+          ok: false,
+          status: 0,
+          message: "Missing channel manager base URL or access token.",
+        },
+      ],
+    };
+  }
+
+  let activeToken = config.accessToken;
+  if (shouldRefreshToken(config.tokenExpiresAt)) {
+    const refreshed = await refreshAccessToken(config);
+    if (refreshed?.accessToken) {
+      activeToken = refreshed.accessToken;
+      if (integrationId) {
+        await db.collection("airbnbIntegrations").updateOne(
+          { _id: integrationId },
+          {
+            $set: {
+              "config.accessToken": refreshed.accessToken,
+              "config.refreshToken": refreshed.refreshToken,
+              "config.tokenExpiresAt": refreshed.expiresAt,
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        );
+      } else {
+        logger.warn("Airbnb integration id missing; token refresh not persisted.", { ownerId });
+      }
+    }
+  }
+
+  const endpoints = [
+    await probeEndpoint(config.baseUrl, config.listingsPath, activeToken),
+    await probeEndpoint(config.baseUrl, config.reservationsPath, activeToken),
+    config.calendarPath ? await probeEndpoint(config.baseUrl, config.calendarPath, activeToken) : null,
+    config.messagesPath ? await probeEndpoint(config.baseUrl, config.messagesPath, activeToken) : null,
+  ].filter(Boolean) as AirbnbChannelHealth["endpoints"];
+
+  const okCount = endpoints.filter((endpoint) => endpoint.ok).length;
+  const status = okCount === endpoints.length ? "healthy" : okCount > 0 ? "degraded" : "down";
+
+  return {
+    status,
+    checkedAt: new Date().toISOString(),
+    endpoints,
+  };
 }
 
 export async function syncAirbnbChannel(params: {

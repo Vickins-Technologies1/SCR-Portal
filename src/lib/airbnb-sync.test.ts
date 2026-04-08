@@ -56,6 +56,30 @@ describe("airbnb sync mapping", () => {
     expect(booking.payoutStatus).toBe("paid");
   });
 
+  it("normalizes booking statuses and direct sources", () => {
+    const booking = mapAirbnbReservation(
+      {
+        id: "res-99",
+        listing_id: "lst-200",
+        listing_name: "Nairobi Loft",
+        guest: { name: "Kelvin Otieno" },
+        start_date: "2026-04-01",
+        end_date: "2026-04-03",
+        total: "16000",
+        status: "altered",
+        channel: "Direct",
+        payout_status: "pending",
+      },
+      "owner-2",
+      "lst-200",
+      "Nairobi Loft"
+    );
+
+    expect(booking.status).toBe("modified");
+    expect(booking.source).toBe("Direct");
+    expect(booking.total).toBe(16000);
+  });
+
   it("maps conversations and tracks unread counts", () => {
     const convo = mapAirbnbConversation(
       {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardList, PlusCircle } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -26,6 +26,8 @@ export default function AirbnbBookingsPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
+  const listingSelectRef = useRef<HTMLSelectElement | null>(null);
 
   const fetchBookings = useCallback(async () => {
     if (!ownerId) return;
@@ -151,19 +153,26 @@ export default function AirbnbBookingsPage() {
             subtitle="Auto-import Airbnb reservations, manage status updates, and handle direct bookings."
             icon={ClipboardList}
             actions={
-              <button className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold">
+              <button
+                onClick={() => {
+                  formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  setTimeout(() => listingSelectRef.current?.focus(), 300);
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold"
+              >
                 <PlusCircle size={16} />
                 New direct booking
               </button>
             }
           />
 
-          <section className="surface-card rounded-3xl p-5 sm:p-6">
+          <section ref={formRef} className="surface-card rounded-3xl p-5 sm:p-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.3em]">Manual booking</p>
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <select
+                    ref={listingSelectRef}
                     value={form.listingId}
                     onChange={(event) => setForm((prev) => ({ ...prev, listingId: event.target.value }))}
                     className="rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"

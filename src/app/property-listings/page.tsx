@@ -12,10 +12,11 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { Listing, AvailabilitySummary } from "@/types/property";
+import { PublicListing, AirbnbPublicListing, AvailabilitySummary } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
 
 interface FilterState {
+  listingType: "all" | "rentals" | "airbnb";
   unitType: string;
   minPrice: string;
   maxPrice: string;
@@ -24,10 +25,11 @@ interface FilterState {
 }
 
 export default function PropertyListings() {
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [listings, setListings] = useState<PublicListing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
+    listingType: "all",
     unitType: "",
     minPrice: "",
     maxPrice: "",
@@ -59,7 +61,9 @@ export default function PropertyListings() {
   }, []);
 
   const unitTypeOptions = useMemo(() => {
-    const types = listings.flatMap((listing) => (listing.unitTypes ?? []).map((unit) => unit.type));
+    const types = listings
+      .filter((listing) => listing.listingType === "rentals")
+      .flatMap((listing) => (listing.unitTypes ?? []).map((unit) => unit.type));
     return Array.from(new Set(types)).sort();
   }, [listings]);
 
@@ -69,7 +73,12 @@ export default function PropertyListings() {
     const max = filters.maxPrice ? Number(filters.maxPrice) : null;
 
     return listings.filter((listing) => {
-      const units = listing.unitTypes ?? [];
+      const isAirbnb = listing.listingType === "airbnb";
+      const units = listing.listingType === "rentals" ? listing.unitTypes ?? [] : [];
+
+      if (filters.listingType !== "all" && listing.listingType !== filters.listingType) {
+        return false;
+      }
 
       if (filters.unitType && !units.some((unit) => unit.type === filters.unitType)) {
         return false;
@@ -81,15 +90,25 @@ export default function PropertyListings() {
         if (!addressMatch && !nameMatch) return false;
       }
 
-      if (filters.featured === "featured" && !listing.isAdvertised) return false;
-      if (filters.featured === "standard" && listing.isAdvertised) return false;
+      const isFeatured = isAirbnb
+        ? (listing.rating ?? 0) >= 4.6 && (listing.reviewCount ?? 0) >= 8
+        : !!listing.isAdvertised;
+
+      if (filters.featured === "featured" && !isFeatured) return false;
+      if (filters.featured === "standard" && isFeatured) return false;
 
       if ((min !== null || max !== null) && units.length) {
         const minListingPrice = Math.min(...units.map((unit) => Number(unit.price) || 0));
         if (min !== null && minListingPrice < min) return false;
         if (max !== null && minListingPrice > max) return false;
       } else if ((min !== null || max !== null) && !units.length) {
-        return false;
+        if (isAirbnb) {
+          const nightlyRate = (listing as AirbnbPublicListing).baseRate || 0;
+          if (min !== null && nightlyRate < min) return false;
+          if (max !== null && nightlyRate > max) return false;
+        } else {
+          return false;
+        }
       }
 
       return true;
@@ -98,16 +117,24 @@ export default function PropertyListings() {
 
   const sortedListings = useMemo(() => {
     return [...filteredListings].sort((a, b) => {
-      if (a.isAdvertised === b.isAdvertised) {
+      const aFeatured = a.listingType === "airbnb"
+        ? (a.rating ?? 0) >= 4.6 && (a.reviewCount ?? 0) >= 8
+        : !!a.isAdvertised;
+      const bFeatured = b.listingType === "airbnb"
+        ? (b.rating ?? 0) >= 4.6 && (b.reviewCount ?? 0) >= 8
+        : !!b.isAdvertised;
+
+      if (aFeatured === bFeatured) {
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return bTime - aTime;
       }
-      return a.isAdvertised ? -1 : 1;
+      return aFeatured ? -1 : 1;
     });
   }, [filteredListings]);
 
   const hasActiveFilters =
+    filters.listingType !== "all" ||
     filters.unitType ||
     filters.minPrice ||
     filters.maxPrice ||
@@ -116,6 +143,7 @@ export default function PropertyListings() {
 
   const resetFilters = () => {
     setFilters({
+      listingType: "all",
       unitType: "",
       minPrice: "",
       maxPrice: "",
@@ -184,7 +212,26 @@ export default function PropertyListings() {
                 </h2>
               </div>
 
-              <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Stay Type
+                  </label>
+                  <select
+                    value={filters.listingType}
+                    onChange={(e) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        listingType: e.target.value as FilterState["listingType"],
+                      }))
+                    }
+                    className="w-full rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm text-foreground focus:border-primary focus:ring-4 focus:ring-primary/20 outline-none transition"
+                  >
+                    <option value="all">All stays</option>
+                    <option value="rentals">Long-term rentals</option>
+                    <option value="airbnb">Short-term stays</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                     Location
@@ -289,6 +336,9 @@ export default function PropertyListings() {
                 ? "Try adjusting your filters or clear them to see all available properties."
                 : "We are constantly adding new verified listings. Please check back soon."}
             </p>
+            <p className="text-xs text-muted-foreground/80">
+              Pricing reflects monthly rates for long-term rentals and nightly rates for short-term stays.
+            </p>
             {hasActiveFilters && (
               <button
                 onClick={() => {
@@ -319,29 +369,46 @@ export default function PropertyListings() {
 // ──────────────────────────────────────────────
 
 interface PropertyCardProps {
-  property: Listing;
+  property: PublicListing;
   index: number;
 }
 
 const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
-  const availability: AvailabilitySummary = ensureAvailability(property);
-  const propertyUnits = property.unitTypes ?? [];
+  const isAirbnb = property.listingType === "airbnb";
+  const availability: AvailabilitySummary | null = isAirbnb ? null : ensureAvailability(property);
+  const propertyUnits = !isAirbnb ? property.unitTypes ?? [] : [];
   const minPrice = propertyUnits.length ? Math.min(...propertyUnits.map((unit) => Number(unit.price) || 0)) : 0;
-  const priceLabel = minPrice ? minPrice.toLocaleString() : "";
-  const vacancyCount = availability.totalVacant;
-  const vacancyBadge = `${vacancyCount} vacant unit${vacancyCount === 1 ? "" : "s"}`;
+  const nightlyRate = isAirbnb ? (property as AirbnbPublicListing).baseRate : 0;
+  const priceLabel = isAirbnb
+    ? nightlyRate
+      ? nightlyRate.toLocaleString()
+      : ""
+    : minPrice
+      ? minPrice.toLocaleString()
+      : "";
+  const vacancyCount = availability?.totalVacant ?? 0;
+  const unitCount = isAirbnb ? (property as AirbnbPublicListing).units ?? 1 : 0;
+  const vacancyBadge = !isAirbnb
+    ? `${vacancyCount} vacant unit${vacancyCount === 1 ? "" : "s"}`
+    : `${unitCount} unit${unitCount === 1 ? "" : "s"}`;
 
-  const statusTone =
-    property.status === "Active"
+  const statusTone = isAirbnb
+    ? property.status === "published"
+      ? "border-primary/30 bg-primary/10 text-primary"
+      : "border-border bg-muted/70 text-muted-foreground"
+    : property.status === "Active"
       ? "border-primary/30 bg-primary/10 text-primary"
       : property.status === "Inactive"
-      ? "border-border bg-muted/80 text-muted-foreground"
-      : "border-border bg-muted/60 text-muted-foreground";
+        ? "border-border bg-muted/80 text-muted-foreground"
+        : "border-border bg-muted/60 text-muted-foreground";
 
   const images = property.images?.length ? property.images : ["/logo.png"];
   const heroImage = images[0];
   const sideImageOne = images[1] || images[0];
   const sideImageTwo = images[2] || images[0];
+
+  const featuredLabel = !isAirbnb ? property.isAdvertised : (property.rating ?? 0) >= 4.6;
+  const badgeLabel = isAirbnb ? "Short-term" : "Long-term";
 
   return (
     <motion.article
@@ -359,12 +426,15 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
             className="object-cover transition-transform duration-700 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
-          {property.isAdvertised && (
+          {featuredLabel && (
             <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-primary/90 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-foreground backdrop-blur-sm">
               <Star size={12} fill="white" />
               Featured
             </span>
           )}
+          <span className="absolute right-4 top-4 inline-flex items-center rounded-full bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-foreground">
+            {badgeLabel}
+          </span>
         </div>
         <div className="relative col-span-2 row-span-1 overflow-hidden rounded-2xl">
           <Image src={sideImageOne} alt="" fill className="object-cover" />
@@ -393,13 +463,20 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <DollarSign size={16} className="text-primary" />
-            {minPrice ? (
-              <span className="font-medium text-foreground">Starting from Ksh {priceLabel}/mo</span>
+            {priceLabel ? (
+              <span className="font-medium text-foreground">
+                Starting from Ksh {priceLabel}/{isAirbnb ? "night" : "mo"}
+              </span>
             ) : (
               <span>Pricing on request</span>
             )}
           </div>
           <span className="text-muted-foreground font-medium">{vacancyBadge}</span>
+          {isAirbnb && (
+            <span className="text-muted-foreground font-medium">
+              {(property.rating ?? 0).toFixed(1)}★ ({property.reviewCount ?? 0})
+            </span>
+          )}
         </div>
 
         <Link

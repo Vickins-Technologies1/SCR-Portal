@@ -88,6 +88,14 @@ interface OtpEmailOptions {
   code: string;
 }
 
+interface AirbnbGuestMessageOptions {
+  to: string;
+  guestName: string;
+  listingName: string;
+  message: string;
+  subject?: string;
+}
+
 // Reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -445,6 +453,45 @@ export async function sendOtpEmail({
     }
 
     throw new Error("Failed to send OTP email");
+  }
+}
+
+export async function sendAirbnbGuestMessageEmail({
+  to,
+  guestName,
+  listingName,
+  message,
+  subject,
+}: AirbnbGuestMessageOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const html = generateStyledTemplate({
+      name: guestName,
+      title: subject || `Message from ${listingName}`,
+      intro: `Hello ${guestName},`,
+      details: `
+        <p style="font-size: 15px; line-height: 1.7; margin-bottom: 16px;">
+          ${message}
+        </p>
+        <p style="font-size: 13px; color: #475569;">
+          Listing: <strong>${listingName}</strong>
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      to,
+      subject: subject || `Message from ${listingName}`,
+      html,
+    });
+    console.log(`Airbnb guest email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending Airbnb guest email to ${to}:`, error);
+    throw new Error("Failed to send Airbnb guest email");
   }
 }
 

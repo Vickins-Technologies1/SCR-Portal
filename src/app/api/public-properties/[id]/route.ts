@@ -76,8 +76,69 @@ export async function GET(
     }
 
     if (!listing) {
-      console.log("Property not found for ID:", id);
-      return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+      // Fallback: check Airbnb listings
+      let airbnbListing: any = null;
+      if (isValidHexId(id)) {
+        airbnbListing = await db.collection("airbnbListings").findOne({
+          _id: new ObjectId(id),
+          status: { $in: ["published", "active"] },
+        });
+      }
+      if (!airbnbListing) {
+        airbnbListing = await db.collection("airbnbListings").findOne({
+          externalId: id,
+          status: { $in: ["published", "active"] },
+        } as any);
+      }
+
+      if (!airbnbListing) {
+        console.log("Property not found for ID:", id);
+        return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+      }
+
+      const ownerIdValue = airbnbListing.ownerId ? String(airbnbListing.ownerId) : "";
+      const owner = ownerIdValue && isValidHexId(ownerIdValue)
+        ? await db
+            .collection("propertyOwners")
+            .findOne(
+              { _id: new ObjectId(ownerIdValue) },
+              { projection: { email: 1, phone: 1 } }
+            )
+        : null;
+
+      const formatted = {
+        _id: airbnbListing.externalId || airbnbListing._id?.toString?.() || "",
+        ownerId: ownerIdValue,
+        listingType: "airbnb",
+        name: airbnbListing.name || "Airbnb Listing",
+        address: airbnbListing.location || airbnbListing.address || "Kenya",
+        description: airbnbListing.description || airbnbListing.summary || "",
+        amenities: airbnbListing.amenities || [],
+        houseRules: airbnbListing.houseRules || [],
+        images: airbnbListing.images || [],
+        status: airbnbListing.status || "draft",
+        baseRate: Number(airbnbListing.baseRate || 0),
+        weekendRate: Number(airbnbListing.weekendRate || airbnbListing.baseRate || 0),
+        occupancyRate: Number(airbnbListing.occupancyRate || 0),
+        rating: Number(airbnbListing.rating || 0),
+        reviewCount: Number(airbnbListing.reviewCount || 0),
+        units: Number(airbnbListing.units || 1),
+        licenseStatus: airbnbListing.licenseStatus || "missing",
+        createdAt: toISO(airbnbListing.createdAt) || "",
+        updatedAt: toISO(airbnbListing.updatedAt),
+      };
+
+      return NextResponse.json(
+        {
+          success: true,
+          property: formatted,
+          owner: owner ? { email: owner.email, phone: owner.phone } : null,
+        },
+        {
+          status: 200,
+          headers: { "Cache-Control": "no-store" },
+        }
+      );
     }
 
     const propertyId = listing.originalPropertyId
@@ -118,6 +179,7 @@ export async function GET(
         ? String(listing.originalPropertyId)
         : String(listing._id),
       ownerId: ownerIdValue,
+      listingType: "rentals",
       name: listing.name,
       address: listing.address,
       description: listing.description,
