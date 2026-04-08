@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
-import { ensureAirbnbSeed } from "@/lib/airbnb-seed";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -12,7 +11,6 @@ export async function GET(request: NextRequest) {
   const { ownerId } = resolved.context!;
 
   const { db } = await connectToDatabase();
-  await ensureAirbnbSeed(db, ownerId);
 
   const compliance = await db
     .collection("airbnbCompliance")

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
-import { ensureAirbnbSeed } from "@/lib/airbnb-seed";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 
@@ -16,7 +15,6 @@ export async function GET(request: NextRequest) {
   const { ownerId } = resolved.context!;
 
   const { db } = await connectToDatabase();
-  await ensureAirbnbSeed(db, ownerId);
 
   const bookings = await db
     .collection("airbnbBookings")

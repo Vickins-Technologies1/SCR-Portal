@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
-import { ensureAirbnbSeed } from "@/lib/airbnb-seed";
 import { calculateAdr, calculateOccupancyRate, calculateRevpar } from "@/lib/airbnb-metrics";
 import { getMonthRange, parseDate } from "@/lib/airbnb-utils";
 
@@ -14,7 +13,6 @@ export async function GET(request: NextRequest) {
   const { ownerId } = resolved.context!;
 
   const { db } = await connectToDatabase();
-  await ensureAirbnbSeed(db, ownerId);
 
   const { start, end, days } = getMonthRange();
 
