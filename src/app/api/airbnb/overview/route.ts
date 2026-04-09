@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { calculateAdr, calculateOccupancyRate, calculateRevpar } from "@/lib/airbnb-metrics";
 import { addDays, getMonthRange, isSameDay, parseDate } from "@/lib/airbnb-utils";
+import { getMonthBuckets, sumAirbnbRevenueForRange } from "@/lib/airbnb-billing";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -55,21 +56,35 @@ export async function GET(request: NextRequest) {
 
   const unreadMessages = conversations.reduce((sum, convo) => sum + Number(convo.unread || 0), 0);
 
-  const monthlyBookings = bookings.filter((booking) => {
+  const monthlyBookingsAll = bookings.filter((booking) => {
     const checkIn = parseDate(booking.checkIn);
-    return checkIn && checkIn >= start && checkIn <= end && booking.status !== "cancelled";
+    return checkIn && checkIn >= start && checkIn <= end;
   });
+  const monthlyBookings = monthlyBookingsAll.filter((booking) => booking.status !== "cancelled");
 
   const inMonth = (value?: string | Date | null) => {
     const parsed = parseDate(value || null);
     return parsed && parsed >= start && parsed <= end;
   };
 
-  const monthlyDirectRevenue = directPayments
+  const revenueSources = {
+    directPayments: directPayments.map((payment: any) => ({
+      paymentDate: payment.paymentDate,
+      createdAt: payment.createdAt,
+      amount: payment.amount,
+    })),
+    payouts: payouts.map((payout: any) => ({
+      createdAt: payout.createdAt,
+      period: payout.period,
+      amount: payout.amount,
+    })),
+  };
+
+  const monthlyDirectRevenue = revenueSources.directPayments
     .filter((payment) => inMonth(payment.paymentDate || payment.createdAt))
     .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
-  const monthlyPayoutRevenue = payouts
+  const monthlyPayoutRevenue = revenueSources.payouts
     .filter((payout) => inMonth(payout.createdAt || payout.period))
     .reduce((sum, payout) => sum + Number(payout.amount || 0), 0);
 
@@ -133,6 +148,36 @@ export async function GET(request: NextRequest) {
       status: item.status,
       nextAction: item.nextAction,
     })),
+    paymentTrends: (() => {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const buckets = getMonthBuckets(start, end);
+      const labels: string[] = [];
+      const direct: number[] = [];
+      const payoutsSeries: number[] = [];
+      const total: number[] = [];
+
+      buckets.forEach((bucket) => {
+        const revenue = sumAirbnbRevenueForRange(revenueSources, bucket.start, bucket.end);
+        labels.push(bucket.label);
+        direct.push(Math.round(revenue.direct));
+        payoutsSeries.push(Math.round(revenue.payouts));
+        total.push(Math.round(revenue.total));
+      });
+
+      return { labels, direct, payouts: payoutsSeries, total };
+    })(),
+    bookingSplit: (() => {
+      const statusCounts = new Map<string, number>();
+      monthlyBookingsAll.forEach((booking) => {
+        const status = booking.status || "pending";
+        statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
+      });
+      const labels = Array.from(statusCounts.keys());
+      const values = labels.map((label) => statusCounts.get(label) || 0);
+      return { labels, values };
+    })(),
   };
 
   return NextResponse.json({ success: true, overview });

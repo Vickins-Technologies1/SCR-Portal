@@ -3,8 +3,9 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { calculateAdr, calculateOccupancyRate, calculateRevpar } from "@/lib/airbnb-metrics";
-import { getMonthRange, parseDate } from "@/lib/airbnb-utils";
+import { endOfDay, getMonthRange, parseDate, startOfDay } from "@/lib/airbnb-utils";
 import { calculateAirbnbTaxes } from "@/lib/airbnb-taxes";
+import { sumAirbnbRevenueForRange } from "@/lib/airbnb-billing";
 import { ObjectId } from "mongodb";
 import * as fs from "fs";
 import * as path from "path";
@@ -18,7 +19,33 @@ export async function GET(request: NextRequest) {
   const { ownerId } = resolved.context!;
 
   const { db } = await connectToDatabase();
-  const { start, end, days } = getMonthRange();
+
+  const startDateParam = searchParams.get("startDate");
+  const endDateParam = searchParams.get("endDate");
+
+  const isValidDate = (value?: string | null) => {
+    if (!value) return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime());
+  };
+
+  let start = getMonthRange().start;
+  let end = getMonthRange().end;
+
+  if (isValidDate(startDateParam)) {
+    start = startOfDay(new Date(startDateParam!));
+  }
+  if (isValidDate(endDateParam)) {
+    end = endOfDay(new Date(endDateParam!));
+  }
+  if (start > end) {
+    const fallback = getMonthRange();
+    start = fallback.start;
+    end = fallback.end;
+  }
+
+  const days = Math.max(1, Math.ceil((end.getTime() - start.getTime() + 1) / (1000 * 60 * 60 * 24)));
 
   const bookings = await db
     .collection("airbnbBookings")
@@ -33,6 +60,19 @@ export async function GET(request: NextRequest) {
     .find({ ownerId, status: "paid" })
     .toArray();
 
+  const revenueSources = {
+    directPayments: directPayments.map((payment: any) => ({
+      paymentDate: payment.paymentDate,
+      createdAt: payment.createdAt,
+      amount: payment.amount,
+    })),
+    payouts: payouts.map((payout: any) => ({
+      createdAt: payout.createdAt,
+      period: payout.period,
+      amount: payout.amount,
+    })),
+  };
+
   const listings = await db.collection("airbnbListings").find({ ownerId }).toArray();
 
   const monthlyBookings = bookings.filter((booking) => {
@@ -40,20 +80,8 @@ export async function GET(request: NextRequest) {
     return checkIn && checkIn >= start && checkIn <= end;
   });
 
-  const inMonth = (value?: string | Date | null) => {
-    const parsed = parseDate(value || null);
-    return parsed && parsed >= start && parsed <= end;
-  };
-
-  const directRevenue = directPayments
-    .filter((payment) => inMonth(payment.paymentDate || payment.createdAt))
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-
-  const payoutRevenue = payouts
-    .filter((payout) => inMonth(payout.createdAt || payout.period))
-    .reduce((sum, payout) => sum + Number(payout.amount || 0), 0);
-
-  const revenue = directRevenue + payoutRevenue;
+  const revenueBreakdown = sumAirbnbRevenueForRange(revenueSources, start, end);
+  const revenue = revenueBreakdown.total;
   const bookedNights = monthlyBookings.reduce((sum, booking) => sum + Number(booking.nights || 0), 0);
   const availableNights = listings.reduce((sum, listing) => sum + (listing.units || 1) * days, 0);
 
@@ -91,7 +119,7 @@ export async function GET(request: NextRequest) {
     color: rgb(0.01, 0.16, 0.29),
   });
   page.drawText(
-    `Period: ${start.toLocaleDateString("en-KE", { month: "long", year: "numeric" })}`,
+    `Period: ${start.toLocaleDateString("en-KE", { month: "short", day: "numeric", year: "numeric" })} - ${end.toLocaleDateString("en-KE", { month: "short", day: "numeric", year: "numeric" })}`,
     { x: 50, y: height - 145, size: 10, font }
   );
   page.drawText(`Owner: ${owner?.name || "Property Owner"}`, { x: 50, y: height - 160, size: 9, font });
@@ -134,6 +162,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     success: true,
     pdf: Buffer.from(pdfBytes).toString("base64"),
-    filename: `airbnb-tax-report-${start.toISOString().slice(0, 10)}.pdf`,
+    filename: `airbnb-tax-report-${start.toISOString().slice(0, 10)}-to-${end.toISOString().slice(0, 10)}.pdf`,
   });
 }

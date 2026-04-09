@@ -282,7 +282,7 @@ export default function TenantsPage() {
   const fetchPendingInvoices = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
     try {
-      const res = await fetch(`/api/invoices?userId=${effectiveOwnerId}`, {
+      const res = await fetch(`/api/invoices?userId=${effectiveOwnerId}&billingPlan=RentCollection,FullManagement`, {
         headers: { "x-csrf-token": csrfToken },
         credentials: "include",
       });

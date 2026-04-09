@@ -14,11 +14,24 @@ import {
   ShieldCheck,
   AlertCircle,
 } from "lucide-react";
+import { Bar, Pie } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  BarElement,
+  LinearScale,
+  Title,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  ArcElement,
+} from "chart.js";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import { useAirbnbAccess } from "./components/useAirbnbAccess";
 import type { AirbnbOverview } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
+
+ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
 export default function AirbnbDashboard() {
   const router = useRouter();
@@ -111,6 +124,43 @@ export default function AirbnbDashboard() {
         bg: "bg-emerald-100/60",
       },
     ];
+  }, [overview]);
+
+  const paymentTrendData = useMemo(() => {
+    const labels = overview?.paymentTrends?.labels ?? [];
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Direct payments",
+          data: overview?.paymentTrends?.direct ?? [],
+          backgroundColor: "rgba(30,58,138,0.7)",
+          borderRadius: 6,
+        },
+        {
+          label: "Payouts",
+          data: overview?.paymentTrends?.payouts ?? [],
+          backgroundColor: "rgba(66,199,117,0.7)",
+          borderRadius: 6,
+        },
+      ],
+    };
+  }, [overview]);
+
+  const bookingSplitData = useMemo(() => {
+    const labels = overview?.bookingSplit?.labels ?? [];
+    const values = overview?.bookingSplit?.values ?? [];
+    return {
+      labels,
+      datasets: [
+        {
+          data: values,
+          backgroundColor: ["#42c775", "#f59e0b", "#ef4444", "#3b82f6"],
+          borderWidth: 0,
+          hoverOffset: 16,
+        },
+      ],
+    };
   }, [overview]);
 
   if (hasAccess === false) {
@@ -248,6 +298,42 @@ export default function AirbnbDashboard() {
                     ))}
                   </div>
                 )}
+              </section>
+
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="surface-card rounded-3xl p-5 sm:p-6">
+                  <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment trends</h2>
+                  {overview?.paymentTrends?.labels?.length ? (
+                    <div className="h-64 sm:h-72">
+                      <Bar
+                        data={paymentTrendData}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          scales: {
+                            y: { beginAtZero: true },
+                          },
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">
+                      No payment trends available yet.
+                    </div>
+                  )}
+                </div>
+                <div className="surface-card rounded-3xl p-5 sm:p-6">
+                  <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Bookings mix</h2>
+                  {overview?.bookingSplit?.labels?.length ? (
+                    <div className="h-64 sm:h-72">
+                      <Pie data={bookingSplitData} options={{ responsive: true, maintainAspectRatio: false }} />
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">
+                      No booking data available yet.
+                    </div>
+                  )}
+                </div>
               </section>
 
               <section className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">

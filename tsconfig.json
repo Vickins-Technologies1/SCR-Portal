@@ -32,7 +32,7 @@
         "./src/lib/*"
       ],
       "@/cron/*": [
-        "cron/*"
+        "src/cron/*"
       ]
     }
   },

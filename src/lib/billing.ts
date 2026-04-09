@@ -3,7 +3,7 @@ import { resolveTenantMonthlyRentForDate } from "./utils";
 import { Tenant } from "../types/tenant";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 
-export type BillingPlan = "RentCollection" | "FullManagement";
+export type BillingPlan = "RentCollection" | "FullManagement" | "Airbnb";
 
 export const SOFTWARE_LEASING_PERCENT = 1;
 
@@ -96,6 +96,20 @@ export async function getOwnerDueStatus(db: Db, ownerId: string, now: Date = new
     });
   });
 
+  const airbnbListings = await db
+    .collection("airbnbListings")
+    .find({ ownerId })
+    .project({ externalId: 1, name: 1 })
+    .toArray();
+
+  const airbnbListingMap = new Map<string, string>();
+  airbnbListings.forEach((listing: any) => {
+    const key = listing.externalId || listing._id?.toString?.();
+    if (key) {
+      airbnbListingMap.set(String(key), listing.name || "Airbnb Listing");
+    }
+  });
+
   const pendingByProperty = new Set(pendingInvoices.map((inv: any) => inv.propertyId?.toString()));
   const dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] = [];
   const duePropertyIds = new Set<string>();
@@ -105,6 +119,7 @@ export async function getOwnerDueStatus(db: Db, ownerId: string, now: Date = new
     if (!propertyId || !pendingByProperty.has(propertyId)) continue;
 
     const propertyInfo = propertyMap.get(propertyId);
+    const isAirbnbInvoice = invoice.billingPlan === "Airbnb";
     const fallbackDate = propertyInfo?.createdAt || now;
     const invoiceDue = invoice.expiresAt ? new Date(invoice.expiresAt) : getGracePeriodEndDate(fallbackDate, now);
     if (Number.isNaN(invoiceDue.getTime())) {
@@ -115,7 +130,9 @@ export async function getOwnerDueStatus(db: Db, ownerId: string, now: Date = new
       if (!duePropertyIds.has(propertyId)) {
         dueProperties.push({
           propertyId,
-          propertyName: propertyInfo?.name || "Property",
+          propertyName: isAirbnbInvoice
+            ? (airbnbListingMap.get(propertyId) || "Airbnb Listing")
+            : (propertyInfo?.name || "Property"),
           dueDate: invoiceDue.toISOString(),
         });
         duePropertyIds.add(propertyId);
@@ -184,7 +201,13 @@ export async function upsertPercentageInvoice(params: {
     return { action: "updated" as const, amount, billingMonth, invoiceId: existingPending._id.toString() };
   }
 
-  const reference = `${billingPlan === "FullManagement" ? "FM" : "SL"}-${propertyId}-${billingMonth}-${Date.now()}`;
+  const referencePrefix =
+    billingPlan === "FullManagement"
+      ? "FM"
+      : billingPlan === "Airbnb"
+        ? "AB"
+        : "SL";
+  const reference = `${referencePrefix}-${propertyId}-${billingMonth}-${Date.now()}`;
 
   const result = await db.collection("invoices").insertOne({
     userId,

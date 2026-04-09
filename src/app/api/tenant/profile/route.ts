@@ -192,6 +192,7 @@ export async function GET(request: NextRequest) {
     const tenant = {
       ...tenantDoc,
       _id: tenantDoc._id.toString(),
+      ownerId: tenantDoc.ownerId?.toString?.() || tenantDoc.ownerId,
       createdAt: tenantDoc.createdAt.toISOString(),
       updatedAt: tenantDoc.updatedAt
         ? (tenantDoc.updatedAt instanceof Date

@@ -57,6 +57,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get("propertyId");
+    const billingPlanParam = searchParams.get("billingPlan");
+    const billingPlanFilter = billingPlanParam
+      ? {
+          $in: billingPlanParam
+            .split(",")
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0),
+        }
+      : null;
     const requestedOwnerId = searchParams.get("userId") || searchParams.get("ownerId");
 
     const { db } = await connectToDatabase();
@@ -106,8 +115,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (propertyId) {
+      const allowNonObjectId = billingPlanFilter?.$in?.includes("Airbnb");
       // Validate propertyId
-      if (!ObjectId.isValid(propertyId)) {
+      if (!ObjectId.isValid(propertyId) && !allowNonObjectId) {
         console.log("Invalid property ID:", propertyId);
         return NextResponse.json(
           { success: false, message: "Invalid property ID" },
@@ -116,9 +126,10 @@ export async function GET(request: NextRequest) {
       }
 
       const baseQuery = effectiveOwnerId ? { userId: effectiveOwnerId } : {};
+      const planQuery = billingPlanFilter ? { billingPlan: billingPlanFilter } : {};
       const pendingInvoices = await db
         .collection<Invoice>("invoices")
-        .find({ ...baseQuery, propertyId, status: "pending" })
+        .find({ ...baseQuery, propertyId, status: "pending", ...planQuery })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -126,7 +137,7 @@ export async function GET(request: NextRequest) {
         ? pendingInvoices
         : await db
           .collection<Invoice>("invoices")
-          .find({ ...baseQuery, propertyId })
+          .find({ ...baseQuery, propertyId, ...planQuery })
           .sort({ createdAt: -1 })
           .toArray();
 
@@ -177,9 +188,11 @@ export async function GET(request: NextRequest) {
     }
 
     // For admins, fetch all invoices (or filter by owner if provided); otherwise fetch owner's invoices
-    const query = role === "admin"
+    const baseQuery = role === "admin"
       ? (effectiveOwnerId ? { userId: effectiveOwnerId } : {})
       : { userId: effectiveOwnerId as string };
+    const planQuery = billingPlanFilter ? { billingPlan: billingPlanFilter } : {};
+    const query = { ...baseQuery, ...planQuery };
     const invoices = await db
       .collection<Invoice>("invoices")
       .find(query).toArray();
@@ -279,7 +292,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId: bodyUserId, propertyId, amount, status, reference, description } = body;
+    const { userId: bodyUserId, propertyId, amount, status, reference, description, billingPlan } = body;
 
     if (!bodyUserId || !ObjectId.isValid(bodyUserId)) {
       console.log("Invalid or missing userId in body:", { bodyUserId, userId });
@@ -289,7 +302,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!propertyId || !ObjectId.isValid(propertyId)) {
+    const allowNonObjectId = billingPlan === "Airbnb";
+    if (!propertyId || (!ObjectId.isValid(propertyId) && !allowNonObjectId)) {
       console.log("Invalid property ID:", propertyId);
       return NextResponse.json(
         { success: false, message: "Valid property ID is required" },

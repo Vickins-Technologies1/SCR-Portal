@@ -57,6 +57,7 @@ interface PaymentModalProps {
   initialPropertyId?: string;
   initialPhone?: string;
   userId: string | null;
+  billingPlan?: string;
 }
 
 export default function PaymentModal({
@@ -68,6 +69,7 @@ export default function PaymentModal({
   initialPropertyId = "",
   initialPhone = "",
   userId,
+  billingPlan,
 }: PaymentModalProps) {
   const [paymentPropertyId, setPaymentPropertyId] = useState(initialPropertyId);
   const [paymentPhone, setPaymentPhone] = useState(initialPhone);
@@ -122,7 +124,8 @@ export default function PaymentModal({
       if (paymentPropertyId && userId && csrfToken) {
         setIsFetchingAmount(true);
         try {
-          const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=All%20Units`;
+          const billingPlanParam = billingPlan ? `&billingPlan=${encodeURIComponent(billingPlan)}` : "";
+          const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=All%20Units${billingPlanParam}`;
           const invoiceRes = await fetch(url, {
             headers: { "X-CSRF-Token": csrfToken },
           });
@@ -159,7 +162,7 @@ export default function PaymentModal({
       setPaymentFormErrors(errors);
       return Object.keys(errors).length === 0;
     },
-    [paymentPropertyId, paymentPhone, userId, csrfToken]
+    [paymentPropertyId, paymentPhone, userId, csrfToken, billingPlan]
   );
 
   useEffect(() => {
@@ -218,6 +221,7 @@ export default function PaymentModal({
                   status: "completed",
                   reference: invoice.reference,
                   description: invoice.description,
+                  billingPlan,
                 }),
               });
               const updateData = await updateRes.json();
@@ -312,7 +316,8 @@ export default function PaymentModal({
       setStatusMessage("Processing your payment. Please wait...");
 
       try {
-        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=All%20Units`;
+        const billingPlanParam = billingPlan ? `&billingPlan=${encodeURIComponent(billingPlan)}` : "";
+        const url = `/api/invoices?userId=${encodeURIComponent(userId)}&propertyId=${encodeURIComponent(paymentPropertyId)}&unitType=All%20Units${billingPlanParam}`;
         const invoiceRes = await fetch(url, {
           headers: { "X-CSRF-Token": csrfToken },
         });
@@ -380,7 +385,7 @@ export default function PaymentModal({
         setIsLoading(false);
       }
     },
-    [userId, paymentPhone, paymentPropertyId, validatePaymentForm, pollTransactionStatus, csrfToken, onError]
+    [userId, paymentPhone, paymentPropertyId, validatePaymentForm, pollTransactionStatus, csrfToken, onError, billingPlan]
   );
 
   const calculateTotalUnits = (propertyId: string): number => {

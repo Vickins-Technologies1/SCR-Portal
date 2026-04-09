@@ -149,6 +149,17 @@ function ReportsAndInvoicesPageInner() {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const formatDateInput = (date: Date) => date.toISOString().slice(0, 10);
+
+  const applyDatePreset = (days: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - (days - 1));
+    setStartDate(formatDateInput(start));
+    setEndDate(formatDateInput(end));
+    setError(null);
+  };
+
   const getReportReference = (report: Report) => {
     const isManual = report.isManual ?? report.transactionId?.startsWith("MANUAL-");
     if (isManual) {
@@ -340,7 +351,7 @@ function ReportsAndInvoicesPageInner() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/invoices?userId=${encodeURIComponent(effectiveOwnerId)}`, {
+      const res = await fetch(`/api/invoices?userId=${encodeURIComponent(effectiveOwnerId)}&billingPlan=RentCollection,FullManagement`, {
         method: "GET",
         headers: { "x-csrf-token": csrfToken },
         credentials: "include",
@@ -743,6 +754,26 @@ function ReportsAndInvoicesPageInner() {
           {/* Filters (Reports only) */}
           {activeTab === "reports" && (
             <div className="surface-card rounded-2xl p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-tour="owner-report-filters">
+              <div className="col-span-full flex flex-wrap gap-2">
+                <button
+                  onClick={() => applyDatePreset(7)}
+                  className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40"
+                >
+                  Last 7 days
+                </button>
+                <button
+                  onClick={() => applyDatePreset(30)}
+                  className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40"
+                >
+                  Last 30 days
+                </button>
+                <button
+                  onClick={() => applyDatePreset(90)}
+                  className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/40"
+                >
+                  Last 90 days
+                </button>
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600">Property</label>
                 <select

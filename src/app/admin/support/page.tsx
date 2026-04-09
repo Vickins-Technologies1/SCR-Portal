@@ -729,10 +729,52 @@ export default function AdminSupportPage() {
 
   if (status === "checking") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"></div>
-          <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
+      <div className="min-h-[100svh] bg-transparent text-foreground">
+        <Navbar isSidebarOpen={isSidebarOpen} onToggleSidebar={() => setIsSidebarOpen((open) => !open)} />
+        <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+
+        <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+          <main className="max-w-7xl mx-auto space-y-6">
+            <section className="glass-panel rounded-3xl p-6 sm:p-8 animate-pulse">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 rounded-2xl bg-primary/10" />
+                  <div className="space-y-2">
+                    <div className="h-3 w-24 rounded-full bg-muted/40" />
+                    <div className="h-5 w-48 rounded-full bg-muted/30" />
+                    <div className="h-3 w-56 rounded-full bg-muted/30" />
+                  </div>
+                </div>
+                <div className="h-3 w-40 rounded-full bg-muted/30" />
+              </div>
+            </section>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 lg:gap-6 lg:min-h-[520px] lg:h-[calc(100svh-260px)] lg:max-h-[calc(100svh-260px)]">
+              <div className="surface-card rounded-3xl p-4 sm:p-5 flex flex-col lg:h-full lg:overflow-hidden animate-pulse">
+                <div className="h-10 rounded-2xl border border-border bg-white/70" />
+                <div className="mt-4 space-y-2 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="surface-card rounded-2xl p-4 h-20" />
+                  ))}
+                </div>
+              </div>
+
+              <div className="surface-card rounded-3xl flex flex-col min-h-[520px] lg:min-h-0 lg:h-full lg:overflow-hidden animate-pulse">
+                <div className="border-b border-border px-5 py-4">
+                  <div className="h-4 w-40 rounded-full bg-muted/30" />
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="surface-card rounded-2xl p-4 h-20" />
+                  ))}
+                </div>
+                <div className="border-t border-border px-5 py-4">
+                  <div className="h-10 rounded-2xl bg-white/70 border border-border" />
+                  <div className="mt-3 h-8 w-32 rounded-xl bg-primary/20" />
+                </div>
+              </div>
+            </div>
+          </main>
         </div>
       </div>
     );

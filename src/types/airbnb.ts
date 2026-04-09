@@ -48,6 +48,16 @@ export interface AirbnbOverview {
   calendarPreview: AirbnbCalendarNight[];
   recentActivity: AirbnbActivityItem[];
   compliance: AirbnbComplianceItem[];
+  paymentTrends?: {
+    labels: string[];
+    direct: number[];
+    payouts: number[];
+    total: number[];
+  };
+  bookingSplit?: {
+    labels: string[];
+    values: number[];
+  };
 }
 
 export interface AirbnbListing {

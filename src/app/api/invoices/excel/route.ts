@@ -49,6 +49,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       properties.map((p: any) => [p._id.toString(), p.name])
     );
 
+    const airbnbListings = await db
+      .collection("airbnbListings")
+      .find({ ownerId })
+      .project({ externalId: 1, name: 1 })
+      .toArray();
+
+    const airbnbListingMap = new Map<string, string>();
+    airbnbListings.forEach((listing: any) => {
+      const key = listing.externalId || listing._id?.toString?.();
+      if (key) {
+        airbnbListingMap.set(String(key), listing.name || "Airbnb Listing");
+      }
+    });
+
     const invoices = await db
       .collection<InvoiceRecord>("invoices")
       .find({ userId: ownerId })
@@ -100,11 +114,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           ? "Full Management"
           : inv.billingPlan === "RentCollection"
           ? "Software Leasing"
+          : inv.billingPlan === "Airbnb"
+          ? "Airbnb"
           : "Unknown";
+      const propertyLabel = inv.billingPlan === "Airbnb"
+        ? airbnbListingMap.get(inv.propertyId) || "Airbnb Listing"
+        : propertyMap.get(inv.propertyId) || "Unknown";
       sheet.addRow([
         format(createdAt, "dd MMM yyyy"),
         inv.reference || "—",
-        propertyMap.get(inv.propertyId) || "Unknown",
+        propertyLabel,
         billingPlan,
         inv.percentage != null ? `${inv.percentage}%` : "—",
         inv.expectedIncome != null ? inv.expectedIncome : "—",

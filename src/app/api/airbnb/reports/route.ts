@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { calculateAdr, calculateOccupancyRate, calculateRevpar } from "@/lib/airbnb-metrics";
-import { getMonthRange, parseDate } from "@/lib/airbnb-utils";
+import { endOfDay, getMonthRange, parseDate, startOfDay } from "@/lib/airbnb-utils";
 import { calculateAirbnbTaxes } from "@/lib/airbnb-taxes";
+import { getMonthBuckets, sumAirbnbRevenueForRange } from "@/lib/airbnb-billing";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,11 +16,36 @@ export async function GET(request: NextRequest) {
 
   const { db } = await connectToDatabase();
 
-  const { start, end, days } = getMonthRange();
+  const startDateParam = searchParams.get("startDate");
+  const endDateParam = searchParams.get("endDate");
+
+  const isValidDate = (value?: string | null) => {
+    if (!value) return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime());
+  };
+
+  let start = getMonthRange().start;
+  let end = getMonthRange().end;
+
+  if (isValidDate(startDateParam)) {
+    start = startOfDay(new Date(startDateParam!));
+  }
+  if (isValidDate(endDateParam)) {
+    end = endOfDay(new Date(endDateParam!));
+  }
+  if (start > end) {
+    const fallback = getMonthRange();
+    start = fallback.start;
+    end = fallback.end;
+  }
+
+  const days = Math.max(1, Math.ceil((end.getTime() - start.getTime() + 1) / (1000 * 60 * 60 * 24)));
 
   const bookings = await db
     .collection("airbnbBookings")
-    .find({ ownerId, status: { $ne: "cancelled" } })
+    .find({ ownerId })
     .toArray();
   const directPayments = await db
     .collection("payments")
@@ -30,32 +56,37 @@ export async function GET(request: NextRequest) {
     .find({ ownerId, status: "paid" })
     .toArray();
 
+  const revenueSources = {
+    directPayments: directPayments.map((payment: any) => ({
+      paymentDate: payment.paymentDate,
+      createdAt: payment.createdAt,
+      amount: payment.amount,
+    })),
+    payouts: payouts.map((payout: any) => ({
+      createdAt: payout.createdAt,
+      period: payout.period,
+      amount: payout.amount,
+    })),
+  };
+
   const listings = await db.collection("airbnbListings").find({ ownerId }).toArray();
 
   const monthlyBookings = bookings.filter((booking) => {
     const checkIn = parseDate(booking.checkIn);
-    return checkIn && checkIn >= start && checkIn <= end;
+    return checkIn && checkIn >= start && checkIn <= end && booking.status !== "cancelled";
   });
 
-  const inMonth = (value?: string | Date | null) => {
-    const parsed = parseDate(value || null);
-    return parsed && parsed >= start && parsed <= end;
-  };
-
-  const directRevenue = directPayments
-    .filter((payment) => inMonth(payment.paymentDate || payment.createdAt))
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-
-  const payoutRevenue = payouts
-    .filter((payout) => inMonth(payout.createdAt || payout.period))
-    .reduce((sum, payout) => sum + Number(payout.amount || 0), 0);
-
-  const revenue = directRevenue + payoutRevenue;
+  const revenueBreakdown = sumAirbnbRevenueForRange(revenueSources, start, end);
+  const revenue = revenueBreakdown.total;
   const bookedNights = monthlyBookings.reduce((sum, booking) => sum + Number(booking.nights || 0), 0);
   const availableNights = listings.reduce((sum, listing) => sum + (listing.units || 1) * days, 0);
 
-  const cancellations = bookings.filter((booking) => booking.status === "cancelled").length;
-  const cancellationRate = bookings.length > 0 ? Number(((cancellations / bookings.length) * 100).toFixed(1)) : 0;
+  const inRangeBookings = bookings.filter((booking) => {
+    const checkIn = parseDate(booking.checkIn);
+    return checkIn && checkIn >= start && checkIn <= end;
+  });
+  const cancellations = inRangeBookings.filter((booking) => booking.status === "cancelled").length;
+  const cancellationRate = inRangeBookings.length > 0 ? Number(((cancellations / inRangeBookings.length) * 100).toFixed(1)) : 0;
 
   const weightedReviewTotal = listings.reduce(
     (sum, listing) => sum + (listing.rating || 0) * (listing.reviewCount || 0),
@@ -74,11 +105,24 @@ export async function GET(request: NextRequest) {
   };
 
   const taxes = calculateAirbnbTaxes(summary.revenue);
+  const trendBuckets = getMonthBuckets(start, end);
+  const trend = trendBuckets.map((bucket) => {
+    const bucketStart = bucket.start < start ? start : bucket.start;
+    const bucketEnd = bucket.end > end ? end : bucket.end;
+    const revenueForMonth = sumAirbnbRevenueForRange(revenueSources, bucketStart, bucketEnd);
+    return {
+      label: bucket.label,
+      total: Math.round(revenueForMonth.total),
+      direct: Math.round(revenueForMonth.direct),
+      payouts: Math.round(revenueForMonth.payouts),
+    };
+  });
 
   return NextResponse.json({
     success: true,
     summary,
     taxes,
+    trend,
     period: {
       start: start.toISOString(),
       end: end.toISOString(),
