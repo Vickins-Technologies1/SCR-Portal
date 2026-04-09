@@ -16,6 +16,7 @@ export default function AirbnbBookingsPage() {
   const [bookings, setBookings] = useState<AirbnbBooking[]>([]);
   const [listings, setListings] = useState<AirbnbListingOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [form, setForm] = useState({
     listingId: "",
     guestName: "",
@@ -26,6 +27,7 @@ export default function AirbnbBookingsPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [tableMessage, setTableMessage] = useState<string | null>(null);
   const formRef = useRef<HTMLDivElement | null>(null);
   const listingSelectRef = useRef<HTMLSelectElement | null>(null);
 
@@ -140,6 +142,36 @@ export default function AirbnbBookingsPage() {
     }
   };
 
+  const handleDeleteBooking = async (bookingId: string) => {
+    if (!csrfToken) {
+      setTableMessage("Missing session token. Refresh the page and try again.");
+      return;
+    }
+    const confirmed = window.confirm("Delete this booking? This action cannot be undone.");
+    if (!confirmed) return;
+    setIsDeleting(bookingId);
+    setTableMessage(null);
+    try {
+      const res = await fetch(`/api/airbnb/bookings?bookingId=${encodeURIComponent(bookingId)}`, {
+        method: "DELETE",
+        headers: {
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete booking");
+      }
+      setBookings((prev) => prev.filter((booking) => booking.id !== bookingId));
+      setTableMessage("Booking deleted.");
+    } catch (err) {
+      setTableMessage(err instanceof Error ? err.message : "Failed to delete booking");
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
   return (
     <div className="min-h-[100svh] bg-background text-foreground">
       <Navbar />
@@ -237,6 +269,11 @@ export default function AirbnbBookingsPage() {
           </section>
 
           <section className="table-shell">
+            {tableMessage && (
+              <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-800">
+                {tableMessage}
+              </div>
+            )}
             <div className="table-scroll">
               <table>
                 <thead>
@@ -248,18 +285,19 @@ export default function AirbnbBookingsPage() {
                     <th>Total</th>
                     <th>Status</th>
                     <th>Payout</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="text-center text-muted-foreground py-6">
+                      <td colSpan={8} className="text-center text-muted-foreground py-6">
                         Loading bookings...
                       </td>
                     </tr>
                   ) : bookings.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center text-muted-foreground py-6">
+                      <td colSpan={8} className="text-center text-muted-foreground py-6">
                         No bookings yet.
                       </td>
                     </tr>
@@ -301,6 +339,15 @@ export default function AirbnbBookingsPage() {
                           >
                             {booking.payoutStatus}
                           </span>
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => handleDeleteBooking(booking.id)}
+                            disabled={isDeleting === booking.id}
+                            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-60"
+                          >
+                            {isDeleting === booking.id ? "Deleting..." : "Delete"}
+                          </button>
                         </td>
                       </tr>
                     ))

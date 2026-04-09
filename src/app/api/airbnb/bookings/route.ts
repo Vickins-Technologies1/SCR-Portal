@@ -166,3 +166,38 @@ export async function POST(request: NextRequest) {
     },
   });
 }
+
+export async function DELETE(request: NextRequest) {
+  const csrfToken = request.headers.get("x-csrf-token");
+  if (!validateCsrfToken(request, csrfToken)) {
+    return buildInvalidCsrfResponse(request);
+  }
+
+  const { searchParams } = new URL(request.url);
+  const bookingId = searchParams.get("bookingId");
+  if (!bookingId) {
+    return NextResponse.json({ success: false, message: "Missing booking ID" }, { status: 400 });
+  }
+
+  const resolved = await resolveAirbnbOwner(request, null);
+  if (resolved.response) return resolved.response;
+  const { ownerId } = resolved.context!;
+
+  const { db } = await connectToDatabase();
+
+  const filters: Record<string, unknown>[] = [{ externalId: bookingId }];
+  if (ObjectId.isValid(bookingId)) {
+    filters.push({ _id: new ObjectId(bookingId) });
+  }
+
+  const result = await db.collection("airbnbBookings").deleteOne({
+    ownerId,
+    $or: filters,
+  });
+
+  if (!result.deletedCount) {
+    return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
+}

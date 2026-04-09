@@ -161,7 +161,7 @@ export default function AirbnbDashboard() {
                   Short-Term Rental Overview
                 </h1>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-xl">
-                  Track bookings, revenue, and compliance across your Kenyan short-term rentals in one view.
+                  Track bookings, revenue, and occupancy across your Kenyan short-term rentals in one view.
                 </p>
                 {overview && (
                   <div className="flex flex-wrap items-center gap-2">
@@ -322,65 +322,6 @@ export default function AirbnbDashboard() {
                 </div>
               </section>
 
-              <section className="surface-card rounded-3xl p-5 sm:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-sm sm:text-base font-semibold text-foreground">Compliance status</h2>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      KTRA, county permits, NEMA, and tax obligations by property.
-                    </p>
-                  </div>
-                  <span className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Kenya ready</span>
-                </div>
-                <div className="table-shell table-compact">
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Property</th>
-                          <th>KTRA</th>
-                          <th>County Permit</th>
-                          <th>NEMA</th>
-                          <th>Status</th>
-                          <th>Next Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {overview?.compliance.length ? (
-                          overview.compliance.map((item) => (
-                            <tr key={item.propertyId}>
-                              <td className="font-semibold">{item.propertyName}</td>
-                              <td>{new Date(item.ktraExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
-                              <td>{new Date(item.countyPermitExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
-                              <td>{new Date(item.nemaExpiry).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
-                              <td>
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                                    item.status === "compliant"
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : item.status === "due"
-                                        ? "bg-amber-100 text-amber-700"
-                                        : "bg-red-100 text-red-700"
-                                  }`}
-                                >
-                                  {item.status}
-                                </span>
-                              </td>
-                              <td className="text-muted-foreground">{item.nextAction}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="text-center text-muted-foreground py-6">
-                              No compliance data yet.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
             </>
           )}
         </main>

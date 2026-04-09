@@ -77,24 +77,33 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
   const firstName = name.split(" ")[0] || "Admin";
 
+  const overviewLinks: NavLink[] = [
+    { key: "overview", href: "/admin/dashboard", label: "Overview", icon: <LayoutDashboard size={20} /> },
+  ];
+
   const coreLinks: NavLink[] = [
-    { key: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: <LayoutDashboard size={20} /> },
     { key: "users", href: "/admin/users", label: "Property Owners", icon: <Users size={20} /> },
     { key: "properties", href: "/admin/properties", label: "Properties", icon: <Building2 size={20} /> },
-    { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
-    { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },
   ];
 
   const airbnbLinks: NavLink[] = [
-    { key: "airbnb-overview", href: "/admin/airbnb", label: "Airbnb Overview", icon: <Home size={20} /> },
     { key: "airbnb-listings", href: "/admin/airbnb/listings", label: "Airbnb Listings", icon: <Building2 size={20} /> },
     { key: "airbnb-bookings", href: "/admin/airbnb/bookings", label: "Airbnb Bookings", icon: <CalendarCheck size={20} /> },
     { key: "airbnb-messages", href: "/admin/airbnb/messages", label: "Airbnb Messages", icon: <MessageCircle size={20} /> },
     { key: "airbnb-payouts", href: "/admin/airbnb/payouts", label: "Airbnb Payouts", icon: <Wallet size={20} /> },
+  ];
+
+  const generalLinks: NavLink[] = [
+    { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
     { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Integrations", icon: <Plug size={20} /> },
+    { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },
   ];
 
   const navSections = [
+    {
+      title: "Overview",
+      links: overviewLinks,
+    },
     {
       title: "Rentals Management",
       links: coreLinks,
@@ -112,6 +121,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         icon: <Home size={10} />,
         className: "bg-primary/10 text-primary",
       },
+    },
+    {
+      title: "General",
+      links: generalLinks,
     },
   ];
 

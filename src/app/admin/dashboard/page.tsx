@@ -16,11 +16,16 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  CalendarCheck,
+  MessageCircle,
+  Wallet,
+  Plug,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import PendingApprovals from "../components/PendingApprovals";
+import { cn } from "@/lib/utils";
 
 interface Counts {
   propertyOwners: number;
@@ -37,6 +42,38 @@ interface PaymentSummary {
   totalUnpaidInvoices: number;
   totalInvoices: number;
   pendingInvoicesCount: number;
+}
+
+interface AirbnbOverviewTotals {
+  listings: number;
+  bookings: number;
+  messages: number;
+  payouts: number;
+  integrations: number;
+  owners: number;
+}
+
+interface AirbnbOverviewAlerts {
+  pendingPayouts: number;
+  unreadMessages: number;
+  upcomingBookings: number;
+}
+
+interface AirbnbRecentBooking {
+  _id: string;
+  listingName: string;
+  guestName: string;
+  ownerEmail: string;
+  checkIn: string;
+  checkOut: string;
+  total: number;
+  status: string;
+}
+
+interface AirbnbOverviewResponse {
+  totals: AirbnbOverviewTotals;
+  alerts: AirbnbOverviewAlerts;
+  recentBookings: AirbnbRecentBooking[];
 }
 
 export default function AdminDashboard() {
@@ -59,6 +96,9 @@ export default function AdminDashboard() {
     pendingInvoicesCount: 0,
   });
 
+  const [airbnbOverview, setAirbnbOverview] = useState<AirbnbOverviewResponse | null>(null);
+  const [isAirbnbLoading, setIsAirbnbLoading] = useState(false);
+  const [airbnbError, setAirbnbError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [status, setStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   const [error, setError] = useState<string | null>(null);
@@ -148,11 +188,44 @@ export default function AdminDashboard() {
     }
   }, [status, router]);
 
+  const fetchAirbnbOverview = useCallback(async () => {
+    if (status !== "authenticated") return;
+    setIsAirbnbLoading(true);
+    setAirbnbError(null);
+
+    try {
+      const res = await fetch("/api/admin/airbnb/overview", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        return;
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Failed to load Airbnb overview");
+      }
+
+      setAirbnbOverview(data.overview || null);
+    } catch (err: any) {
+      setAirbnbError(err.message || "Failed to load Airbnb overview.");
+    } finally {
+      setIsAirbnbLoading(false);
+    }
+  }, [status, router]);
+
   useEffect(() => {
     if (status === "authenticated") {
       fetchDashboardData();
+      fetchAirbnbOverview();
     }
-  }, [status, fetchDashboardData]);
+  }, [status, fetchDashboardData, fetchAirbnbOverview]);
 
   // ── Combined cards (original + payments/invoices) ──────────────────────────
   const allCards = [
@@ -220,6 +293,36 @@ export default function AdminDashboard() {
     },
   ];
 
+  const airbnbStats = React.useMemo(() => {
+    if (!airbnbOverview) return [];
+    return [
+      { label: "Listings", value: airbnbOverview.totals.listings, icon: Building2 },
+      { label: "Bookings", value: airbnbOverview.totals.bookings, icon: CalendarCheck },
+      { label: "Messages", value: airbnbOverview.totals.messages, icon: MessageCircle },
+      { label: "Payouts", value: airbnbOverview.totals.payouts, icon: Wallet },
+      { label: "Integrations", value: airbnbOverview.totals.integrations, icon: Plug },
+      { label: "Owners", value: airbnbOverview.totals.owners, icon: Users },
+    ];
+  }, [airbnbOverview]);
+
+  const airbnbHasActivity = React.useMemo(() => {
+    if (!airbnbOverview) return false;
+    const totals = airbnbOverview.totals;
+    const alerts = airbnbOverview.alerts;
+    return Boolean(
+      totals.listings ||
+        totals.bookings ||
+        totals.messages ||
+        totals.payouts ||
+        totals.integrations ||
+        totals.owners ||
+        alerts.pendingPayouts ||
+        alerts.unreadMessages ||
+        alerts.upcomingBookings ||
+        airbnbOverview.recentBookings.length
+    );
+  }, [airbnbOverview]);
+
   // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
@@ -257,9 +360,9 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
-                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Dashboard Overview</h1>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Overview</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Monitor platform activity, approvals, and billing performance.
+                    Monitor rentals activity, approvals, billing, and short-term stays.
                   </p>
                 </div>
               </div>
@@ -341,6 +444,183 @@ export default function AdminDashboard() {
                 <PendingApprovals />
               </div>
             </>
+          )}
+
+          <motion.section
+            className="glass-panel rounded-3xl p-6 sm:p-8"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Airbnb Overview</p>
+                  <h2 className="text-lg sm:text-xl font-semibold text-foreground">Short-Term Rentals</h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Monitor global Airbnb activity, alerts, and recent bookings.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.section>
+
+          {airbnbError && (
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-xs sm:text-sm">{airbnbError}</p>
+                <button
+                  onClick={() => {
+                    setAirbnbError(null);
+                    fetchAirbnbOverview();
+                  }}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-red-700 hover:text-red-800 transition-colors"
+                >
+                  <RefreshCw size={14} />
+                  Try again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isAirbnbLoading ? (
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="surface-card rounded-2xl h-24 animate-pulse" />
+              ))}
+            </div>
+          ) : airbnbOverview ? (
+            airbnbHasActivity ? (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="grid grid-cols-2 lg:grid-cols-3 gap-4"
+                >
+                  {airbnbStats.map((stat) => (
+                    <div key={stat.label} className="surface-card rounded-2xl p-4 sm:p-5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                          {stat.label}
+                        </p>
+                        <div className="h-9 w-9 rounded-2xl bg-primary/10 flex items-center justify-center">
+                          <stat.icon className="h-4 w-4 text-primary" />
+                        </div>
+                      </div>
+                      <p className="text-lg sm:text-xl font-semibold text-foreground mt-2">
+                        {stat.value.toLocaleString("en-US")}
+                      </p>
+                    </div>
+                  ))}
+                </motion.div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="surface-card rounded-2xl p-4">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                      Upcoming bookings (14 days)
+                    </p>
+                    <p className="text-xl font-semibold text-foreground mt-2">
+                      {airbnbOverview.alerts.upcomingBookings.toLocaleString("en-US")}
+                    </p>
+                  </div>
+                  <div className="surface-card rounded-2xl p-4">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                      Unread messages
+                    </p>
+                    <p className="text-xl font-semibold text-foreground mt-2">
+                      {airbnbOverview.alerts.unreadMessages.toLocaleString("en-US")}
+                    </p>
+                  </div>
+                  <div className="surface-card rounded-2xl p-4">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                      Pending payouts
+                    </p>
+                    <p className="text-xl font-semibold text-foreground mt-2">
+                      {airbnbOverview.alerts.pendingPayouts.toLocaleString("en-US")}
+                    </p>
+                  </div>
+                </div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="table-shell table-compact"
+                >
+                  <div className="px-4 pt-4">
+                    <h3 className="text-sm sm:text-base font-semibold text-foreground">Recent bookings</h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      Latest reservations across all Airbnb owners.
+                    </p>
+                  </div>
+                  <div className="table-scroll">
+                    <table className="w-full">
+                      <thead>
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Listing</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Guest</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Owner</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Check-In</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Check-Out</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total (KES)</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {airbnbOverview.recentBookings.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                              No bookings available yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          airbnbOverview.recentBookings.map((booking) => (
+                            <tr key={booking._id} className="hover:bg-primary/5 transition-colors">
+                              <td className="px-4 py-3 text-xs font-medium text-foreground">{booking.listingName}</td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">{booking.guestName}</td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">{booking.ownerEmail || "—"}</td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                                {new Date(booking.checkIn).toLocaleDateString("en-KE")}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                                {new Date(booking.checkOut).toLocaleDateString("en-KE")}
+                              </td>
+                              <td className="px-4 py-3 text-xs font-semibold text-primary">
+                                Ksh {Math.round(booking.total || 0).toLocaleString("en-KE")}
+                              </td>
+                              <td className="px-4 py-3 text-xs">
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                                    booking.status === "confirmed"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : booking.status === "pending"
+                                      ? "bg-amber-100 text-amber-700"
+                                      : "bg-slate-100 text-slate-700"
+                                  )}
+                                >
+                                  {booking.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </motion.div>
+              </>
+            ) : (
+              <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+                No Airbnb activity yet.
+              </div>
+            )
+          ) : (
+            <div className="surface-card rounded-2xl p-6 text-center text-xs text-muted-foreground">
+              No Airbnb data available yet.
+            </div>
           )}
         </main>
       </div>

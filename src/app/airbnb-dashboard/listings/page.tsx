@@ -336,7 +336,7 @@ export default function AirbnbListingsPage() {
           <SectionHeader
             eyebrow="Airbnb Module"
             title="Listings Management"
-            subtitle="Publish, optimize, and manage Airbnb-ready listings with Kenya compliance built-in."
+            subtitle="Publish, optimize, and manage Airbnb-ready listings with Kenya-ready details built-in."
             icon={Home}
             actions={
               <button

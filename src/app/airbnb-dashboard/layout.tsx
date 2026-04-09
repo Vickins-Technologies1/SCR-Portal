@@ -38,7 +38,7 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
     },
     {
       title: "Overview",
-      body: "Your STR command center with KPIs, occupancy, and compliance at a glance.",
+      body: "Your STR command center with KPIs, occupancy, and booking activity at a glance.",
       selector: '[data-tour="airbnb-nav-dashboard"]',
       placement: "right",
     },
@@ -50,7 +50,7 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
     },
     {
       title: "Calendar",
-      body: "Set availability, pricing, and seasonal rules for every listing.",
+      body: "Set availability and seasonal rules for every listing.",
       selector: '[data-tour="airbnb-nav-calendar"]',
       placement: "right",
     },
@@ -67,12 +67,6 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
       placement: "right",
     },
     {
-      title: "Pricing",
-      body: "Apply dynamic pricing rules and seasonal adjustments.",
-      selector: '[data-tour="airbnb-nav-pricing"]',
-      placement: "right",
-    },
-    {
       title: "Operations",
       body: "Assign cleaning, maintenance, and turnover tasks.",
       selector: '[data-tour="airbnb-nav-operations"]',
@@ -82,12 +76,6 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
       title: "Payments",
       body: "Monitor payouts, direct payments, and M-Pesa activity.",
       selector: '[data-tour="airbnb-nav-payments"]',
-      placement: "right",
-    },
-    {
-      title: "Compliance",
-      body: "Track KTRA licenses, permits, and tax obligations.",
-      selector: '[data-tour="airbnb-nav-compliance"]',
       placement: "right",
     },
     {
