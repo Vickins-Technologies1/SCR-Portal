@@ -32,28 +32,28 @@ export default function PublicNavbar() {
     <>
       <nav className="fixed top-4 left-0 right-0 z-40">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between rounded-full border border-border/60 bg-background/80 backdrop-blur-xl shadow-[0_20px_50px_-35px_rgba(30,58,138,0.6)] px-4 py-2">
+          <div className="flex items-center justify-between rounded-full border border-slate-200/80 bg-white/90 backdrop-blur-xl shadow-[0_20px_50px_-35px_rgba(15,23,42,0.45)] px-4 py-2">
             <Link href={MAIN_SITE} aria-label="Home" className="flex items-center gap-3">
               <Image
                 src="/logo.png"
                 alt="Sorana"
                 width={56}
                 height={56}
-                className="h-14 w-14 object-contain"
+                className="h-12 w-12 object-contain"
                 priority
               />
               <div className="hidden sm:block">
-                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Sorana</p>
-                <p className="text-sm font-semibold text-foreground">Property Managers</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Sorana</p>
+                <p className="text-xs font-semibold text-slate-900">Property Managers</p>
               </div>
             </Link>
 
-            <div className="hidden lg:flex items-center gap-1 rounded-full bg-muted/60 px-2 py-2">
+            <div className="hidden lg:flex items-center gap-1 rounded-full bg-slate-100/80 px-2 py-2">
               {navLinks.map((link) => (
                 <Link
                   key={link.label}
                   href={link.href}
-                  className="px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground transition hover:text-foreground"
+                  className="px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 transition hover:text-slate-900"
                 >
                   {link.label}
                 </Link>
@@ -63,16 +63,16 @@ export default function PublicNavbar() {
             <div className="hidden lg:flex items-center gap-2">
               <Link
                 href="/"
-                className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition-all text-muted-foreground hover:text-foreground"
+                className="flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] transition-all text-slate-500 hover:text-slate-900"
               >
-                <LogIn size={16} />
+                <LogIn size={14} />
                 Sign In
               </Link>
               <Link
                 href="/sign-up"
-                className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition-all bg-primary text-primary-foreground shadow-[0_16px_30px_-18px_rgba(66,199,117,0.6)] hover:bg-primary-hover"
+                className="flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] transition-all bg-primary text-primary-foreground shadow-[0_16px_30px_-18px_rgba(66,199,117,0.6)] hover:bg-primary-hover"
               >
-                <UserPlus size={16} />
+                <UserPlus size={14} />
                 Sign Up
               </Link>
             </div>
@@ -80,7 +80,7 @@ export default function PublicNavbar() {
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
-              className="lg:hidden p-2 rounded-full bg-muted/60 hover:bg-muted transition"
+              className="lg:hidden p-2 rounded-full bg-slate-100/80 hover:bg-slate-100 transition"
               aria-label="Open menu"
             >
               <Menu size={22} strokeWidth={2.4} />
@@ -98,7 +98,7 @@ export default function PublicNavbar() {
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-80 rounded-r-3xl border-r border-border bg-background/95 backdrop-blur-xl shadow-[0_25px_70px_-40px_rgba(30,58,138,0.65)] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-80 rounded-r-3xl border-r border-slate-200 bg-white/95 backdrop-blur-xl shadow-[0_25px_70px_-40px_rgba(15,23,42,0.5)] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
           mobileOpen ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0"
         }`}
         aria-hidden={!mobileOpen}
@@ -111,17 +111,17 @@ export default function PublicNavbar() {
                 alt="Sorana"
                 width={56}
                 height={56}
-                className="h-14 w-14 object-contain"
+                className="h-12 w-12 object-contain"
               />
               <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Sorana</p>
-                <p className="text-sm font-semibold text-foreground">Property Managers</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Sorana</p>
+                <p className="text-xs font-semibold text-slate-900">Property Managers</p>
               </div>
             </Link>
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
-              className="rounded-full p-2 hover:bg-muted transition"
+              className="rounded-full p-2 hover:bg-slate-100 transition"
               aria-label="Close menu"
             >
               <X size={22} />
@@ -135,11 +135,11 @@ export default function PublicNavbar() {
                 <Link
                   key={link.label}
                   href={link.href}
-                  className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold tracking-wide text-foreground hover:bg-muted/70 transition"
+                  className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-xs font-semibold tracking-wide text-slate-900 hover:bg-slate-100/80 transition"
                   onClick={() => setMobileOpen(false)}
                 >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                    <Icon size={20} className="text-primary" />
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+                    <Icon size={18} className="text-primary" />
                   </span>
                   {link.label}
                 </Link>
@@ -150,19 +150,19 @@ export default function PublicNavbar() {
           <div className="space-y-3">
             <Link
               href="/"
-              className="flex w-full items-center justify-between rounded-2xl border border-border px-5 py-3 text-sm font-semibold tracking-wide text-foreground transition"
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-5 py-3 text-xs font-semibold tracking-wide text-slate-900 transition"
               onClick={() => setMobileOpen(false)}
             >
               <span>Sign In</span>
-              <LogIn size={18} />
+              <LogIn size={16} />
             </Link>
             <Link
               href="/sign-up"
-              className="flex w-full items-center justify-between rounded-2xl bg-primary px-5 py-3 text-sm font-semibold tracking-wide text-primary-foreground shadow-[0_14px_30px_-18px_rgba(66,199,117,0.6)]"
+              className="flex w-full items-center justify-between rounded-2xl bg-primary px-5 py-3 text-xs font-semibold tracking-wide text-primary-foreground shadow-[0_14px_30px_-18px_rgba(66,199,117,0.6)]"
               onClick={() => setMobileOpen(false)}
             >
               <span>Sign Up</span>
-              <UserPlus size={18} />
+              <UserPlus size={16} />
             </Link>
           </div>
         </div>
