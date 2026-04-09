@@ -67,7 +67,7 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
   return (
     <>
       {/* Main gallery preview */}
-      <div className="group relative h-80 w-full overflow-hidden rounded-3xl border border-border bg-card shadow-[0_18px_45px_-30px_rgba(30,58,138,0.45)] transition-all duration-300 hover:shadow-[0_26px_60px_-35px_rgba(30,58,138,0.55)] sm:h-96">
+      <div className="group relative h-72 w-full overflow-hidden rounded-3xl border border-white/70 bg-white/80 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.4)] transition-all duration-300 hover:shadow-[0_26px_60px_-35px_rgba(15,23,42,0.5)] backdrop-blur sm:h-80">
         {/* Main image */}
         <Image
           src={activeImage}
@@ -83,18 +83,18 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
           <>
             <button
               onClick={goPrev}
-              className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-foreground/40 p-3 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-foreground/60 group-hover:opacity-100 focus:opacity-100"
+              className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/50 p-2.5 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-slate-900/70 group-hover:opacity-100 focus:opacity-100"
               aria-label="Previous image"
             >
-              <ChevronLeft size={24} />
+              <ChevronLeft size={20} />
             </button>
 
             <button
               onClick={goNext}
-              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-foreground/40 p-3 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-foreground/60 group-hover:opacity-100 focus:opacity-100"
+              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-slate-900/50 p-2.5 text-white opacity-0 backdrop-blur-sm transition-all hover:bg-slate-900/70 group-hover:opacity-100 focus:opacity-100"
               aria-label="Next image"
             >
-              <ChevronRight size={24} />
+              <ChevronRight size={20} />
             </button>
           </>
         )}
@@ -116,7 +116,7 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
               key={src + idx}
               type="button"
               onClick={() => setActiveIndex(idx)}
-              className={`relative h-20 w-28 flex-shrink-0 overflow-hidden rounded-2xl border-2 transition-all duration-200 ${
+              className={`relative h-16 w-24 flex-shrink-0 overflow-hidden rounded-2xl border-2 transition-all duration-200 ${
                 idx === activeIndex
                   ? "border-primary scale-105 shadow-md"
                   : "border-transparent opacity-70 hover:opacity-100 hover:scale-105 hover:shadow-sm"
@@ -144,10 +144,10 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
             {/* Close button */}
             <button
               onClick={() => setIsOpen(false)}
-              className="absolute -top-12 right-4 z-20 rounded-full bg-foreground/60 p-3 text-white hover:bg-foreground/80 transition-colors"
+              className="absolute -top-12 right-4 z-20 rounded-full bg-slate-900/60 p-3 text-white hover:bg-slate-900/80 transition-colors"
               aria-label="Close gallery"
             >
-              <X size={24} />
+              <X size={20} />
             </button>
 
             {/* Main full-screen image */}
@@ -166,24 +166,24 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
               <>
                 <button
                   onClick={goPrev}
-                  className="absolute left-6 top-1/2 z-20 -translate-y-1/2 rounded-full bg-foreground/60 p-4 text-white hover:bg-foreground/80 transition-colors"
+                  className="absolute left-6 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/60 p-3 text-white hover:bg-slate-900/80 transition-colors"
                   aria-label="Previous image"
                 >
-                  <ChevronLeft size={28} />
+                  <ChevronLeft size={24} />
                 </button>
 
                 <button
                   onClick={goNext}
-                  className="absolute right-6 top-1/2 z-20 -translate-y-1/2 rounded-full bg-foreground/60 p-4 text-white hover:bg-foreground/80 transition-colors"
+                  className="absolute right-6 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-900/60 p-3 text-white hover:bg-slate-900/80 transition-colors"
                   aria-label="Next image"
                 >
-                  <ChevronRight size={28} />
+                  <ChevronRight size={24} />
                 </button>
               </>
             )}
 
             {/* Counter */}
-            <div className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full bg-foreground/70 px-4 py-2 text-sm text-white backdrop-blur-sm">
+            <div className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full bg-slate-900/70 px-4 py-2 text-xs text-white backdrop-blur-sm">
               {activeIndex + 1} / {safeImages.length}
             </div>
           </div>

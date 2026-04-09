@@ -102,37 +102,39 @@ export default async function PropertyDetailPage({
   const contactLink = `mailto:${contactEmail}`;
 
   return (
-    <main className="min-h-screen bg-[#f6f3ef] text-slate-900">
+    <main className="relative isolate min-h-screen bg-[#f7f6f3] text-slate-900">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[length:22px_22px] opacity-40" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(255,255,255,0.7),rgba(255,255,255,0))] opacity-60" />
       <div className="max-w-7xl mx-auto px-6 pt-28 pb-16">
         <Link
           href="/property-listings"
-          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition hover:text-slate-900"
+          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600 transition hover:text-slate-900"
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={14} />
           Back to listings
         </Link>
 
         <section className="mt-8 grid gap-10 lg:grid-cols-[1.25fr_0.75fr]">
           <div className="space-y-8">
-            <div className="rounded-[32px] border border-slate-200 bg-white/90 p-4 sm:p-6 shadow-[0_22px_50px_-40px_rgba(15,23,42,0.5)]">
+            <div className="rounded-[32px] border border-white/70 bg-white/85 p-4 sm:p-6 shadow-[0_22px_50px_-40px_rgba(15,23,42,0.45)] backdrop-blur">
               <ImageGallery images={images} title={property.name} />
             </div>
 
-            <div className="rounded-[32px] border border-slate-200 bg-white/90 p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)]">
+            <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.4em] text-slate-500">Property</p>
-                  <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Property</p>
+                  <h1 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
                     {property.name}
                   </h1>
-                  <p className="mt-2 flex items-center gap-2 text-sm sm:text-base text-slate-500">
-                    <MapPin size={18} className="flex-shrink-0" />
+                  <p className="mt-2 flex items-center gap-2 text-xs sm:text-sm text-slate-500">
+                    <MapPin size={14} className="flex-shrink-0" />
                     {property.address}
                   </p>
                 </div>
 
                 <span
-                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-xs sm:text-sm font-semibold uppercase tracking-wider mt-3 sm:mt-0 ${
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider mt-3 sm:mt-0 ${
                     isAirbnb
                       ? property.status === "published"
                         ? "bg-emerald-100 text-emerald-700"
@@ -148,50 +150,50 @@ export default async function PropertyDetailPage({
 
               {isAirbnb ? (
                 <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500">Nightly rate</p>
-                    <p className="mt-2 text-xl sm:text-2xl font-semibold text-slate-900">
+                  <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500">Nightly rate</p>
+                    <p className="mt-2 text-lg font-semibold text-slate-900">
                       {airbnbListing?.baseRate
                         ? `Ksh ${airbnbListing.baseRate.toLocaleString()}`
                         : "On request"}
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500">Weekend rate</p>
-                    <p className="mt-2 text-xl sm:text-2xl font-semibold text-slate-900">
+                  <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500">Weekend rate</p>
+                    <p className="mt-2 text-lg font-semibold text-slate-900">
                       {airbnbListing?.weekendRate
                         ? `Ksh ${airbnbListing.weekendRate.toLocaleString()}`
                         : "On request"}
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500">Rating</p>
-                    <p className="mt-2 text-2xl sm:text-3xl font-bold text-slate-900">
+                  <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500">Rating</p>
+                    <p className="mt-2 text-xl font-semibold text-slate-900">
                       {(airbnbListing?.rating ?? 0).toFixed(1)} ★
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500">Price range</p>
-                    <p className="mt-2 text-xl sm:text-2xl font-semibold text-slate-900">
+                  <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500">Price range</p>
+                    <p className="mt-2 text-lg font-semibold text-slate-900">
                       {minPrice ? `Ksh ${minPrice.toLocaleString()} – ${maxPrice.toLocaleString()}` : "On request"}
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500">Vacant units</p>
-                    <p className="mt-2 text-2xl sm:text-3xl font-bold text-emerald-600">
+                  <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500">Vacant units</p>
+                    <p className="mt-2 text-xl font-semibold text-emerald-600">
                       {availability?.totalVacant ?? 0}
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500">Occupancy</p>
-                    <p className="mt-2 text-2xl sm:text-3xl font-bold text-slate-900">
+                  <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500">Occupancy</p>
+                    <p className="mt-2 text-xl font-semibold text-slate-900">
                       {availability?.occupancyRate ?? 0}%
                     </p>
                   </div>
@@ -200,8 +202,8 @@ export default async function PropertyDetailPage({
 
               {property.description && (
                 <div className="mt-8">
-                  <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-3">Description</p>
-                  <p className="text-sm sm:text-base leading-relaxed text-slate-700 whitespace-pre-line">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">Overview</p>
+                  <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-line">
                     {property.description}
                   </p>
                 </div>
@@ -209,22 +211,22 @@ export default async function PropertyDetailPage({
             </div>
 
             {isAirbnb ? (
-              <div className="rounded-[32px] border border-slate-200 bg-white/90 p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] space-y-6">
+              <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">Stay details</h2>
-                  <p className="text-sm text-slate-500">
+                  <h2 className="text-lg sm:text-xl font-semibold text-slate-900">Stay profile</h2>
+                  <p className="text-xs text-slate-500">
                     {(airbnbListing?.reviewCount ?? 0).toLocaleString()} reviews
                   </p>
                 </div>
 
                 {airbnbListing?.amenities?.length ? (
                   <div>
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-3">Amenities</p>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">Amenities</p>
                     <div className="flex flex-wrap gap-2">
                       {airbnbListing.amenities.map((amenity) => (
                         <span
                           key={amenity}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                          className="rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[10px] text-slate-600"
                         >
                           {amenity}
                         </span>
@@ -235,10 +237,10 @@ export default async function PropertyDetailPage({
 
                 {airbnbListing?.houseRules?.length ? (
                   <div>
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-3">House rules</p>
-                    <ul className="space-y-2 text-sm text-slate-600">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">House rules</p>
+                    <ul className="space-y-2 text-xs text-slate-600">
                       {airbnbListing.houseRules.map((rule) => (
-                        <li key={rule} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <li key={rule} className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-3">
                           {rule}
                         </li>
                       ))}
@@ -247,26 +249,26 @@ export default async function PropertyDetailPage({
                 ) : null}
               </div>
             ) : (
-              <div className="rounded-[32px] border border-slate-200 bg-white/90 p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)]">
+              <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
                 <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">Unit mix</h2>
-                  <p className="text-sm text-slate-500">Live availability</p>
+                  <h2 className="text-lg sm:text-xl font-semibold text-slate-900">Unit mix</h2>
+                  <p className="text-xs text-slate-500">Live availability</p>
                 </div>
 
                 <div className="space-y-4">
                   {unitTypes.map((unit, idx) => (
                     <div
                       key={`${property._id}-${unit.type}-${idx}`}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6 hover:bg-white transition-colors"
+                      className="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 hover:bg-white transition-colors"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                          <p className="text-base sm:text-lg font-semibold text-slate-900">{unit.type}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{unit.uniqueType || "Standard"}</p>
+                          <p className="text-sm sm:text-base font-semibold text-slate-900">{unit.type}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{unit.uniqueType || "Standard"}</p>
                         </div>
-                        <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                        <div className="flex flex-wrap gap-4 text-xs text-slate-500">
                           <span className="flex items-center gap-1.5">
-                            <DollarSign size={16} /> {unit.price?.toLocaleString() ?? "?"} / mo
+                            <DollarSign size={14} /> {unit.price?.toLocaleString() ?? "?"} / mo
                           </span>
                           <span>
                             {unit.deposit ? `Deposit: ${unit.deposit.toLocaleString()}` : "No deposit"}
@@ -284,20 +286,20 @@ export default async function PropertyDetailPage({
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
-            <div className="rounded-[32px] border border-slate-200 bg-white/90 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)]">
+            <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Reserve this stay</h3>
+                <h3 className="text-base font-semibold text-slate-900">Reserve this listing</h3>
                 {isAirbnb && (
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                    <Star size={14} /> {(airbnbListing?.rating ?? 0).toFixed(1)}
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                    <Star size={12} /> {(airbnbListing?.rating ?? 0).toFixed(1)}
                   </span>
                 )}
               </div>
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[11px] uppercase tracking-wider text-slate-500">
+              <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 p-4 backdrop-blur">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500">
                   {isAirbnb ? "Nightly rate" : "Monthly rent"}
                 </p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">
+                <p className="mt-2 text-xl font-semibold text-slate-900">
                   {isAirbnb
                     ? nightlyRate
                       ? `Ksh ${nightlyRate.toLocaleString()}`
@@ -310,27 +312,25 @@ export default async function PropertyDetailPage({
 
               <a
                 href={contactLink}
-                className="mt-4 block w-full rounded-full bg-slate-900 px-6 py-3 text-center text-xs font-semibold uppercase tracking-[0.25em] text-white transition hover:bg-slate-800"
+                className="mt-4 block w-full rounded-full bg-slate-900 px-5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.24em] text-white transition hover:bg-slate-800"
               >
-                {isAirbnb ? "Book now" : "Schedule viewing"}
+                {isAirbnb ? "Reserve stay" : "Schedule viewing"}
               </a>
 
-              <p className="mt-4 text-xs text-slate-500">
-                Our concierge team replies within 2 hours during business days.
-              </p>
+              <p className="mt-4 text-[11px] text-slate-500">Response within 2 business hours.</p>
             </div>
 
-            <div className="rounded-[32px] border border-slate-200 bg-white/90 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)]">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Contact host</h3>
+            <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
+              <h3 className="text-base font-semibold text-slate-900 mb-4">Contact details</h3>
 
               {owner ? (
-                <div className="space-y-4 text-sm text-slate-600">
+                <div className="space-y-4 text-xs text-slate-600">
                   {owner.email && (
                     <a
                       href={`mailto:${owner.email}`}
                       className="flex items-center gap-3 hover:text-emerald-600 transition-colors"
                     >
-                      <Mail size={18} className="text-slate-500" />
+                      <Mail size={14} className="text-slate-500" />
                       {owner.email}
                     </a>
                   )}
@@ -339,23 +339,21 @@ export default async function PropertyDetailPage({
                       href={`tel:${owner.phone}`}
                       className="flex items-center gap-3 hover:text-emerald-600 transition-colors"
                     >
-                      <Phone size={18} className="text-slate-500" />
+                      <Phone size={14} className="text-slate-500" />
                       {owner.phone}
                     </a>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Owner details unavailable at this time.</p>
+                <p className="text-xs text-slate-500">Contact details unavailable.</p>
               )}
 
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-xs text-slate-500">
+              <div className="mt-6 rounded-2xl border border-white/70 bg-white/70 px-4 py-4 text-[11px] text-slate-500 backdrop-blur">
                 <div className="flex items-center gap-2 font-semibold text-slate-700">
-                  <ShieldCheck size={14} />
+                  <ShieldCheck size={12} />
                   Verified listing
                 </div>
-                <p className="mt-2">
-                  Every listing is professionally managed and inspected for guest readiness.
-                </p>
+                <p className="mt-2">Professionally managed and verified for readiness.</p>
               </div>
             </div>
           </aside>
