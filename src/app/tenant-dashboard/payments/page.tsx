@@ -16,7 +16,7 @@ interface Payment {
   phoneNumber: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "failed" | "cancelled";
+  status: "completed" | "pending" | "pending_stk" | "failed" | "cancelled";
   createdAt: string;
   tenantName: string;
   reference: string;
@@ -363,12 +363,14 @@ export default function PaymentsPage() {
                           className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${
                             p.status === "completed"
                               ? "bg-primary/10 text-primary"
-                              : p.status === "pending"
+                              : p.status === "pending" || p.status === "pending_stk"
                               ? "bg-yellow-100 text-yellow-700"
                               : "bg-red-100 text-red-700"
                           }`}
                         >
-                          {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                          {p.status === "pending_stk"
+                            ? "Pending"
+                            : p.status.charAt(0).toUpperCase() + p.status.slice(1)}
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-gray-600">
@@ -549,7 +551,7 @@ export default function PaymentsPage() {
                       onStart={() => {
                         setIsProcessing(true);
                         setMessages([
-                          { type: "success", text: "STK Push initiated. Complete the prompt on your phone.", timestamp: new Date().toISOString() },
+                          { type: "success", text: "STK Push initiated — please check your phone and enter M-Pesa PIN.", timestamp: new Date().toISOString() },
                         ]);
                       }}
                       onSuccess={async () => {

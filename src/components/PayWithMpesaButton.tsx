@@ -64,7 +64,7 @@ export default function PayWithMpesaButton({
       }
 
       const status = String(statusData.status || "pending");
-      if (status === "pending") {
+      if (status === "pending" || status === "pending_stk") {
         attempts += 1;
         continue;
       }

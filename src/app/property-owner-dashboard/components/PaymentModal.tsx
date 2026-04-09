@@ -200,7 +200,7 @@ export default function PaymentModal({
 
           const normalized = String(statusData.TransactionStatus || "").toLowerCase();
 
-          if (normalized === "pending") {
+          if (normalized === "pending" || normalized === "pending_stk") {
             setStatusMessage("Transaction pending, please complete the payment on your phone.");
             return false;
           }

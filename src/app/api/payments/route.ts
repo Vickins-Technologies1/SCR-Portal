@@ -12,7 +12,7 @@ interface Payment {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "failed";
+  status: "completed" | "pending" | "pending_stk" | "failed";
   createdAt: string;
   type?: "Rent" | "Utility";
   phoneNumber?: string;
@@ -31,7 +31,7 @@ interface PaymentDb {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "failed";
+  status: "completed" | "pending" | "pending_stk" | "failed";
   createdAt: string;
   type?: "Rent" | "Utility";
   phoneNumber?: string;
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   const propertyId = searchParams.get("propertyId");
   const tenantName = searchParams.get("tenantName");
   const type = searchParams.get("type") as "Rent" | "Utility" | undefined;
-  const status = searchParams.get("status") as "completed" | "pending" | "failed" | undefined;
+  const status = searchParams.get("status") as "completed" | "pending" | "pending_stk" | "failed" | undefined;
   const unitType = searchParams.get("unitType");
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "10")));
@@ -259,7 +259,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
     if (tenantName) query.tenantName = { $regex: tenantName, $options: "i" };
     if (type) query.type = type;
-    if (status) query.status = status;
+    if (status) {
+      query.status = status === "pending" ? ({ $in: ["pending", "pending_stk"] } as any) : status;
+    }
     if (unitType && !query.tenantId && !query.$or) {
       query.unitType = unitType;
     }

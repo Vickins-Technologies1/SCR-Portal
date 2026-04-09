@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       propertyName: booking.listingName,
       paymentDate: nowIso,
       transactionId: incoming.id,
-      status: "pending",
+      status: "pending_stk",
       createdAt: nowIso,
       type: "AirbnbDirect",
       phoneNumber: normalizedPhone,

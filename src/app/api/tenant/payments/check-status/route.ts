@@ -5,18 +5,6 @@ import { Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { z } from "zod";
-import { getIncomingPaymentStatus } from "@/lib/kopokopo";
-
-function normalizeMsisdn(value?: string): string {
-  if (!value) return "";
-  return value.replace(/\D/g, "");
-}
-
-function isLikelyMpesaReceipt(reference?: string): boolean {
-  if (!reference) return false;
-  const trimmed = reference.trim();
-  return /^[A-Z0-9]{10}$/i.test(trimmed);
-}
 
 const StatusSchema = z.object({
   transaction_request_id: z.string().trim().min(1),
@@ -72,59 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
 
-    if (payment.status === "pending" && (payment.provider === "kopokopo" || payment.kopokopoIncomingPaymentId)) {
-      const incomingId = payment.kopokopoIncomingPaymentId || payment.transactionId;
-      try {
-        const statusData = await getIncomingPaymentStatus(String(incomingId));
-        const statusLower = (statusData.status || "").toLowerCase();
-        const resourceStatusLower = (statusData.resourceStatus || "").toLowerCase();
-        const errorsLower = (statusData.errors || "").toLowerCase();
-        const hasReference = !!statusData.reference;
-        const referenceValid = isLikelyMpesaReceipt(statusData.reference);
-        const expectedPhone = normalizeMsisdn(payment.phoneNumber);
-        const incomingPhone = normalizeMsisdn(statusData.phoneNumber);
-        const hasIncomingPhone = !!incomingPhone;
-        const hasAmount = statusData.amount != null && !Number.isNaN(Number(statusData.amount));
-        const phoneMatches = hasIncomingPhone && (!expectedPhone || incomingPhone === expectedPhone);
-        const amountMatches = hasAmount && Number(statusData.amount) === Number(payment.amount);
-
-        const isCompleted =
-          statusLower === "success" &&
-          resourceStatusLower === "received" &&
-          hasReference &&
-          referenceValid &&
-          phoneMatches &&
-          amountMatches;
-        const isCancelled =
-          statusLower === "failed" &&
-          (errorsLower.includes("cancel") || errorsLower.includes("canceled") || errorsLower.includes("cancelled"));
-        const isFailed =
-          statusLower === "failed" ||
-          resourceStatusLower === "failed" ||
-          errorsLower.includes("timeout") ||
-          errorsLower.includes("expired");
-        const normalizedStatus = isCompleted ? "completed" : isCancelled ? "cancelled" : isFailed ? "failed" : "pending";
-
-        const shouldUpdate =
-          normalizedStatus !== payment.status ||
-          (hasReference && !payment.mpesaCode) ||
-          (statusData.originationTime && payment.paymentDate !== statusData.originationTime);
-
-        if (shouldUpdate) {
-          const update: Record<string, any> = { status: normalizedStatus };
-          if (isCompleted && statusData.reference) update.mpesaCode = statusData.reference;
-          if (statusData.originationTime) update.paymentDate = statusData.originationTime;
-
-          await db.collection("payments").updateOne({ _id: payment._id }, { $set: update });
-          payment = { ...payment, ...update };
-        }
-      } catch (error) {
-        logger.error("KopoKopo status check failed", {
-          message: error instanceof Error ? error.message : "Unknown error",
-          incomingId,
-        });
-      }
-    }
+    // For KopoKopo STK Push, rely on webhook updates to avoid premature completion.
 
     return NextResponse.json({
       success: true,

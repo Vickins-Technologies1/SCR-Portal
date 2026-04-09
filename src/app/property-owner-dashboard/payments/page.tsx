@@ -15,7 +15,7 @@ interface Payment {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "failed";
+  status: "completed" | "pending" | "pending_stk" | "failed";
   tenantName: string;
   type: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber: string;
@@ -342,6 +342,7 @@ export default function PaymentsPage() {
       case "completed":
         return "text-primary bg-primary/10";
       case "pending":
+      case "pending_stk":
         return "text-yellow-600 bg-yellow-100";
       case "failed":
         return "text-red-600 bg-red-100";
@@ -568,7 +569,7 @@ export default function PaymentsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${getStatusStyles(payment.status)}`}>
-                            {payment.status}
+                            {payment.status === "pending_stk" ? "pending" : payment.status}
                           </span>
                         </td>
                       </tr>

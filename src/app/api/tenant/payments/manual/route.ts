@@ -37,7 +37,7 @@ interface Payment {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "failed" | "cancelled";
+  status: "completed" | "pending" | "pending_stk" | "failed" | "cancelled";
   createdAt: string;
   type: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;

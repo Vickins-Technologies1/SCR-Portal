@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
         propertyId,
         paymentDate: nowIso,
         transactionId: incoming.id,
-        status: "pending",
+        status: "pending_stk",
         createdAt: nowIso,
         type: parsed.data.type || "Rent",
         phoneNumber: normalizedPhone,
@@ -303,10 +303,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          message: "STK Push initiated via KopoKopo. Check your phone.",
+          message: "STK Push initiated — please check your phone and enter M-Pesa PIN.",
           checkoutRequestId: incoming.id,
           merchantRequestId: incoming.id,
-          customerMessage: "STK Push initiated via KopoKopo.",
+          customerMessage: "STK Push initiated — please check your phone and enter M-Pesa PIN.",
           provider: "kopokopo",
         },
         { status: 200 }
