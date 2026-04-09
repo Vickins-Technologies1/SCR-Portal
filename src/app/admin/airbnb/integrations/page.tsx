@@ -17,7 +17,6 @@ interface Integration {
   provider: string;
   status: string;
   description: string;
-  lastSyncedAt?: string;
 }
 
 export default function AdminAirbnbIntegrationsPage() {
@@ -123,7 +122,7 @@ export default function AdminAirbnbIntegrationsPage() {
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
                   <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Airbnb Integrations</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Monitor channel manager and payment integrations per owner.
+                    Monitor payments, analytics, and notification integrations per owner.
                   </p>
                 </div>
               </div>
@@ -169,7 +168,6 @@ export default function AdminAirbnbIntegrationsPage() {
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Integration</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Owner</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Last Sync</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Notes</th>
                     </tr>
                   </thead>
@@ -194,11 +192,6 @@ export default function AdminAirbnbIntegrationsPage() {
                           >
                             {integration.status}
                           </span>
-                        </td>
-                        <td className="py-3 px-4 text-xs text-muted-foreground">
-                          {integration.lastSyncedAt
-                            ? new Date(integration.lastSyncedAt).toLocaleString("en-KE")
-                            : "—"}
                         </td>
                         <td className="py-3 px-4 text-xs text-muted-foreground">
                           {integration.description || "—"}

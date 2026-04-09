@@ -44,7 +44,6 @@ export async function GET(request: NextRequest) {
             provider: 1,
             status: 1,
             description: 1,
-            lastSyncedAt: 1,
           },
         },
         { $sort: { createdAt: -1 } },

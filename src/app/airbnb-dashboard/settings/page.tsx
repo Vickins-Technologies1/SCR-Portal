@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Settings, Clock, Sparkles, Mail, Copy, CheckCircle2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Settings, Clock, Sparkles, Mail, CheckCircle2 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -26,9 +26,6 @@ const defaultSettings = {
   sendPaymentReceipt: true,
   sendCheckInReminder: true,
   sendCheckOutReminder: true,
-  icalExportEnabled: true,
-  icalToken: "",
-  icalImportUrl: "",
 };
 
 type SettingsState = typeof defaultSettings;
@@ -39,19 +36,6 @@ export default function AirbnbSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
-  const [baseUrl, setBaseUrl] = useState("");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setBaseUrl(window.location.origin);
-    }
-  }, []);
-
-  const icalUrl = useMemo(() => {
-    if (!settings.icalToken || !baseUrl) return "";
-    return `${baseUrl}/api/airbnb/calendar/ical?token=${settings.icalToken}`;
-  }, [baseUrl, settings.icalToken]);
 
   const fetchSettings = useCallback(async () => {
     if (!ownerId) return;
@@ -98,17 +82,6 @@ export default function AirbnbSettingsPage() {
       setFormMessage(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleCopy = async () => {
-    if (!icalUrl) return;
-    try {
-      await navigator.clipboard.writeText(icalUrl);
-      setCopyMessage("iCal link copied.");
-      setTimeout(() => setCopyMessage(null), 2000);
-    } catch {
-      setCopyMessage("Copy failed. Select the link and copy manually.");
     }
   };
 
@@ -338,50 +311,6 @@ export default function AirbnbSettingsPage() {
                   />
                   Send check-out reminders
                 </label>
-              </div>
-            </div>
-
-            <div className="surface-card rounded-3xl p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Copy className="h-5 w-5 text-primary" />
-                <h2 className="text-base font-semibold text-foreground">Calendar sync</h2>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Share your Airbnb availability via iCal and import external calendars without affecting long-term leases.
-              </p>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={settings.icalExportEnabled}
-                  onChange={(event) => setSettings((prev) => ({ ...prev, icalExportEnabled: event.target.checked }))}
-                />
-                Enable iCal export link
-              </label>
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">iCal export link</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={icalUrl}
-                    readOnly
-                    className="flex-1 rounded-xl border border-border bg-white/80 px-3 py-2 text-xs"
-                  />
-                  <button
-                    onClick={handleCopy}
-                    className="rounded-xl border border-border px-3 py-2 text-[11px] font-semibold text-muted-foreground"
-                  >
-                    Copy
-                  </button>
-                </div>
-                {copyMessage && <p className="mt-2 text-[11px] text-emerald-600">{copyMessage}</p>}
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">Import iCal URL</label>
-                <input
-                  value={settings.icalImportUrl}
-                  onChange={(event) => setSettings((prev) => ({ ...prev, icalImportUrl: event.target.value }))}
-                  className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-xs"
-                  placeholder="https://calendar.google.com/calendar/ical/..."
-                />
               </div>
             </div>
           </section>

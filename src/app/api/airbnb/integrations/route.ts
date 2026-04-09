@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     .sort({ createdAt: 1 })
     .toArray();
 
+  const blockedProviders = new Set(["airbnb", "airbnb-api", "airbnb-sync", "ical", "ical-sync"]);
+
   const defaults = [
     {
       id: "stripe",
@@ -37,13 +39,6 @@ export async function GET(request: NextRequest) {
       status: process.env.SMTP_USER && process.env.SMTP_PASS ? "connected" : "available",
       description: "Send booking confirmations, payment receipts, and reminders.",
       provider: "smtp",
-    },
-    {
-      id: "ical",
-      name: "iCal Sync",
-      status: "available",
-      description: "Export availability and import external calendars.",
-      provider: "ical",
     },
     {
       id: "ga",
@@ -63,7 +58,12 @@ export async function GET(request: NextRequest) {
 
   const defaultProviders = new Set(defaults.map((item) => item.provider));
   const existingByProvider = new Map(
-    integrations.map((integration) => [integration.provider || integration.name?.toLowerCase(), integration])
+    integrations
+      .filter((integration) => {
+        const providerKey = (integration.provider || integration.name || "").toLowerCase().replace(/\s+/g, "-");
+        return !blockedProviders.has(providerKey);
+      })
+      .map((integration) => [integration.provider || integration.name?.toLowerCase(), integration])
   );
 
   const merged = defaults.map((item) => {
@@ -76,12 +76,14 @@ export async function GET(request: NextRequest) {
       description: match.description || item.description,
       provider: match.provider || item.provider,
       config: match.config || {},
-      health: match.health || undefined,
     };
   });
 
   const custom = integrations
-    .filter((integration) => !defaultProviders.has(integration.provider))
+    .filter((integration) => {
+      const providerKey = (integration.provider || integration.name || "").toLowerCase().replace(/\s+/g, "-");
+      return !defaultProviders.has(integration.provider) && !blockedProviders.has(providerKey);
+    })
     .map((integration) => ({
       id: integration.externalId || integration._id?.toString?.() || "",
       name: integration.name,
@@ -89,7 +91,6 @@ export async function GET(request: NextRequest) {
       description: integration.description,
       provider: integration.provider,
       config: integration.config || {},
-      health: integration.health || undefined,
     }));
 
   return NextResponse.json({
@@ -129,15 +130,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid integration payload" }, { status: 400 });
   }
 
-  if (parsed.data.status === "connected" && parsed.data.provider === "airbnb-api") {
-    const baseUrl = parsed.data.config?.baseUrl?.trim?.() || "";
-    const accessToken = parsed.data.config?.accessToken?.trim?.() || "";
-    if (!baseUrl || !accessToken) {
-      return NextResponse.json(
-        { success: false, message: "Base URL and access token are required to connect this integration." },
-        { status: 400 }
-      );
-    }
+  const normalizedProvider = (parsed.data.provider || parsed.data.name || "")
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+  if (normalizedProvider.startsWith("airbnb") || normalizedProvider.startsWith("ical")) {
+    return NextResponse.json(
+      { success: false, message: "Sync integrations are no longer supported." },
+      { status: 400 }
+    );
   }
 
   const { db } = await connectToDatabase();

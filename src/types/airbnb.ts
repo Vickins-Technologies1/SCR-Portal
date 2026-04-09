@@ -129,17 +129,6 @@ export interface AirbnbIntegration {
   description: string;
   provider?: string;
   config?: Record<string, any>;
-  health?: {
-    status: "healthy" | "degraded" | "down";
-    checkedAt: string;
-    endpoints: Array<{
-      name: string;
-      url: string;
-      ok: boolean;
-      status?: number;
-      message?: string;
-    }>;
-  };
 }
 
 export interface AirbnbReportSummary {

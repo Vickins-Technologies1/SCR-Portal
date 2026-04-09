@@ -50,7 +50,7 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
     },
     {
       title: "Calendar",
-      body: "Set availability, pricing, and sync nightly rates across channels.",
+      body: "Set availability, pricing, and seasonal rules for every listing.",
       selector: '[data-tour="airbnb-nav-calendar"]',
       placement: "right",
     },
@@ -98,7 +98,7 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
     },
     {
       title: "Integrations",
-      body: "Manage Airbnb sync, M-Pesa, and smart lock connections.",
+      body: "Manage payments, analytics, and guest communication integrations.",
       selector: '[data-tour="airbnb-nav-integrations"]',
       placement: "right",
     },

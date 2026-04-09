@@ -129,7 +129,7 @@ export default function AdminAirbnbBookingsPage() {
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
                   <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Airbnb Bookings</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Inspect reservations synced from Airbnb and direct channels.
+                    Inspect reservations from Airbnb and direct channels.
                   </p>
                 </div>
               </div>

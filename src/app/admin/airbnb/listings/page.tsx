@@ -129,7 +129,7 @@ export default function AdminAirbnbListingsPage() {
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
                   <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Airbnb Listings</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Review all short-term rental listings synced across owners.
+                    Review all short-term rental listings across owners.
                   </p>
                 </div>
               </div>
@@ -180,7 +180,7 @@ export default function AdminAirbnbListingsPage() {
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Weekend Rate</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Occupancy</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rating</th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Last Sync</th>
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Last Update</th>
                     </tr>
                   </thead>
                   <tbody>

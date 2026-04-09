@@ -276,7 +276,7 @@ export default function AdminAirbnbOverviewPage() {
                 <div className="px-4 pt-4">
                   <h2 className="text-sm sm:text-base font-semibold text-foreground">Recent bookings</h2>
                   <p className="text-[11px] text-muted-foreground">
-                    Latest reservations synced across all Airbnb owners.
+                    Latest reservations across all Airbnb owners.
                   </p>
                 </div>
                 <div className="table-scroll">

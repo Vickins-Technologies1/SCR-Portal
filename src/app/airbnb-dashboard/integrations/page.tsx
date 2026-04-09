@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plug, CheckCircle2, Clock, ArrowRight, X, Activity } from "lucide-react";
+import { Plug, CheckCircle2, Clock, ArrowRight, X } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -15,7 +15,6 @@ export default function AirbnbIntegrationsPage() {
   const [showModal, setShowModal] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<AirbnbIntegration | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isChecking, setIsChecking] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [config, setConfig] = useState({
     baseUrl: "",
@@ -25,7 +24,7 @@ export default function AirbnbIntegrationsPage() {
     clientId: "",
     clientSecret: "",
   });
-  const managedProviders = ["stripe", "smtp", "ga", "meta", "ical"];
+  const managedProviders = ["stripe", "smtp", "ga", "meta"];
 
   const fetchIntegrations = useCallback(async () => {
     if (!ownerId) return;
@@ -96,37 +95,6 @@ export default function AirbnbIntegrationsPage() {
     }
   };
 
-  const handleHealthCheck = async () => {
-    if (!csrfToken || !selectedIntegration) {
-      setFormMessage("Missing session token. Refresh and try again.");
-      return;
-    }
-    setIsChecking(true);
-    setFormMessage(null);
-    try {
-      const res = await fetch("/api/airbnb/integrations/health", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrfToken,
-        },
-        credentials: "include",
-        body: JSON.stringify({ integrationId: selectedIntegration.id }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Health check failed");
-      }
-      setSelectedIntegration((prev) => (prev ? { ...prev, health: data.health } : prev));
-      await fetchIntegrations();
-      setFormMessage("Health check completed.");
-    } catch (err) {
-      setFormMessage(err instanceof Error ? err.message : "Health check failed");
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
   return (
     <div className="min-h-[100svh] bg-background text-foreground">
       <Navbar />
@@ -137,7 +105,7 @@ export default function AirbnbIntegrationsPage() {
           <SectionHeader
             eyebrow="Airbnb Module"
             title="Integrations"
-            subtitle="Connect channels, payments, and automation partners."
+            subtitle="Connect payments, analytics, and guest communication partners."
             icon={Plug}
           />
 
@@ -157,16 +125,6 @@ export default function AirbnbIntegrationsPage() {
                     <div>
                       <h3 className="text-base sm:text-lg font-semibold text-foreground">{integration.name}</h3>
                       <p className="text-xs text-muted-foreground mt-1">{integration.description}</p>
-                      {integration.health && (
-                        <p className="mt-2 text-[11px] text-muted-foreground flex items-center gap-2">
-                          <Activity size={12} />
-                          {integration.health.status === "healthy"
-                            ? "Healthy connection"
-                            : integration.health.status === "degraded"
-                              ? "Issues detected"
-                              : "Connection down"}
-                        </p>
-                      )}
                     </div>
                     {integration.status === "connected" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
@@ -224,28 +182,9 @@ export default function AirbnbIntegrationsPage() {
                         Configuration
                       </p>
                       <p>
-                        This integration is enabled through environment variables and system settings. Use the
-                        Airbnb Settings page to manage iCal sync and notification preferences.
+                        This integration is enabled through environment variables and system settings. No in-app
+                        configuration is required here.
                       </p>
-                    </div>
-                  )}
-                  {selectedIntegration.health && (
-                    <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground space-y-2">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Health check</p>
-                      <p>
-                        Status:{" "}
-                        <span className="font-semibold text-foreground">
-                          {selectedIntegration.health.status.toUpperCase()}
-                        </span>
-                      </p>
-                      {selectedIntegration.health.endpoints.map((endpoint) => (
-                        <div key={endpoint.url} className="flex items-start justify-between gap-3">
-                          <span className="truncate">{endpoint.url}</span>
-                          <span className={endpoint.ok ? "text-emerald-600" : "text-amber-600"}>
-                            {endpoint.ok ? "OK" : endpoint.message || "Error"}
-                          </span>
-                        </div>
-                      ))}
                     </div>
                   )}
                   {!managedProviders.includes(selectedIntegration.provider || "") && (
@@ -297,13 +236,6 @@ export default function AirbnbIntegrationsPage() {
                         Disconnect
                       </button>
                     )}
-                    <button
-                      onClick={handleHealthCheck}
-                      disabled={isChecking}
-                      className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-60"
-                    >
-                      {isChecking ? "Checking..." : "Run health check"}
-                    </button>
                     <button
                       onClick={() => handleSaveIntegration("connected")}
                       disabled={isSaving}

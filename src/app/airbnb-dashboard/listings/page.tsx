@@ -5,11 +5,8 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Home,
-  UploadCloud,
   Sparkles,
   AlertTriangle,
-  CheckCircle2,
-  Loader2,
   GripVertical,
   ImagePlus,
   Trash2,
@@ -26,8 +23,6 @@ export default function AirbnbListingsPage() {
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("properties:view");
   const [listings, setListings] = useState<AirbnbListing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
@@ -188,32 +183,6 @@ export default function AirbnbListingsPage() {
     return data.urls || [];
   };
 
-  const handleSync = async (listingId?: string) => {
-    if (!csrfToken) {
-      setSyncMessage("Missing session token. Refresh the page and try again.");
-      return;
-    }
-    setSyncingId(listingId || "all");
-    setSyncMessage(null);
-    try {
-      const res = await fetch("/api/airbnb/sync", {
-        method: "POST",
-        headers: { "x-csrf-token": csrfToken },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.message || "Sync failed");
-      }
-      setSyncMessage(data.message || "Sync completed.");
-      await fetchListings();
-    } catch (err) {
-      setSyncMessage(err instanceof Error ? err.message : "Sync failed");
-    } finally {
-      setSyncingId(null);
-    }
-  };
-
   const openCreateModal = () => {
     setForm({
       id: "",
@@ -367,35 +336,18 @@ export default function AirbnbListingsPage() {
           <SectionHeader
             eyebrow="Airbnb Module"
             title="Listings Management"
-            subtitle="Publish, optimize, and sync Airbnb-ready listings with Kenya compliance built-in."
+            subtitle="Publish, optimize, and manage Airbnb-ready listings with Kenya compliance built-in."
             icon={Home}
             actions={
-              <>
-                <button
-                  onClick={() => handleSync()}
-                  disabled={syncingId !== null}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-sm transition-all text-xs sm:text-sm font-semibold disabled:opacity-60"
-                >
-                  {syncingId ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud size={16} />}
-                  Sync all
-                </button>
-                <button
-                  onClick={openCreateModal}
-                  className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold"
-                >
-                  <Sparkles size={16} />
-                  Add listing
-                </button>
-              </>
+              <button
+                onClick={openCreateModal}
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold"
+              >
+                <Sparkles size={16} />
+                Add listing
+              </button>
             }
           />
-
-          {syncMessage && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-800 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              {syncMessage}
-            </div>
-          )}
 
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -408,7 +360,7 @@ export default function AirbnbListingsPage() {
             </div>
           ) : listings.length === 0 ? (
             <div className="surface-card rounded-3xl p-6 text-xs text-muted-foreground">
-              No listings yet. Add a listing to start syncing with Airbnb.
+              No listings yet. Add a listing to start managing availability.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -483,8 +435,8 @@ export default function AirbnbListingsPage() {
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">
                       {listing.lastSyncedAt
-                        ? `Last sync ${new Date(listing.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                        : "Not synced yet"}
+                        ? `Last updated ${new Date(listing.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                        : "No recent updates"}
                     </span>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
@@ -499,18 +451,10 @@ export default function AirbnbListingsPage() {
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <button
-                      onClick={() => handleSync(listing.id)}
-                      disabled={syncingId !== null}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                    >
-                      {syncingId === listing.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud size={14} />}
-                      Sync
-                    </button>
+                  <div className="pt-2">
                     <button
                       onClick={() => openEditModal(listing)}
-                      className="flex-1 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+                      className="w-full rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
                     >
                       Edit listing
                     </button>

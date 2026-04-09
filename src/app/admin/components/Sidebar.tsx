@@ -91,7 +91,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     { key: "airbnb-bookings", href: "/admin/airbnb/bookings", label: "Airbnb Bookings", icon: <CalendarCheck size={20} /> },
     { key: "airbnb-messages", href: "/admin/airbnb/messages", label: "Airbnb Messages", icon: <MessageCircle size={20} /> },
     { key: "airbnb-payouts", href: "/admin/airbnb/payouts", label: "Airbnb Payouts", icon: <Wallet size={20} /> },
-    { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Airbnb Integrations", icon: <Plug size={20} /> },
+    { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Integrations", icon: <Plug size={20} /> },
   ];
 
   const navSections = [

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { randomUUID } from "crypto";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
@@ -24,9 +23,6 @@ const SettingsSchema = z.object({
   sendPaymentReceipt: z.boolean().optional(),
   sendCheckInReminder: z.boolean().optional(),
   sendCheckOutReminder: z.boolean().optional(),
-  icalExportEnabled: z.boolean().optional(),
-  icalToken: z.string().trim().max(64).optional(),
-  icalImportUrl: z.string().trim().url().optional(),
 });
 
 const defaultSettings = {
@@ -48,9 +44,6 @@ const defaultSettings = {
   sendPaymentReceipt: true,
   sendCheckInReminder: true,
   sendCheckOutReminder: true,
-  icalExportEnabled: true,
-  icalToken: "",
-  icalImportUrl: "",
 };
 
 export async function GET(request: NextRequest) {
@@ -66,24 +59,19 @@ export async function GET(request: NextRequest) {
   const now = new Date().toISOString();
 
   if (!existing) {
-    const token = `ical_${randomUUID().replace(/-/g, "")}`;
-    const payload = { ownerId, ...defaultSettings, icalToken: token, createdAt: now, updatedAt: now };
+    const payload = { ownerId, ...defaultSettings, createdAt: now, updatedAt: now };
     await db.collection("airbnbSettings").insertOne(payload);
     return NextResponse.json({ success: true, settings: payload });
   }
 
-  if (!existing.icalToken) {
-    const token = `ical_${randomUUID().replace(/-/g, "")}`;
-    await db.collection("airbnbSettings").updateOne(
-      { _id: existing._id },
-      { $set: { icalToken: token, updatedAt: now } }
-    );
-    existing.icalToken = token;
-  }
+  const sanitized = { ...existing } as Record<string, unknown>;
+  delete sanitized.icalToken;
+  delete sanitized.icalExportEnabled;
+  delete sanitized.icalImportUrl;
 
   return NextResponse.json({
     success: true,
-    settings: { ...defaultSettings, ...existing },
+    settings: { ...defaultSettings, ...sanitized },
   });
 }
 
@@ -112,20 +100,26 @@ export async function PUT(request: NextRequest) {
   const { db } = await connectToDatabase();
   const now = new Date().toISOString();
   const existing = await db.collection("airbnbSettings").findOne({ ownerId });
-  const token = parsed.data.icalToken || existing?.icalToken || `ical_${randomUUID().replace(/-/g, "")}`;
 
   const update = {
     ...defaultSettings,
     ...existing,
     ...parsed.data,
-    icalToken: token,
     ownerId,
     updatedAt: now,
   };
 
+  delete (update as Record<string, unknown>).icalToken;
+  delete (update as Record<string, unknown>).icalExportEnabled;
+  delete (update as Record<string, unknown>).icalImportUrl;
+
   await db.collection("airbnbSettings").updateOne(
     { ownerId },
-    { $set: update, $setOnInsert: { createdAt: now } },
+    {
+      $set: update,
+      $unset: { icalToken: "", icalExportEnabled: "", icalImportUrl: "" },
+      $setOnInsert: { createdAt: now },
+    },
     { upsert: true }
   );
 
