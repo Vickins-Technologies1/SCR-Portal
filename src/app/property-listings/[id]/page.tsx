@@ -6,6 +6,7 @@ import { MapPin, DollarSign, Phone, Mail, ArrowLeft, Star, ShieldCheck } from "l
 import { PublicListing, AirbnbPublicListing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
 import ImageGallery from "./ImageGallery";
+import BookingRequest from "./BookingRequest";
 
 export const dynamic = "force-dynamic";
 
@@ -286,39 +287,37 @@ export default async function PropertyDetailPage({
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
-            <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-slate-900">Reserve this listing</h3>
-                {isAirbnb && (
+            {isAirbnb ? (
+              <BookingRequest
+                listingId={property._id}
+                propertyName={property.name}
+                nightlyRate={nightlyRate}
+              />
+            ) : (
+              <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-slate-900">Schedule viewing</h3>
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
-                    <Star size={12} /> {(airbnbListing?.rating ?? 0).toFixed(1)}
+                    <Star size={12} /> Verified
                   </span>
-                )}
-              </div>
-              <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 p-4 backdrop-blur">
-                <p className="text-[10px] uppercase tracking-wider text-slate-500">
-                  {isAirbnb ? "Nightly rate" : "Monthly rent"}
-                </p>
-                <p className="mt-2 text-xl font-semibold text-slate-900">
-                  {isAirbnb
-                    ? nightlyRate
-                      ? `Ksh ${nightlyRate.toLocaleString()}`
-                      : "On request"
-                    : minPrice
-                      ? `Ksh ${minPrice.toLocaleString()}`
-                      : "On request"}
-                </p>
-              </div>
+                </div>
+                <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 p-4 backdrop-blur">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Monthly rent</p>
+                  <p className="mt-2 text-xl font-semibold text-slate-900">
+                    {minPrice ? `Ksh ${minPrice.toLocaleString()}` : "On request"}
+                  </p>
+                </div>
 
-              <a
-                href={contactLink}
-                className="mt-4 block w-full rounded-full bg-slate-900 px-5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.24em] text-white transition hover:bg-slate-800"
-              >
-                {isAirbnb ? "Reserve stay" : "Schedule viewing"}
-              </a>
+                <a
+                  href={contactLink}
+                  className="mt-4 block w-full rounded-full bg-slate-900 px-5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.24em] text-white transition hover:bg-slate-800"
+                >
+                  Schedule viewing
+                </a>
 
-              <p className="mt-4 text-[11px] text-slate-500">Response within 2 business hours.</p>
-            </div>
+                <p className="mt-4 text-[11px] text-slate-500">Response within 2 business hours.</p>
+              </div>
+            )}
 
             <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
               <h3 className="text-base font-semibold text-slate-900 mb-4">Contact details</h3>

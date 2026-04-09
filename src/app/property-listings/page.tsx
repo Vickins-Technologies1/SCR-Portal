@@ -194,30 +194,12 @@ export default function PropertyListings() {
 
         <div className="relative max-w-7xl mx-auto px-6">
           <div className="max-w-2xl">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-emerald-700">
-              Sorana property portfolio
-            </p>
             <h1 className="mt-4 text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
               Premium listings with verified standards.
             </h1>
             <p className="mt-4 text-sm text-slate-600 max-w-xl">
               Professionally managed rentals and short-term stays with clear terms and refined service.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="#listings"
-                className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white shadow-[0_16px_35px_-22px_rgba(15,23,42,0.6)] transition hover:bg-slate-800"
-              >
-                View listings
-                <ArrowUpRight size={12} />
-              </Link>
-              <a
-                href="mailto:bookings@soranapropertymanagers.com"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white/80 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-700 transition hover:border-slate-400"
-              >
-                Request consultation
-              </a>
-            </div>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {[
                 { label: "Verified inventory", value: "Compliance reviewed" },
@@ -424,9 +406,7 @@ export default function PropertyListings() {
         )}
 
         {isLoading ? (
-          <div className="flex justify-center items-center min-h-[45vh]">
-            <div className="h-14 w-14 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
-          </div>
+          <ListingsSkeleton />
         ) : sortedListings.length === 0 ? (
           <div className="rounded-[32px] border border-slate-200 bg-white/85 px-6 sm:px-10 py-14 sm:py-16 text-center shadow-[0_20px_45px_-35px_rgba(15,23,42,0.4)] backdrop-blur">
             <Building2 className="mx-auto mb-5 h-12 w-12 sm:h-14 sm:w-14 text-slate-400" />
@@ -468,6 +448,30 @@ interface PropertyCardProps {
   property: PublicListing;
   index: number;
 }
+
+const ListingsSkeleton = () => (
+  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    {Array.from({ length: 8 }).map((_, idx) => (
+      <div
+        key={`skeleton-${idx}`}
+        className="overflow-hidden rounded-[28px] border border-slate-200 bg-white/80 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.35)] backdrop-blur animate-pulse"
+      >
+        <div className="h-52 bg-slate-200/70" />
+        <div className="space-y-3 px-6 pb-6 pt-4">
+          <div className="space-y-2">
+            <div className="h-4 w-3/4 rounded-full bg-slate-200/80" />
+            <div className="h-3 w-5/6 rounded-full bg-slate-200/70" />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="h-3 w-24 rounded-full bg-slate-200/70" />
+            <div className="h-3 w-16 rounded-full bg-slate-200/70" />
+          </div>
+          <div className="h-8 w-full rounded-full bg-slate-200/80" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
   const isAirbnb = property.listingType === "airbnb";
