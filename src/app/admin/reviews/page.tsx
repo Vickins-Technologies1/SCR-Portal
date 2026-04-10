@@ -73,7 +73,8 @@ export default function AdminReviewsPage() {
 
       if (!res.ok) throw new Error("Session invalid");
       const data = await res.json();
-      if (!data.authenticated || data.role !== "admin") throw new Error("Not authenticated");
+      const sessionRole = (data.role || data.user?.role || "").toLowerCase();
+      if (!data.authenticated || sessionRole !== "admin") throw new Error("Not authenticated");
       setStatus("authenticated");
     } catch {
       setStatus("unauthenticated");

@@ -13,7 +13,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const role = request.cookies.get("role")?.value;
+  const role = request.cookies.get("role")?.value?.toLowerCase();
   if (!role || role !== "admin") {
     return NextResponse.json(
       { success: false, message: "Unauthorized: Admin access required" },

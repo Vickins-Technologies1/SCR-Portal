@@ -10,7 +10,7 @@ const normalizeStatus = (value?: string | null) => {
 };
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
+  const role = request.cookies.get("role")?.value?.toLowerCase();
 
   if (!role || role !== "admin") {
     return NextResponse.json(

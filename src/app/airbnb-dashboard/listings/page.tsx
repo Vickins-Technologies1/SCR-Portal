@@ -466,7 +466,7 @@ export default function AirbnbListingsPage() {
 
           {showModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
-              <div className="modal-panel w-full max-w-2xl overflow-hidden">
+              <div className="modal-panel flex w-full max-w-2xl flex-col overflow-hidden max-h-[92vh] sm:max-h-[88vh]">
                 <div className="modal-header flex items-center justify-between px-5 py-4">
                   <div>
                     <h2 className="text-base font-semibold text-foreground">
@@ -487,7 +487,7 @@ export default function AirbnbListingsPage() {
                     <X size={20} />
                   </button>
                 </div>
-                <div className="modal-body modal-stagger space-y-4">
+                <div className="modal-body modal-stagger flex-1 min-h-0 space-y-4 overflow-y-auto px-5 pb-5">
                   {formMessage && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                       {formMessage}
