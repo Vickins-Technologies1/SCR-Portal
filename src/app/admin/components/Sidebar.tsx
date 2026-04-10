@@ -84,7 +84,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   ];
 
   const coreLinks: NavLink[] = [
-    { key: "users", href: "/admin/users", label: "Property Owners", icon: <Users size={20} /> },
     { key: "properties", href: "/admin/properties", label: "Properties", icon: <Building2 size={20} /> },
   ];
 
@@ -96,6 +95,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   ];
 
   const generalLinks: NavLink[] = [
+    { key: "users", href: "/admin/users", label: "Property Owners", icon: <Users size={20} /> },
     { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
     { key: "reviews", href: "/admin/reviews", label: "Reviews", icon: <Star size={20} /> },
     { key: "kopokopo-webhooks", href: "/admin/kopokopo-webhooks", label: "KopoKopo Webhooks", icon: <Activity size={20} /> },
@@ -107,6 +107,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     {
       title: "Overview",
       links: overviewLinks,
+    },
+    {
+      title: "General",
+      links: generalLinks,
     },
     {
       title: "Rentals Management",
@@ -125,10 +129,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         icon: <Home size={10} />,
         className: "bg-primary/10 text-primary",
       },
-    },
-    {
-      title: "General",
-      links: generalLinks,
     },
   ];
 

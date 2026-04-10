@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
             name: 1,
             phone: 1,
             role: 1,
+            managementType: 1,
             createdAt: {
               $switch: {
                 branches: [
@@ -182,16 +183,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Owner created (pending approval)",
-      propertyOwner: {
-        _id: newOwner?._id.toString(),
-        name: newOwner?.name,
-        email: newOwner?.email,
-        phone: newOwner?.phone,
-        role: newOwner?.role,
-        isApproved: newOwner?.isApproved ?? false,
-        createdAt: newOwner?.createdAt instanceof Date
-          ? newOwner.createdAt.toISOString().split("T")[0]
-          : "—",
+        propertyOwner: {
+          _id: newOwner?._id.toString(),
+          name: newOwner?.name,
+          email: newOwner?.email,
+          phone: newOwner?.phone,
+          role: newOwner?.role,
+          managementType: newOwner?.managementType || "rentals",
+          isApproved: newOwner?.isApproved ?? false,
+          createdAt: newOwner?.createdAt instanceof Date
+            ? newOwner.createdAt.toISOString().split("T")[0]
+            : "—",
         propertiesCount: 0,
         paymentsCount: 0,
         invoicesCount: 0,

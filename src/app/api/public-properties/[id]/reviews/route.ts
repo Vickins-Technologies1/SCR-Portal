@@ -17,8 +17,8 @@ const normalizeText = (value: string, maxLength: number) =>
 const isValidEmail = (value: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
-const MIN_FORM_TIME_MS = 1500;
-const MAX_FORM_TIME_MS = 1000 * 60 * 60 * 6;
+const MIN_FORM_TIME_MS = 500;
+const MAX_FORM_TIME_MS = 1000 * 60 * 60 * 24;
 
 const getClientIp = (req: NextRequest) =>
   req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -157,17 +157,18 @@ export async function POST(
     }
 
     const startedAt = Number(payload.formStartedAt);
-    const elapsedMs = nowMs - startedAt;
-    if (
-      !Number.isFinite(startedAt) ||
-      !Number.isFinite(elapsedMs) ||
-      elapsedMs < MIN_FORM_TIME_MS ||
-      elapsedMs > MAX_FORM_TIME_MS
-    ) {
-      return NextResponse.json(
-        { success: false, message: "Unable to submit your review." },
-        { status: 400 }
-      );
+    if (Number.isFinite(startedAt) && startedAt > 0) {
+      const elapsedMs = nowMs - startedAt;
+      if (
+        !Number.isFinite(elapsedMs) ||
+        elapsedMs < MIN_FORM_TIME_MS ||
+        elapsedMs > MAX_FORM_TIME_MS
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Unable to submit your review." },
+          { status: 400 }
+        );
+      }
     }
 
     const { db } = await connectToDatabase();
@@ -180,32 +181,35 @@ export async function POST(
     }
 
     const ipAddress = getClientIp(req);
+    const hasIp = ipAddress !== "unknown";
     const userAgent = req.headers.get("user-agent") || "";
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const recentCount = await db.collection(REVIEW_COLLECTION).countDocuments({
-      ipAddress,
-      createdAt: { $gte: oneHourAgo },
-    });
+    if (hasIp) {
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const recentCount = await db.collection(REVIEW_COLLECTION).countDocuments({
+        ipAddress,
+        createdAt: { $gte: oneHourAgo },
+      });
 
-    if (recentCount >= 5) {
-      return NextResponse.json(
-        { success: false, message: "Too many reviews from this device. Try again later." },
-        { status: 429 }
-      );
-    }
+      if (recentCount >= 5) {
+        return NextResponse.json(
+          { success: false, message: "Too many reviews from this device. Try again later." },
+          { status: 429 }
+        );
+      }
 
-    const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
-    const recentListingCount = await db.collection(REVIEW_COLLECTION).countDocuments({
-      ipAddress,
-      listingId: listing.listingId,
-      createdAt: { $gte: twoMinutesAgo },
-    });
+      const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
+      const recentListingCount = await db.collection(REVIEW_COLLECTION).countDocuments({
+        ipAddress,
+        listingId: listing.listingId,
+        createdAt: { $gte: twoMinutesAgo },
+      });
 
-    if (recentListingCount > 0) {
-      return NextResponse.json(
-        { success: false, message: "Please wait a bit before submitting another review." },
-        { status: 429 }
-      );
+      if (recentListingCount > 0) {
+        return NextResponse.json(
+          { success: false, message: "Please wait a bit before submitting another review." },
+          { status: 429 }
+        );
+      }
     }
 
     const reviewDoc = {

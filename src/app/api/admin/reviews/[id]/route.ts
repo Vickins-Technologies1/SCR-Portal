@@ -22,7 +22,7 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ success: false, message: "Invalid review ID" }, { status: 400 });
   }
 
@@ -51,8 +51,9 @@ export async function PATCH(
   try {
     const { db } = await connectToDatabase();
 
+    const reviewId = ObjectId.isValid(id) ? new ObjectId(id) : id;
     const result = await db.collection(REVIEW_COLLECTION).findOneAndUpdate(
-      { _id: new ObjectId(id) },
+      { _id: reviewId as any },
       {
         $set: {
           status: nextStatus,

@@ -47,7 +47,7 @@ export default function ReviewsSection({
   const [selectedRating, setSelectedRating] = useState(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
-  const formStartedAt = useRef(Date.now());
+  const formStartedAt = useRef<number | null>(null);
 
   const ratingLabel = reviewCount
     ? `${rating.toFixed(1)} out of 5`
@@ -59,6 +59,12 @@ export default function ReviewsSection({
     return message.trim().length >= 10 && selectedRating >= 1;
   }, [name, message, selectedRating]);
 
+  const markFormStarted = () => {
+    if (formStartedAt.current === null) {
+      formStartedAt.current = Date.now();
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit || isSubmitting) return;
@@ -66,6 +72,7 @@ export default function ReviewsSection({
     setIsSubmitting(true);
     setFormMessage(null);
     try {
+      markFormStarted();
       const res = await fetch(`/api/public-properties/${listingId}/reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,7 +111,7 @@ export default function ReviewsSection({
       setMessage("");
       setCompany("");
       setSelectedRating(5);
-      formStartedAt.current = Date.now();
+      formStartedAt.current = null;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to submit your review.";
@@ -192,7 +199,10 @@ export default function ReviewsSection({
               <input
                 type="text"
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => {
+                  markFormStarted();
+                  setName(event.target.value);
+                }}
                 className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                 required
               />
@@ -205,7 +215,10 @@ export default function ReviewsSection({
               <input
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  markFormStarted();
+                  setEmail(event.target.value);
+                }}
                 className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
               />
             </div>
@@ -219,17 +232,20 @@ export default function ReviewsSection({
                   const value = idx + 1;
                   const active = value <= selectedRating;
                   return (
-                    <button
-                      key={`rating-${value}`}
-                      type="button"
-                      onClick={() => setSelectedRating(value)}
-                      className={`rounded-full p-1 transition ${
-                        active ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
-                      }`}
-                      aria-label={`Set rating to ${value}`}
-                    >
-                      <Star size={18} fill={active ? "#f59e0b" : "none"} />
-                    </button>
+                <button
+                  key={`rating-${value}`}
+                  type="button"
+                  onClick={() => {
+                    markFormStarted();
+                    setSelectedRating(value);
+                  }}
+                  className={`rounded-full p-1 transition ${
+                    active ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
+                  }`}
+                  aria-label={`Set rating to ${value}`}
+                >
+                  <Star size={18} fill={active ? "#f59e0b" : "none"} />
+                </button>
                   );
                 })}
                 <span className="ml-2 text-xs text-slate-500">{selectedRating} / 5</span>
@@ -242,7 +258,10 @@ export default function ReviewsSection({
               </label>
               <textarea
                 value={message}
-                onChange={(event) => setMessage(event.target.value)}
+                onChange={(event) => {
+                  markFormStarted();
+                  setMessage(event.target.value);
+                }}
                 rows={4}
                 className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
                 placeholder="Tell us about the stay, cleanliness, or communication."

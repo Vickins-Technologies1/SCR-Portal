@@ -26,6 +26,7 @@ interface PropertyOwner {
   name: string;
   phone: string;
   role: string;
+  managementType?: "rentals" | "airbnb" | string;
   createdAt: string;
   isApproved?: boolean;
   approvedAt?: string | null;
@@ -183,6 +184,9 @@ export default function PropertyOwnersPage() {
       <ChevronDown className="inline ml-1 h-4 w-4" />
     );
   };
+
+  const formatOwnerType = (value?: string) =>
+    value?.toLowerCase() === "airbnb" ? "Airbnb / Short-term" : "Rentals / Long-term";
 
   // ── Expand / Collapse ──────────────────────────────────────────────────────
   const toggleExpand = (id: string) => {
@@ -461,6 +465,9 @@ export default function PropertyOwnersPage() {
                       >
                         Phone {getSortIcon("phone")}
                       </th>
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Type
+                      </th>
                       <th
                         className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
                         onClick={() => handleSort("createdAt")}
@@ -478,7 +485,7 @@ export default function PropertyOwnersPage() {
                   <tbody>
                     {propertyOwners.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-10 text-center text-xs text-muted-foreground">
+                        <td colSpan={7} className="py-10 text-center text-xs text-muted-foreground">
                           No property owners found.
                         </td>
                       </tr>
@@ -489,6 +496,9 @@ export default function PropertyOwnersPage() {
                             <td className="py-3 px-4 text-xs font-medium text-foreground">{owner.name}</td>
                             <td className="py-3 px-4 text-xs text-muted-foreground">{owner.email}</td>
                             <td className="py-3 px-4 text-xs text-muted-foreground">{owner.phone}</td>
+                            <td className="py-3 px-4 text-xs text-muted-foreground">
+                              {formatOwnerType(owner.managementType)}
+                            </td>
                             <td className="py-3 px-4 text-xs text-muted-foreground">
                               {owner.createdAt}
                             </td>
@@ -544,7 +554,7 @@ export default function PropertyOwnersPage() {
 
                           {expanded.includes(owner._id) && (
                             <tr>
-                              <td colSpan={6} className="bg-white/70 px-4 py-4">
+                              <td colSpan={7} className="bg-white/70 px-4 py-4">
                                 <div className="grid grid-cols-3 gap-6 text-center text-xs text-muted-foreground">
                                   <div>
                                     <div className="text-lg font-semibold text-primary">
