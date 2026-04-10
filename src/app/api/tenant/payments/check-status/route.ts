@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
+import { getIncomingPaymentStatus } from "@/lib/kopokopo";
+import { applyKopokopoPaymentUpdate } from "@/lib/kopokopo-incoming";
 import logger from "@/lib/logger";
 import { z } from "zod";
 
@@ -60,7 +62,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
 
-    // For KopoKopo STK Push, rely on webhook updates to avoid premature completion.
+    // For KopoKopo STK Push, attempt a status refresh if still pending and webhook hasn't arrived.
+    if (payment.provider === "kopokopo" && ["pending", "pending_stk"].includes(payment.status)) {
+      try {
+        const incomingId =
+          payment.kopokopoIncomingPaymentId || payment.checkoutRequestId || payment.transactionId;
+        if (incomingId) {
+          const kopoStatus = await getIncomingPaymentStatus(String(incomingId));
+          const result = await applyKopokopoPaymentUpdate({
+            db,
+            payment,
+            update: {
+              id: String(incomingId),
+              status: kopoStatus.status,
+              resourceStatus: kopoStatus.resourceStatus,
+              errors: kopoStatus.errors,
+              reference: kopoStatus.reference,
+              amount: kopoStatus.amount,
+              phoneNumber: kopoStatus.phoneNumber,
+              originationTime: kopoStatus.originationTime,
+            },
+            skipNonTerminalSideEffects: true,
+          });
+          payment = result.payment || payment;
+        }
+      } catch (refreshError) {
+        logger.error("KopoKopo status refresh failed", {
+          message: refreshError instanceof Error ? refreshError.message : String(refreshError),
+          transaction_request_id,
+        });
+      }
+    }
+
+    if (!payment) {
+      return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
+    }
 
     return NextResponse.json({
       success: true,
