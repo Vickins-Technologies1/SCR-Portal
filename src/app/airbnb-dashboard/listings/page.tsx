@@ -25,7 +25,9 @@ export default function AirbnbListingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [listMessage, setListMessage] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -308,6 +310,43 @@ export default function AirbnbListingsPage() {
     }
   };
 
+  const handleDeleteListing = async () => {
+    if (!form.id) return;
+    if (!csrfToken) {
+      setFormMessage("Missing session token. Refresh the page and try again.");
+      return;
+    }
+    const confirmed = window.confirm("Delete this listing? This action cannot be undone.");
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setFormMessage(null);
+    setListMessage(null);
+    try {
+      const res = await fetch(
+        `/api/airbnb/listings?listingId=${encodeURIComponent(form.id)}`,
+        {
+          method: "DELETE",
+          headers: { "x-csrf-token": csrfToken },
+          credentials: "include",
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete listing");
+      }
+
+      setListings((prev) => prev.filter((listing) => listing.id !== form.id));
+      setListMessage("Listing deleted.");
+      resetImageItems([]);
+      setShowModal(false);
+    } catch (err) {
+      setFormMessage(err instanceof Error ? err.message : "Failed to delete listing");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (hasAccess === false) {
     return (
       <div className="min-h-[100svh] bg-background text-foreground">
@@ -348,6 +387,12 @@ export default function AirbnbListingsPage() {
               </button>
             }
           />
+
+          {listMessage && (
+            <div className="surface-card rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
+              {listMessage}
+            </div>
+          )}
 
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -694,6 +739,15 @@ export default function AirbnbListingsPage() {
                     )}
                   </div>
                   <div className="flex justify-end gap-3">
+                    {form.id && (
+                      <button
+                        onClick={handleDeleteListing}
+                        disabled={isDeleting || isSaving || isUploadingImages}
+                        className="rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                      >
+                        {isDeleting ? "Deleting..." : "Delete listing"}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         resetImageItems([]);

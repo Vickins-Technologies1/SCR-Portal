@@ -209,3 +209,33 @@ export async function PUT(request: NextRequest) {
     },
   });
 }
+
+export async function DELETE(request: NextRequest) {
+  const csrfToken = request.headers.get("x-csrf-token");
+  if (!validateCsrfToken(request, csrfToken)) {
+    return buildInvalidCsrfResponse(request);
+  }
+
+  const resolved = await resolveAirbnbOwner(request, null);
+  if (resolved.response) return resolved.response;
+  const { ownerId } = resolved.context!;
+
+  const { searchParams } = new URL(request.url);
+  const listingId = searchParams.get("listingId");
+  if (!listingId) {
+    return NextResponse.json({ success: false, message: "Listing ID is required" }, { status: 400 });
+  }
+
+  const filter = ObjectId.isValid(listingId)
+    ? { _id: new ObjectId(listingId), ownerId }
+    : { externalId: listingId, ownerId };
+
+  const { db } = await connectToDatabase();
+  const result = await db.collection("airbnbListings").findOneAndDelete(filter);
+
+  if (!result?.value) {
+    return NextResponse.json({ success: false, message: "Listing not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
+}
