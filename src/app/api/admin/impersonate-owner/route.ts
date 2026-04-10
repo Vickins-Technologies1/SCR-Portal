@@ -3,6 +3,14 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { SESSION_COOKIE_NAME, createSessionToken, getSessionCookieOptions, verifySessionToken } from "@/lib/session";
 
+type OwnerManagementType = "rentals" | "airbnb";
+
+const normalizeManagementType = (value: unknown): OwnerManagementType => {
+  if (typeof value !== "string") return "rentals";
+  const normalized = value.trim().toLowerCase();
+  return normalized === "airbnb" ? "airbnb" : "rentals";
+};
+
 export async function POST(request: NextRequest) {
   try {
     const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -40,10 +48,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Owner not found" }, { status: 404 });
     }
 
+    const managementType = normalizeManagementType(owner.managementType);
+    const redirectPath = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+
     const response = NextResponse.json({
       success: true,
       message: "Impersonation started",
-      redirect: "/property-owner-dashboard",
+      redirect: redirectPath,
     });
 
     const impersonationToken = await createSessionToken({
