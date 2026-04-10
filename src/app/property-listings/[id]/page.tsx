@@ -7,6 +7,7 @@ import { PublicListing, AirbnbPublicListing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
 import ImageGallery from "./ImageGallery";
 import BookingRequest from "./BookingRequest";
+import ReviewsSection from "./ReviewsSection";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,21 @@ interface PropertyResponse {
   success: boolean;
   property?: PublicListing;
   owner?: { email?: string; phone?: string } | null;
+}
+
+interface ReviewItem {
+  _id: string;
+  reviewerName: string;
+  rating: number;
+  review: string;
+  createdAt: string;
+}
+
+interface ReviewsResponse {
+  success: boolean;
+  reviews?: ReviewItem[];
+  rating?: number;
+  reviewCount?: number;
 }
 
 async function getProperty(id: string): Promise<PropertyResponse> {
@@ -29,6 +45,26 @@ async function getProperty(id: string): Promise<PropertyResponse> {
       `${baseUrl}/api/public-properties/${id}`,
       { cache: "no-store" }
     );
+
+    if (!res.ok) return { success: false };
+    return res.json();
+  } catch {
+    return { success: false };
+  }
+}
+
+async function getReviews(id: string): Promise<ReviewsResponse> {
+  try {
+    const hdrs = await headers();
+    const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host");
+    const proto =
+      hdrs.get("x-forwarded-proto") ?? (host?.includes("localhost") ? "http" : "https");
+    const fallbackBase = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = host ? `${proto}://${host}` : fallbackBase;
+
+    const res = await fetch(`${baseUrl}/api/public-properties/${id}/reviews`, {
+      cache: "no-store",
+    });
 
     if (!res.ok) return { success: false };
     return res.json();
@@ -89,6 +125,21 @@ export default async function PropertyDetailPage({
 
   const { property, owner } = data;
   const isAirbnb = property.listingType === "airbnb";
+  const reviewData = await getReviews(id);
+  const initialReviews =
+    reviewData.success && reviewData.reviews ? reviewData.reviews : [];
+  const reviewCount =
+    reviewData.success && typeof reviewData.reviewCount === "number"
+      ? reviewData.reviewCount
+      : property.reviewCount ?? 0;
+  const rating =
+    reviewData.success && typeof reviewData.rating === "number"
+      ? reviewData.rating
+      : property.rating ?? 0;
+  const ratingLabel = reviewCount ? `${rating.toFixed(1)} ★` : "No reviews yet";
+  const ratingDetail = reviewCount
+    ? `${reviewCount.toLocaleString()} reviews`
+    : "Be the first to review";
 
   const availability = isAirbnb ? null : ensureAvailability(property);
   const images = property.images?.length ? property.images : ["/logo.png"];
@@ -132,6 +183,13 @@ export default async function PropertyDetailPage({
                     <MapPin size={14} className="flex-shrink-0" />
                     {property.address}
                   </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-slate-800">
+                      <Star size={13} className="text-amber-500" />
+                      {ratingLabel}
+                    </span>
+                    <span>{ratingDetail}</span>
+                  </div>
                 </div>
 
                 <span
@@ -171,13 +229,12 @@ export default async function PropertyDetailPage({
 
                   <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
                     <p className="text-[10px] uppercase tracking-wider text-slate-500">Rating</p>
-                    <p className="mt-2 text-xl font-semibold text-slate-900">
-                      {(airbnbListing?.rating ?? 0).toFixed(1)} ★
-                    </p>
+                    <p className="mt-2 text-xl font-semibold text-slate-900">{ratingLabel}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">{ratingDetail}</p>
                   </div>
                 </div>
               ) : (
-                <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
                     <p className="text-[10px] uppercase tracking-wider text-slate-500">Price range</p>
                     <p className="mt-2 text-lg font-semibold text-slate-900">
@@ -198,6 +255,12 @@ export default async function PropertyDetailPage({
                       {availability?.occupancyRate ?? 0}%
                     </p>
                   </div>
+
+                  <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-center backdrop-blur">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500">Rating</p>
+                    <p className="mt-2 text-xl font-semibold text-slate-900">{ratingLabel}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">{ratingDetail}</p>
+                  </div>
                 </div>
               )}
 
@@ -216,7 +279,7 @@ export default async function PropertyDetailPage({
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg sm:text-xl font-semibold text-slate-900">Stay profile</h2>
                   <p className="text-xs text-slate-500">
-                    {(airbnbListing?.reviewCount ?? 0).toLocaleString()} reviews
+                    {reviewCount.toLocaleString()} reviews
                   </p>
                 </div>
 
@@ -284,6 +347,14 @@ export default async function PropertyDetailPage({
                 </div>
               </div>
             )}
+
+            <ReviewsSection
+              listingId={property._id}
+              listingType={property.listingType}
+              initialReviews={initialReviews}
+              initialRating={rating}
+              initialReviewCount={reviewCount}
+            />
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">

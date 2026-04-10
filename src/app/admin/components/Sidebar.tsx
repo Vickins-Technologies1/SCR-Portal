@@ -18,6 +18,7 @@ import {
   Wallet,
   Plug,
   Activity,
+  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -96,6 +97,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
   const generalLinks: NavLink[] = [
     { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
+    { key: "reviews", href: "/admin/reviews", label: "Reviews", icon: <Star size={20} /> },
     { key: "kopokopo-webhooks", href: "/admin/kopokopo-webhooks", label: "KopoKopo Webhooks", icon: <Activity size={20} /> },
     { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Integrations", icon: <Plug size={20} /> },
     { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },

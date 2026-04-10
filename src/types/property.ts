@@ -80,6 +80,8 @@ export interface Listing {
   createdAt: string;
   updatedAt?: string;
   availability?: AvailabilitySummary;
+  rating?: number;
+  reviewCount?: number;
 }
 
 // ────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { getReviewSummaryForListing } from "@/lib/property-reviews";
 
 const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
@@ -128,6 +129,12 @@ export async function GET(
         updatedAt: toISO(airbnbListing.updatedAt),
       };
 
+      const reviewSummary = await getReviewSummaryForListing(db, formatted._id);
+      if (reviewSummary.reviewCount > 0) {
+        formatted.rating = reviewSummary.rating;
+        formatted.reviewCount = reviewSummary.reviewCount;
+      }
+
       return NextResponse.json(
         {
           success: true,
@@ -193,7 +200,13 @@ export async function GET(
       updatedAt: toISO(listing.updatedAt),
       availability,
       occupiedByType,
+      rating: 0,
+      reviewCount: 0,
     };
+
+    const reviewSummary = await getReviewSummaryForListing(db, formatted._id);
+    formatted.rating = reviewSummary.rating;
+    formatted.reviewCount = reviewSummary.reviewCount;
 
     return NextResponse.json(
       {

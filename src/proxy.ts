@@ -143,6 +143,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/invoices/generate": { roles: ["admin"], isApi: true },
   "/api/admins": { roles: ["admin"], isApi: true },
   "/api/admin/properties": { roles: ["admin"], isApi: true },
+  "/api/admin/reviews": { roles: ["admin"], isApi: true },
   "/api/admin/property-owners": { roles: ["admin"], isApi: true },
   "/api/admin/impersonate-owner": { roles: ["admin"], isApi: true },
   "/api/admin/revert-impersonation": { roles: ["admin", "propertyOwner"], isApi: true },
@@ -183,6 +184,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/property-owner-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/airbnb-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/admin/support": { roles: ["admin"], isApi: false },
+  "/admin/reviews": { roles: ["admin"], isApi: false },
   "/tenant-dashboard": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/tenant-dashboard/vacate": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/properties": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: false },
@@ -193,6 +195,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
 const ADMIN_API_PATHS = [
   "/api/admin/property-owners",
   "/api/admin/properties",
+  "/api/admin/reviews",
   "/api/admins",
   "/api/users",
 ];

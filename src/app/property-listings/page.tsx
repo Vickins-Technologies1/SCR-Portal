@@ -134,8 +134,7 @@ export default function PropertyListings() {
     return prices.length ? Math.min(...prices) : 0;
   };
 
-  const getListingRating = (listing: PublicListing) =>
-    listing.listingType === "airbnb" ? listing.rating ?? 0 : 0;
+  const getListingRating = (listing: PublicListing) => listing.rating ?? 0;
 
   const sortedListings = useMemo(() => {
     const listingsToSort = [...filteredListings];
@@ -505,6 +504,11 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
 
   const featuredLabel = !isAirbnb ? property.isAdvertised : (property.rating ?? 0) >= 4.6;
   const badgeLabel = isAirbnb ? "Short-term" : "Long-term";
+  const reviewCount = property.reviewCount ?? 0;
+  const ratingValue = property.rating ?? 0;
+  const reviewLabel = reviewCount
+    ? `${ratingValue.toFixed(1)}★ (${reviewCount})`
+    : "No reviews yet";
 
   return (
     <motion.article
@@ -559,11 +563,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
             )}
           </div>
           <span className="text-slate-500 font-medium">{vacancyBadge}</span>
-          {isAirbnb && (
-            <span className="text-slate-500 font-medium">
-              {(property.rating ?? 0).toFixed(1)}★ ({property.reviewCount ?? 0})
-            </span>
-          )}
+          <span className="text-slate-500 font-medium">{reviewLabel}</span>
         </div>
 
         <Link

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { getReviewSummaryForListings } from "@/lib/property-reviews";
 
 const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
@@ -66,6 +67,15 @@ export async function GET(request: NextRequest) {
     if (listings.length === 0 && airbnbListings.length === 0) {
       return NextResponse.json({ success: true, properties: [] });
     }
+
+    const rentalListingIds = listings.map((listing) => listing._id.toString());
+    const airbnbListingIds = airbnbListings
+      .map((listing) => listing.externalId || listing._id?.toString?.() || "")
+      .filter(Boolean);
+    const reviewSummaryMap = await getReviewSummaryForListings(
+      db,
+      Array.from(new Set([...rentalListingIds, ...airbnbListingIds]))
+    );
 
     const propertyIdByListingId = new Map<string, string>();
     const propertyIds = Array.from(
@@ -179,6 +189,9 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
         }
 
         const ownerIdValue = listing.ownerId ? String(listing.ownerId) : "";
+        const reviewSummary = reviewSummaryMap.get(listingId);
+        const rating = reviewSummary?.rating ?? 0;
+        const reviewCount = reviewSummary?.reviewCount ?? 0;
 
         return {
           _id: listingId,
@@ -197,6 +210,8 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
           createdAt: toISO(listing.createdAt) || "",
           updatedAt: toISO(listing.updatedAt),
           availability,
+          rating,
+          reviewCount,
           owner: ownerMap[ownerIdValue] || null,
         };
       })
@@ -207,6 +222,13 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
         const listingId = listing.externalId || listing._id?.toString?.() || "";
         const name = listing.name || "Airbnb Listing";
         const address = listing.location || listing.address || "Kenya";
+        const reviewSummary = reviewSummaryMap.get(listingId);
+        const reviewRating = reviewSummary?.rating ?? 0;
+        const reviewCount = reviewSummary?.reviewCount ?? 0;
+        const fallbackRating = Number(listing.rating || 0);
+        const fallbackReviewCount = Number(listing.reviewCount || 0);
+        const rating = reviewCount > 0 ? reviewRating : fallbackRating;
+        const totalReviews = reviewCount > 0 ? reviewCount : fallbackReviewCount;
 
         const minRate = Number(listing.baseRate || 0);
         const matchesPrice = hasPriceFilter
@@ -217,8 +239,8 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
         const listingName = typeof name === "string" ? name.toLowerCase() : "";
         const matchesLocation = !location || listingAddress.includes(location) || listingName.includes(location);
 
-        const featuredScore = Number(listing.rating || 0);
-        const featuredReviews = Number(listing.reviewCount || 0);
+        const featuredScore = rating;
+        const featuredReviews = totalReviews;
         const isFeatured = featuredScore >= 4.6 && featuredReviews >= 8;
         const matchesFeatured =
           !featured ||
@@ -246,8 +268,8 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
           baseRate: Number(listing.baseRate || 0),
           weekendRate: Number(listing.weekendRate || listing.baseRate || 0),
           occupancyRate: Number(listing.occupancyRate || 0),
-          rating: Number(listing.rating || 0),
-          reviewCount: Number(listing.reviewCount || 0),
+          rating,
+          reviewCount: totalReviews,
           units: Number(listing.units || 1),
           licenseStatus: listing.licenseStatus || "missing",
           createdAt: toISO(listing.createdAt) || "",
