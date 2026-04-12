@@ -1,35 +1,51 @@
 // src/lib/tuma.ts
 import "server-only";
 
-const TUMA_API_BASE_URL = (process.env.TUMA_API_BASE_URL || "https://api.tuma.co.ke").replace(/\/$/, "");
-const TUMA_EMAIL = (process.env.TUMA_EMAIL || "").trim();
-const TUMA_API_KEY = (process.env.TUMA_API_KEY || "").trim();
+const DEFAULT_TUMA_API_BASE_URL = (process.env.TUMA_API_BASE_URL || "https://api.tuma.co.ke").replace(/\/$/, "");
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+export type TumaCredentials = {
+  email: string;
+  apiKey: string;
+  baseUrl?: string;
+};
+
+type CachedToken = { token: string; expiresAt: number };
+const tokenCache = new Map<string, CachedToken>();
 
 function requireEnv(name: string, value: string) {
   if (!value) throw new Error(`Missing required env: ${name}`);
 }
 
-export function isTumaConfigured(): boolean {
-  return !!(TUMA_EMAIL && TUMA_API_KEY);
+function cacheKey(credentials: TumaCredentials): string {
+  const baseUrl = (credentials.baseUrl || DEFAULT_TUMA_API_BASE_URL).replace(/\/$/, "");
+  return `${baseUrl}|${credentials.email}|${credentials.apiKey}`;
 }
 
-export async function getTumaToken(): Promise<string> {
-  requireEnv("TUMA_EMAIL", TUMA_EMAIL);
-  requireEnv("TUMA_API_KEY", TUMA_API_KEY);
+export function isTumaConfigured(credentials?: TumaCredentials | null): boolean {
+  return !!(credentials?.email && credentials?.apiKey);
+}
+
+export async function getTumaToken(credentials: TumaCredentials): Promise<string> {
+  const email = credentials.email.trim();
+  const apiKey = credentials.apiKey.trim();
+  const baseUrl = (credentials.baseUrl || DEFAULT_TUMA_API_BASE_URL).replace(/\/$/, "");
+
+  requireEnv("TUMA_EMAIL", email);
+  requireEnv("TUMA_API_KEY", apiKey);
 
   const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) {
-    return cachedToken.token;
+  const key = cacheKey({ email, apiKey, baseUrl });
+  const cached = tokenCache.get(key);
+  if (cached && cached.expiresAt > now + 60_000) {
+    return cached.token;
   }
 
-  const res = await fetch(`${TUMA_API_BASE_URL}/auth/token`, {
+  const res = await fetch(`${baseUrl}/auth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: TUMA_EMAIL,
-      api_key: TUMA_API_KEY,
+      email,
+      api_key: apiKey,
     }),
     cache: "no-store",
   });
@@ -45,7 +61,7 @@ export async function getTumaToken(): Promise<string> {
 
   const expiresIn = Number(data?.data?.expires_in || data?.expires_in);
   const ttlMs = Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn * 1000 : 55 * 60 * 1000;
-  cachedToken = { token, expiresAt: now + ttlMs };
+  tokenCache.set(key, { token, expiresAt: now + ttlMs });
 
   return token;
 }
@@ -55,13 +71,15 @@ export async function createTumaStkPush(params: {
   phone: string;
   description: string;
   callbackUrl?: string;
+  credentials: TumaCredentials;
 }): Promise<{
   merchantRequestId?: string;
   checkoutRequestId?: string;
   customerMessage?: string;
   raw: any;
 }> {
-  const token = await getTumaToken();
+  const token = await getTumaToken(params.credentials);
+  const baseUrl = (params.credentials.baseUrl || DEFAULT_TUMA_API_BASE_URL).replace(/\/$/, "");
   const payload: Record<string, any> = {
     amount: params.amount,
     phone: params.phone,
@@ -71,7 +89,7 @@ export async function createTumaStkPush(params: {
     payload.callback_url = params.callbackUrl;
   }
 
-  const res = await fetch(`${TUMA_API_BASE_URL}/payment/stk-push`, {
+  const res = await fetch(`${baseUrl}/payment/stk-push`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

@@ -18,6 +18,7 @@ export function usePermissions() {
         canViewExpenses: false,
         canViewNotifications: false,
         canViewReports: false,
+        canViewIntegrations: false,
         canViewSettings: false,
         canListProperties: false,
       };
@@ -43,6 +44,7 @@ export function usePermissions() {
       canViewExpenses: hasPermission("expenses:view"),
       canViewNotifications: hasPermission("notifications:view"),
       canViewReports: hasPermission("reports:view"),
+      canViewIntegrations: hasPermission("integrations:view"),
       canViewSettings: hasPermission("settings:view"),
       canListProperties: hasPermission("properties:list_new"),
     };

@@ -16,6 +16,7 @@ import {
   PlusCircle,
   Receipt,
   UserCog,
+  PlugZap,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { useSidebar } from "./SidebarContext";
@@ -114,6 +115,7 @@ export default function Sidebar() {
     { key: "tenants", href: "/property-owner-dashboard/tenants", label: "Tenants", icon: <Users size={20} />, requiredPermission: "tenants:view" },
     { key: "users", href: "/property-owner-dashboard/users", label: "Users", icon: <UserCog size={20} />, requiredPermission: "users:view" },
     { key: "payments", href: "/property-owner-dashboard/payments", label: "Payments", icon: <CreditCard size={20} />, requiredPermission: "payments:view" },
+    { key: "integrations", href: "/property-owner-dashboard/integrations", label: "Integrations", icon: <PlugZap size={20} />, requiredPermission: "integrations:view" },
     { key: "expenses", href: "/property-owner-dashboard/expenses", label: "Expenses", icon: <Receipt size={20} />, requiredPermission: "expenses:view" },
     { key: "notifications", href: "/property-owner-dashboard/notifications", label: "Notifications", icon: <Bell size={20} />, requiredPermission: "notifications:view" },
     { key: "reports", href: "/property-owner-dashboard/reports", label: "Reports & Invoices", icon: <BarChart size={20} />, requiredPermission: "reports:view" },

@@ -8,6 +8,7 @@ export const getDefaultPermissions = (role: string, isTeamMember: boolean = fals
     "expenses:view",
     "notifications:view",
     "reports:view",
+    "integrations:view",
     "settings:view",
   ];
 

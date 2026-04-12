@@ -73,6 +73,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: "expenses:approve", label: "Approve Expenses" },
   { id: "reports:view", label: "View Reports" },
   { id: "reports:export", label: "Export Reports" },
+  { id: "integrations:view", label: "View Integrations" },
+  { id: "integrations:edit", label: "Manage Integrations" },
   { id: "users:view", label: "View Team Members" },
   { id: "users:manage", label: "Manage Team Members (add/edit/delete)" },
   { id: "roles:manage", label: "Manage Roles & Permissions" },
@@ -100,6 +102,7 @@ const ROLE_PRESETS: Record<TeamMember["teamRole"], string[]> = {
     "expenses:view", "expenses:create", "expenses:approve",
     "reports:view", "reports:export",
     "users:view",
+    "integrations:view", "integrations:edit",
     "settings:view", "settings:edit",
   ],
   "Portfolio Manager": [
@@ -113,6 +116,7 @@ const ROLE_PRESETS: Record<TeamMember["teamRole"], string[]> = {
     "expenses:view", "expenses:create", "expenses:approve",
     "reports:view", "reports:export",
     "users:view",
+    "integrations:view",
     "settings:view",
   ],
   "Leasing Manager": [
@@ -137,6 +141,7 @@ const ROLE_PRESETS: Record<TeamMember["teamRole"], string[]> = {
     "payments:view", "payments:record",
     "expenses:view", "expenses:create", "expenses:approve",
     "reports:view", "reports:export",
+    "integrations:view",
   ],
   "Finance Officer": [
     "dashboard:view",

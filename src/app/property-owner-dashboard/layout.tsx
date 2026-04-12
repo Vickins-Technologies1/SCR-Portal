@@ -66,6 +66,12 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
       placement: "right",
     },
     {
+      title: "Integrations",
+      body: "Connect payment providers like Tuma and manage API credentials.",
+      selector: '[data-tour="owner-nav-integrations"]',
+      placement: "right",
+    },
+    {
       title: "Expenses",
       body: "Log and review operating expenses for each property.",
       selector: '[data-tour="owner-nav-expenses"]',

@@ -6,6 +6,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
+import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
 import {
   decryptPasskey,
   getMpesaPasskey,
@@ -216,7 +217,12 @@ export async function POST(request: NextRequest) {
     const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
 
     const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
-    const tumaConfigured = isTumaConfigured();
+    const tumaIntegration = await getOwnerTumaIntegration(db, derivedLandlordId);
+    const tumaConfigured = isTumaConfigured(
+      tumaIntegration
+        ? { email: tumaIntegration.email, apiKey: tumaIntegration.apiKey }
+        : null
+    );
     if (tumaConfigured && !tumaCallbackBase) {
       return NextResponse.json(
         { success: false, message: "Missing TUMA_CALLBACK_BASE_URL for Tuma gateway." },
@@ -231,6 +237,10 @@ export async function POST(request: NextRequest) {
         phone: normalizedPhone,
         description,
         callbackUrl: `${tumaCallbackBase}/api/tuma/webhook`,
+        credentials: {
+          email: tumaIntegration!.email,
+          apiKey: tumaIntegration!.apiKey,
+        },
       });
 
       const nowIso = new Date().toISOString();
