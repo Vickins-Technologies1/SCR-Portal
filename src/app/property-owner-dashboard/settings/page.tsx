@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import { Save, User, Lock, CreditCard, Settings } from "lucide-react";
+import { Save, User, Lock, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast"; // Import react-hot-toast
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { usePermissions } from "@/hooks/usePermissions";
-import ConnectMpesaForm from "@/components/ConnectMpesaForm";
 
 export default function OwnerSettingsPage() {
   const router = useRouter();
@@ -257,21 +256,6 @@ export default function OwnerSettingsPage() {
             </button>
           </motion.div>
 
-          <motion.div
-            className="surface-card rounded-2xl p-5 sm:p-6"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-          >
-            <h2 className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 text-foreground">
-              <CreditCard className="text-primary" />
-              Payments
-            </h2>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-4">
-              M-Pesa credentials are managed at the platform level. Please add your payout details below.
-            </p>
-            <ConnectMpesaForm disabled={isReadOnly} />
-          </motion.div>
         </main>
       </div>
       <style jsx global>{`
