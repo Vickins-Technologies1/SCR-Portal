@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
 
     const webhooks = await db
-      .collection("kopokopoWebhooks")
+      .collection("tumaWebhooks")
       .find({})
       .sort({ receivedAt: -1 })
       .limit(limit)
@@ -32,14 +32,17 @@ export async function GET(request: NextRequest) {
         webhooks: webhooks.map((hook: any) => ({
           _id: hook._id.toString(),
           receivedAt: hook.receivedAt || null,
-          incomingPaymentId: hook.incomingPaymentId || "",
+          merchantRequestId: hook.merchantRequestId || "",
+          checkoutRequestId: hook.checkoutRequestId || "",
+          paymentGatewayId: hook.paymentGatewayId || "",
           status: hook.status || "",
-          resourceStatus: hook.resourceStatus || "",
+          resultCode: hook.resultCode ?? null,
+          resultDesc: hook.resultDesc || "",
           reference: hook.reference || "",
           amount: hook.amount ?? null,
           phoneNumber: hook.phoneNumber || "",
-          originationTime: hook.originationTime || "",
-          paymentId: hook.paymentId || "",
+          timestamp: hook.timestamp || "",
+          paymentId: hook.paymentId ? String(hook.paymentId) : "",
           paymentStatus: hook.paymentStatus || "",
           paymentMatched: hook.paymentMatched ?? null,
           rawBody: hook.rawBody || "",
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error: unknown) {
     return NextResponse.json(
-      { success: false, message: "Failed to load KopoKopo webhooks" },
+      { success: false, message: "Failed to load Tuma webhooks" },
       { status: 500 }
     );
   }

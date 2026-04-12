@@ -1,12 +1,9 @@
 // src/app/api/mpesa/connect/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { createPayRecipient } from "@/lib/kopokopo";
 
 type PaymentType = "paybill" | "till";
 
@@ -28,8 +25,6 @@ export async function GET(request: NextRequest) {
         paybillAccountNumber: 1,
         tillNumber: 1,
         isDefault: 1,
-        kopokopoRecipientType: 1,
-        kopokopoRecipientUrl: 1,
         _id: 0,
       })
       .lean<{
@@ -38,22 +33,24 @@ export async function GET(request: NextRequest) {
         paybillAccountNumber?: string;
         tillNumber?: string;
         isDefault?: boolean;
-        kopokopoRecipientType?: string;
-        kopokopoRecipientUrl?: string;
       }>()
       .exec();
 
     const safePaymentType: PaymentType = doc?.paymentType === "till" ? "till" : "paybill";
+    const hasTill = !!doc?.tillNumber?.trim();
+    const hasPaybill = !!doc?.paybillNumber?.trim();
+    const hasPaybillAccount = !!doc?.paybillAccountNumber?.trim();
+    const connected =
+      safePaymentType === "till" ? hasTill : hasPaybill && hasPaybillAccount;
 
     return NextResponse.json({
       success: true,
-      connected: !!doc?.kopokopoRecipientUrl,
+      connected,
       paymentType: safePaymentType,
       paybillNumber: doc?.paybillNumber || "",
       paybillAccountNumber: doc?.paybillAccountNumber || "",
       tillNumber: doc?.tillNumber || "",
       isDefault: doc?.isDefault ?? true,
-      kopokopoRecipientUrl: doc?.kopokopoRecipientUrl || "",
     });
   } catch (error) {
     logger.error("GET /api/mpesa/connect error", {
@@ -116,35 +113,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { db } = await connectToDatabase();
-    const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(userId) });
-    const ownerName = owner?.name || owner?.companyName || "Property Owner";
-
-    let recipientType = "";
-    let recipientUrl = "";
-    if (paymentType === "till") {
-      recipientType = "till";
-      const recipient = await createPayRecipient({
-        type: "till",
-        payload: {
-          till_name: ownerName,
-          till_number: payload.tillNumber as string,
-        },
-      });
-      recipientUrl = recipient.location;
-    } else {
-      recipientType = "paybill";
-      const recipient = await createPayRecipient({
-        type: "paybill",
-        payload: {
-          paybill_name: ownerName,
-          paybill_number: payload.paybillNumber as string,
-          paybill_account_number: payload.paybillAccountNumber as string,
-        },
-      });
-      recipientUrl = recipient.location;
-    }
-
     await LandlordMpesa.findOneAndUpdate(
       { landlord: userId },
       {
@@ -153,8 +121,6 @@ export async function POST(request: NextRequest) {
         paybillAccountNumber: paymentType === "paybill" ? payload.paybillAccountNumber : "",
         tillNumber: paymentType === "till" ? payload.tillNumber : "",
         isDefault: payload.isDefault ?? true,
-        kopokopoRecipientType: recipientType,
-        kopokopoRecipientUrl: recipientUrl,
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );

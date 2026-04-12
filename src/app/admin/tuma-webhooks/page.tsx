@@ -10,13 +10,16 @@ import Sidebar from "../components/Sidebar";
 interface WebhookEvent {
   _id: string;
   receivedAt: string | null;
-  incomingPaymentId: string;
+  merchantRequestId: string;
+  checkoutRequestId: string;
+  paymentGatewayId: string;
   status: string;
-  resourceStatus: string;
+  resultCode: number | null;
+  resultDesc: string;
   reference: string;
   amount: number | null;
   phoneNumber: string;
-  originationTime: string;
+  timestamp: string;
   paymentId: string;
   paymentStatus: string;
   paymentMatched: boolean | null;
@@ -43,7 +46,7 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-export default function KopokopoWebhooksPage() {
+export default function TumaWebhooksPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [status, setStatus] = useState<AuthStatus>("checking");
@@ -75,7 +78,7 @@ export default function KopokopoWebhooksPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/kopokopo/webhooks?limit=75", {
+      const res = await fetch("/api/admin/tuma/webhooks?limit=75", {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -177,7 +180,7 @@ export default function KopokopoWebhooksPage() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
-                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">KopoKopo Webhooks</h1>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Tuma Webhooks</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground">
                     Recent webhook deliveries and payment status transitions.
                   </p>
@@ -277,7 +280,7 @@ export default function KopokopoWebhooksPage() {
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phone</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Payment</th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Event ID</th>
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Request ID</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -293,6 +296,9 @@ export default function KopokopoWebhooksPage() {
                           ? "bg-amber-100 text-amber-700"
                           : "bg-yellow-100 text-yellow-700";
 
+                      const requestId =
+                        event.checkoutRequestId || event.merchantRequestId || event.paymentGatewayId || "—";
+
                       return (
                         <React.Fragment key={event._id}>
                           <tr className="hover:bg-primary/5 transition">
@@ -304,7 +310,7 @@ export default function KopokopoWebhooksPage() {
                                 {statusLabel(paymentStatus)}
                               </span>
                               <div className="text-[10px] text-muted-foreground mt-1">
-                                event: {statusLabel(event.status)} / resource: {statusLabel(event.resourceStatus)}
+                                event: {statusLabel(event.status)} / code: {event.resultCode ?? "—"}
                               </div>
                             </td>
                             <td className="py-3 px-4 text-xs font-mono text-foreground">
@@ -332,7 +338,7 @@ export default function KopokopoWebhooksPage() {
                                 className="inline-flex items-center gap-1 text-primary hover:text-primary-hover transition"
                               >
                                 {expandedId === event._id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                {event.incomingPaymentId}
+                                {requestId}
                               </button>
                             </td>
                           </tr>
@@ -341,8 +347,12 @@ export default function KopokopoWebhooksPage() {
                               <td colSpan={7} className="bg-white/80 px-4 py-4 text-xs text-muted-foreground">
                                 <div className="flex flex-col gap-2">
                                   <div>
-                                    <span className="font-semibold text-foreground">Origination time:</span>{" "}
-                                    {formatDateTime(event.originationTime)}
+                                    <span className="font-semibold text-foreground">Transaction time:</span>{" "}
+                                    {formatDateTime(event.timestamp)}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-foreground">Result:</span>{" "}
+                                    {event.resultDesc || "—"}
                                   </div>
                                   <div>
                                     <span className="font-semibold text-foreground">Raw payload:</span>

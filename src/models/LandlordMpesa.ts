@@ -15,8 +15,6 @@ const LandlordMpesaSchema = new Schema(
     bankBranchRef: { type: String, default: "" },
     bankSettlementMethod: { type: String, default: "EFT" },
     isDefault: { type: Boolean, default: true },
-    kopokopoRecipientType: { type: String, default: "" },
-    kopokopoRecipientUrl: { type: String, default: "" },
   },
   { timestamps: true }
 );

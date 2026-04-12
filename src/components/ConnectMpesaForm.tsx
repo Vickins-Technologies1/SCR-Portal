@@ -31,7 +31,6 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
     isDefault: true,
   });
 
-  const isKopoTill = useMemo(() => /^K\d{5,}$/i.test(tillNumber.trim()), [tillNumber]);
   const isDirty = useMemo(() => {
     return (
       paymentType !== initialValues.paymentType ||
@@ -210,7 +209,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
               <p className="text-xs text-muted-foreground">
                 {connected
                   ? "Your payment details are ready for tenant collections."
-                  : "Add your details to enable STK Push and payout routing."}
+                  : "Add your details to enable STK Push collections."}
               </p>
             </div>
           </div>
@@ -276,11 +275,6 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
               className="mt-1 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
               placeholder="e.g. K123456"
             />
-            {isKopoTill && (
-              <p className="text-[11px] text-emerald-700">
-                KopoKopo online payments till detected. STK Push will route via KopoKopo.
-              </p>
-            )}
           </div>
         )}
 

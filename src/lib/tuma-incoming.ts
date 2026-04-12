@@ -1,4 +1,4 @@
-// src/lib/kopokopo-incoming.ts
+// src/lib/tuma-incoming.ts
 import { Db, ObjectId } from "mongodb";
 import logger from "@/lib/logger";
 import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
@@ -7,15 +7,17 @@ import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 
-export type KopoKopoIncomingUpdate = {
+export type TumaIncomingUpdate = {
   id: string;
   status?: string;
-  resourceStatus?: string;
-  errors?: string;
+  resultCode?: number | string;
+  resultDesc?: string;
+  failureReason?: string;
   reference?: string;
+  mpesaReceiptNumber?: string;
   amount?: number;
   phoneNumber?: string;
-  originationTime?: string;
+  timestamp?: string;
 };
 
 export function isLikelyMpesaReceipt(reference?: string): boolean {
@@ -24,52 +26,80 @@ export function isLikelyMpesaReceipt(reference?: string): boolean {
   return /^[A-Z0-9]{10}$/i.test(trimmed);
 }
 
-export function normalizeKopoStatus(params: {
+export function normalizeTumaStatus(params: {
   status?: string;
-  resourceStatus?: string;
-  errors?: string;
+  resultCode?: number | string;
+  resultDesc?: string;
+  failureReason?: string;
 }) {
   const status = String(params.status || "").toLowerCase();
-  const resourceStatus = String(params.resourceStatus || "").toLowerCase();
-  const errorsLower = String(params.errors || "").toLowerCase();
+  const resultDesc = String(params.resultDesc || params.failureReason || "").toLowerCase();
+  const resultCode = params.resultCode != null ? String(params.resultCode).toLowerCase() : "";
 
-  const successTokens = new Set(["success", "received"]);
-  const statusTokens = [status, resourceStatus].filter(Boolean);
-  const isCompleted = statusTokens.some((value) => successTokens.has(value));
-  const isCancelled =
-    statusTokens.some((value) => value === "cancelled" || value === "canceled") ||
-    errorsLower.includes("cancel");
-  const isFailed =
-    statusTokens.some((value) => value === "failed") ||
-    errorsLower.includes("timeout") ||
-    errorsLower.includes("expired");
-  return isCompleted ? "completed" : isCancelled ? "cancelled" : isFailed ? "failed" : "pending_stk";
+  if (status.includes("complete") || status === "success") return "completed";
+  if (status.includes("cancel")) return "cancelled";
+  if (status.includes("fail")) return "failed";
+
+  if (resultCode && resultCode !== "0") return "failed";
+  if (resultDesc.includes("cancel")) return "cancelled";
+  if (resultDesc.includes("fail") || resultDesc.includes("timeout") || resultDesc.includes("expired")) {
+    return "failed";
+  }
+
+  return "pending_stk";
 }
 
-export async function applyKopokopoPaymentUpdate(params: {
+function parseTimestamp(timestamp?: string): string | null {
+  if (!timestamp) return null;
+  const trimmed = timestamp.trim();
+  if (!trimmed) return null;
+
+  const direct = new Date(trimmed);
+  if (!Number.isNaN(direct.getTime())) {
+    return direct.toISOString();
+  }
+
+  // Handle YYYYMMDDHHmmss
+  if (/^\d{14}$/.test(trimmed)) {
+    const year = Number(trimmed.slice(0, 4));
+    const month = Number(trimmed.slice(4, 6)) - 1;
+    const day = Number(trimmed.slice(6, 8));
+    const hour = Number(trimmed.slice(8, 10));
+    const minute = Number(trimmed.slice(10, 12));
+    const second = Number(trimmed.slice(12, 14));
+    const parsed = new Date(Date.UTC(year, month, day, hour, minute, second));
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+
+  return null;
+}
+
+export async function applyTumaPaymentUpdate(params: {
   db: Db;
   payment: any;
-  update: KopoKopoIncomingUpdate;
+  update: TumaIncomingUpdate;
   skipNonTerminalSideEffects?: boolean;
 }): Promise<{ payment: any; normalizedStatus: string }> {
   const { db, payment } = params;
   const update = params.update;
-  const normalizedStatus = normalizeKopoStatus(update);
+  const normalizedStatus = normalizeTumaStatus(update);
   const prevStatus = payment.status;
 
   const patch: Record<string, any> = {};
   if (normalizedStatus && normalizedStatus !== payment.status) {
     patch.status = normalizedStatus;
   }
-  if (normalizedStatus === "completed" && update.reference && isLikelyMpesaReceipt(update.reference)) {
-    patch.mpesaCode = update.reference;
+
+  const reference = update.mpesaReceiptNumber || update.reference || "";
+  if (normalizedStatus === "completed" && reference && isLikelyMpesaReceipt(reference)) {
+    patch.mpesaCode = reference;
   }
-  if (update.originationTime) {
-    const parsed = new Date(update.originationTime);
-    if (!Number.isNaN(parsed.getTime())) {
-      patch.paymentDate = parsed.toISOString();
-    }
+
+  const parsedTimestamp = parseTimestamp(update.timestamp);
+  if (parsedTimestamp) {
+    patch.paymentDate = parsedTimestamp;
   }
+
   if (update.phoneNumber) {
     patch.phoneNumber = update.phoneNumber;
   }
@@ -127,7 +157,7 @@ export async function applyKopokopoPaymentUpdate(params: {
       });
       const settings = await db.collection("airbnbSettings").findOne({ ownerId: updatedPayment.ownerId });
       if (booking?.guestEmail && settings?.sendPaymentReceipt !== false) {
-        const parsedOrigination = update.originationTime ? new Date(update.originationTime) : null;
+        const parsedOrigination = parsedTimestamp ? new Date(parsedTimestamp) : null;
         const validOrigination = parsedOrigination && !Number.isNaN(parsedOrigination.getTime());
         try {
           await sendAirbnbPaymentReceivedEmail({
@@ -143,7 +173,7 @@ export async function applyKopokopoPaymentUpdate(params: {
                   year: "numeric",
                 })
               : new Date().toLocaleDateString("en-KE"),
-            reference: update.reference || updatedPayment.transactionId || update.id,
+            reference: reference || updatedPayment.transactionId || update.id,
             supportEmail: settings?.supportEmail,
           });
         } catch (emailError) {
@@ -215,7 +245,7 @@ export async function applyKopokopoPaymentUpdate(params: {
     ? await db.collection("users").findOne({ _id: new ObjectId(ownerId), role: "propertyOwner" })
     : null;
 
-  const parsedOrigination = update.originationTime ? new Date(update.originationTime) : null;
+  const parsedOrigination = parsedTimestamp ? new Date(parsedTimestamp) : null;
   const validOrigination = parsedOrigination && !Number.isNaN(parsedOrigination.getTime());
   const paymentDateFormatted = validOrigination
     ? parsedOrigination!.toLocaleDateString("en-US", {
@@ -234,7 +264,7 @@ export async function applyKopokopoPaymentUpdate(params: {
     paymentType: updatedPayment.type || "Other",
     transactionId: updatedPayment.transactionId || update.id,
     paymentDate: paymentDateFormatted,
-    mpesaCode: update.reference || undefined,
+    mpesaCode: reference || undefined,
   };
 
   try {
@@ -253,7 +283,7 @@ export async function applyKopokopoPaymentUpdate(params: {
 
   if (tenant.phone) {
     try {
-      const smsText = `Payment of Ksh. ${amount} for ${property.name} (${updatedPayment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${update.reference || updatedPayment.transactionId || update.id}`;
+      const smsText = `Payment of Ksh. ${amount} for ${property.name} (${updatedPayment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${reference || updatedPayment.transactionId || update.id}`;
       await sendWelcomeSms({ phone: tenant.phone, message: smsText });
     } catch (smsError) {
       logger.error("Failed to send payment confirmation SMS to tenant", {
@@ -281,7 +311,7 @@ export async function applyKopokopoPaymentUpdate(params: {
 
     if (owner.phone) {
       try {
-        const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${updatedPayment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${update.reference || updatedPayment.transactionId || update.id}`;
+        const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${updatedPayment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${reference || updatedPayment.transactionId || update.id}`;
         await sendWelcomeSms({ phone: owner.phone, message: smsText });
       } catch (smsError) {
         logger.error("Failed to send payment confirmation SMS to owner", {

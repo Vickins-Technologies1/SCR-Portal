@@ -3,7 +3,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
-import { createIncomingPaymentRequest } from "@/lib/kopokopo";
+import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import {
   decryptPasskey,
   getMpesaPasskey,
@@ -29,11 +29,6 @@ function resolveStoredPasskey(rawPasskey: string): string {
   } catch {
     return rawPasskey;
   }
-}
-
-function isKopoKopoOnlinePaymentsTill(value: string): boolean {
-  const trimmed = (value || "").trim().toUpperCase();
-  return /^K\d{5,}$/.test(trimmed);
 }
 
 export async function POST(request: NextRequest) {
@@ -91,43 +86,28 @@ export async function POST(request: NextRequest) {
   const storedShortcode = mpesaDoc?.shortcode?.trim() || "";
   const storedPasskey = mpesaDoc?.passkey?.trim() || "";
 
-  const kopoClientId = (process.env.KOPOKOPO_CLIENT_ID || "").trim();
-  const kopoClientSecret = (process.env.KOPOKOPO_CLIENT_SECRET || "").trim();
-  const kopoCallbackBase = (process.env.KOPOKOPO_CALLBACK_BASE_URL || "").trim();
-  const kopoTillEnv = (process.env.KOPOKOPO_STK_TILL_NUMBER || "").trim();
-  const useKopoKopo = !!(kopoClientId && kopoClientSecret && kopoCallbackBase);
-
-  const kopoTillCandidate = isKopoKopoOnlinePaymentsTill(tillNumber)
-    ? tillNumber
-    : isKopoKopoOnlinePaymentsTill(kopoTillEnv)
-      ? kopoTillEnv
-      : "";
-
   const nowIso = new Date().toISOString();
   const accountReference = buildAirbnbPaymentReference(bookingId);
+  const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
+  const tumaConfigured = isTumaConfigured();
+  if (tumaConfigured && !tumaCallbackBase) {
+    return NextResponse.json(
+      { success: false, message: "Missing TUMA_CALLBACK_BASE_URL for Tuma gateway." },
+      { status: 500 }
+    );
+  }
 
-  if (kopoTillCandidate) {
-    if (!useKopoKopo) {
-      return NextResponse.json(
-        { success: false, message: "Incomplete KopoKopo configuration." },
-        { status: 500 }
-      );
-    }
-
-    const incoming = await createIncomingPaymentRequest({
-      tillNumber: kopoTillCandidate,
-      firstName: (booking.guestName || "Guest").split(" ")[0],
-      lastName: (booking.guestName || "Guest").split(" ").slice(1).join(" ") || "Guest",
-      phoneNumber: `+${normalizedPhone}`,
-      email: booking.guestEmail || undefined,
+  if (tumaConfigured) {
+    const description = `Airbnb booking ${bookingId}`;
+    const incoming = await createTumaStkPush({
       amount,
-      metadata: {
-        reference: accountReference,
-        booking_id: bookingId,
-        owner_id: ownerId,
-      },
-      callbackUrl: `${kopoCallbackBase}/api/kopokopo/incoming-payments`,
+      phone: normalizedPhone,
+      description,
+      callbackUrl: `${tumaCallbackBase}/api/tuma/webhook`,
     });
+
+    const checkoutRequestId = incoming.checkoutRequestId || incoming.merchantRequestId || "";
+    const merchantRequestId = incoming.merchantRequestId || "";
 
     await db.collection("payments").insertOne({
       tenantId: null,
@@ -136,25 +116,24 @@ export async function POST(request: NextRequest) {
       propertyId: booking.listingId,
       propertyName: booking.listingName,
       paymentDate: nowIso,
-      transactionId: incoming.id,
+      transactionId: checkoutRequestId || merchantRequestId || accountReference,
       status: "pending_stk",
       createdAt: nowIso,
       type: "AirbnbDirect",
       phoneNumber: normalizedPhone,
       reference: accountReference,
       mpesaCode: null,
-      checkoutRequestId: incoming.id,
-      merchantRequestId: incoming.id,
+      checkoutRequestId,
+      merchantRequestId,
       airbnbBookingId: bookingId,
-      provider: "kopokopo",
-      kopokopoIncomingPaymentId: incoming.id,
-      kopokopoLocation: incoming.location,
+      provider: "tuma",
+      tumaPaymentId: incoming.raw?.data?.payment_id || incoming.raw?.payment_id || "",
     });
 
     return NextResponse.json({
       success: true,
-      message: "STK Push initiated via KopoKopo.",
-      checkoutRequestId: incoming.id,
+      message: incoming.customerMessage || "STK Push initiated. Check your phone.",
+      checkoutRequestId,
     });
   }
 
