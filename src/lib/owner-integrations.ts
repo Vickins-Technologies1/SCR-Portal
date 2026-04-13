@@ -1,10 +1,12 @@
 // src/lib/owner-integrations.ts
 import { Db, ObjectId } from "mongodb";
+import { decryptTumaApiKey, isLikelyEncryptedTumaApiKey } from "@/lib/tuma-crypto";
 
 export type OwnerTumaIntegration = {
   enabled: boolean;
   email: string;
   apiKey: string;
+  businessId?: string;
 };
 
 export function maskSecret(secret?: string): string {
@@ -26,9 +28,20 @@ export async function getOwnerTumaIntegration(
 
   const tuma = doc?.tuma || {};
   const email = String(tuma.email || "").trim();
-  const apiKey = String(tuma.apiKey || "").trim();
+  const storedApiKey = String(tuma.apiKey || "").trim();
   const enabled = tuma.enabled !== false;
+  const businessId = String(tuma.businessId || "").trim() || undefined;
+
+  let apiKey = storedApiKey;
+  if (storedApiKey && isLikelyEncryptedTumaApiKey(storedApiKey)) {
+    try {
+      apiKey = decryptTumaApiKey(storedApiKey);
+    } catch {
+      // Encrypted key without valid secret means we cannot safely use this integration.
+      apiKey = "";
+    }
+  }
 
   if (!enabled || !email || !apiKey) return null;
-  return { enabled, email, apiKey };
+  return { enabled, email, apiKey, businessId };
 }

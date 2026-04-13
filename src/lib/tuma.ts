@@ -9,6 +9,23 @@ export type TumaCredentials = {
   baseUrl?: string;
 };
 
+export type TumaBank = {
+  id: string;
+  name: string;
+  code?: string;
+  country?: string;
+};
+
+export type TumaBusinessPayload = {
+  name: string;
+  email: string;
+  mobile: string;
+  bankId: string;
+  accountNumber: string;
+  logo: string;
+  description?: string;
+};
+
 type CachedToken = { token: string; expiresAt: number };
 const tokenCache = new Map<string, CachedToken>();
 
@@ -109,6 +126,78 @@ export async function createTumaStkPush(params: {
     merchantRequestId: responseData.merchant_request_id || responseData.merchantRequestId || "",
     checkoutRequestId: responseData.checkout_request_id || responseData.checkoutRequestId || "",
     customerMessage: responseData.customer_message || responseData.customerMessage || data?.message || "",
+    raw: data,
+  };
+}
+
+export async function fetchTumaBanks(baseUrl?: string): Promise<TumaBank[]> {
+  const resolvedBaseUrl = (baseUrl || DEFAULT_TUMA_API_BASE_URL).replace(/\/$/, "");
+  const res = await fetch(`${resolvedBaseUrl}/reference/banks`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok || data?.success === false) {
+    const message = data?.message || `Failed to fetch Tuma banks (HTTP ${res.status})`;
+    throw new Error(message);
+  }
+
+  const banks = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+  return banks.map((bank: any) => ({
+    id: String(bank?.id || ""),
+    name: String(bank?.name || ""),
+    code: bank?.code ? String(bank.code) : undefined,
+    country: bank?.country ? String(bank.country) : undefined,
+  }));
+}
+
+export async function createTumaBusiness(params: {
+  credentials: TumaCredentials;
+  business: TumaBusinessPayload;
+}): Promise<{
+  id: string;
+  apiKey: string;
+  email: string;
+  name: string;
+  raw: any;
+}> {
+  const token = await getTumaToken(params.credentials);
+  const baseUrl = (params.credentials.baseUrl || DEFAULT_TUMA_API_BASE_URL).replace(/\/$/, "");
+  const payload: Record<string, any> = {
+    name: params.business.name,
+    email: params.business.email,
+    mobile: params.business.mobile,
+    bank_id: params.business.bankId,
+    account_number: params.business.accountNumber,
+    logo: params.business.logo,
+  };
+  if (params.business.description) {
+    payload.description = params.business.description;
+  }
+
+  const res = await fetch(`${baseUrl}/businesses`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok || data?.success === false) {
+    const message = data?.message || `Failed to create Tuma business (HTTP ${res.status})`;
+    throw new Error(message);
+  }
+
+  const responseData = data?.data || data || {};
+  return {
+    id: String(responseData?.id || ""),
+    apiKey: String(responseData?.api_key || ""),
+    email: String(responseData?.email || params.business.email || ""),
+    name: String(responseData?.name || params.business.name || ""),
     raw: data,
   };
 }

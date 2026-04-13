@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { maskSecret } from "@/lib/owner-integrations";
+import { decryptTumaApiKey, encryptTumaApiKey, isLikelyEncryptedTumaApiKey } from "@/lib/tuma-crypto";
 
 type OwnerContext = {
   ownerId: string;
@@ -59,8 +60,17 @@ export async function GET(request: NextRequest) {
 
     const tuma = record?.tuma || {};
     const email = String(tuma.email || "").trim();
-    const apiKey = String(tuma.apiKey || "").trim();
+    const storedApiKey = String(tuma.apiKey || "").trim();
+    const businessId = String(tuma.businessId || "").trim();
     const enabled = tuma.enabled !== false;
+    let apiKeyForMask = storedApiKey;
+    if (storedApiKey && isLikelyEncryptedTumaApiKey(storedApiKey)) {
+      try {
+        apiKeyForMask = decryptTumaApiKey(storedApiKey);
+      } catch {
+        apiKeyForMask = storedApiKey;
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -68,8 +78,9 @@ export async function GET(request: NextRequest) {
         tuma: {
           enabled,
           email,
-          hasApiKey: !!apiKey,
-          maskedApiKey: maskSecret(apiKey),
+          businessId,
+          hasApiKey: !!storedApiKey,
+          maskedApiKey: maskSecret(apiKeyForMask),
         },
       },
     });
@@ -104,6 +115,7 @@ export async function PUT(request: NextRequest) {
     const tumaPayload = payload?.tuma || {};
     const incomingEmail = String(tumaPayload.email || "").trim();
     const incomingApiKey = String(tumaPayload.apiKey || "").trim();
+    const incomingBusinessId = String(tumaPayload.businessId || "").trim();
     const incomingEnabled = tumaPayload.enabled !== false;
 
     const { db } = await connectToDatabase();
@@ -114,10 +126,21 @@ export async function PUT(request: NextRequest) {
     const existingTuma = existing?.tuma || {};
 
     const nextEmail = incomingEmail || String(existingTuma.email || "").trim();
-    const nextApiKey = incomingApiKey || String(existingTuma.apiKey || "").trim();
+    const existingStoredApiKey = String(existingTuma.apiKey || "").trim();
     const nextEnabled = incomingEnabled;
+    let nextStoredApiKey = existingStoredApiKey;
+    if (incomingApiKey) {
+      nextStoredApiKey = encryptTumaApiKey(incomingApiKey);
+    } else if (existingStoredApiKey && !isLikelyEncryptedTumaApiKey(existingStoredApiKey)) {
+      try {
+        nextStoredApiKey = encryptTumaApiKey(existingStoredApiKey);
+      } catch {
+        nextStoredApiKey = existingStoredApiKey;
+      }
+    }
+    const nextBusinessId = incomingBusinessId || String(existingTuma.businessId || "").trim();
 
-    if (nextEnabled && (!nextEmail || !nextApiKey)) {
+    if (nextEnabled && (!nextEmail || !nextStoredApiKey)) {
       return NextResponse.json(
         { success: false, message: "Tuma email and API key are required when integration is enabled." },
         { status: 400 }
@@ -128,7 +151,8 @@ export async function PUT(request: NextRequest) {
       ownerId: new ObjectId(context.ownerId),
       tuma: {
         email: nextEmail,
-        apiKey: nextApiKey,
+        apiKey: nextStoredApiKey,
+        businessId: nextBusinessId,
         enabled: nextEnabled,
         updatedAt: new Date().toISOString(),
       },
@@ -147,8 +171,19 @@ export async function PUT(request: NextRequest) {
         tuma: {
           enabled: nextEnabled,
           email: nextEmail,
-          hasApiKey: !!nextApiKey,
-          maskedApiKey: maskSecret(nextApiKey),
+          businessId: nextBusinessId,
+          hasApiKey: !!nextStoredApiKey,
+          maskedApiKey: maskSecret(
+            isLikelyEncryptedTumaApiKey(nextStoredApiKey)
+              ? (() => {
+                  try {
+                    return decryptTumaApiKey(nextStoredApiKey);
+                  } catch {
+                    return nextStoredApiKey;
+                  }
+                })()
+              : nextStoredApiKey
+          ),
         },
       },
     });
@@ -157,4 +192,3 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Failed to update integrations" }, { status: 500 });
   }
 }
-
