@@ -320,6 +320,61 @@ export default function OwnerIntegrationsPage() {
     }
   };
 
+  const handleDeleteCredentials = async () => {
+    if (isReadOnly) {
+      toast.error("You do not have permission to delete integrations.");
+      return;
+    }
+
+    if (!csrfToken) {
+      toast.error("Missing CSRF token. Please refresh and try again.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "This will remove your Tuma API key and business profile from this account. You will need to create it again to receive payments. Continue?"
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/owner/integrations", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.message || "Failed to delete integrations.");
+        return;
+      }
+
+      const updated = data.integrations?.tuma || {};
+      setTuma({
+        enabled: updated.enabled !== false,
+        email: updated.email || "",
+        hasApiKey: !!updated.hasApiKey,
+        maskedApiKey: updated.maskedApiKey || "",
+        businessId: updated.businessId || "",
+      });
+      setInitial({
+        enabled: updated.enabled !== false,
+        email: updated.email || "",
+        hasApiKey: !!updated.hasApiKey,
+        businessId: updated.businessId || "",
+      });
+      toast.success(data.message || "Tuma credentials deleted.");
+    } catch {
+      toast.error("Failed to delete integrations.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
@@ -444,6 +499,16 @@ export default function OwnerIntegrationsPage() {
                 <Save size={14} />
                 {saving ? "Saving..." : "Save Integration"}
               </button>
+              {tuma.hasApiKey && (
+                <button
+                  type="button"
+                  onClick={handleDeleteCredentials}
+                  disabled={isReadOnly || saving}
+                  className="ml-3 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-colors duration-200 disabled:opacity-50"
+                >
+                  Delete Credentials
+                </button>
+              )}
             </form>
           </motion.section>
 

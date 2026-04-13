@@ -192,3 +192,54 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Failed to update integrations" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const context = await resolveOwnerContext(request);
+    if (!context) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    if (!context.canEdit) {
+      return NextResponse.json({ success: false, message: "Insufficient permissions" }, { status: 403 });
+    }
+
+    const csrfToken = request.headers.get("x-csrf-token");
+    if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
+      return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
+    }
+
+    const { db } = await connectToDatabase();
+    await db.collection("ownerIntegrations").updateOne(
+      { ownerId: new ObjectId(context.ownerId) },
+      {
+        $set: {
+          "tuma.enabled": false,
+          updatedAt: new Date().toISOString(),
+        },
+        $unset: {
+          "tuma.apiKey": "",
+          "tuma.email": "",
+          "tuma.businessId": "",
+        },
+      },
+      { upsert: true }
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: "Tuma credentials deleted.",
+      integrations: {
+        tuma: {
+          enabled: false,
+          email: "",
+          businessId: "",
+          hasApiKey: false,
+          maskedApiKey: "",
+        },
+      },
+    });
+  } catch (error) {
+    console.error("DELETE /api/owner/integrations error:", error);
+    return NextResponse.json({ success: false, message: "Failed to delete integrations" }, { status: 500 });
+  }
+}

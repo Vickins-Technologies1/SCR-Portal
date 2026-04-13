@@ -211,8 +211,16 @@ export default function PropertyOwnersPage() {
     setDeleteError(null);
 
     try {
+      const token = await ensureCsrfToken();
+      if (!token) {
+        setDeleteError("Security token missing. Please refresh and try again.");
+        setIsDeleting(false);
+        return;
+      }
+
       const res = await fetch(`/api/admin/property-owners/${deleteTarget._id}`, {
         method: "DELETE",
+        headers: { "x-csrf-token": token },
         credentials: "include",
       });
 
