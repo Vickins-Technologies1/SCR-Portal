@@ -204,10 +204,6 @@ export default function PropertyOwnersPage() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    if (isOwnerApproved(deleteTarget)) {
-      setDeleteError("Approved owners cannot be deleted. Only pending owners can be removed.");
-      return;
-    }
 
     setIsDeleting(true);
     setDeleteError(null);
@@ -818,11 +814,9 @@ export default function PropertyOwnersPage() {
                     <p className="text-[10px] text-muted-foreground mt-1">{deleteTarget.email}</p>
                   </div>
 
-                  {isOwnerApproved(deleteTarget) && (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                      Approved owners cannot be deleted. Only pending sign-ups can be removed.
-                    </div>
-                  )}
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                    This will remove the owner, their properties, tenants, invoices, and payments.
+                  </div>
 
                   <div className="flex justify-end gap-3 mt-6">
                     <button
@@ -839,7 +833,7 @@ export default function PropertyOwnersPage() {
                     <button
                       type="button"
                       onClick={handleDelete}
-                      disabled={isDeleting || isOwnerApproved(deleteTarget)}
+                      disabled={isDeleting}
                       className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-xs font-medium shadow-md disabled:opacity-60"
                     >
                       {isDeleting ? "Deleting..." : "Delete Owner"}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
+import { cascadeDeleteOwner } from "../../../../../lib/admin-owner-delete";
 import { ObjectId } from "mongodb";
 
 export async function DELETE(
@@ -18,31 +19,26 @@ export async function DELETE(
   }
 
   try {
-    const { db } = await connectToDatabase();
+    const { db, client } = await connectToDatabase();
 
     const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(id) });
     if (!owner) {
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
     }
 
-    if (owner.isApproved === true) {
-      return NextResponse.json(
-        { success: false, message: "Approved owners cannot be deleted" },
-        { status: 400 }
-      );
-    }
+    const deleted = await cascadeDeleteOwner({ db, client, ownerId: id });
 
-    const result = await db.collection("propertyOwners").deleteOne({ _id: new ObjectId(id) });
-    if (result.deletedCount === 0) {
+    if (deleted.owner === 0) {
       return NextResponse.json({ success: false, message: "Delete failed" }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      message: "Pending user rejected and deleted",
+      message: "Owner and related data deleted",
+      deleted,
     });
   } catch (error) {
-    console.error("Delete pending user error:", error);
+    console.error("Delete owner error:", error);
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }

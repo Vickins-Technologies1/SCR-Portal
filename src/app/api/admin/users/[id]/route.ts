@@ -1,7 +1,8 @@
 // src/app/api/admin/users/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
-import { ObjectId, MongoClient } from "mongodb";
+import { ObjectId } from "mongodb";
+import { cascadeDeleteOwner } from "../../../../../lib/admin-owner-delete";
 
 export async function GET(
   request: NextRequest,
@@ -146,79 +147,21 @@ export async function DELETE(
   }
 
   const userObjectId = new ObjectId(id);
-  let client: MongoClient;
-  let session: ReturnType<MongoClient["startSession"]> | undefined = undefined; // ← undefined, not null
-
-  const deletedCounts = {
-    owner: 0,
-    properties: 0,
-    tenants: 0,
-    invoices: 0,
-    payments: 0,
-  };
-
   try {
-    const connection = await connectToDatabase();
-    const {db} = connection;
-    client = connection.client;
-
-    session = client.startSession(); // session is now defined
-
-    await session.withTransaction(async () => {
-      const properties = await db
-        .collection("properties")
-        .find({ ownerId: userObjectId }, { session })
-        .toArray();
-
-      const propertyIds = properties.map((p) => p._id);
-      const propertyIdStrings = propertyIds.map((id) => id.toString());
-
-      if (propertyIds.length > 0) {
-        const tenantsRes = await db
-          .collection("tenants")
-          .deleteMany({ propertyId: { $in: propertyIds } }, { session });
-        deletedCounts.tenants = tenantsRes.deletedCount;
-      }
-
-      const invoicesRes = await db.collection("invoices").deleteMany(
-        {
-          $or: [
-            { userId: userObjectId.toString() },
-            { propertyId: { $in: propertyIdStrings } },
-          ],
-        },
-        { session }
-      );
-      deletedCounts.invoices = invoicesRes.deletedCount;
-
-      const paymentsRes = await db.collection("payments").deleteMany(
-        {
-          $or: [
-            { userId: userObjectId.toString() },
-            { propertyId: { $in: propertyIdStrings } },
-          ],
-        },
-        { session }
-      );
-      deletedCounts.payments = paymentsRes.deletedCount;
-
-      if (propertyIds.length > 0) {
-        const propsRes = await db
-          .collection("properties")
-          .deleteMany({ _id: { $in: propertyIds } }, { session });
-        deletedCounts.properties = propsRes.deletedCount;
-      }
-
-      const ownerRes = await db
-        .collection("propertyOwners")
-        .deleteOne({ _id: userObjectId }, { session });
-      deletedCounts.owner = ownerRes.deletedCount;
-    });
-
-    if (deletedCounts.owner === 0) {
+    const { db, client } = await connectToDatabase();
+    const owner = await db.collection("propertyOwners").findOne({ _id: userObjectId });
+    if (!owner) {
       return NextResponse.json(
         { success: false, message: "User not found" },
         { status: 404 }
+      );
+    }
+
+    const deletedCounts = await cascadeDeleteOwner({ db, client, ownerId: id });
+    if (deletedCounts.owner === 0) {
+      return NextResponse.json(
+        { success: false, message: "Delete failed" },
+        { status: 500 }
       );
     }
 
@@ -235,9 +178,5 @@ export async function DELETE(
       { success: false, message: "Failed to delete user" },
       { status: 500 }
     );
-  } finally {
-    if (session) {
-      await session.endSession();
-    }
   }
 }
