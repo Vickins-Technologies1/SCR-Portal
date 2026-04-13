@@ -28,7 +28,7 @@ interface PropertyOwner {
   role: string;
   managementType?: "rentals" | "airbnb" | string;
   createdAt: string;
-  isApproved?: boolean;
+  isApproved?: boolean | string;
   approvedAt?: string | null;
   propertiesCount: number;
   paymentsCount: number;
@@ -187,6 +187,8 @@ export default function PropertyOwnersPage() {
 
   const formatOwnerType = (value?: string) =>
     value?.toLowerCase() === "airbnb" ? "Airbnb / Short-term" : "Rentals / Long-term";
+  const isOwnerApproved = (owner: PropertyOwner) =>
+    owner.isApproved === true || owner.isApproved === "true";
 
   // ── Expand / Collapse ──────────────────────────────────────────────────────
   const toggleExpand = (id: string) => {
@@ -202,7 +204,7 @@ export default function PropertyOwnersPage() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    if (deleteTarget.isApproved) {
+    if (isOwnerApproved(deleteTarget)) {
       setDeleteError("Approved owners cannot be deleted. Only pending owners can be removed.");
       return;
     }
@@ -513,12 +515,12 @@ export default function PropertyOwnersPage() {
                             <td className="py-3 px-4 text-xs">
                               <span
                                 className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                  owner.isApproved
+                                  isOwnerApproved(owner)
                                     ? "bg-green-100 text-green-800"
                                     : "bg-yellow-100 text-yellow-800"
                                 }`}
                               >
-                                {owner.isApproved ? "Approved" : "Pending"}
+                                {isOwnerApproved(owner) ? "Approved" : "Pending"}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-xs">
@@ -527,7 +529,7 @@ export default function PropertyOwnersPage() {
                                   onClick={() => openImpersonateModal(owner)}
                                   className="text-primary hover:text-primary-hover transition-colors disabled:opacity-50"
                                   title="Impersonate owner"
-                                  disabled={!owner.isApproved}
+                                  disabled={!isOwnerApproved(owner)}
                                 >
                                   <LogIn size={18} />
                                 </button>
@@ -756,7 +758,7 @@ export default function PropertyOwnersPage() {
                     <p className="text-[10px] text-muted-foreground mt-1">{impersonateTarget.email}</p>
                   </div>
 
-                  {!impersonateTarget.isApproved && (
+                  {!isOwnerApproved(impersonateTarget) && (
                     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
                       This owner is not approved yet. Approve the account before impersonating.
                     </div>
@@ -777,7 +779,7 @@ export default function PropertyOwnersPage() {
                     <button
                       type="button"
                       onClick={handleImpersonate}
-                      disabled={isImpersonating || !impersonateTarget.isApproved}
+                      disabled={isImpersonating || !isOwnerApproved(impersonateTarget)}
                       className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md disabled:opacity-60"
                     >
                       {isImpersonating ? "Switching..." : "Impersonate Owner"}
@@ -816,7 +818,7 @@ export default function PropertyOwnersPage() {
                     <p className="text-[10px] text-muted-foreground mt-1">{deleteTarget.email}</p>
                   </div>
 
-                  {deleteTarget.isApproved && (
+                  {isOwnerApproved(deleteTarget) && (
                     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
                       Approved owners cannot be deleted. Only pending sign-ups can be removed.
                     </div>
@@ -837,7 +839,7 @@ export default function PropertyOwnersPage() {
                     <button
                       type="button"
                       onClick={handleDelete}
-                      disabled={isDeleting || deleteTarget.isApproved}
+                      disabled={isDeleting || isOwnerApproved(deleteTarget)}
                       className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-xs font-medium shadow-md disabled:opacity-60"
                     >
                       {isDeleting ? "Deleting..." : "Delete Owner"}
