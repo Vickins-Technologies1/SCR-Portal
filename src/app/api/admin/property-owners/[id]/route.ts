@@ -20,16 +20,21 @@ export async function DELETE(
   try {
     const { db } = await connectToDatabase();
 
-    const result = await db.collection("propertyOwners").deleteOne({
-      _id: new ObjectId(id),
-      isApproved: false, // only allow deleting pending users (safety)
-    });
+    const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(id) });
+    if (!owner) {
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
+    }
 
-    if (result.deletedCount === 0) {
+    if (owner.isApproved === true) {
       return NextResponse.json(
-        { success: false, message: "User not found or already approved" },
-        { status: 404 }
+        { success: false, message: "Approved owners cannot be deleted" },
+        { status: 400 }
       );
+    }
+
+    const result = await db.collection("propertyOwners").deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) {
+      return NextResponse.json({ success: false, message: "Delete failed" }, { status: 500 });
     }
 
     return NextResponse.json({
