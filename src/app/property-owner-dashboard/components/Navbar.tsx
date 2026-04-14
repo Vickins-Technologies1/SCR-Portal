@@ -6,6 +6,7 @@ import { LogOut, Menu, X, Sparkles, Shield } from "lucide-react";
 import Cookies from "js-cookie";
 import { useEffect, useState } from "react";
 import { useSidebar } from "./SidebarContext";
+import NavbarDateTime from "@/components/NavbarDateTime";
 
 export default function Navbar() {
   const router = useRouter();
@@ -68,14 +69,17 @@ export default function Navbar() {
           >
             {isOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <Image
-            src="/logo.png"
-            alt="Sorana Property Managers Logo"
-            width={200}
-            height={80}
-            className="h-8 w-auto max-w-[120px] sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none rounded-md object-contain drop-shadow-sm"
-            priority
-          />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <Image
+              src="/logo.png"
+              alt="Sorana Property Managers Logo"
+              width={200}
+              height={80}
+              className="h-8 w-auto max-w-[120px] sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none rounded-md object-contain drop-shadow-sm"
+              priority
+            />
+            <NavbarDateTime />
+          </div>
         </div>
 
       {/* Right: Tour + Logout Buttons */}

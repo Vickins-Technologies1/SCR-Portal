@@ -20,6 +20,7 @@ import Cookies from "js-cookie";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import TourGuide, { TourStep } from "@/components/tour/TourGuide";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
+import NavbarDateTime from "@/components/NavbarDateTime";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -297,11 +298,14 @@ export default function TenantDashboardLayout({
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-            <img
-              src="/logo.png"
-              alt="Sorana Property Managers Logo"
-              className="lg:hidden h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm"
-            />
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <img
+                src="/logo.png"
+                alt="Sorana Property Managers Logo"
+                className="h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm sm:h-9 sm:max-w-[140px]"
+              />
+              <NavbarDateTime />
+            </div>
           </div>
 
           {/* Right side – actions */}

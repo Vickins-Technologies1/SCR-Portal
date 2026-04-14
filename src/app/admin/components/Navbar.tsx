@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { LogOut, Menu, X } from "lucide-react";
 import Cookies from "js-cookie";
+import NavbarDateTime from "@/components/NavbarDateTime";
 
 type NavbarProps = {
   isSidebarOpen: boolean;
@@ -26,7 +27,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
     <header className="fixed top-0 left-0 right-0 z-40 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72">
       <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-3 sm:px-6 lg:px-10">
         {/* Left: Menu + Logo */}
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <button
             onClick={onToggleSidebar}
             aria-label="Toggle sidebar"
@@ -35,14 +36,17 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
           >
             {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <Image
-            src="/logo.png"
-            alt="Sorana Property Managers Logo"
-            width={180}
-            height={64}
-            className="h-8 w-auto max-w-[120px] sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none object-contain drop-shadow-sm rounded-md"
-            priority
-          />
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <Image
+              src="/logo.png"
+              alt="Sorana Property Managers Logo"
+              width={180}
+              height={64}
+              className="h-8 w-auto max-w-[120px] sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none object-contain drop-shadow-sm rounded-md"
+              priority
+            />
+            <NavbarDateTime />
+          </div>
         </div>
 
         {/* Right: Logout */}
