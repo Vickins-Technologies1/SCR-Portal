@@ -3,12 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
-import { PlugZap, Save, ShieldCheck, ShieldX } from "lucide-react";
-import { motion } from "framer-motion";
+import { ArrowRight, CheckCircle2, Clock, CreditCard, Landmark, PlugZap, Wallet } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
+import Modal from "../components/Modal";
 import { usePermissions } from "@/hooks/usePermissions";
+
+type IntegrationStatus = "connected" | "available" | "coming_soon";
+
+type IntegrationCard = {
+  id: string;
+  name: string;
+  description: string;
+  status: IntegrationStatus;
+  badgeLabel?: string;
+  cta?: string;
+  icon: typeof PlugZap;
+  logoSrc?: string;
+  logoAlt?: string;
+  logoClassName?: string;
+};
 
 type TumaState = {
   enabled: boolean;
@@ -35,6 +50,39 @@ type TumaBank = {
   country?: string;
 };
 
+const comingSoonIntegrations: IntegrationCard[] = [
+  {
+    id: "stripe",
+    name: "Stripe",
+    description: "Accept international card payments from tenants.",
+    status: "coming_soon",
+    cta: "Join waitlist",
+    icon: CreditCard,
+    logoSrc: "/brand/stripe.svg",
+    logoAlt: "Stripe",
+    logoClassName: "h-5",
+  },
+  {
+    id: "paypal",
+    name: "PayPal",
+    description: "Offer PayPal for resident checkout and invoices.",
+    status: "coming_soon",
+    cta: "Notify me",
+    icon: Wallet,
+    logoSrc: "/brand/paypal.svg",
+    logoAlt: "PayPal",
+    logoClassName: "h-6",
+  },
+  {
+    id: "banking",
+    name: "Banking Partners",
+    description: "Connect local bank partners for payouts and settlements.",
+    status: "coming_soon",
+    cta: "Request access",
+    icon: Landmark,
+  },
+];
+
 export default function OwnerIntegrationsPage() {
   const router = useRouter();
   const perm = usePermissions();
@@ -48,6 +96,7 @@ export default function OwnerIntegrationsPage() {
   const isReadOnly = !canEditIntegrations;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [tuma, setTuma] = useState<TumaState>({
     enabled: true,
@@ -64,7 +113,6 @@ export default function OwnerIntegrationsPage() {
   });
   const [banks, setBanks] = useState<TumaBank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [tumaForm, setTumaForm] = useState<TumaBusinessForm>({
     name: "",
     email: "",
@@ -74,6 +122,8 @@ export default function OwnerIntegrationsPage() {
     logo: "",
     description: "",
   });
+  const [showModal, setShowModal] = useState(false);
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationCard | null>(null);
 
   useEffect(() => {
     const id = Cookies.get("userId");
@@ -182,6 +232,40 @@ export default function OwnerIntegrationsPage() {
       : isProvisioned
         ? "Configured (Disabled)"
         : "Not configured";
+
+  const tumaCardDescription = isProvisioned
+    ? "Manage Tuma settings and tenant payment routing."
+    : "Create a Tuma profile to start collecting tenant payments.";
+  const tumaCta = isConfigured ? "Manage Tuma" : isProvisioned ? "Finish setup" : "Create profile";
+
+  const integrationCards = useMemo<IntegrationCard[]>(() => {
+    const tumaBadgeLabel = isConfigured ? "Connected" : isProvisioned ? "Available" : "Setup required";
+    return [
+      {
+        id: "tuma",
+        name: "Tuma Gateway",
+        description: tumaCardDescription,
+        status: isConfigured ? "connected" : "available",
+        badgeLabel: tumaBadgeLabel,
+        cta: tumaCta,
+        icon: PlugZap,
+        logoSrc: "/brand/tuma.png",
+        logoAlt: "Tuma",
+        logoClassName: "h-7",
+      },
+      ...comingSoonIntegrations,
+    ];
+  }, [isConfigured, isProvisioned, tumaCardDescription]);
+
+  const openIntegrationModal = (integration: IntegrationCard) => {
+    setSelectedIntegration(integration);
+    setShowModal(true);
+  };
+
+  const closeIntegrationModal = () => {
+    setShowModal(false);
+    setSelectedIntegration(null);
+  };
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -375,287 +459,333 @@ export default function OwnerIntegrationsPage() {
     }
   };
 
+  const renderStatusBadge = (status: IntegrationStatus, labelOverride?: string) => {
+    if (status === "connected") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+          <CheckCircle2 size={12} />
+          {labelOverride || "Connected"}
+        </span>
+      );
+    }
+    if (status === "coming_soon") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-700">
+          <Clock size={12} />
+          {labelOverride || "Coming soon"}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+        <Clock size={12} />
+        {labelOverride || "Available"}
+      </span>
+    );
+  };
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[100svh] bg-background text-foreground">
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       <Navbar />
       <Sidebar />
-      <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
-        <main className="max-w-6xl mx-auto space-y-6 overflow-y-auto transition-all duration-300">
-          <motion.section
-            className="glass-panel rounded-3xl p-6 sm:p-8"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <PlugZap size={20} className="text-primary" />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
-                <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Integrations</h1>
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  Connect payment providers and manage API credentials.
-                </p>
+
+      <div className="md:ml-72 pt-16 pb-12 px-4 sm:px-6 lg:px-8">
+        <main className="max-w-7xl mx-auto space-y-8">
+          <section className="glass-panel rounded-3xl p-6 sm:p-8">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 bg-primary/10 rounded-2xl flex items-center justify-center shadow-sm">
+                  <PlugZap className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Owner Portal</p>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Integrations</h1>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                    Connect payment providers and manage API credentials.
+                  </p>
+                </div>
               </div>
             </div>
-          </motion.section>
+          </section>
 
-          <motion.section
-            className="surface-card rounded-2xl p-5 sm:p-6"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
-                    isConfigured
-                      ? "bg-primary/15 text-primary"
-                      : "bg-amber-100 text-amber-600"
-                  }`}
-                >
-                  {isConfigured ? <ShieldCheck className="h-5 w-5" /> : <ShieldX className="h-5 w-5" />}
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Tuma Gateway</p>
-                  <p className="text-sm font-semibold text-foreground">{statusLabel}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Enable Tuma to collect tenant payments via STK push.
-                  </p>
-                </div>
-              </div>
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${
-                  isConfigured
-                    ? "bg-primary/10 text-primary"
-                    : isProvisioned
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-amber-100 text-amber-700"
-                }`}
-              >
-                {isConfigured ? "Connected" : isProvisioned ? "Disabled" : "Not connected"}
-              </span>
-            </div>
-
-            <form onSubmit={handleSave} className="mt-6 space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur">
-                  <label className="text-xs font-medium text-gray-600">Enable Tuma</label>
-                  <select
-                    value={tuma.enabled ? "yes" : "no"}
-                    onChange={(e) =>
-                      setTuma((prev) => ({ ...prev, enabled: e.target.value === "yes" }))
-                    }
-                    disabled={isReadOnly}
-                    className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                  >
-                    <option value="yes">Enabled</option>
-                    <option value="no">Disabled</option>
-                  </select>
-                </div>
-
-                <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm backdrop-blur">
-                  <label className="text-xs font-medium text-gray-600">Current API Key</label>
-                  <p className="mt-3 text-sm font-semibold text-foreground">
-                    {tuma.hasApiKey ? tuma.maskedApiKey || "Configured" : "Not set"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    API keys are generated automatically when you create the business profile.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Tuma Business Email</label>
-                  <input
-                    type="email"
-                    value={tuma.email}
-                    disabled
-                    className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/50 text-xs sm:text-sm text-gray-500"
-                    placeholder="Not created yet"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Tuma Business ID</label>
-                  <input
-                    type="text"
-                    value={tuma.businessId}
-                    disabled
-                    className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/50 text-xs sm:text-sm text-gray-500"
-                    placeholder="Not created yet"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isReadOnly || saving || !isDirty}
-                className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
-              >
-                <Save size={14} />
-                {saving ? "Saving..." : "Save Integration"}
-              </button>
-              {tuma.hasApiKey && (
-                <button
-                  type="button"
-                  onClick={handleDeleteCredentials}
-                  disabled={isReadOnly || saving}
-                  className="ml-3 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-colors duration-200 disabled:opacity-50"
-                >
-                  Delete Credentials
-                </button>
-              )}
-            </form>
-          </motion.section>
-
-          {!isProvisioned && (
-            <motion.section
-              className="surface-card rounded-2xl p-5 sm:p-6"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-foreground">
-                    Create a Tuma business profile
-                  </h2>
-                  <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
-                    Enter your business and banking details. We will create a child profile and save the API key
-                    automatically.
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={handleCreateBusiness} className="mt-6 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Business Name</label>
-                    <input
-                      type="text"
-                      value={tumaForm.name}
-                      onChange={(e) => setTumaForm((prev) => ({ ...prev, name: e.target.value }))}
-                      disabled={isReadOnly}
-                      className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                      placeholder="Your business name"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Business Email</label>
-                    <input
-                      type="email"
-                      value={tumaForm.email}
-                      onChange={(e) => setTumaForm((prev) => ({ ...prev, email: e.target.value }))}
-                      disabled={isReadOnly}
-                      className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                      placeholder="billing@yourcompany.com"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Mobile Number (254XXXXXXXXX)</label>
-                    <input
-                      type="tel"
-                      value={tumaForm.mobile}
-                      onChange={(e) => setTumaForm((prev) => ({ ...prev, mobile: e.target.value }))}
-                      disabled={isReadOnly}
-                      className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                      placeholder="254712345678"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Bank</label>
-                    <select
-                      value={tumaForm.bankId}
-                      onChange={(e) => setTumaForm((prev) => ({ ...prev, bankId: e.target.value }))}
-                      disabled={isReadOnly || banksLoading}
-                      className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {loading ? (
+              [...Array(6)].map((_, i) => (
+                <div key={i} className="surface-card rounded-3xl p-6 animate-pulse" />
+              ))
+            ) : (
+              integrationCards.map((integration) => {
+                const Icon = integration.icon;
+                const buttonLabel =
+                  integration.cta ||
+                  (integration.status === "coming_soon"
+                    ? "View details"
+                    : integration.status === "connected"
+                      ? "Manage"
+                      : "Connect");
+                return (
+                  <div key={integration.id} className="surface-card rounded-3xl p-6 flex flex-col gap-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/80 shadow-sm">
+                          {integration.logoSrc ? (
+                            <img
+                              src={integration.logoSrc}
+                              alt={integration.logoAlt || integration.name}
+                              className={integration.logoClassName || "h-6"}
+                            />
+                          ) : (
+                            <Icon size={18} className="text-primary" />
+                          )}
+                        </div>
+                        <h3 className="text-base sm:text-lg font-semibold text-foreground">{integration.name}</h3>
+                        <p className="text-xs text-muted-foreground mt-1">{integration.description}</p>
+                      </div>
+                      {renderStatusBadge(integration.status, integration.badgeLabel)}
+                    </div>
+                    <button
+                      onClick={() => openIntegrationModal(integration)}
+                      className="mt-auto inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                     >
-                      <option value="">
-                        {banksLoading ? "Loading banks..." : "Select a bank"}
-                      </option>
-                      {banks.map((bank) => (
-                        <option key={bank.id} value={bank.id}>
-                          {bank.name}
-                        </option>
-                      ))}
-                    </select>
+                      {buttonLabel}
+                      <ArrowRight size={14} />
+                    </button>
                   </div>
-                </div>
+                );
+              })
+            )}
+          </section>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Bank Account Number</label>
-                    <input
-                      type="text"
-                      value={tumaForm.accountNumber}
-                      onChange={(e) => setTumaForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
-                      disabled={isReadOnly}
-                      className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                      placeholder="1234567890"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-600">Logo URL (optional)</label>
-                    <input
-                      type="url"
-                      value={tumaForm.logo}
-                      onChange={(e) => setTumaForm((prev) => ({ ...prev, logo: e.target.value }))}
-                      disabled={isReadOnly}
-                      className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                      placeholder="https://yourdomain.com/logo.png"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Description (optional)</label>
-                  <textarea
-                    value={tumaForm.description}
-                    onChange={(e) => setTumaForm((prev) => ({ ...prev, description: e.target.value }))}
-                    disabled={isReadOnly}
-                    className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                    rows={3}
-                    placeholder="Brief description of your business"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isReadOnly || creating}
-                  className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-colors duration-200 disabled:opacity-50"
-                >
-                  {creating ? "Creating..." : "Create Tuma Business"}
-                </button>
-              </form>
-            </motion.section>
-          )}
-
-          <motion.section
-            className="surface-card rounded-2xl p-5 sm:p-6"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
+          <Modal
+            title={selectedIntegration?.name || "Integration"}
+            isOpen={showModal && !!selectedIntegration}
+            onClose={closeIntegrationModal}
+            className="max-w-3xl"
           >
-            <h2 className="text-base sm:text-lg font-semibold text-foreground">More integrations coming soon</h2>
-            <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
-              Stripe, PayPal, and banking partners will appear here once enabled.
-            </p>
-          </motion.section>
+            {selectedIntegration?.id === "tuma" ? (
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Integration status</p>
+                    <p className="text-sm font-semibold text-foreground mt-2">{statusLabel}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enable Tuma to collect tenant payments via STK push.
+                    </p>
+                  </div>
+                  {renderStatusBadge(
+                    isConfigured ? "connected" : "available",
+                    isConfigured ? "Connected" : isProvisioned ? "Available" : "Setup required"
+                  )}
+                </div>
+
+                {isReadOnly && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    You have read-only access. Contact an owner admin to update integrations.
+                  </div>
+                )}
+
+                <form onSubmit={handleSave} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border bg-white/80 p-4">
+                      <label className="text-xs font-medium text-muted-foreground">Enable Tuma</label>
+                      <select
+                        value={tuma.enabled ? "yes" : "no"}
+                        onChange={(e) =>
+                          setTuma((prev) => ({ ...prev, enabled: e.target.value === "yes" }))
+                        }
+                        disabled={isReadOnly}
+                        className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                      >
+                        <option value="yes">Enabled</option>
+                        <option value="no">Disabled</option>
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-border bg-white/80 p-4">
+                      <label className="text-xs font-medium text-muted-foreground">Current API Key</label>
+                      <p className="mt-3 text-sm font-semibold text-foreground">
+                        {tuma.hasApiKey ? tuma.maskedApiKey || "Configured" : "Not set"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        API keys are generated automatically when you create the business profile.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Tuma Business Email</label>
+                      <input
+                        type="email"
+                        value={tuma.email}
+                        disabled
+                        className="mt-2 w-full rounded-xl border border-border bg-white/70 px-3 py-2 text-sm text-muted-foreground"
+                        placeholder="Not created yet"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Tuma Business ID</label>
+                      <input
+                        type="text"
+                        value={tuma.businessId}
+                        disabled
+                        className="mt-2 w-full rounded-xl border border-border bg-white/70 px-3 py-2 text-sm text-muted-foreground"
+                        placeholder="Not created yet"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={isReadOnly || saving || !isDirty}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                    >
+                      {saving ? "Saving..." : "Save integration"}
+                    </button>
+                    {tuma.hasApiKey && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteCredentials}
+                        disabled={isReadOnly || saving}
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        Delete credentials
+                      </button>
+                    )}
+                  </div>
+                </form>
+
+                {!isProvisioned && (
+                  <div className="rounded-3xl border border-border bg-white/70 p-5">
+                    <h3 className="text-base font-semibold text-foreground">Create a Tuma business profile</h3>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Enter your business and banking details. We will create a child profile and save the API key automatically.
+                    </p>
+                    <form onSubmit={handleCreateBusiness} className="mt-5 space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Business Name</label>
+                          <input
+                            type="text"
+                            value={tumaForm.name}
+                            onChange={(e) => setTumaForm((prev) => ({ ...prev, name: e.target.value }))}
+                            disabled={isReadOnly}
+                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            placeholder="Your business name"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Business Email</label>
+                          <input
+                            type="email"
+                            value={tumaForm.email}
+                            onChange={(e) => setTumaForm((prev) => ({ ...prev, email: e.target.value }))}
+                            disabled={isReadOnly}
+                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            placeholder="billing@yourcompany.com"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Mobile Number (254XXXXXXXXX)</label>
+                          <input
+                            type="tel"
+                            value={tumaForm.mobile}
+                            onChange={(e) => setTumaForm((prev) => ({ ...prev, mobile: e.target.value }))}
+                            disabled={isReadOnly}
+                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            placeholder="254712345678"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Bank</label>
+                          <select
+                            value={tumaForm.bankId}
+                            onChange={(e) => setTumaForm((prev) => ({ ...prev, bankId: e.target.value }))}
+                            disabled={isReadOnly || banksLoading}
+                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                          >
+                            <option value="">
+                              {banksLoading ? "Loading banks..." : "Select a bank"}
+                            </option>
+                            {banks.map((bank) => (
+                              <option key={bank.id} value={bank.id}>
+                                {bank.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Bank Account Number</label>
+                          <input
+                            type="text"
+                            value={tumaForm.accountNumber}
+                            onChange={(e) => setTumaForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
+                            disabled={isReadOnly}
+                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            placeholder="1234567890"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Logo URL (optional)</label>
+                          <input
+                            type="url"
+                            value={tumaForm.logo}
+                            onChange={(e) => setTumaForm((prev) => ({ ...prev, logo: e.target.value }))}
+                            disabled={isReadOnly}
+                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            placeholder="https://yourdomain.com/logo.png"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Description (optional)</label>
+                        <textarea
+                          value={tumaForm.description}
+                          onChange={(e) => setTumaForm((prev) => ({ ...prev, description: e.target.value }))}
+                          disabled={isReadOnly}
+                          className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                          rows={3}
+                          placeholder="Brief description of your business"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isReadOnly || creating}
+                        className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        {creating ? "Creating..." : "Create Tuma Business"}
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 text-sm text-muted-foreground">
+                <p>
+                  This integration is being prepared for owners. When it launches, you will connect and manage it right
+                  here.
+                </p>
+                <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-xs text-muted-foreground">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Coming soon</p>
+                  <p className="mt-2">
+                    Reach out to support if you want early access or a custom rollout.
+                  </p>
+                </div>
+              </div>
+            )}
+          </Modal>
         </main>
       </div>
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body {
-          font-family: 'Inter', sans-serif;
-        }
-      `}</style>
     </div>
   );
 }
