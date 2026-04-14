@@ -155,10 +155,6 @@ export async function POST(request: NextRequest) {
       logger.error("Invalid or missing propertyId", { propertyId });
       return NextResponse.json({ success: false, message: "Invalid or missing property ID" }, { status: 400 });
     }
-    if (submittedUserId !== userId) {
-      logger.error("User ID mismatch", { submittedUserId, userId });
-      return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 400 });
-    }
     if (!type || !["Rent", "Utility", "Deposit", "Other"].includes(type)) {
       logger.error("Invalid payment type", { type });
       return NextResponse.json({ success: false, message: "Invalid payment type" }, { status: 400 });
@@ -189,6 +185,11 @@ export async function POST(request: NextRequest) {
     }
 
     const effectiveOwnerId = context.ownerId;
+
+    if (submittedUserId !== effectiveOwnerId) {
+      logger.error("User ID mismatch", { submittedUserId, sessionUserId: userId, effectiveOwnerId });
+      return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 400 });
+    }
 
     // Validate property
     const property = await db.collection<Property>("properties").findOne({
