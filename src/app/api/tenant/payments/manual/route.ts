@@ -52,6 +52,13 @@ interface User {
   role: "tenant" | "propertyOwner" | "admin";
 }
 
+type ManualPaymentContext = {
+  userId: string;
+  role: "propertyOwner" | "teamMember";
+  ownerId: string;
+  canRecord: boolean;
+};
+
 interface ManualPaymentRequestBody {
   tenantId: string;
   amount: number;
@@ -78,11 +85,50 @@ interface CheckDuesResponse {
   };
 }
 
+async function resolveManualPaymentContext(
+  request: NextRequest,
+  db: Db
+): Promise<ManualPaymentContext | null> {
+  const userId = request.cookies.get("userId")?.value;
+  const role = request.cookies.get("role")?.value;
+
+  if (!userId || !role || !["propertyOwner", "teamMember"].includes(role)) {
+    return null;
+  }
+
+  if (role === "propertyOwner") {
+    return {
+      userId,
+      role: "propertyOwner",
+      ownerId: userId,
+      canRecord: true,
+    };
+  }
+
+  const member = await db.collection("teamMembers").findOne({
+    _id: new ObjectId(userId),
+    active: true,
+  });
+
+  if (!member?.ownerId) {
+    return null;
+  }
+
+  const permissions: string[] = Array.isArray(member.permissions) ? member.permissions : [];
+
+  return {
+    userId,
+    role: "teamMember",
+    ownerId: member.ownerId.toString(),
+    canRecord: permissions.includes("payments:record"),
+  };
+}
+
 export async function POST(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
 
-  if (!userId || !role || role !== "propertyOwner") {
+  if (!userId || !role || !["propertyOwner", "teamMember"].includes(role)) {
     logger.error("Unauthorized access attempt", { userId, role });
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
@@ -127,14 +173,30 @@ export async function POST(request: NextRequest) {
     }
 
     const { db }: { db: Db } = await connectToDatabase();
+    const context = await resolveManualPaymentContext(request, db);
+
+    if (!context) {
+      logger.error("Unauthorized access attempt (context)", { userId, role });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    if (context.role === "teamMember" && !context.canRecord) {
+      logger.warn("Insufficient permissions to record payment", { userId, role });
+      return NextResponse.json(
+        { success: false, message: "Insufficient permissions to record payments" },
+        { status: 403 }
+      );
+    }
+
+    const effectiveOwnerId = context.ownerId;
 
     // Validate property
     const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(propertyId),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
     });
     if (!property) {
-      logger.error("Property not found or not owned", { propertyId, userId });
+      logger.error("Property not found or not owned", { propertyId, userId, effectiveOwnerId });
       return NextResponse.json({ success: false, message: "Property not found or not owned" }, { status: 404 });
     }
 
@@ -273,7 +335,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch property owner details
     const owner = await db.collection<User>("users").findOne({
-      _id: new ObjectId(userId),
+      _id: new ObjectId(effectiveOwnerId),
       role: "propertyOwner",
     });
 

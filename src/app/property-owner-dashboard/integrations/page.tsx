@@ -105,6 +105,7 @@ export default function OwnerIntegrationsPage() {
     maskedApiKey: "",
     businessId: "",
   });
+  const [tumaApiKeyInput, setTumaApiKeyInput] = useState("");
   const [initial, setInitial] = useState({
     enabled: true,
     email: "",
@@ -122,8 +123,13 @@ export default function OwnerIntegrationsPage() {
     logo: "",
     description: "",
   });
+  const [tumaFormErrors, setTumaFormErrors] = useState<Partial<Record<keyof TumaBusinessForm, string>>>(
+    {}
+  );
   const [showModal, setShowModal] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationCard | null>(null);
+  const [tumaErrors, setTumaErrors] = useState<{ email?: string; apiKey?: string }>({});
+  const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
     const id = Cookies.get("userId");
@@ -217,8 +223,11 @@ export default function OwnerIntegrationsPage() {
   }, [router, canViewIntegrations]);
 
   const isDirty = useMemo(() => {
-    return tuma.enabled !== initial.enabled;
-  }, [tuma, initial]);
+    const enabledDirty = tuma.enabled !== initial.enabled;
+    const emailDirty = tuma.email.trim() !== initial.email;
+    const apiKeyDirty = tumaApiKeyInput.trim().length > 0;
+    return enabledDirty || emailDirty || apiKeyDirty;
+  }, [tuma, initial, tumaApiKeyInput]);
 
   const isProvisioned = tuma.email.trim() && tuma.hasApiKey;
   const isConfigured = tuma.enabled && isProvisioned;
@@ -279,6 +288,25 @@ export default function OwnerIntegrationsPage() {
       return;
     }
 
+    const trimmedEmail = tuma.email.trim();
+    const trimmedApiKey = tumaApiKeyInput.trim();
+    const nextErrors: { email?: string; apiKey?: string } = {};
+
+    if (tuma.enabled) {
+      if (!trimmedEmail) {
+        nextErrors.email = "Email is required when Tuma is enabled.";
+      }
+      if (!tuma.hasApiKey && !trimmedApiKey) {
+        nextErrors.apiKey = "API key is required when enabling Tuma.";
+      }
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setTumaErrors(nextErrors);
+      toast.error("Please fix the highlighted fields.");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/owner/integrations", {
@@ -291,6 +319,8 @@ export default function OwnerIntegrationsPage() {
         body: JSON.stringify({
           tuma: {
             enabled: tuma.enabled,
+            email: trimmedEmail,
+            ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
           },
         }),
       });
@@ -315,6 +345,8 @@ export default function OwnerIntegrationsPage() {
         hasApiKey: !!updated.hasApiKey,
         businessId: updated.businessId || "",
       });
+      setTumaErrors({});
+      setTumaApiKeyInput("");
       toast.success("Tuma integration saved successfully.");
     } catch {
       toast.error("Failed to update integrations.");
@@ -356,6 +388,7 @@ export default function OwnerIntegrationsPage() {
       return;
     }
 
+    setTumaFormErrors({});
     setCreating(true);
     try {
       const res = await fetch("/api/owner/tuma/business", {
@@ -378,7 +411,21 @@ export default function OwnerIntegrationsPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        toast.error(data.message || "Failed to create Tuma business.");
+        const fieldErrors = data?.errors?.fieldErrors || {};
+        const nextErrors: Partial<Record<keyof TumaBusinessForm, string>> = {};
+        (Object.keys(fieldErrors) as Array<keyof TumaBusinessForm>).forEach((key) => {
+          const messages = fieldErrors[key];
+          if (Array.isArray(messages) && messages[0]) {
+            nextErrors[key] = messages[0];
+          }
+        });
+
+        if (Object.keys(nextErrors).length > 0) {
+          setTumaFormErrors(nextErrors);
+          toast.error("Please fix the highlighted fields.");
+        } else {
+          toast.error(data.message || "Failed to create Tuma business.");
+        }
         return;
       }
 
@@ -396,6 +443,9 @@ export default function OwnerIntegrationsPage() {
         hasApiKey: !!updated.hasApiKey,
         businessId: updated.businessId || "",
       });
+      setTumaFormErrors({});
+      setTumaErrors({});
+      setTumaApiKeyInput("");
       toast.success(data.message || "Tuma business created successfully.");
     } catch {
       toast.error("Failed to create Tuma business.");
@@ -451,6 +501,8 @@ export default function OwnerIntegrationsPage() {
         hasApiKey: !!updated.hasApiKey,
         businessId: updated.businessId || "",
       });
+      setTumaErrors({});
+      setTumaApiKeyInput("");
       toast.success(data.message || "Tuma credentials deleted.");
     } catch {
       toast.error("Failed to delete integrations.");
@@ -603,13 +655,42 @@ export default function OwnerIntegrationsPage() {
                     </div>
 
                     <div className="rounded-2xl border border-border bg-white/80 p-4">
-                      <label className="text-xs font-medium text-muted-foreground">Current API Key</label>
+                      <label className="text-xs font-medium text-muted-foreground">API Key</label>
                       <p className="mt-3 text-sm font-semibold text-foreground">
                         {tuma.hasApiKey ? tuma.maskedApiKey || "Configured" : "Not set"}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        API keys are generated automatically when you create the business profile.
-                      </p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <input
+                          type={showApiKey ? "text" : "password"}
+                          value={tumaApiKeyInput}
+                          onChange={(e) => {
+                            setTumaApiKeyInput(e.target.value);
+                            if (tumaErrors.apiKey) {
+                              setTumaErrors((prev) => ({ ...prev, apiKey: undefined }));
+                            }
+                          }}
+                          disabled={isReadOnly}
+                          className={`w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                            tumaErrors.apiKey ? "border-rose-300" : "border-border"
+                          }`}
+                          placeholder="Paste a new API key to update"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKey((prev) => !prev)}
+                          disabled={isReadOnly}
+                          className="whitespace-nowrap rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          {showApiKey ? "Hide" : "Reveal"}
+                        </button>
+                      </div>
+                      {tumaErrors.apiKey ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{tumaErrors.apiKey}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Leave blank to keep the current key. You can copy a new key from the Tuma portal.
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -619,10 +700,25 @@ export default function OwnerIntegrationsPage() {
                       <input
                         type="email"
                         value={tuma.email}
-                        disabled
-                        className="mt-2 w-full rounded-xl border border-border bg-white/70 px-3 py-2 text-sm text-muted-foreground"
+                        onChange={(e) => {
+                          setTuma((prev) => ({ ...prev, email: e.target.value }));
+                          if (tumaErrors.email) {
+                            setTumaErrors((prev) => ({ ...prev, email: undefined }));
+                          }
+                        }}
+                        disabled={isReadOnly}
+                        className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                          tumaErrors.email ? "border-rose-300" : "border-border"
+                        }`}
                         placeholder="Not created yet"
                       />
+                      {tumaErrors.email ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{tumaErrors.email}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Update the email to match what you see in the Tuma portal.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Tuma Business ID</label>
@@ -670,22 +766,42 @@ export default function OwnerIntegrationsPage() {
                           <input
                             type="text"
                             value={tumaForm.name}
-                            onChange={(e) => setTumaForm((prev) => ({ ...prev, name: e.target.value }))}
+                            onChange={(e) => {
+                              setTumaForm((prev) => ({ ...prev, name: e.target.value }));
+                              if (tumaFormErrors.name) {
+                                setTumaFormErrors((prev) => ({ ...prev, name: undefined }));
+                              }
+                            }}
                             disabled={isReadOnly}
-                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              tumaFormErrors.name ? "border-rose-300" : "border-border"
+                            }`}
                             placeholder="Your business name"
                           />
+                          {tumaFormErrors.name && (
+                            <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.name}</p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs font-medium text-muted-foreground">Business Email</label>
                           <input
                             type="email"
                             value={tumaForm.email}
-                            onChange={(e) => setTumaForm((prev) => ({ ...prev, email: e.target.value }))}
+                            onChange={(e) => {
+                              setTumaForm((prev) => ({ ...prev, email: e.target.value }));
+                              if (tumaFormErrors.email) {
+                                setTumaFormErrors((prev) => ({ ...prev, email: undefined }));
+                              }
+                            }}
                             disabled={isReadOnly}
-                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              tumaFormErrors.email ? "border-rose-300" : "border-border"
+                            }`}
                             placeholder="billing@yourcompany.com"
                           />
+                          {tumaFormErrors.email && (
+                            <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.email}</p>
+                          )}
                         </div>
                       </div>
 
@@ -695,19 +811,36 @@ export default function OwnerIntegrationsPage() {
                           <input
                             type="tel"
                             value={tumaForm.mobile}
-                            onChange={(e) => setTumaForm((prev) => ({ ...prev, mobile: e.target.value }))}
+                            onChange={(e) => {
+                              setTumaForm((prev) => ({ ...prev, mobile: e.target.value }));
+                              if (tumaFormErrors.mobile) {
+                                setTumaFormErrors((prev) => ({ ...prev, mobile: undefined }));
+                              }
+                            }}
                             disabled={isReadOnly}
-                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              tumaFormErrors.mobile ? "border-rose-300" : "border-border"
+                            }`}
                             placeholder="254712345678"
                           />
+                          {tumaFormErrors.mobile && (
+                            <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.mobile}</p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs font-medium text-muted-foreground">Bank</label>
                           <select
                             value={tumaForm.bankId}
-                            onChange={(e) => setTumaForm((prev) => ({ ...prev, bankId: e.target.value }))}
+                            onChange={(e) => {
+                              setTumaForm((prev) => ({ ...prev, bankId: e.target.value }));
+                              if (tumaFormErrors.bankId) {
+                                setTumaFormErrors((prev) => ({ ...prev, bankId: undefined }));
+                              }
+                            }}
                             disabled={isReadOnly || banksLoading}
-                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              tumaFormErrors.bankId ? "border-rose-300" : "border-border"
+                            }`}
                           >
                             <option value="">
                               {banksLoading ? "Loading banks..." : "Select a bank"}
@@ -718,6 +851,9 @@ export default function OwnerIntegrationsPage() {
                               </option>
                             ))}
                           </select>
+                          {tumaFormErrors.bankId && (
+                            <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.bankId}</p>
+                          )}
                         </div>
                       </div>
 
@@ -727,22 +863,42 @@ export default function OwnerIntegrationsPage() {
                           <input
                             type="text"
                             value={tumaForm.accountNumber}
-                            onChange={(e) => setTumaForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
+                            onChange={(e) => {
+                              setTumaForm((prev) => ({ ...prev, accountNumber: e.target.value }));
+                              if (tumaFormErrors.accountNumber) {
+                                setTumaFormErrors((prev) => ({ ...prev, accountNumber: undefined }));
+                              }
+                            }}
                             disabled={isReadOnly}
-                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              tumaFormErrors.accountNumber ? "border-rose-300" : "border-border"
+                            }`}
                             placeholder="1234567890"
                           />
+                          {tumaFormErrors.accountNumber && (
+                            <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.accountNumber}</p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs font-medium text-muted-foreground">Logo URL (optional)</label>
                           <input
                             type="url"
                             value={tumaForm.logo}
-                            onChange={(e) => setTumaForm((prev) => ({ ...prev, logo: e.target.value }))}
+                            onChange={(e) => {
+                              setTumaForm((prev) => ({ ...prev, logo: e.target.value }));
+                              if (tumaFormErrors.logo) {
+                                setTumaFormErrors((prev) => ({ ...prev, logo: undefined }));
+                              }
+                            }}
                             disabled={isReadOnly}
-                            className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              tumaFormErrors.logo ? "border-rose-300" : "border-border"
+                            }`}
                             placeholder="https://yourdomain.com/logo.png"
                           />
+                          {tumaFormErrors.logo && (
+                            <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.logo}</p>
+                          )}
                         </div>
                       </div>
 
@@ -750,12 +906,22 @@ export default function OwnerIntegrationsPage() {
                         <label className="text-xs font-medium text-muted-foreground">Description (optional)</label>
                         <textarea
                           value={tumaForm.description}
-                          onChange={(e) => setTumaForm((prev) => ({ ...prev, description: e.target.value }))}
+                          onChange={(e) => {
+                            setTumaForm((prev) => ({ ...prev, description: e.target.value }));
+                            if (tumaFormErrors.description) {
+                              setTumaFormErrors((prev) => ({ ...prev, description: undefined }));
+                            }
+                          }}
                           disabled={isReadOnly}
-                          className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                          className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                            tumaFormErrors.description ? "border-rose-300" : "border-border"
+                          }`}
                           rows={3}
                           placeholder="Brief description of your business"
                         />
+                        {tumaFormErrors.description && (
+                          <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.description}</p>
+                        )}
                       </div>
 
                       <button
