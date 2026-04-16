@@ -5,7 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
-import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
+import { getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
 import {
   decryptPasskey,
   getMpesaPasskey,
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
   const reference = buildAirbnbPaymentReference(bookingId);
 
   const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
-  const tumaIntegration = await getOwnerTumaIntegration(db, String(tenant.ownerId));
+  const tumaIntegration = await getAirbnbOwnerTumaIntegration(db, String(tenant.ownerId));
   const tumaConfigured = isTumaConfigured(
     tumaIntegration ? { email: tumaIntegration.email, apiKey: tumaIntegration.apiKey } : null
   );
@@ -232,4 +232,3 @@ export async function POST(request: NextRequest) {
     checkoutRequestId: stkResponse.CheckoutRequestID,
   });
 }
-

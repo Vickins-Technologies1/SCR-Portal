@@ -4,7 +4,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
+import { getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const { db } = await connectToDatabase();
 
-  const tumaIntegration = await getOwnerTumaIntegration(db, ownerId);
+  const tumaIntegration = await getAirbnbOwnerTumaIntegration(db, ownerId);
   const tumaStatus = tumaIntegration ? "connected" : "available";
 
   const integrations = await db
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     .sort({ createdAt: 1 })
     .toArray();
 
-  const blockedProviders = new Set(["airbnb", "airbnb-api", "airbnb-sync", "ical", "ical-sync"]);
+  const blockedProviders = new Set(["airbnb", "airbnb-api", "airbnb-sync", "ical", "ical-sync", "tuma"]);
 
   const defaults = [
     {
