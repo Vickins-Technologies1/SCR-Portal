@@ -577,8 +577,8 @@ export default function AirbnbInboxPage() {
           </section>
 
           {showTemplateModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
-              <div className="modal-panel w-full max-w-lg overflow-hidden">
+            <div className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop p-4 overflow-y-auto sm:items-center">
+              <div className="modal-panel flex w-full max-w-lg flex-col overflow-hidden max-h-[calc(100dvh-2rem)] min-h-0">
                 <div className="modal-header flex items-center justify-between px-5 py-4">
                   <div>
                     <h2 className="text-base font-semibold text-foreground">
@@ -590,7 +590,7 @@ export default function AirbnbInboxPage() {
                     <X size={18} />
                   </button>
                 </div>
-                <div className="modal-body modal-stagger space-y-4">
+                <div className="modal-body modal-stagger flex-1 min-h-0 space-y-4 overflow-y-auto">
                   {templateMessage && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                       {templateMessage}

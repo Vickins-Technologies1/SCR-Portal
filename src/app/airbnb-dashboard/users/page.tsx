@@ -795,11 +795,11 @@ export default function UsersPage() {
 
       {/* ADD MODAL */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop p-4 overflow-y-auto sm:items-center">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="modal-panel w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            className="modal-panel w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto"
           >
             <div className="modal-header sticky top-0 z-10 flex items-center justify-between px-6 py-5">
               <h2 className="text-xl font-bold text-gray-900">Add Team Member</h2>
@@ -961,11 +961,11 @@ export default function UsersPage() {
       )}
 
       {isEditModalOpen && editMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop p-4 overflow-y-auto sm:items-center">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="modal-panel w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            className="modal-panel w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto"
           >
             <div className="modal-header sticky top-0 z-10 flex items-center justify-between px-6 py-5">
               <h2 className="text-xl font-bold text-gray-900">Edit Team Member</h2>
@@ -1103,11 +1103,11 @@ export default function UsersPage() {
       )}
 
       {resendTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop p-4 overflow-y-auto sm:items-center">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="modal-panel p-8 max-w-sm w-full text-center"
+            className="modal-panel p-8 max-w-sm w-full text-center max-h-[calc(100dvh-2rem)] overflow-y-auto"
           >
             <div className="modal-stagger">
               <Send className="h-12 w-12 text-blue-600 mx-auto mb-4" />
@@ -1141,11 +1141,11 @@ export default function UsersPage() {
 
       {/* DELETE CONFIRMATION */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop p-4 overflow-y-auto sm:items-center">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="modal-panel p-8 max-w-sm w-full text-center"
+            className="modal-panel p-8 max-w-sm w-full text-center max-h-[calc(100dvh-2rem)] overflow-y-auto"
           >
             <div className="modal-stagger">
               <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />

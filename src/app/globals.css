@@ -201,6 +201,7 @@ body {
   .modal-backdrop {
     background: rgba(15, 23, 42, 0.62);
     backdrop-filter: blur(10px);
+    overscroll-behavior: contain;
   }
   .modal-panel {
     background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));

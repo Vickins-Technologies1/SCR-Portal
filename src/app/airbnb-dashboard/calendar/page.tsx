@@ -280,8 +280,8 @@ export default function AirbnbCalendarPage() {
           </section>
 
           {selectedNight && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
-              <div className="modal-panel w-full max-w-md overflow-hidden">
+            <div className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop p-4 overflow-y-auto sm:items-center">
+              <div className="modal-panel flex w-full max-w-md flex-col overflow-hidden max-h-[calc(100dvh-2rem)] min-h-0">
                 <div className="modal-header flex items-center justify-between px-5 py-4">
                   <div>
                     <h2 className="text-base font-semibold text-foreground">Update night</h2>
@@ -293,7 +293,7 @@ export default function AirbnbCalendarPage() {
                     <X size={18} />
                   </button>
                 </div>
-                <div className="modal-body modal-stagger space-y-4">
+                <div className="modal-body modal-stagger flex-1 min-h-0 space-y-4 overflow-y-auto">
                   <select
                     value={selectedNight.status}
                     onChange={(event) =>

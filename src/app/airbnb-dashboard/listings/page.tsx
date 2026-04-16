@@ -510,8 +510,8 @@ export default function AirbnbListingsPage() {
           )}
 
           {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
-              <div className="modal-panel flex w-full max-w-2xl flex-col overflow-hidden max-h-[92vh] sm:max-h-[88vh]">
+            <div className="fixed inset-0 z-50 flex items-start justify-center modal-backdrop p-4 overflow-y-auto sm:items-center">
+              <div className="modal-panel flex w-full max-w-2xl flex-col overflow-hidden max-h-[calc(100dvh-2rem)] min-h-0">
                 <div className="modal-header flex items-center justify-between px-5 py-4">
                   <div>
                     <h2 className="text-base font-semibold text-foreground">
