@@ -25,10 +25,12 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    bookings: bookings.map((booking) => ({
+      bookings: bookings.map((booking) => ({
       id: booking.externalId || booking._id?.toString?.() || "",
       listingName: booking.listingName,
       guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      guestPhone: booking.guestPhone,
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
       nights: booking.nights,

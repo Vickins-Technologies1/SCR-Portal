@@ -31,8 +31,13 @@ export async function GET(request: NextRequest) {
     period: payment.paymentDate
       ? new Date(payment.paymentDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
       : "Direct payment",
-    status: payment.status === "completed" ? "paid" : payment.status === "failed" ? "failed" : "processing",
-    method: "M-Pesa",
+    status:
+      payment.status === "completed"
+        ? "paid"
+        : payment.status === "failed" || payment.status === "cancelled"
+          ? "failed"
+          : "processing",
+    method: payment.provider === "cash" ? "Cash" : "M-Pesa",
   }));
 
   return NextResponse.json({

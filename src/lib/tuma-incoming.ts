@@ -184,6 +184,13 @@ export async function applyTumaPaymentUpdate(params: {
         }
       }
     }
+
+    if (normalizedStatus === "completed" && updatedPayment.airbnbTenantId && ObjectId.isValid(updatedPayment.airbnbTenantId)) {
+      await db.collection("tenants").updateOne(
+        { _id: new ObjectId(updatedPayment.airbnbTenantId), accountType: "airbnb_guest" },
+        { $set: { status: "inactive", updatedAt: new Date().toISOString() } }
+      );
+    }
   }
 
   if (normalizedStatus !== "completed" || !updatedPayment.tenantId) {

@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       user = await db.collection("tenants").findOne({ _id: new ObjectId(userId) });
       if (user) {
         finalRole = "tenant";
-        redirectPath = "/tenant-dashboard";
+        redirectPath = user?.accountType === "airbnb_guest" ? "/airbnb-tenant-dashboard" : "/tenant-dashboard";
         userCollection = "tenants";
       } else {
         // Try property owner
@@ -143,7 +143,10 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-        const requiresOtp = !shouldBypassOtp(user.email?.toString(), finalRole);
+        const requiresOtp =
+          finalRole === "tenant" && user?.accountType === "airbnb_guest"
+            ? false
+            : !shouldBypassOtp(user.email?.toString(), finalRole);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();

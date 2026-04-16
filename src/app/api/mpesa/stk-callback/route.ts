@@ -132,6 +132,13 @@ export async function POST(request: NextRequest) {
       );
 
       if (status === "completed") {
+        if (payment.airbnbTenantId && ObjectId.isValid(payment.airbnbTenantId)) {
+          await db.collection("tenants").updateOne(
+            { _id: new ObjectId(payment.airbnbTenantId), accountType: "airbnb_guest" },
+            { $set: { status: "inactive", updatedAt: new Date().toISOString() } }
+          );
+        }
+
         const booking = await db.collection("airbnbBookings").findOne({
           externalId: payment.airbnbBookingId,
           ownerId: payment.ownerId,

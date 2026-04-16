@@ -4,6 +4,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
+import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest) {
 
   const { db } = await connectToDatabase();
 
+  const tumaIntegration = await getOwnerTumaIntegration(db, ownerId);
+  const tumaStatus = tumaIntegration ? "connected" : "available";
+
   const integrations = await db
     .collection("airbnbIntegrations")
     .find({ ownerId })
@@ -24,6 +28,13 @@ export async function GET(request: NextRequest) {
   const blockedProviders = new Set(["airbnb", "airbnb-api", "airbnb-sync", "ical", "ical-sync"]);
 
   const defaults = [
+    {
+      id: "tuma",
+      name: "Tuma M-Pesa Gateway",
+      status: tumaStatus,
+      description: "Collect booking payments via STK Push (recommended for Kenyan guests).",
+      provider: "tuma",
+    },
     {
       id: "stripe",
       name: "Stripe Payments",

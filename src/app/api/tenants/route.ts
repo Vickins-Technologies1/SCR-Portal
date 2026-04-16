@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid owner ID" }, { status: 400 });
     }
 
-    const filters: any = { ownerId: effectiveOwnerId };
+    const filters: any = { ownerId: effectiveOwnerId, accountType: { $ne: "airbnb_guest" } };
     const andFilters: any[] = [];
     if (searchParams.get("name")) filters.name = { $regex: searchParams.get("name")!, $options: "i" };
     if (searchParams.get("email")) filters.email = { $regex: searchParams.get("email")!, $options: "i" };

@@ -117,6 +117,19 @@ interface AirbnbPaymentEmailOptions {
   supportEmail?: string;
 }
 
+interface AirbnbPaymentPortalInviteOptions {
+  to: string;
+  guestName: string;
+  listingName: string;
+  bookingId: string;
+  amount: number;
+  loginUrl: string;
+  paymentUrl: string;
+  email: string;
+  password: string;
+  supportEmail?: string;
+}
+
 interface AirbnbReminderEmailOptions {
   to: string;
   guestName: string;
@@ -615,6 +628,55 @@ export async function sendAirbnbPaymentReceivedEmail({
   } catch (error) {
     console.error(`Error sending Airbnb payment receipt email to ${to}:`, error);
     throw new Error("Failed to send payment receipt email");
+  }
+}
+
+export async function sendAirbnbPaymentPortalInviteEmail({
+  to,
+  guestName,
+  listingName,
+  bookingId,
+  amount,
+  loginUrl,
+  paymentUrl,
+  email,
+  password,
+  supportEmail,
+}: AirbnbPaymentPortalInviteOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const html = generateStyledTemplate({
+      name: guestName,
+      title: "Complete your booking payment",
+      intro: `Your payment portal has been created for ${listingName}. Use the details below to log in and complete your payment.`,
+      details: `
+        <ul>
+          <li><strong>Booking:</strong> ${bookingId}</li>
+          <li><strong>Amount:</strong> KES ${Number(amount || 0).toLocaleString("en-KE")}</li>
+          <li><strong>Login URL:</strong> <a href="${loginUrl}" class="button">Log in</a></li>
+          <li><strong>Payment page:</strong> <a href="${paymentUrl}" class="button">Make payment</a></li>
+          <li><strong>Email:</strong> ${email}</li>
+          <li><strong>Temporary Password:</strong> ${password}</li>
+        </ul>
+        <p style="font-size: 14px; margin-top: 16px;">
+          Keep these details safe. If you need help, contact ${supportEmail || "the host"}.
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      to,
+      subject: `Payment link for your booking (${listingName})`,
+      html,
+    });
+    console.log(`Airbnb payment portal invite email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending Airbnb payment portal invite email to ${to}:`, error);
+    throw new Error("Failed to send Airbnb payment portal invite email");
   }
 }
 

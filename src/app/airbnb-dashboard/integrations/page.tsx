@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plug, CheckCircle2, Clock, ArrowRight, X } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -10,6 +11,7 @@ import type { AirbnbIntegration } from "@/types/airbnb";
 
 export default function AirbnbIntegrationsPage() {
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("settings:view");
+  const router = useRouter();
   const [integrations, setIntegrations] = useState<AirbnbIntegration[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -24,7 +26,7 @@ export default function AirbnbIntegrationsPage() {
     clientId: "",
     clientSecret: "",
   });
-  const managedProviders = ["stripe", "smtp", "ga", "meta"];
+  const managedProviders = ["tuma", "stripe", "smtp", "ga", "meta"];
 
   const fetchIntegrations = useCallback(async () => {
     if (!ownerId) return;
@@ -181,10 +183,29 @@ export default function AirbnbIntegrationsPage() {
                       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
                         Configuration
                       </p>
-                      <p>
-                        This integration is enabled through environment variables and system settings. No in-app
-                        configuration is required here.
-                      </p>
+                      {selectedIntegration.provider === "tuma" ? (
+                        <>
+                          <p>
+                            Configure Tuma on the Owner dashboard under Integrations. Once connected, booking STK Push
+                            collections will automatically route through Tuma.
+                          </p>
+                          <button
+                            onClick={() => {
+                              setShowModal(false);
+                              router.push("/property-owner-dashboard/integrations");
+                            }}
+                            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-[11px] font-semibold text-white hover:bg-primary-hover"
+                          >
+                            Open owner integrations
+                            <ArrowRight size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <p>
+                          This integration is enabled through environment variables and system settings. No in-app
+                          configuration is required here.
+                        </p>
+                      )}
                     </div>
                   )}
                   {!managedProviders.includes(selectedIntegration.provider || "") && (

@@ -37,6 +37,7 @@ interface UserResponse {
     email: string;
     phone: string;
     role: string;
+    accountType?: string;
     createdAt: string;
     userId: string;
     propertyId?: string;
@@ -113,6 +114,10 @@ export default function TenantDashboardLayout({
             { credentials: "include" }
           );
           const data: UserResponse = await response.json();
+          if (data.success && data.user?.accountType === "airbnb_guest") {
+            window.location.href = "/airbnb-tenant-dashboard";
+            return;
+          }
           if (data.success && data.user?.name) setName(data.user.name);
         }
       } catch {

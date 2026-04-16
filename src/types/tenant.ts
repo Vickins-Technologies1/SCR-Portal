@@ -17,6 +17,9 @@ export interface Tenant {
   phone: string;
   password: string;
   role: "tenant";
+  accountType?: "rental" | "airbnb_guest";
+  airbnbBookingId?: string;
+  expiresAt?: string;
   propertyId: string;
   unitType: string;           // Display name: "1-Bedroom"
   unitIdentifier: string;     // Unique key: "1-Bedroom-0", "1-Bedroom-1"
@@ -44,6 +47,9 @@ export interface ResponseTenant {
   email: string;
   phone: string;
   role: "tenant";
+  accountType?: "rental" | "airbnb_guest";
+  airbnbBookingId?: string;
+  expiresAt?: string;
   propertyId: string;
   unitType: string;
   unitIdentifier: string;
