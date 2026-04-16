@@ -23,14 +23,38 @@ export async function GET(request: NextRequest) {
     .sort({ checkIn: 1 })
     .toArray();
 
+  const bookingIds = bookings
+    .map((booking) => booking.externalId || booking._id?.toString?.() || "")
+    .filter((id): id is string => Boolean(id));
+
+  const tenantByBookingId = bookingIds.length
+    ? new Map(
+        (
+          await db
+            .collection("tenants")
+            .find(
+              { ownerId, accountType: "airbnb_guest", airbnbBookingId: { $in: bookingIds } },
+              { projection: { _id: 1, airbnbBookingId: 1 } }
+            )
+            .toArray()
+        ).map((tenant) => [
+          String(tenant.airbnbBookingId || ""),
+          tenant._id?.toString?.() || null,
+        ])
+      )
+    : new Map<string, string | null>();
+
   return NextResponse.json({
     success: true,
-      bookings: bookings.map((booking) => ({
+    bookings: bookings.map((booking) => {
+      const id = booking.externalId || booking._id?.toString?.() || "";
+      return {
       id: booking.externalId || booking._id?.toString?.() || "",
       listingName: booking.listingName,
       guestName: booking.guestName,
       guestEmail: booking.guestEmail,
       guestPhone: booking.guestPhone,
+      tenantId: tenantByBookingId.get(id) ?? null,
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
       nights: booking.nights,
@@ -39,7 +63,8 @@ export async function GET(request: NextRequest) {
       source: booking.source,
       payoutStatus: booking.payoutStatus,
       specialRequests: booking.specialRequests,
-    })),
+      };
+    }),
   });
 }
 

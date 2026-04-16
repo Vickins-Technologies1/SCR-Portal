@@ -85,6 +85,7 @@ export interface AirbnbBooking {
   guestName: string;
   guestEmail?: string;
   guestPhone?: string;
+  tenantId?: string | null;
   checkIn: string;
   checkOut: string;
   nights: number;

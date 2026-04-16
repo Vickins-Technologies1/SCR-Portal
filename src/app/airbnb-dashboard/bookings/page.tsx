@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardList, PlusCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
@@ -13,7 +14,8 @@ type AirbnbListingOption = { id: string; name: string; baseRate: number };
 type PaymentMode = "mpesa" | "cash" | "link";
 
 export default function AirbnbBookingsPage() {
-  const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("tenants:view");
+  const router = useRouter();
+  const { hasAccess, ownerId, csrfToken, role } = useAirbnbAccess("tenants:view");
   const [bookings, setBookings] = useState<AirbnbBooking[]>([]);
   const [listings, setListings] = useState<AirbnbListingOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -249,6 +251,27 @@ export default function AirbnbBookingsPage() {
     setTableMessage("Cash payment recorded.");
   };
 
+  const impersonateBookingGuest = async (booking: AirbnbBooking) => {
+    if (role !== "propertyOwner") {
+      throw new Error("Only the property owner can impersonate tenant accounts.");
+    }
+    if (!booking.tenantId) {
+      throw new Error("Payment portal account not created yet. Click “Payment link” first.");
+    }
+
+    const res = await fetch("/api/impersonate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ tenantId: booking.tenantId }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || "Failed to impersonate tenant");
+    }
+    window.location.href = json.redirect || "/tenant-dashboard";
+  };
+
   const handleDeleteBooking = async (bookingId: string) => {
     if (!csrfToken) {
       setTableMessage("Missing session token. Refresh the page and try again.");
@@ -440,8 +463,23 @@ export default function AirbnbBookingsPage() {
                     </tr>
                   ) : (
                     bookings.map((booking) => (
-                      <tr key={booking.id}>
-                        <td className="font-semibold">{booking.guestName}</td>
+                      <tr
+                        key={booking.id}
+                        onClick={() => router.push(`/airbnb-dashboard/bookings/${encodeURIComponent(booking.id)}`)}
+                        className="cursor-pointer"
+                      >
+                        <td className="font-semibold">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              router.push(`/airbnb-dashboard/bookings/${encodeURIComponent(booking.id)}`);
+                            }}
+                            className="text-left hover:underline"
+                          >
+                            {booking.guestName}
+                          </button>
+                        </td>
                         <td>{booking.listingName}</td>
                         <td className="table-muted">
                           {new Date(booking.checkIn).toLocaleDateString("en-US", { month: "short", day: "numeric" })} →
@@ -478,7 +516,7 @@ export default function AirbnbBookingsPage() {
                           </span>
                         </td>
                         <td>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
                             {booking.payoutStatus !== "paid" ? (
                               <button
                                 onClick={() => withAction(booking.id, () => requestStkForBooking(booking))}
@@ -506,6 +544,20 @@ export default function AirbnbBookingsPage() {
                                 {isActing[booking.id] ? "Working..." : "Cash"}
                               </button>
                             ) : null}
+                            <button
+                              onClick={() => withAction(booking.id, () => impersonateBookingGuest(booking))}
+                              disabled={Boolean(isActing[booking.id]) || !booking.tenantId || role !== "propertyOwner"}
+                              className="rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-[10px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                              title={
+                                role !== "propertyOwner"
+                                  ? "Only the property owner can impersonate tenant accounts."
+                                  : booking.tenantId
+                                    ? "Impersonate the guest payment account"
+                                    : "Create the payment portal account first."
+                              }
+                            >
+                              {isActing[booking.id] ? "Working..." : "Impersonate"}
+                            </button>
                             <button
                               onClick={() => handleDeleteBooking(booking.id)}
                               disabled={isDeleting === booking.id}
