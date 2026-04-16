@@ -91,6 +91,12 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
       placement: "right",
     },
     {
+      title: "Users",
+      body: "Invite team members and control permissions for Airbnb operations.",
+      selector: '[data-tour="airbnb-nav-users"]',
+      placement: "right",
+    },
+    {
       title: "Settings",
       body: "Configure your account, team roles, and automation defaults.",
       selector: '[data-tour="airbnb-nav-settings"]',

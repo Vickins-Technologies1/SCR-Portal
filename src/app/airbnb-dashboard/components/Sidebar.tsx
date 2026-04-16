@@ -16,6 +16,7 @@ import {
   BarChart,
   Plug,
   Settings,
+  UserCog,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { useSidebar } from "./SidebarContext";
@@ -123,6 +124,7 @@ export default function Sidebar() {
     { key: "payments", href: "/airbnb-dashboard/payments", label: "Payments", icon: <CreditCard size={20} />, requiredPermission: "payments:view" },
     { key: "reports", href: "/airbnb-dashboard/reports", label: "Reports", icon: <BarChart size={20} />, requiredPermission: "reports:view" },
     { key: "integrations", href: "/airbnb-dashboard/integrations", label: "Integrations", icon: <Plug size={20} />, requiredPermission: "settings:view" },
+    { key: "users", href: "/airbnb-dashboard/users", label: "Users", icon: <UserCog size={20} />, requiredPermission: "users:view" },
     { key: "settings", href: "/airbnb-dashboard/settings", label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
   ];
 
