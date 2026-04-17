@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   })();
 
   const baseUrl = resolveBaseUrl();
-  const loginUrl = `${baseUrl}/tenant-login`;
+  const loginUrl = `${baseUrl}/airbnb-tenant-login`;
   const paymentUrl = `${baseUrl}/airbnb-tenant-dashboard`;
 
   const tenantFilter = {
@@ -226,4 +226,3 @@ export async function POST(request: NextRequest) {
     links: { loginUrl, paymentUrl },
   });
 }
-

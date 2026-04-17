@@ -3,9 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 
 export async function POST(request: NextRequest) {
   try {
+    const csrfToken = request.headers.get("x-csrf-token");
+    if (!validateCsrfToken(request, csrfToken)) {
+      return buildInvalidCsrfResponse(request);
+    }
+
     const body = await request.json();
     const { tenantId } = body;
 

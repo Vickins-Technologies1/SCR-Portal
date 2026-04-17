@@ -39,7 +39,7 @@ export default function AirbnbTenantDashboardPage() {
     const role = Cookies.get("role");
     const userId = Cookies.get("userId");
     if (!role || role !== "tenant" || !userId) {
-      router.replace("/tenant-login");
+      router.replace("/airbnb-tenant-login");
     }
   }, [router]);
 
@@ -88,7 +88,7 @@ export default function AirbnbTenantDashboardPage() {
     Cookies.remove("permissions");
     Cookies.remove("ownerId");
     Cookies.remove("csrf-token");
-    window.location.href = "/tenant-login";
+    window.location.href = "/airbnb-tenant-login";
   };
 
   const booking = data?.booking;
@@ -194,4 +194,3 @@ export default function AirbnbTenantDashboardPage() {
     </PublicThemeWrapper>
   );
 }
-

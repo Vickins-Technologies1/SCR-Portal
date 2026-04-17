@@ -366,7 +366,7 @@ export async function POST(request: NextRequest) {
         });
         if (user) {
           finalRole = "tenant";
-          redirectPath = "/tenant-dashboard";
+          redirectPath = user?.accountType === "airbnb_guest" ? "/airbnb-tenant-dashboard" : "/tenant-dashboard";
           userCollection = "tenants";
         }
       }
@@ -402,7 +402,9 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-        const requiresOtp = !shouldBypassOtp(user.email?.toString(), finalRole);
+        const isAirbnbGuestTenant =
+          finalRole === "tenant" && userCollection === "tenants" && user?.accountType === "airbnb_guest";
+        const requiresOtp = isAirbnbGuestTenant ? false : !shouldBypassOtp(user.email?.toString(), finalRole);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();

@@ -261,7 +261,7 @@ export default function AirbnbBookingsPage() {
 
     const res = await fetch("/api/impersonate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken! },
       credentials: "include",
       body: JSON.stringify({ tenantId: booking.tenantId }),
     });

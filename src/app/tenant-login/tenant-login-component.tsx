@@ -10,9 +10,22 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
-export default function TenantLoginPage() {
+type TenantLoginVariant = "rental" | "airbnb";
+
+export default function TenantLoginPage({ variant = "rental" }: { variant?: TenantLoginVariant }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const isAirbnbGuestPortal = variant === "airbnb";
+  const portalTitle = isAirbnbGuestPortal ? "Guest Payment Portal" : "Tenant Portal";
+  const portalSubtitle = isAirbnbGuestPortal
+    ? "Pay for your booking • View amount due • Get support securely"
+    : "Pay rent • Report issues • View statements • Communicate securely";
+  const portalKicker = isAirbnbGuestPortal ? "Simple. Secure. Pay in minutes." : "Simple. Secure. Always connected.";
+  const formSubtitle = isAirbnbGuestPortal
+    ? "Secure access to your booking payment portal"
+    : "Secure access to your rental dashboard";
+  const defaultRedirectPath = isAirbnbGuestPortal ? "/airbnb-tenant-dashboard" : "/tenant-dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +43,7 @@ export default function TenantLoginPage() {
   // Auto-fill demo credentials
   useEffect(() => {
     const demo = searchParams.get("demo");
-    if (demo === "tenant") {
+    if (!isAirbnbGuestPortal && demo === "tenant") {
       setEmail("tenant@demo.com");
       setPassword("Tenant@2025!");
       setTimeout(() => {
@@ -98,7 +111,7 @@ export default function TenantLoginPage() {
         sameSite: "strict",
       });
 
-      router.push(result.redirect || "/tenant-dashboard");
+      router.push(result.redirect || defaultRedirectPath);
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
     } finally {
@@ -140,7 +153,7 @@ export default function TenantLoginPage() {
         sameSite: "strict",
       });
 
-      router.push(result.redirect || "/tenant-dashboard");
+      router.push(result.redirect || defaultRedirectPath);
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
       autoVerifyRef.current = "";
@@ -300,7 +313,7 @@ export default function TenantLoginPage() {
             transition={{ delay: 0.2, duration: 0.9 }}
             className="text-3xl sm:text-4xl xl:text-5xl font-extrabold tracking-tight text-gradient-primary"
           >
-            Tenant Portal
+            {portalTitle}
           </motion.h2>
 
           <motion.p
@@ -309,7 +322,7 @@ export default function TenantLoginPage() {
             transition={{ delay: 0.4, duration: 0.9 }}
             className="text-sm sm:text-base xl:text-lg font-light text-muted-foreground leading-relaxed max-w-md mx-auto"
           >
-            Pay rent • Report issues • View statements • Communicate securely
+            {portalSubtitle}
           </motion.p>
 
           <motion.p
@@ -318,7 +331,7 @@ export default function TenantLoginPage() {
             transition={{ delay: 0.55 }}
             className="text-xs sm:text-sm xl:text-base font-medium text-primary tracking-wide"
           >
-            Simple. Secure. Always connected.
+            {portalKicker}
           </motion.p>
         </div>
       </div>
@@ -347,50 +360,51 @@ export default function TenantLoginPage() {
 
             <div className="text-center space-y-1">
               <h1 className="text-lg xs:text-xl sm:text-2xl md:text-2.5xl font-extrabold text-gradient-primary">
-                Tenant Portal
+                {portalTitle}
               </h1>
               <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium">
-                Secure access to your rental dashboard
+                {formSubtitle}
               </p>
             </div>
-                        {/* Owner Portal Link with tooltip */}
-            <div className="relative group">
-              <Link
-                href="/"
-                className="flex items-center justify-center gap-2 w-full bg-[linear-gradient(110deg,rgba(66,199,117,0.18),rgba(30,58,138,0.08))] hover:bg-[linear-gradient(110deg,rgba(66,199,117,0.24),rgba(30,58,138,0.12))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 xs:py-3 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-xs xs:text-sm sm:text-base"
-              >
-                <FaUserTie className="text-primary text-lg" />
-                <span>I'm a Property Owner</span>
-                <FaArrowRight className="text-primary opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-              </Link>
-
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                <div
-                  tabIndex={0}
-                  className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help outline-none focus:ring-2 focus:ring-primary/50 rounded-full"
+            {!isAirbnbGuestPortal ? (
+              <div className="relative group">
+                <Link
+                  href="/"
+                  className="flex items-center justify-center gap-2 w-full bg-[linear-gradient(110deg,rgba(66,199,117,0.18),rgba(30,58,138,0.08))] hover:bg-[linear-gradient(110deg,rgba(66,199,117,0.24),rgba(30,58,138,0.12))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 xs:py-3 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-xs xs:text-sm sm:text-base"
                 >
-                  <FaInfoCircle className="text-primary/70 hover:text-primary text-base xs:text-lg transition-colors" />
+                  <FaUserTie className="text-primary text-lg" />
+                  <span>I'm a Property Owner</span>
+                  <FaArrowRight className="text-primary opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                </Link>
+
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
                   <div
-                    className="
-                      absolute bottom-full right-0 mb-2 z-20 w-max max-w-[220px]
-                      opacity-0 translate-y-1 scale-95
-                      transition-all duration-200
-                      pointer-events-none
-                      group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100
-                      group-focus-within:opacity-100 group-focus-within:translate-y-0 group-focus-within:scale-100
-                      group-active:opacity-100 group-active:translate-y-0 group-active:scale-100
-                    "
+                    tabIndex={0}
+                    className="relative flex items-center justify-center w-5 h-5 xs:w-6 xs:h-6 cursor-help outline-none focus:ring-2 focus:ring-primary/50 rounded-full"
                   >
-                    <div className="bg-white text-foreground text-xs rounded-lg py-1.5 px-2.5 shadow-lg border border-border leading-snug">
-                      For property owners & managers
-                      <br />
-                      <span className="text-foreground/70">Manage properties, tenants & finances</span>
+                    <FaInfoCircle className="text-primary/70 hover:text-primary text-base xs:text-lg transition-colors" />
+                    <div
+                      className="
+                        absolute bottom-full right-0 mb-2 z-20 w-max max-w-[220px]
+                        opacity-0 translate-y-1 scale-95
+                        transition-all duration-200
+                        pointer-events-none
+                        group-hover:opacity-100 group-hover:translate-y-0 group-hover:scale-100
+                        group-focus-within:opacity-100 group-focus-within:translate-y-0 group-focus-within:scale-100
+                        group-active:opacity-100 group-active:translate-y-0 group-active:scale-100
+                      "
+                    >
+                      <div className="bg-white text-foreground text-xs rounded-lg py-1.5 px-2.5 shadow-lg border border-border leading-snug">
+                        For property owners & managers
+                        <br />
+                        <span className="text-foreground/70">Manage properties, tenants & finances</span>
+                      </div>
+                      <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-white drop-shadow" />
                     </div>
-                    <div className="absolute bottom-[-6px] right-3 w-0 h-0 border-l-5 border-l-transparent border-r-5 border-r-transparent border-t-5 border-t-white drop-shadow" />
                   </div>
                 </div>
               </div>
-            </div>
+            ) : null}
 
             {error && (
               <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
@@ -398,27 +412,30 @@ export default function TenantLoginPage() {
               </div>
             )}
 
-            <div className="relative my-1 sm:my-2">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
-              </div>
-            </div>
+            {!isAirbnbGuestPortal ? (
+              <>
+                <div className="relative my-1 sm:my-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
+                  </div>
+                </div>
 
-            {/* Google Sign-In (placeholder) */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              type="button"
-              onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
-              disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
-            >
-              <FaGoogle className="text-red-500 text-lg" />
-              Continue with Google
-            </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="button"
+                  onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
+                  disabled={isSubmitting}
+                  className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
+                >
+                  <FaGoogle className="text-red-500 text-lg" />
+                  Continue with Google
+                </motion.button>
+              </>
+            ) : null}
 
             {otpRequired ? (
               <form onSubmit={handleOtpVerify} className="space-y-3.5 sm:space-y-4 pt-1">
