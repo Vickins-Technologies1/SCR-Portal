@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { getReviewSummaryForListings } from "@/lib/property-reviews";
+import { pickListingContactPhone } from "@/lib/listing-contact";
 
 const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
@@ -189,6 +190,15 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
         }
 
         const ownerIdValue = listing.ownerId ? String(listing.ownerId) : "";
+        const listingContactPhone = pickListingContactPhone(listing);
+        const ownerFromAccount = ownerMap[ownerIdValue] || null;
+        const owner =
+          ownerFromAccount || listingContactPhone
+            ? {
+                email: ownerFromAccount?.email,
+                phone: listingContactPhone ?? ownerFromAccount?.phone,
+              }
+            : null;
         const reviewSummary = reviewSummaryMap.get(listingId);
         const rating = reviewSummary?.rating ?? 0;
         const reviewCount = reviewSummary?.reviewCount ?? 0;
@@ -212,7 +222,7 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
           availability,
           rating,
           reviewCount,
-          owner: ownerMap[ownerIdValue] || null,
+          owner,
         };
       })
       .filter(Boolean);
@@ -253,6 +263,15 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
         }
 
         const ownerIdValue = listing.ownerId ? String(listing.ownerId) : "";
+        const listingContactPhone = pickListingContactPhone(listing);
+        const ownerFromAccount = ownerMap[ownerIdValue] || null;
+        const owner =
+          ownerFromAccount || listingContactPhone
+            ? {
+                email: ownerFromAccount?.email,
+                phone: listingContactPhone ?? ownerFromAccount?.phone,
+              }
+            : null;
 
         return {
           _id: listingId,
@@ -274,7 +293,7 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
           licenseStatus: listing.licenseStatus || "missing",
           createdAt: toISO(listing.createdAt) || "",
           updatedAt: toISO(listing.updatedAt),
-          owner: ownerMap[ownerIdValue] || null,
+          owner,
         };
       })
       .filter(Boolean);

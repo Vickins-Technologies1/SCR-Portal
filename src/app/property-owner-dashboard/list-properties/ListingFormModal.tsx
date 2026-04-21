@@ -45,6 +45,7 @@ export default function ListingFormModal({
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [isAdvertised, setIsAdvertised] = useState<boolean>(false);
   const [description, setDescription] = useState<string>("");
+  const [contactPhone, setContactPhone] = useState<string>("");
   const [facilities, setFacilities] = useState<string[]>([]);
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -79,6 +80,7 @@ export default function ListingFormModal({
         setSelectedPropertyId(prop._id);
         setIsAdvertised(prop.isAdvertised ?? false);
         setDescription(prop.description || "");
+        setContactPhone(prop.contactPhone || "");
         setFacilities(prop.facilities || []);
         setImagePreviews(prop.images || []);
       }
@@ -91,6 +93,7 @@ export default function ListingFormModal({
     setSelectedPropertyId("");
     setIsAdvertised(false);
     setDescription("");
+    setContactPhone("");
     setFacilities([]);
     setImages([]);
     setImagePreviews([]);
@@ -113,6 +116,11 @@ export default function ListingFormModal({
       errors.description = "Description cannot exceed 500 characters";
     }
 
+    const contactPhoneValue = contactPhone.trim();
+    if (contactPhoneValue && !/^\+\d{8,15}$/.test(contactPhoneValue)) {
+      errors.contactPhone = "Phone number must start with + and contain 8–15 digits total";
+    }
+
     if (facilities.length > 10) {
       errors.facilities = "Maximum 10 facilities allowed";
     }
@@ -126,7 +134,7 @@ export default function ListingFormModal({
     }
 
     setFormErrors(errors);
-  }, [mode, selectedPropertyId, description, facilities, imagePreviews]);
+  }, [mode, selectedPropertyId, description, contactPhone, facilities, imagePreviews]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -222,6 +230,7 @@ export default function ListingFormModal({
       const payload: Partial<Listing> = {
         isAdvertised,
         description: description.trim() || undefined,
+        contactPhone: contactPhone.trim(),
         facilities: facilities.length > 0 ? facilities : undefined,
         images: finalImageUrls, // Always send the full current set (can be [] in edit mode)
       };
@@ -328,6 +337,24 @@ export default function ListingFormModal({
           </p>
           {formErrors.description && (
             <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>
+          )}
+        </div>
+
+        {/* Contact phone */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            Listing contact phone (optional)
+          </label>
+          <input
+            type="tel"
+            value={contactPhone}
+            onChange={(e) => setContactPhone(e.target.value)}
+            placeholder="+254712345678"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white disabled:opacity-60"
+            disabled={isSubmitting || isUploading}
+          />
+          {formErrors.contactPhone && (
+            <p className="text-red-500 text-xs mt-1">{formErrors.contactPhone}</p>
           )}
         </div>
 

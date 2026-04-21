@@ -70,6 +70,7 @@ export interface Listing {
   description?: string;
   facilities?: string[];
   images: string[]; // Independent from any core property images
+  contactPhone?: string;
 
   // Advertisement controls
   isAdvertised: boolean;

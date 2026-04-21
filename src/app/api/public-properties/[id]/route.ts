@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { getReviewSummaryForListing } from "@/lib/property-reviews";
+import { pickListingContactPhone } from "@/lib/listing-contact";
 
 const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
@@ -106,6 +107,7 @@ export async function GET(
               { projection: { email: 1, phone: 1 } }
             )
         : null;
+      const listingContactPhone = pickListingContactPhone(airbnbListing);
 
       const formatted = {
         _id: airbnbListing.externalId || airbnbListing._id?.toString?.() || "",
@@ -139,7 +141,9 @@ export async function GET(
         {
           success: true,
           property: formatted,
-          owner: owner ? { email: owner.email, phone: owner.phone } : null,
+          owner: owner || listingContactPhone
+            ? { email: owner?.email, phone: listingContactPhone ?? owner?.phone }
+            : null,
         },
         {
           status: 200,
@@ -177,6 +181,7 @@ export async function GET(
             { projection: { email: 1, phone: 1 } }
           )
       : null;
+    const listingContactPhone = pickListingContactPhone(listing);
 
     const availability = summarizeAvailability(unitTypes, tenants.length);
 
@@ -212,7 +217,9 @@ export async function GET(
       {
         success: true,
         property: formatted,
-        owner: owner ? { email: owner.email, phone: owner.phone } : null,
+        owner: owner || listingContactPhone
+          ? { email: owner?.email, phone: listingContactPhone ?? owner?.phone }
+          : null,
       },
       {
         status: 200,

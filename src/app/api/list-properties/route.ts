@@ -24,6 +24,7 @@ interface PropertyListing {
   facilities: string[];
   unitTypes: UnitType[];
   images: string[];
+  contactPhone?: string;
   isAdvertised: boolean;
   adExpiration?: Date;
   status: 'Active' | 'Inactive';
@@ -111,6 +112,7 @@ export async function GET(request: NextRequest) {
           facilities: listing.facilities,
           unitTypes,
           images: listing.images,
+          contactPhone: listing.contactPhone,
           isAdvertised: listing.isAdvertised,
           adExpiration: listing.adExpiration?.toISOString(),
           status: listing.status,
@@ -160,6 +162,7 @@ export async function POST(request: NextRequest) {
       facilities = [],
       images = [],
       isAdvertised = false,
+      contactPhone,
     } = body;
 
     if (!originalPropertyId || !ObjectId.isValid(originalPropertyId)) {
@@ -191,6 +194,30 @@ export async function POST(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
+
+    const contactPhoneValue =
+      typeof contactPhone === "string" && contactPhone.trim()
+        ? contactPhone.trim()
+        : undefined;
+
+    if (contactPhoneValue && !/^\+\d{8,15}$/.test(contactPhoneValue)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Contact phone must start with + and contain 8–15 digits total",
+        },
+        { status: 400 }
+      );
+    }
+
+    const ownerProfile = await db.collection("propertyOwners").findOne(
+      { _id: new ObjectId(userId as string) },
+      { projection: { phone: 1 } }
+    );
+    const ownerPhoneValue =
+      typeof ownerProfile?.phone === "string" && ownerProfile.phone.trim()
+        ? ownerProfile.phone.trim()
+        : undefined;
 
     const original = await db
       .collection('properties')
@@ -228,6 +255,7 @@ export async function POST(request: NextRequest) {
         quantity: u.quantity,
       })),
       images,
+      contactPhone: contactPhoneValue ?? ownerPhoneValue,
       isAdvertised,
       adExpiration: isAdvertised
         ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -284,7 +312,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { _id, description, facilities = [], images = [], isAdvertised } = body;
+    const { _id, description, facilities = [], images = [], isAdvertised, contactPhone } = body;
 
     if (!_id || !ObjectId.isValid(_id)) {
       return NextResponse.json(
@@ -313,6 +341,23 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const contactPhoneValue =
+      typeof contactPhone === "string" && contactPhone.trim()
+        ? contactPhone.trim()
+        : contactPhone === "" || contactPhone === null
+          ? ""
+          : undefined;
+
+    if (typeof contactPhoneValue === "string" && contactPhoneValue !== "" && !/^\+\d{8,15}$/.test(contactPhoneValue)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Contact phone must start with + and contain 8–15 digits total",
+        },
+        { status: 400 }
+      );
+    }
+
     const update: Partial<PropertyListing> = {
       description: description?.trim(),
       facilities: facilities.filter((f: string) => FACILITIES.includes(f)),
@@ -326,11 +371,20 @@ export async function PUT(request: NextRequest) {
       updatedAt: new Date(),
     };
 
+    const updateDoc: Record<string, unknown> = { $set: update };
+    if (contactPhoneValue === "") {
+      (updateDoc.$set as any).contactPhone = undefined;
+      updateDoc.$unset = { contactPhone: "" };
+      delete (updateDoc.$set as any).contactPhone;
+    } else if (typeof contactPhoneValue === "string") {
+      (updateDoc.$set as any).contactPhone = contactPhoneValue;
+    }
+
     await db
       .collection('propertyListings')
       .updateOne(
         { _id: new ObjectId(_id) },
-        { $set: update }
+        updateDoc
       );
 
     return NextResponse.json(
