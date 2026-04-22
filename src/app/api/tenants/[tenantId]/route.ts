@@ -10,6 +10,7 @@ import { sendTenantDeletionRequestEmail } from "../../../../lib/email";
 import { sendWelcomeSms } from "../../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
 import { buildInvalidCsrfResponse } from "../../../../lib/csrf";
+import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 
 const logger = {
   info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
@@ -38,33 +39,19 @@ const formatDate = (date: any): string => {
   return isNaN(d.getTime()) ? "" : d.toISOString();
 };
 
-const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out"];
-
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
   propertyId: string,
   excludeTenantId?: ObjectId,
   now: Date = new Date()
 ): Promise<Map<string, number>> => {
-  const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
-  if (ObjectId.isValid(propertyId)) {
-    propertyIdCandidates.push(new ObjectId(propertyId));
-  }
-
-  const todayISO = now.toISOString();
-  const query: any = {
-    propertyId: { $in: propertyIdCandidates },
-    status: { $nin: NON_OCCUPYING_STATUSES },
-    leaseStartDate: { $ne: null, $lte: todayISO },
-    leaseEndDate: { $ne: null, $gte: todayISO },
-  };
-  if (excludeTenantId) {
-    query._id = { $ne: excludeTenantId };
-  }
-
-  const tenants = await db.collection<Tenant>("tenants")
-    .find(query, { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } })
-    .toArray();
+  const tenants = await fetchTenantsActiveOnDay<Tenant>(
+    db,
+    [propertyId],
+    now,
+    { leasedUnits: 1, unitIdentifier: 1, unitType: 1 },
+    excludeTenantId
+  );
 
   const occupiedByUnit = new Map<string, number>();
   const bump = (key?: string) => {
@@ -454,6 +441,7 @@ export async function DELETE(
         tenantId: tenant._id.toString(),
         tenantName: tenant.name,
         ownerId: effectiveOwnerId,
+        audience: "owner",
         deliveryMethod: "app",
         deliveryStatus: "success",
       });

@@ -7,6 +7,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 
 interface Tenant {
   _id: ObjectId;
@@ -107,18 +108,10 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalUnits = totalUnitsResult[0]?.totalUnits || 0;
 
-    // 2. Active Tenants + Occupied Units
-    const activeTenants = await db.collection<Tenant>("tenants")
-      .find({
-        propertyId: { $in: propertyIds },
-        leaseStartDate: { $lte: todayISO },
-        leaseEndDate: { $gte: todayISO },
-        status: "active",
-      })
-      .toArray() as Tenant[];
-
+    // 2. Active Tenants + Occupied Units (DB-filtered, supports string/Date lease fields and multi-unit tenants)
+    const activeTenants = await fetchTenantsActiveOnDay<Tenant>(db, propertyIds, today);
     const totalTenants = activeTenants.length;
-    const occupiedUnits = totalTenants;
+    const occupiedUnits = activeTenants.reduce((sum, tenant) => sum + countOccupiedUnitsForTenant(tenant), 0);
 
     // 3. Total Monthly Revenue Collected (this month)
     const monthlyRentResult = await db.collection("payments")

@@ -7,33 +7,19 @@ import { UNIT_TYPES } from '../../../lib/unitTypes';
 import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
 import { buildInvalidCsrfResponse } from '../../../lib/csrf';
-
-const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out", "evicted"];
+import { fetchTenantsActiveOnDay } from '@/lib/tenant-occupancy';
 
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
   propertyId: string,
   now: Date = new Date()
 ): Promise<Map<string, number>> => {
-  const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
-  if (ObjectId.isValid(propertyId)) {
-    propertyIdCandidates.push(new ObjectId(propertyId));
-  }
-
-  const todayISO = now.toISOString();
-  const tenantFilter = {
-    propertyId: { $in: propertyIdCandidates as any },
-    status: { $nin: NON_OCCUPYING_STATUSES },
-    leaseStartDate: { $ne: null, $lte: todayISO },
-    leaseEndDate: { $ne: null, $gte: todayISO },
-  } as any;
-
-  const tenants = await db.collection<Tenant>('tenants')
-    .find(
-      tenantFilter,
-      { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } }
-    )
-    .toArray();
+  const tenants = await fetchTenantsActiveOnDay<Tenant>(
+    db,
+    [propertyId],
+    now,
+    { leasedUnits: 1, unitIdentifier: 1, unitType: 1 }
+  );
 
   const occupiedByUnit = new Map<string, number>();
   const bump = (key?: string) => {

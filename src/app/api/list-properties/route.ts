@@ -5,6 +5,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import logger from '@/lib/logger';
 import { buildInvalidCsrfResponse } from '@/lib/csrf';
+import { getOccupancyByPropertyAndUnitType } from '@/lib/tenant-occupancy';
 
 interface UnitType {
   type: string;
@@ -38,12 +39,12 @@ const FACILITIES = [
 ];
 
 
-const summarizeAvailability = (unitTypes: UnitType[], totalTenants?: number) => {
+const summarizeAvailability = (unitTypes: UnitType[], occupiedUnits?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
 
-  if (typeof totalTenants === "number") {
-    const normalizedTenants = Math.max(0, totalTenants);
-    const totalOccupied = Math.min(totalUnits, normalizedTenants);
+  if (typeof occupiedUnits === "number") {
+    const normalizedOccupied = Math.max(0, occupiedUnits);
+    const totalOccupied = Math.min(totalUnits, normalizedOccupied);
     const totalVacant = Math.max(0, totalUnits - totalOccupied);
     const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
     return { totalUnits, totalVacant, totalOccupied, occupancyRate };
@@ -81,21 +82,24 @@ export async function GET(request: NextRequest) {
       .sort({ createdAt: -1 })
       .toArray();
 
+    const today = new Date();
+    const listingPropertyIds = Array.from(
+      new Set(
+        listings.map((listing) =>
+          (listing.originalPropertyId ? listing.originalPropertyId.toString() : listing._id.toString())
+        )
+      )
+    );
+    const occupancyByProperty = await getOccupancyByPropertyAndUnitType(db, listingPropertyIds, today);
+
     const enriched = await Promise.all(
       listings.map(async (listing) => {
         const propertyId = listing.originalPropertyId
           ? listing.originalPropertyId.toString()
           : listing._id.toString();
 
-        const tenants = await db
-          .collection('tenants')
-          .find({ propertyId })
-          .toArray();
-
-        const occupiedByType = tenants.reduce((acc: Record<string, number>, t) => {
-          acc[t.unitType] = (acc[t.unitType] || 0) + 1;
-          return acc;
-        }, {});
+        const occupancy = occupancyByProperty[propertyId] || { totalTenants: 0, occupiedUnits: 0, occupiedByType: {} };
+        const occupiedByType = occupancy.occupiedByType || {};
 
         const unitTypes = (listing.unitTypes || []).map((u) => ({
           ...u,
@@ -118,8 +122,9 @@ export async function GET(request: NextRequest) {
           status: listing.status,
           createdAt: listing.createdAt.toISOString(),
           updatedAt: listing.updatedAt.toISOString(),
-          availability: summarizeAvailability(unitTypes, tenants.length),
+          availability: summarizeAvailability(unitTypes, occupancy.occupiedUnits),
           occupiedByType,
+          occupancy: { totalTenants: occupancy.totalTenants, occupiedUnits: occupancy.occupiedUnits },
         };
       })
     );

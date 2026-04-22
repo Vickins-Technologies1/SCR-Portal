@@ -6,35 +6,33 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/rentaldb';
+const uri = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/rentaldb';
 
-if (!uri) {
-  throw new Error('Please define MONGODB_URI in .env.local');
-}
+let client: MongoClient | undefined;
 
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
+const getClientPromise = (): Promise<MongoClient> => {
+  if (process.env.NODE_ENV === 'development') {
+    if (!global._mongoClientPromise) {
+      client = new MongoClient(uri, {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 10000,
+      });
+      global._mongoClientPromise = client.connect();
+    }
+    return global._mongoClientPromise;
+  }
 
-if (process.env.NODE_ENV === 'development') {
-  // In development: reuse connection across hot reloads
   if (!global._mongoClientPromise) {
     client = new MongoClient(uri, {
-      // Optional: improve connection resilience
-      maxPoolSize: 10,
+      maxPoolSize: 20,
       serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 10000,
     });
     global._mongoClientPromise = client.connect();
   }
-  clientPromise = global._mongoClientPromise;
-} else {
-  // In production: fresh connection
-  client = new MongoClient(uri, {
-    maxPoolSize: 20,
-    serverSelectionTimeoutMS: 5000,
-  });
-  clientPromise = client.connect();
-}
+
+  return global._mongoClientPromise;
+};
 
 // Export type for use in API routes
 export interface DBConnection {
@@ -44,7 +42,7 @@ export interface DBConnection {
 
 export async function connectToDatabase(): Promise<DBConnection> {
   try {
-    const connectedClient = await clientPromise;
+    const connectedClient = await getClientPromise();
 
     // Optional: log only in dev
     if (process.env.NODE_ENV === 'development') {

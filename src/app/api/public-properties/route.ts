@@ -4,13 +4,14 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { getReviewSummaryForListings } from "@/lib/property-reviews";
 import { pickListingContactPhone } from "@/lib/listing-contact";
+import { getOccupancyByPropertyAndUnitType } from "@/lib/tenant-occupancy";
 
-const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
+const summarizeAvailability = (unitTypes: any[], occupiedUnits?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
 
-  if (typeof totalTenants === "number") {
-    const normalizedTenants = Math.max(0, totalTenants);
-    const totalOccupied = Math.min(totalUnits, normalizedTenants);
+  if (typeof occupiedUnits === "number") {
+    const normalizedOccupied = Math.max(0, occupiedUnits);
+    const totalOccupied = Math.min(totalUnits, normalizedOccupied);
     const totalVacant = Math.max(0, totalUnits - totalOccupied);
     const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
     return { totalUnits, totalVacant, totalOccupied, occupancyRate };
@@ -92,45 +93,7 @@ export async function GET(request: NextRequest) {
       )
     );
 
-    const propertyIdMatch: (string | ObjectId)[] = [...propertyIds];
-    propertyIds.forEach((id) => {
-      if (ObjectId.isValid(id)) {
-        propertyIdMatch.push(new ObjectId(id));
-      }
-    });
-
-    // Fetch tenants and group by propertyId AND unitType
-    const tenantGroups = await db
-      .collection("tenants")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIdMatch }
-          }
-        },
-        {
-          $group: {
-            _id: { propertyId: "$propertyId", unitType: "$unitType" },
-            count: { $sum: 1 }
-          }
-        }
-      ])
-      .toArray();
-
-    // Build map: propertyId → unitType → occupied count
-    const occupiedMap = tenantGroups.reduce((acc: Record<string, Record<string, number>>, group: any) => {
-      const propId = group._id.propertyId.toString(); // ensure string key
-      const uType = group._id.unitType;
-      if (!acc[propId]) acc[propId] = {};
-      acc[propId][uType] = group.count;
-      return acc;
-    }, {});
-
-    const totalTenantsByProperty = tenantGroups.reduce((acc: Record<string, number>, group: any) => {
-      const propId = group._id.propertyId.toString(); // ensure string key
-      acc[propId] = (acc[propId] || 0) + group.count;
-      return acc;
-    }, {});
+    const occupancyByProperty = await getOccupancyByPropertyAndUnitType(db, propertyIds, new Date());
 
     // Fetch owners (long-term + Airbnb)
     const ownerIds = [
@@ -157,15 +120,15 @@ export async function GET(request: NextRequest) {
       .map((listing) => {
         const listingId = listing._id.toString();
         const propertyId = propertyIdByListingId.get(listingId) || listingId;
-        const occupiedByType = occupiedMap[propertyId] || {};
+        const occupancy = occupancyByProperty[propertyId] || { totalTenants: 0, occupiedUnits: 0, occupiedByType: {} };
+        const occupiedByType = occupancy.occupiedByType || {};
 
         const unitTypes = (listing.unitTypes || []).map((u: any) => ({
           ...u,
           vacant: Math.max(0, (u.quantity || 0) - (occupiedByType[u.type] || 0)),
         }));
 
-        const totalTenants = totalTenantsByProperty[propertyId] || 0;
-        const availability = summarizeAvailability(unitTypes, totalTenants);
+        const availability = summarizeAvailability(unitTypes, occupancy.occupiedUnits);
 
         const prices = unitTypes
           .map((u: any) => (typeof u.price === "number" ? u.price : Number(u.price)))

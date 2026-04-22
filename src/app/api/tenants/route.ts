@@ -11,6 +11,7 @@ import { TenantRequest, ResponseTenant, Tenant } from "../../../types/tenant";
 import { Property } from "../../../types/property";
 import { getOwnerDueStatus } from "../../../lib/billing";
 import { buildInvalidCsrfResponse } from "../../../lib/csrf";
+import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -31,33 +32,19 @@ const validateCsrfToken = async (request: NextRequest): Promise<boolean> => {
 
 const toISO = (date?: Date | string): string | undefined => date ? new Date(date).toISOString() : undefined;
 
-const NON_OCCUPYING_STATUSES: Tenant["status"][] = ["terminated", "inactive", "moved out"];
-
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
   propertyId: string,
   excludeTenantId?: ObjectId,
   now: Date = new Date()
 ): Promise<Map<string, number>> => {
-  const propertyIdCandidates: Array<string | ObjectId> = [propertyId];
-  if (ObjectId.isValid(propertyId)) {
-    propertyIdCandidates.push(new ObjectId(propertyId));
-  }
-
-  const todayISO = now.toISOString();
-  const query: any = {
-    propertyId: { $in: propertyIdCandidates },
-    status: { $nin: NON_OCCUPYING_STATUSES },
-    leaseStartDate: { $ne: null, $lte: todayISO },
-    leaseEndDate: { $ne: null, $gte: todayISO },
-  };
-  if (excludeTenantId) {
-    query._id = { $ne: excludeTenantId };
-  }
-
-  const tenants = await db.collection<Tenant>("tenants")
-    .find(query, { projection: { leasedUnits: 1, unitIdentifier: 1, unitType: 1 } })
-    .toArray();
+  const tenants = await fetchTenantsActiveOnDay<Tenant>(
+    db,
+    [propertyId],
+    now,
+    { leasedUnits: 1, unitIdentifier: 1, unitType: 1 },
+    excludeTenantId
+  );
 
   const occupiedByUnit = new Map<string, number>();
   const bump = (key?: string) => {

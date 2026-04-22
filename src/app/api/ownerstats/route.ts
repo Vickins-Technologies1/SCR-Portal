@@ -5,6 +5,7 @@ import { WithId, ObjectId } from "mongodb";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds } from "@/lib/payment-totals";
+import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 
 interface Property {
   _id: string;
@@ -20,7 +21,7 @@ interface Property {
 }
 
 interface TenantDoc {
-  _id: string;
+  _id: ObjectId;
   propertyId: string;
   leasedUnits?: Array<{
     unitIdentifier?: string;
@@ -56,38 +57,7 @@ interface Stats {
 }
 
 const roundMoney = (value: number) => Math.round(value || 0);
-const NON_OCCUPYING_STATUSES = ["terminated", "inactive", "moved out", "evicted"] as const;
 const ACTIVE_PROPERTY_STATUSES = ["Active", "active"] as const;
-
-const parseDate = (value?: string | Date | null): Date | null => {
-  if (!value) return null;
-  const parsed = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-const endOfDay = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-
-const isTenantActiveOnDate = (tenant: { leaseStartDate?: string | null; leaseEndDate?: string | null }, date: Date) => {
-  const leaseStart = parseDate(tenant.leaseStartDate);
-  const leaseEnd = parseDate(tenant.leaseEndDate);
-  if (leaseStart && startOfDay(date) < startOfDay(leaseStart)) return false;
-  if (leaseEnd && startOfDay(date) > endOfDay(leaseEnd)) return false;
-  return true;
-};
-
-const doesTenantOverlapMonth = (
-  tenant: { leaseStartDate?: string | null; leaseEndDate?: string | null },
-  monthStart: Date,
-  monthEnd: Date
-) => {
-  const leaseStart = parseDate(tenant.leaseStartDate);
-  const leaseEnd = parseDate(tenant.leaseEndDate);
-  if (leaseStart && monthEnd < startOfDay(leaseStart)) return false;
-  if (leaseEnd && monthStart > endOfDay(leaseEnd)) return false;
-  return true;
-};
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -204,21 +174,15 @@ export async function GET(request: NextRequest) {
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
     const tenantCollection = db.collection<TenantDoc>("tenants");
-    const tenants = await tenantCollection.find<WithId<TenantDoc>>({
-      propertyId: { $in: propertyIds },
-      status: { $nin: NON_OCCUPYING_STATUSES },
-    }).toArray();
 
-    const activeTenantsForOccupancy = tenants.filter((tenant) => isTenantActiveOnDate(tenant, today));
-    const activeTenantsForMonth = tenants.filter((tenant) =>
-      doesTenantOverlapMonth(tenant, startOfMonth, endOfMonth)
-    );
+    const activeTenantsForOccupancy = await fetchTenantsActiveOnDay<TenantDoc>(db, propertyIds, today);
+    const activeTenantsForMonth = await fetchTenantsOverlappingRange<TenantDoc>(db, propertyIds, startOfMonth, endOfMonth);
 
     const totalTenants = activeTenantsForOccupancy.length;
-    const occupiedUnits = activeTenantsForOccupancy.reduce((sum, tenant: any) => {
-      const unitCount = tenant.leasedUnits && tenant.leasedUnits.length > 0 ? tenant.leasedUnits.length : 1;
-      return sum + unitCount;
-    }, 0);
+    const occupiedUnits = activeTenantsForOccupancy.reduce(
+      (sum, tenant) => sum + countOccupiedUnitsForTenant(tenant),
+      0
+    );
 
     const rentPaidThisMonthResult = await db
       .collection("payments")

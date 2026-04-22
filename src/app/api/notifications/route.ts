@@ -24,6 +24,7 @@ interface Notification {
   tenantId: string;
   tenantName: string;
   ownerId: string;
+  audience?: "tenant" | "owner";
   deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
   deliveryStatus: "pending" | "success" | "failed";
   errorDetails?: string | null;
@@ -377,6 +378,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         tenantId: tenantId === "all" ? tenant._id.toString() : tenantId,
         tenantName: tenant.name,
         ownerId: effectiveOwnerId,
+        audience: "tenant",
         deliveryMethod: effectiveMethod,
         deliveryStatus: effectiveMethod === "app" ? "success" : deliveryStatus,
         errorDetails,

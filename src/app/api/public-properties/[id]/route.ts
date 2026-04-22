@@ -4,13 +4,14 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { getReviewSummaryForListing } from "@/lib/property-reviews";
 import { pickListingContactPhone } from "@/lib/listing-contact";
+import { getOccupancyByPropertyAndUnitType } from "@/lib/tenant-occupancy";
 
-const summarizeAvailability = (unitTypes: any[], totalTenants?: number) => {
+const summarizeAvailability = (unitTypes: any[], occupiedUnits?: number) => {
   const totalUnits = unitTypes.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
 
-  if (typeof totalTenants === "number") {
-    const normalizedTenants = Math.max(0, totalTenants);
-    const totalOccupied = Math.min(totalUnits, normalizedTenants);
+  if (typeof occupiedUnits === "number") {
+    const normalizedOccupied = Math.max(0, occupiedUnits);
+    const totalOccupied = Math.min(totalUnits, normalizedOccupied);
     const totalVacant = Math.max(0, totalUnits - totalOccupied);
     const occupancyRate = totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0;
     return { totalUnits, totalVacant, totalOccupied, occupancyRate };
@@ -30,14 +31,6 @@ const toISO = (value?: Date | string | null): string | undefined => {
 
 const isValidHexId = (id: string): boolean => {
   return typeof id === "string" && id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id);
-};
-
-const buildTenantMatch = (propertyId: string) => {
-  const matches: (string | ObjectId)[] = [propertyId];
-  if (isValidHexId(propertyId)) {
-    matches.push(new ObjectId(propertyId));
-  }
-  return { propertyId: { $in: matches } };
 };
 
 export async function GET(
@@ -156,16 +149,9 @@ export async function GET(
       ? String(listing.originalPropertyId)
       : String(listing._id);
 
-    const tenants = await db
-      .collection("tenants")
-      .find(buildTenantMatch(propertyId))
-      .toArray();
-
-    const occupiedByType = tenants.reduce((acc: Record<string, number>, t: any) => {
-      const type = t.unitType || "unknown";
-      acc[type] = (acc[type] || 0) + 1;
-      return acc;
-    }, {});
+    const occupancyByProperty = await getOccupancyByPropertyAndUnitType(db, [propertyId], new Date());
+    const occupancy = occupancyByProperty[propertyId] || { totalTenants: 0, occupiedUnits: 0, occupiedByType: {} };
+    const occupiedByType = occupancy.occupiedByType || {};
 
     const unitTypes = (listing.unitTypes || []).map((u: any) => ({
       ...u,
@@ -183,7 +169,7 @@ export async function GET(
       : null;
     const listingContactPhone = pickListingContactPhone(listing);
 
-    const availability = summarizeAvailability(unitTypes, tenants.length);
+    const availability = summarizeAvailability(unitTypes, occupancy.occupiedUnits);
 
     const formatted = {
       _id: String(listing._id),

@@ -8,6 +8,7 @@ import {
   X,
   LayoutDashboard,
   CreditCard,
+  Bell,
   Settings,
   LogOut,
   Wrench,
@@ -84,6 +85,7 @@ export default function TenantDashboardLayout({
     { key: "overview", href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
     { key: "payments", href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
     { key: "maintenance", href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
+    { key: "notifications", href: "/tenant-dashboard/notifications", label: "Notifications", icon: <Bell size={18} /> },
     { key: "vacate", href: "/tenant-dashboard/vacate", label: "Vacate Notice", icon: <DoorOpen size={18} /> },
     { key: "settings", href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
   ];

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import {
   Home,
   DollarSign,
   User,
+  Bell,
   AlertCircle,
   PieChart as PieChartIcon,
   Wallet,
@@ -79,6 +81,14 @@ interface MonthlyPayment {
 interface Analytics {
   monthlyPayments: MonthlyPayment[];
   paymentBreakdown: Array<{ name: string; value: number }>;
+}
+
+interface TenantNotification {
+  _id: string;
+  message: string;
+  type: "payment" | "maintenance" | "tenant" | "other";
+  createdAt: string;
+  status: "unread" | "read";
 }
 
 function SkeletonCard() {
@@ -267,6 +277,8 @@ export default function TenantDashboardPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [recentNotifications, setRecentNotifications] = useState<TenantNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDuesLoading, setIsDuesLoading] = useState(false);
@@ -400,6 +412,30 @@ export default function TenantDashboardPage() {
         const profileTenant = tenantData.tenant;
         setTenant(profileTenant);
         setAnalytics(tenantData.analytics || null);
+
+        // ── Notifications preview (non-blocking) ────────────────────────
+        try {
+          const [notifRes, unreadRes] = await Promise.all([
+            fetch("/api/tenant/notifications?limit=3", { credentials: "include", cache: "no-store" }),
+            fetch("/api/tenant/notifications?unreadCount=1", { credentials: "include", cache: "no-store" }),
+          ]);
+
+          if (notifRes.ok) {
+            const notifData = await notifRes.json();
+            if (notifData?.success && Array.isArray(notifData.data)) {
+              setRecentNotifications(notifData.data);
+            }
+          }
+
+          if (unreadRes.ok) {
+            const unreadData = await unreadRes.json();
+            if (unreadData?.success) {
+              setUnreadNotificationCount(Number(unreadData.unreadCount || 0));
+            }
+          }
+        } catch {
+          // silent fail
+        }
 
         // ── 2. Set property from profile response (preferred) ───────────
         if (tenantData.property) {
@@ -751,6 +787,59 @@ export default function TenantDashboardPage() {
               ) : (
                 <p className="text-gray-500 text-sm">No payment data available</p>
               )}
+            </div>
+
+            <div className="surface-card rounded-3xl p-6 sm:p-7">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-10 w-10 rounded-2xl bg-[#1e3a8a]/10 flex items-center justify-center">
+                  <Bell className="h-5 w-5 text-[#1e3a8a]" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">In-app Inbox</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-semibold text-foreground">Notifications</h2>
+                    <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                      {unreadNotificationCount} unread
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {recentNotifications.length === 0 ? (
+                <p className="text-gray-500 text-sm">No notifications yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {recentNotifications.map((n) => (
+                    <div
+                      key={n._id}
+                      className={`rounded-2xl border p-3 bg-white/70 ${
+                        n.status === "unread" ? "border-primary/30" : "border-border"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {n.type}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {new Date(n.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs sm:text-sm text-foreground whitespace-pre-line line-clamp-2">
+                        {n.message}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4">
+                <Link
+                  href="/tenant-dashboard/notifications"
+                  className="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-primary text-white hover:bg-primary/90 text-xs sm:text-sm font-semibold"
+                >
+                  View all notifications
+                </Link>
+              </div>
             </div>
 
             <div className="surface-card rounded-3xl p-6 sm:p-7">
