@@ -25,7 +25,7 @@ import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import PendingApprovals from "../components/PendingApprovals";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 
 interface Counts {
   propertyOwners: number;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "@/lib/utils";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds } from "@/lib/payment-totals";
 
@@ -367,9 +367,10 @@ export async function GET(request: NextRequest) {
         penaltyFrequency: property?.penaltyFrequency,
       });
       totalPenaltyAmount += penaltyDues;
-      const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
-        ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
-        : (tenant.deposit || 0);
+      const totalDeposit = resolveTenantRequiredDeposit({
+        tenant: tenant as any,
+        unitTypes: property?.unitTypes as any,
+      });
       const depositDues = Math.max(0, totalDeposit - tenantTotals.depositPaid);
       const totalOverdueAmountForTenant = roundMoney(rentDues + depositDues + penaltyDues);
       const roundedOverdue = roundMoney(totalOverdueAmountForTenant);

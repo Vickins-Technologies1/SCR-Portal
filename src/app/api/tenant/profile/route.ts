@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
 interface Tenant {
@@ -237,9 +237,10 @@ export async function GET(request: NextRequest) {
         else if (p.type === "Utility") utilityPaid += p.amount;
       }
 
-      const depositDue = tenantDoc.leasedUnits && tenantDoc.leasedUnits.length > 0
-        ? tenantDoc.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
-        : (tenantDoc.deposit || 0);
+      const depositDue = resolveTenantRequiredDeposit({
+        tenant: tenantDoc as any,
+        unitTypes: (property as any)?.unitTypes,
+      });
 
       const updatedTotalRentPaid = rentPaid;
       const updatedWalletBalance = calculateWalletBalanceFromPayments({

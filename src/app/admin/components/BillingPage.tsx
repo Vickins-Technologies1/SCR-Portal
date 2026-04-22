@@ -13,7 +13,7 @@ import {
 import { motion } from "framer-motion";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 
 interface PropertyOwner {
   _id: string;

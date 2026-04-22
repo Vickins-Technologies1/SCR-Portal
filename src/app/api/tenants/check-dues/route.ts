@@ -5,7 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate } from "@/lib/utils";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 
 interface Tenant {
@@ -176,7 +176,6 @@ export async function GET(request: NextRequest) {
         today,
         rentOverrideMap,
       });
-      const depositDue = tenant.deposit || 0;
       const rentDues = Math.max(0, rentDue - paid.rentPaid);
       const penaltyDues = calculateOverduePenalty({
         rentDues,
@@ -186,9 +185,10 @@ export async function GET(request: NextRequest) {
         penaltyAmount: property?.penaltyAmount,
         penaltyFrequency: property?.penaltyFrequency,
       });
-      const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
-        ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
-        : depositDue;
+      const totalDeposit = resolveTenantRequiredDeposit({
+        tenant: tenant as any,
+        unitTypes: property?.unitTypes,
+      });
       const totalDue = rentDue + totalDeposit + penaltyDues;
       const totalPaid = paid.rentPaid + paid.depositPaid;
       const remaining = Math.max(0, totalDue - totalPaid);
@@ -294,15 +294,15 @@ export async function POST(request: NextRequest) {
       today,
       rentOverrideMap,
     });
-    const depositDue = tenant.deposit || 0;
     const property = ObjectId.isValid(tenant.propertyId)
       ? await db.collection("properties").findOne({ _id: new ObjectId(tenant.propertyId) })
       : null;
 
     const updatedTotalRentPaid = rentPaid;
-    const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
-      : depositDue;
+    const totalDeposit = resolveTenantRequiredDeposit({
+      tenant: tenant as any,
+      unitTypes: (property as any)?.unitTypes,
+    });
     const updatedWalletBalance = calculateWalletBalanceFromPayments({
       rentPaid,
       depositPaid,
@@ -365,7 +365,7 @@ export async function POST(request: NextRequest) {
       tenantId,
       monthsStayed,
       rentDue,
-      depositDue,
+      depositDue: totalDeposit,
       rentPaid,
       depositPaid,
       totalRemainingDues,

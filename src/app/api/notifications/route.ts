@@ -35,6 +35,7 @@ interface PropertyPenaltyConfig {
   rentPaymentDate?: number;
   penaltyAmount?: number;
   penaltyFrequency?: "daily" | "weekly";
+  unitTypes?: Array<{ type: string; price: number; deposit: number; quantity: number; uniqueType?: string }>;
 }
 
 const transporter = nodemailer.createTransport({
@@ -231,16 +232,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       // Generate payment message
       if (type === "payment") {
-        const property = propertyMap.get(tenant.propertyId);
-        const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString());
-        const tenantWithTotals = tenantTotals
-          ? {
-              ...tenant,
-              totalRentPaid: tenantTotals.rentPaid,
-              totalDepositPaid: tenantTotals.depositPaid,
-              totalUtilityPaid: tenantTotals.utilityPaid,
-            }
-          : tenant;
+         const property = propertyMap.get(tenant.propertyId);
+         const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString());
+         const tenantWithTotals = {
+           ...tenant,
+           totalRentPaid: tenantTotals?.rentPaid ?? 0,
+           totalDepositPaid: tenantTotals?.depositPaid ?? 0,
+           totalUtilityPaid: tenantTotals?.utilityPaid ?? 0,
+         };
         const overrides = filterOverridesForUnit(
           rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
           tenant.unitIdentifier
@@ -252,6 +251,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           penaltyAmount: property?.penaltyAmount,
           penaltyFrequency: property?.penaltyFrequency,
           rentPaymentDate: property?.rentPaymentDate,
+          propertyUnitTypes: property?.unitTypes as any,
         });
         if (dues.paymentStatus === "up-to-date") {
           logger.info("Skipping up-to-date tenant", { tenantId: tenant._id.toString() });

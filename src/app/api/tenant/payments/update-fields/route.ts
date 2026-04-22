@@ -4,7 +4,7 @@ import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
-import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments } from "../../../../../lib/utils";
+import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantRequiredDeposit } from "../../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "../../../../../lib/payment-totals";
 
@@ -151,9 +151,10 @@ export async function POST(request: NextRequest) {
         ? Math.max(0, paymentTotals.depositPaid - payment.amount)
         : paymentTotals.depositPaid;
     const rentDueBefore = Math.max(0, totalRentDue - rentPaidBefore);
-    const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
-      : (tenant.deposit || 0);
+    const totalDeposit = resolveTenantRequiredDeposit({
+      tenant: tenant as any,
+      unitTypes: (property as any)?.unitTypes,
+    });
     const depositDueBefore = Math.max(0, totalDeposit - depositPaidBefore);
     const utilityDueBefore = 0;
 

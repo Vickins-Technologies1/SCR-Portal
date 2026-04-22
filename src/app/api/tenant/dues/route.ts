@@ -4,7 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateTenantDues } from "@/lib/utils";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateTenantDues, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
 
@@ -260,9 +260,10 @@ export async function GET(request: NextRequest) {
         penaltyAmount: property?.penaltyAmount,
         penaltyFrequency: property?.penaltyFrequency,
       });
-      const totalDeposit = tenant.leasedUnits && tenant.leasedUnits.length > 0
-        ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
-        : (tenant.deposit || 0);
+      const totalDeposit = resolveTenantRequiredDeposit({
+        tenant: tenant as any,
+        unitTypes: property?.unitTypes as any,
+      });
       const totalDue = rentDue + totalDeposit + penaltyDues;
       const tenantTotals = paymentTotalsByTenant.get(tenantObjectId.toString()) || {
         rentPaid: 0,
@@ -386,6 +387,7 @@ export async function POST(request: NextRequest) {
       penaltyAmount: property?.penaltyAmount,
       penaltyFrequency: property?.penaltyFrequency,
       rentPaymentDate: property?.rentPaymentDate,
+      propertyUnitTypes: (property as any)?.unitTypes,
     });
 
     await db.collection("tenants").updateOne(

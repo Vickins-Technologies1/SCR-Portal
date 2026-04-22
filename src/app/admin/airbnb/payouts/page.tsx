@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Wallet, AlertCircle, RefreshCw } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 import { formatKes } from "@/lib/airbnb-metrics";
 
 interface Payout {

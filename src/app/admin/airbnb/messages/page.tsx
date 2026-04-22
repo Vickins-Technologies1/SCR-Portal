@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { MessageCircle, AlertCircle, RefreshCw } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 
 interface Conversation {
   _id: string;

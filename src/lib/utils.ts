@@ -53,6 +53,80 @@ export const normalizeUnitTypes = (unitTypes: UnitType[]): UnitType[] => {
   }));
 };
 
+export const resolveTenantRequiredDeposit = ({
+  tenant,
+  unitTypes,
+}: {
+  tenant: Pick<Tenant, 'deposit' | 'unitIdentifier' | 'unitType' | 'leasedUnits'>;
+  unitTypes?: UnitType[] | null;
+}): number => {
+  const safeNumber = (value: unknown): number => Math.max(0, Number(value) || 0);
+
+  const normalizedUnitTypes = Array.isArray(unitTypes) ? normalizeUnitTypes(unitTypes) : null;
+  const unitTypeByUniqueId = normalizedUnitTypes
+    ? new Map<string, UnitType>(
+        normalizedUnitTypes
+          .filter((unit) => typeof unit.uniqueType === 'string' && unit.uniqueType.length > 0)
+          .map((unit) => [unit.uniqueType as string, unit])
+      )
+    : null;
+  const unitTypesByType = normalizedUnitTypes
+    ? normalizedUnitTypes.reduce((map, unit) => {
+        const key = unit.type;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(unit);
+        return map;
+      }, new Map<string, UnitType[]>())
+    : null;
+
+  const resolveDepositForUnit = ({
+    unitIdentifier,
+    unitType,
+    fallbackDeposit,
+  }: {
+    unitIdentifier?: string;
+    unitType?: string;
+    fallbackDeposit?: number;
+  }): number => {
+    if (unitTypeByUniqueId && unitIdentifier) {
+      const match = unitTypeByUniqueId.get(unitIdentifier);
+      if (match) return safeNumber(match.deposit);
+    }
+
+    if (unitTypesByType && unitType) {
+      const candidates = unitTypesByType.get(unitType);
+      if (candidates && candidates.length > 0) {
+        return safeNumber(candidates[0]?.deposit);
+      }
+    }
+
+    return safeNumber(fallbackDeposit);
+  };
+
+  if (Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0) {
+    return roundCurrency(
+      tenant.leasedUnits.reduce((sum, unit) => {
+        return (
+          sum +
+          resolveDepositForUnit({
+            unitIdentifier: unit?.unitIdentifier,
+            unitType: unit?.unitType,
+            fallbackDeposit: unit?.deposit,
+          })
+        );
+      }, 0)
+    );
+  }
+
+  const resolvedSingleDeposit = resolveDepositForUnit({
+    unitIdentifier: tenant.unitIdentifier,
+    unitType: tenant.unitType,
+    fallbackDeposit: tenant.deposit,
+  });
+
+  return roundCurrency(resolvedSingleDeposit);
+};
+
 export interface TenantDues {
   rentDues: number;
   penaltyDues?: number;
@@ -569,8 +643,37 @@ export const calculateTenantDues = async (
     penaltyAmount?: number;
     penaltyFrequency?: "daily" | "weekly";
     rentPaymentDate?: number;
+    propertyUnitTypes?: UnitType[];
   }
 ): Promise<TenantDues> => {
+  const fetchPropertyUnitTypes = async (): Promise<UnitType[] | null> => {
+    if (Array.isArray(penaltyConfig?.propertyUnitTypes)) return penaltyConfig?.propertyUnitTypes ?? null;
+    if (!tenant.propertyId) return null;
+
+    const queryByObjectId = async (id: string) => {
+      if (!ObjectId.isValid(id)) return null;
+      return db.collection<{ _id: ObjectId; unitTypes?: UnitType[] }>('properties').findOne(
+        { _id: new ObjectId(id) },
+        { projection: { unitTypes: 1 } }
+      );
+    };
+
+    const queryByString = async (id: string) => {
+      return db.collection<{ _id: string; unitTypes?: UnitType[] }>('properties').findOne(
+        { _id: id },
+        { projection: { unitTypes: 1 } }
+      );
+    };
+
+    const propertyByObjectId = await queryByObjectId(tenant.propertyId);
+    if (propertyByObjectId?.unitTypes) return propertyByObjectId.unitTypes;
+
+    const propertyByString = await queryByString(tenant.propertyId);
+    if (propertyByString?.unitTypes) return propertyByString.unitTypes;
+
+    return null;
+  };
+
   const rentOverrideMap = rentOverridesOrMap instanceof Map ? rentOverridesOrMap : undefined;
   const rentOverrides = Array.isArray(rentOverridesOrMap) ? rentOverridesOrMap : undefined;
   const rentDueResult = tenant.leasedUnits && tenant.leasedUnits.length > 0
@@ -591,9 +694,8 @@ export const calculateTenantDues = async (
         overrides: rentOverrides,
       });
 
-  const totalDepositDue = tenant.leasedUnits && tenant.leasedUnits.length > 0
-    ? tenant.leasedUnits.reduce((sum: number, unit: { deposit?: number }) => sum + (unit.deposit || 0), 0)
-    : tenant.deposit || 0;
+  const propertyUnitTypes = await fetchPropertyUnitTypes();
+  const totalDepositDue = resolveTenantRequiredDeposit({ tenant, unitTypes: propertyUnitTypes });
   const totalUtilityDue = 0;
 
   const walletBalance = tenant.walletBalance || 0;

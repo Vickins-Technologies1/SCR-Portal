@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
-import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
+import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
@@ -194,9 +194,10 @@ export async function POST(request: NextRequest) {
 
     const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);
     const amount = metadata.amount || payment.amount || 0;
-    const depositTotal = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits.reduce((sum: number, unit: any) => sum + (unit.deposit || 0), 0)
-      : (tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0);
+    const depositTotal = resolveTenantRequiredDeposit({
+      tenant: tenant as any,
+      unitTypes: (property as any)?.unitTypes,
+    });
     const rentDueAfter = Math.max(0, totalRentDue - paymentTotals.rentPaid);
     const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
     const utilityDueAfter = 0;
