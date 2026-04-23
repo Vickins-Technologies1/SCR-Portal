@@ -4,6 +4,8 @@ import { connectToDatabase } from "../../../../lib/mongodb";
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export async function POST(req: NextRequest) {
   try {
     const { token, email, newPassword } = await req.json();
@@ -20,10 +22,12 @@ export async function POST(req: NextRequest) {
 
     const resetDoc = await db.collection("passwordResets").findOne({
       token,
-      email,
       expiresAt: { $gt: now },
       used: false,
-      $or: [{ role: "owner" }, { ownerId: { $exists: true } }],
+      ...(email && typeof email === "string"
+        ? { email: { $regex: `^${escapeRegex(email.trim())}$`, $options: "i" } }
+        : {}),
+      $or: [{ role: "owner" }, { role: "propertyOwner" }, { ownerId: { $exists: true } }],
     });
 
     if (!resetDoc) {

@@ -167,9 +167,30 @@ export interface TenantRentContext {
 const roundCurrency = (value: number): number => Math.round(value);
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
+const parseLocalDateLikeString = (value: string): Date | null => {
+  const trimmed = value.trim();
+  // Accept date-only strings and ISO timestamps; interpret as a calendar date in local time.
+  // This avoids the UTC-shift issue of `new Date('YYYY-MM-DD')` in non-UTC time zones.
+  const match = /^(\d{4})-(\d{2})(?:-(\d{2}))?(?:[T ].*)?$/.exec(trimmed);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = match[3] ? Number(match[3]) : 1;
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const toValidDate = (value?: Date | string): Date | null => {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const parsedLocal = parseLocalDateLikeString(value);
+  const date = parsedLocal ?? new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 };
 

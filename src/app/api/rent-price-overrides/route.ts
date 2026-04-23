@@ -4,16 +4,38 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { RentPriceOverride } from "@/types/rent-price-override";
 
+const parseYearMonth = (value: string): { year: number; month: number } | null => {
+  const trimmed = value.trim();
+  // Accept YYYY-MM, YYYY-MM-DD, and full ISO timestamps; only year+month matter for overrides.
+  const match = /^(\d{4})-(\d{2})(?:-(\d{2}))?(?:[T ].*)?$/.exec(trimmed);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]); // 1-12
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+  return { year, month };
+};
+
 const normalizeStartOfMonth = (value: string | Date): Date | null => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return new Date(value.getFullYear(), value.getMonth(), 1);
+  }
+
+  const parsed = parseYearMonth(value);
+  if (!parsed) return null;
+  return new Date(parsed.year, parsed.month - 1, 1);
 };
 
 const normalizeEndOfMonth = (value: string | Date): Date | null => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return new Date(value.getFullYear(), value.getMonth() + 1, 0, 23, 59, 59, 999);
+  }
+
+  const parsed = parseYearMonth(value);
+  if (!parsed) return null;
+  // JS Date month is 0-based; passing `month` (1-12) with day 0 yields last day of that month.
+  return new Date(parsed.year, parsed.month, 0, 23, 59, 59, 999);
 };
 
 export async function GET(request: NextRequest) {
@@ -61,9 +83,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const propertyIdAsObjectId = new ObjectId(propertyId);
     const overrides = await db
       .collection<RentPriceOverride>("rentPriceOverrides")
-      .find({ propertyId, status: { $ne: "inactive" } })
+      .find({
+        status: { $ne: "inactive" },
+        // `propertyId` is stored as a string in new data, but may be an ObjectId in legacy records.
+        $or: [{ propertyId }, { propertyId: propertyIdAsObjectId as any }],
+      })
       .sort({ startDate: 1 })
       .toArray();
 
@@ -185,21 +212,27 @@ export async function POST(request: NextRequest) {
     const resolvedUnitType = selectedUnit.type as string;
     const resolvedUnitIdentifier = selectedUnit.uniqueType as string;
 
+    const propertyIdAsObjectId = new ObjectId(propertyId);
     const overlapQuery: Record<string, unknown> = {
-      propertyId,
       status: { $ne: "inactive" },
       startDate: { $lte: normalizedEnd },
       endDate: { $gte: normalizedStart },
+      $and: [
+        // `propertyId` is stored as a string in new data, but may be an ObjectId in legacy records.
+        { $or: [{ propertyId }, { propertyId: propertyIdAsObjectId as any }] },
+      ],
     };
 
     if (resolvedUnitIdentifier) {
-      overlapQuery.$or = [
-        { unitIdentifier: resolvedUnitIdentifier },
-        { unitType: resolvedUnitType, unitIdentifier: { $exists: false } },
-        { unitType: resolvedUnitType, unitIdentifier: null },
-      ];
+      (overlapQuery.$and as any[]).push({
+        $or: [
+          { unitIdentifier: resolvedUnitIdentifier },
+          { unitType: resolvedUnitType, unitIdentifier: { $exists: false } },
+          { unitType: resolvedUnitType, unitIdentifier: null },
+        ],
+      });
     } else {
-      overlapQuery.unitType = resolvedUnitType;
+      (overlapQuery.$and as any[]).push({ unitType: resolvedUnitType });
     }
 
     const overlapping = await db.collection<RentPriceOverride>("rentPriceOverrides").findOne(overlapQuery);

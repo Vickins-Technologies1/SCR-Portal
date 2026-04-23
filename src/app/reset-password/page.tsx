@@ -15,7 +15,8 @@ function ResetPasswordContent() {
   const token = searchParams.get("token");
   const email = searchParams.get("email");
   const role = (searchParams.get("role") || "tenant").toLowerCase();
-  const isOwner = role === "owner";
+  const normalizedRole = role.replace(/[\s_-]+/g, "");
+  const isOwner = normalizedRole === "owner" || normalizedRole === "propertyowner";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

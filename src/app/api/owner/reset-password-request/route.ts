@@ -8,6 +8,8 @@ import validator from "validator";
 import logger from "../../../../lib/logger";
 import { sendOwnerPasswordResetEmail } from "../../../../lib/email";
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // Simple in-memory rate limiter (IP-based)
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
 
     const owner = await db.collection("propertyOwners").findOne({
-      email: new RegExp(`^${email}$`, "i"),
+      email: { $regex: `^${escapeRegex(email)}$`, $options: "i" },
     });
 
     // Always return success to avoid account enumeration
@@ -81,7 +83,9 @@ export async function POST(request: NextRequest) {
 
     await db.collection("passwordResets").insertOne({
       ownerId: owner._id instanceof ObjectId ? owner._id : new ObjectId(owner._id),
-      role: "owner",
+      // Use the same role label used across the app for property owners.
+      // (Keep the reset endpoint backward-compatible with legacy "owner" docs.)
+      role: "propertyOwner",
       email: owner.email,
       token: resetToken,
       expiresAt,
@@ -89,10 +93,10 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin || "http://localhost:3000").trim();
     const resetLink = `${baseUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(
       owner.email
-    )}&role=owner`;
+    )}&role=propertyOwner`;
 
     try {
       await sendOwnerPasswordResetEmail({

@@ -68,10 +68,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Build reset link
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin || "http://localhost:3000").trim();
     const resetLink = `${baseUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(
       tenant.email
-    )}`;
+    )}&role=tenant`;
 
     const propertyId = tenant.propertyId;
     const property = propertyId && ObjectId.isValid(propertyId)
