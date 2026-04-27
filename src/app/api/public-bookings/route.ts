@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
     checkOut: checkOutDate.toISOString(),
     nights,
     total,
+    amountPaid: 0,
     status: "pending",
     source: "Direct",
     payoutStatus: "pending",

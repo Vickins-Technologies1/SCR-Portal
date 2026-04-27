@@ -137,7 +137,7 @@ export default function ReviewsSection({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {reviews.length ? (
             reviews.map((review) => (
               <div
@@ -158,7 +158,7 @@ export default function ReviewsSection({
                   <span className="font-semibold text-slate-800">{review.reviewerName}</span>
                   <span>{formatDate(review.createdAt)}</span>
                 </div>
-                <p className="mt-3 text-sm text-slate-700 whitespace-pre-line">{review.review}</p>
+                <p className="mt-3 text-sm text-slate-700 whitespace-pre-line break-words">{review.review}</p>
               </div>
             ))
           ) : (
@@ -176,7 +176,7 @@ export default function ReviewsSection({
 
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <div
-              className="absolute left-[-10000px] top-auto h-px w-px overflow-hidden"
+              className="absolute left-0 top-0 h-0 w-0 overflow-hidden opacity-0 pointer-events-none"
               aria-hidden="true"
             >
               <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">

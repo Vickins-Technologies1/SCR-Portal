@@ -141,6 +141,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   // Admin-only APIs
   "/api/users": { roles: ["admin"], isApi: true },
   "/api/invoices/generate": { roles: ["admin"], isApi: true },
+  "/api/quotations/generate": { roles: ["admin"], isApi: true },
   "/api/admins": { roles: ["admin"], isApi: true },
   "/api/admin/properties": { roles: ["admin"], isApi: true },
   "/api/admin/reviews": { roles: ["admin"], isApi: true },

@@ -16,6 +16,8 @@ type BookingResponse = {
     checkIn: string;
     checkOut: string;
     total: number;
+    amountPaid?: number;
+    amountDue?: number;
     payoutStatus?: string;
     reference?: string;
   };
@@ -34,11 +36,17 @@ export default function AirbnbTenantDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   useEffect(() => {
     const role = Cookies.get("role");
     const userId = Cookies.get("userId");
-    if (!role || role !== "tenant" || !userId) {
+    const impersonating = Cookies.get("isImpersonating") === "true";
+    const canAccessAsTenant = role === "tenant" && Boolean(userId);
+    const canAccessAsImpersonator = role === "propertyOwner" && Boolean(userId) && impersonating;
+    setIsImpersonating(Boolean(canAccessAsImpersonator));
+
+    if (!canAccessAsTenant && !canAccessAsImpersonator) {
       router.replace("/airbnb-tenant-login");
     }
   }, [router]);
@@ -82,7 +90,23 @@ export default function AirbnbTenantDashboardPage() {
     ensureCsrf().finally(fetchBooking);
   }, [ensureCsrf, fetchBooking]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (isImpersonating) {
+      try {
+        const res = await fetch("/api/revert-impersonation", {
+          method: "POST",
+          credentials: "include",
+        });
+        const json = await res.json();
+        if (json?.success) {
+          window.location.href = json.redirect || "/property-owner-dashboard";
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     Cookies.remove("userId");
     Cookies.remove("role");
     Cookies.remove("permissions");
@@ -94,6 +118,7 @@ export default function AirbnbTenantDashboardPage() {
   const booking = data?.booking;
   const rail = data?.paymentRail;
   const isPaid = String(booking?.payoutStatus || "").toLowerCase() === "paid";
+  const amountDue = Number(booking?.amountDue ?? booking?.total ?? 0);
 
   return (
     <PublicThemeWrapper>
@@ -115,7 +140,7 @@ export default function AirbnbTenantDashboardPage() {
               onClick={handleLogout}
               className="rounded-xl border border-border bg-white/70 px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
             >
-              Logout
+              {isImpersonating ? "Exit preview" : "Logout"}
             </button>
           </div>
 
@@ -133,7 +158,7 @@ export default function AirbnbTenantDashboardPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">Amount due</p>
-                    <p className="text-2xl font-bold">KES {Number(booking.total || 0).toLocaleString("en-KE")}</p>
+                    <p className="text-2xl font-bold">KES {amountDue.toLocaleString("en-KE")}</p>
                   </div>
                   <span
                     className={`rounded-full px-3 py-1 text-[10px] font-semibold ${
@@ -172,10 +197,10 @@ export default function AirbnbTenantDashboardPage() {
 
                 {csrfToken ? (
                   <PayForAirbnbBookingButton
-                    amount={Number(booking.total || 0)}
+                    amount={amountDue}
                     phone={phone}
                     csrfToken={csrfToken}
-                    disabled={isPaid}
+                    disabled={isPaid || amountDue <= 0}
                     shortcode={rail?.shortcode || null}
                     reference={booking.reference || null}
                     paybillAccountNumber={rail?.paybillAccountNumber || null}

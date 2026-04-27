@@ -15,7 +15,8 @@ import {
   normalizePhoneNumber,
 } from "@/lib/mpesa";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { buildAirbnbPaymentReference } from "@/lib/airbnb-payments";
+import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
+import { resolveTenantContext } from "@/lib/impersonation";
 
 const StkSchema = z.object({
   phone: z.string().trim().optional(),
@@ -39,9 +40,8 @@ export async function POST(request: NextRequest) {
 
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
-  if (!userId || role !== "tenant" || !ObjectId.isValid(userId)) {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const isImpersonating = request.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = request.cookies.get("impersonatingTenantId")?.value;
 
   let payload: unknown;
   try {
@@ -56,7 +56,19 @@ export async function POST(request: NextRequest) {
   }
 
   const { db } = await connectToDatabase();
-  const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(userId) });
+  const tenantContext = await resolveTenantContext({
+    db,
+    userId,
+    role,
+    isImpersonating,
+    impersonatingTenantId,
+  });
+
+  if (!tenantContext || !ObjectId.isValid(tenantContext.tenantId)) {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(tenantContext.tenantId) });
   if (!tenant) {
     return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
   }
@@ -71,8 +83,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
   }
 
-  if (String(booking.payoutStatus || "").toLowerCase() === "paid") {
-    return NextResponse.json({ success: false, message: "Booking is already marked as paid." }, { status: 400 });
+  const totalDue = Number(booking.total || 0);
+  const { amountPaid } = await getAirbnbBookingPaymentSummary(db, { ownerId: String(tenant.ownerId), bookingId });
+  const remaining = Math.max(0, totalDue - amountPaid);
+  if (totalDue <= 0 || remaining <= 0) {
+    return NextResponse.json({ success: false, message: "Booking is already fully paid." }, { status: 400 });
   }
 
   const normalizedPhone = normalizePhoneNumber(parsed.data.phone || tenant.phone || "");
@@ -80,7 +95,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid phone number format" }, { status: 400 });
   }
 
-  const amount = parsed.data.amount ?? Number(booking.total || 0);
+  const requestedAmount = parsed.data.amount;
+  const amount = Math.min(requestedAmount ?? remaining, remaining);
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ success: false, message: "Invalid amount" }, { status: 400 });
   }
@@ -118,7 +134,7 @@ export async function POST(request: NextRequest) {
 
     await db.collection("payments").insertOne({
       tenantId: null,
-      airbnbTenantId: userId,
+      airbnbTenantId: tenantContext.tenantId,
       ownerId: tenant.ownerId,
       amount,
       propertyId: booking.listingId,
@@ -207,7 +223,7 @@ export async function POST(request: NextRequest) {
 
   await db.collection("payments").insertOne({
     tenantId: null,
-    airbnbTenantId: userId,
+    airbnbTenantId: tenantContext.tenantId,
     ownerId: tenant.ownerId,
     amount,
     propertyId: booking.listingId,

@@ -13,6 +13,26 @@ import { formatKes } from "@/lib/airbnb-metrics";
 type AirbnbListingOption = { id: string; name: string; baseRate: number };
 type PaymentMode = "mpesa" | "cash" | "link";
 
+function parseLocalDate(value: string): Date | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const [yearRaw, monthRaw, dayRaw] = trimmed.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  const dt = new Date(year, month - 1, day);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function diffNights(checkIn: Date, checkOut: Date): number {
+  const start = new Date(checkIn.getFullYear(), checkIn.getMonth(), checkIn.getDate()).getTime();
+  const end = new Date(checkOut.getFullYear(), checkOut.getMonth(), checkOut.getDate()).getTime();
+  const delta = end - start;
+  if (!Number.isFinite(delta) || delta <= 0) return 1;
+  return Math.max(1, Math.round(delta / 86400000));
+}
+
 export default function AirbnbBookingsPage() {
   const router = useRouter();
   const { hasAccess, ownerId, csrfToken, role } = useAirbnbAccess("tenants:view");
@@ -36,6 +56,7 @@ export default function AirbnbBookingsPage() {
   const [tableMessage, setTableMessage] = useState<string | null>(null);
   const formRef = useRef<HTMLDivElement | null>(null);
   const listingSelectRef = useRef<HTMLSelectElement | null>(null);
+  const lastAutoAmountRef = useRef<string>("");
 
   const fetchBookings = useCallback(async () => {
     if (!ownerId) return;
@@ -79,6 +100,30 @@ export default function AirbnbBookingsPage() {
     () => listings.find((listing) => listing.id === form.listingId),
     [listings, form.listingId]
   );
+
+  useEffect(() => {
+    const baseRate = Number(selectedListing?.baseRate || 0);
+    if (!form.listingId || !Number.isFinite(baseRate) || baseRate <= 0) return;
+
+    const checkInDate = parseLocalDate(form.checkIn);
+    const checkOutDate = parseLocalDate(form.checkOut);
+    const nights =
+      checkInDate && checkOutDate && checkOutDate.getTime() > checkInDate.getTime()
+        ? diffNights(checkInDate, checkOutDate)
+        : 1;
+
+    const computed = String(Math.round(baseRate * nights));
+    const current = String(form.amount || "").trim();
+    const shouldAutoFill = !current || current === lastAutoAmountRef.current;
+    if (!shouldAutoFill) return;
+    if (current === computed) {
+      lastAutoAmountRef.current = computed;
+      return;
+    }
+
+    lastAutoAmountRef.current = computed;
+    setForm((prev) => ({ ...prev, amount: computed }));
+  }, [form.amount, form.checkIn, form.checkOut, form.listingId, selectedListing?.baseRate]);
 
   const handleDirectBooking = async () => {
     if (!csrfToken) {
@@ -269,7 +314,7 @@ export default function AirbnbBookingsPage() {
     if (!res.ok || !json.success) {
       throw new Error(json.message || "Failed to impersonate tenant");
     }
-    window.location.href = json.redirect || "/tenant-dashboard";
+    window.location.href = json.redirect || "/airbnb-tenant-dashboard";
   };
 
   const handleDeleteBooking = async (bookingId: string) => {

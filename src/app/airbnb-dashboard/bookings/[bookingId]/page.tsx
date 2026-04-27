@@ -126,7 +126,7 @@ export default function AirbnbBookingDetailsPage() {
     if (!res.ok || !json.success) {
       throw new Error(json.message || "Failed to impersonate tenant");
     }
-    window.location.href = json.redirect || "/tenant-dashboard";
+    window.location.href = json.redirect || "/airbnb-tenant-dashboard";
   };
 
   return (

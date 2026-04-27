@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
     success: true,
     bookings: bookings.map((booking) => {
       const id = booking.externalId || booking._id?.toString?.() || "";
+      const amountPaid = Number(booking.amountPaid || 0);
+      const total = Number(booking.total || 0);
       return {
       id: booking.externalId || booking._id?.toString?.() || "",
       listingName: booking.listingName,
@@ -58,7 +60,9 @@ export async function GET(request: NextRequest) {
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
       nights: booking.nights,
-      total: booking.total,
+      total,
+      amountPaid,
+      amountDue: Math.max(0, total - amountPaid),
       status: booking.status,
       source: booking.source,
       payoutStatus: booking.payoutStatus,
@@ -133,6 +137,7 @@ export async function POST(request: NextRequest) {
     checkOut: checkOutDate.toISOString(),
     nights: diffNights(checkInDate, checkOutDate),
     total: parsed.data.total,
+    amountPaid: 0,
     status: "pending",
     source: "Direct",
     payoutStatus: "pending",

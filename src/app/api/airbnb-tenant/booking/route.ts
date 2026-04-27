@@ -3,8 +3,9 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
-import { buildAirbnbPaymentReference } from "@/lib/airbnb-payments";
+import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
 import { decryptPasskey } from "@/lib/mpesa";
+import { resolveTenantContext } from "@/lib/impersonation";
 
 function resolveStoredPasskey(rawPasskey: string): string {
   if (!rawPasskey) return "";
@@ -18,13 +19,23 @@ function resolveStoredPasskey(rawPasskey: string): string {
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
+  const isImpersonating = request.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = request.cookies.get("impersonatingTenantId")?.value;
 
-  if (!userId || role !== "tenant" || !ObjectId.isValid(userId)) {
+  const { db } = await connectToDatabase();
+  const tenantContext = await resolveTenantContext({
+    db,
+    userId,
+    role,
+    isImpersonating,
+    impersonatingTenantId,
+  });
+
+  if (!tenantContext || !ObjectId.isValid(tenantContext.tenantId)) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  const { db } = await connectToDatabase();
-  const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(userId) });
+  const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(tenantContext.tenantId) });
   if (!tenant) {
     return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
   }
@@ -47,6 +58,9 @@ export async function GET(request: NextRequest) {
   }
 
   const reference = buildAirbnbPaymentReference(bookingId);
+  const { amountPaid } = await getAirbnbBookingPaymentSummary(db, { ownerId: String(tenant.ownerId), bookingId });
+  const total = Number(booking.total || 0);
+  const remaining = Math.max(0, total - amountPaid);
 
   let paymentType: "paybill" | "till" | "bank" | "unknown" = "unknown";
   let shortcode = "";
@@ -100,7 +114,9 @@ export async function GET(request: NextRequest) {
       guestName: booking.guestName,
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
-      total: booking.total,
+      total,
+      amountPaid,
+      amountDue: remaining,
       payoutStatus: booking.payoutStatus,
       reference,
     },
@@ -122,4 +138,3 @@ export async function GET(request: NextRequest) {
       : null,
   });
 }
-

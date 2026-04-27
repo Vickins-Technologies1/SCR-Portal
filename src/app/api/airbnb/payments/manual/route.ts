@@ -3,7 +3,11 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { buildAirbnbPaymentReference } from "@/lib/airbnb-payments";
+import {
+  buildAirbnbPaymentReference,
+  deactivateAirbnbGuestTenantsForBooking,
+  syncAirbnbBookingPaymentStatus,
+} from "@/lib/airbnb-payments";
 
 const ManualPaymentSchema = z.object({
   bookingId: z.string().trim().min(1),
@@ -75,14 +79,16 @@ export async function POST(request: NextRequest) {
     note: note || undefined,
   });
 
-  await db.collection("airbnbBookings").updateOne(
-    { ownerId, externalId: bookingId },
-    { $set: { payoutStatus: "paid", updatedAt: nowIso } }
-  );
+  const sync = await syncAirbnbBookingPaymentStatus(db, { ownerId, bookingId, nowIso });
+  if (sync?.payoutStatus === "paid") {
+    await deactivateAirbnbGuestTenantsForBooking(db, { ownerId, bookingId, nowIso });
+  }
 
   return NextResponse.json({
     success: true,
-    message: "Cash payment recorded and booking marked as paid.",
+    message:
+      sync?.payoutStatus === "paid"
+        ? "Cash payment recorded and booking marked as paid."
+        : `Cash payment recorded. Remaining balance: KES ${Math.max(0, Math.round(sync?.remaining ?? 0)).toLocaleString("en-KE")}.`,
   });
 }
-

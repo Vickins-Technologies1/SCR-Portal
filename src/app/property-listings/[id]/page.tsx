@@ -157,7 +157,7 @@ export default async function PropertyDetailPage({
     <main className="relative isolate min-h-screen bg-[#f7f6f3] text-slate-900">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[length:22px_22px] opacity-40" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(255,255,255,0.7),rgba(255,255,255,0))] opacity-60" />
-      <div className="max-w-7xl mx-auto px-6 pt-28 pb-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-16">
         <Link
           href="/property-listings"
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600 transition hover:text-slate-900"
@@ -166,8 +166,8 @@ export default async function PropertyDetailPage({
           Back to listings
         </Link>
 
-        <section className="mt-8 grid gap-10 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="space-y-8">
+        <section className="mt-8 grid gap-10 items-start lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="space-y-8 min-w-0">
             <div className="rounded-[32px] border border-white/70 bg-white/85 p-4 sm:p-6 shadow-[0_22px_50px_-40px_rgba(15,23,42,0.45)] backdrop-blur">
               <ImageGallery images={images} title={property.name} />
             </div>
@@ -176,10 +176,10 @@ export default async function PropertyDetailPage({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Property</p>
-                  <h1 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
+                  <h1 className="mt-2 text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-900 font-[var(--font-cormorant)] break-words">
                     {property.name}
                   </h1>
-                  <p className="mt-2 flex items-center gap-2 text-xs sm:text-sm text-slate-500">
+                  <p className="mt-2 flex items-center gap-2 text-xs sm:text-sm text-slate-500 break-words">
                     <MapPin size={14} className="flex-shrink-0" />
                     {property.address}
                   </p>
@@ -267,7 +267,7 @@ export default async function PropertyDetailPage({
               {property.description && (
                 <div className="mt-8">
                   <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">Overview</p>
-                  <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-line">
+                  <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-line break-words">
                     {property.description}
                   </p>
                 </div>
@@ -357,7 +357,7 @@ export default async function PropertyDetailPage({
             />
           </div>
 
-          <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
+          <aside className="space-y-6 min-w-0 lg:sticky lg:top-24 lg:h-fit">
             {isAirbnb ? (
               <BookingRequest
                 listingId={property._id}
@@ -398,19 +398,19 @@ export default async function PropertyDetailPage({
                   {owner.email && (
                     <a
                       href={`mailto:${owner.email}`}
-                      className="flex items-center gap-3 hover:text-emerald-600 transition-colors"
+                      className="flex min-w-0 items-center gap-3 hover:text-emerald-600 transition-colors"
                     >
                       <Mail size={14} className="text-slate-500" />
-                      {owner.email}
+                      <span className="min-w-0 break-all">{owner.email}</span>
                     </a>
                   )}
                   {owner.phone && (
                     <a
                       href={`tel:${owner.phone}`}
-                      className="flex items-center gap-3 hover:text-emerald-600 transition-colors"
+                      className="flex min-w-0 items-center gap-3 hover:text-emerald-600 transition-colors"
                     >
                       <Phone size={14} className="text-slate-500" />
-                      {owner.phone}
+                      <span className="min-w-0 break-words">{owner.phone}</span>
                     </a>
                   )}
                 </div>

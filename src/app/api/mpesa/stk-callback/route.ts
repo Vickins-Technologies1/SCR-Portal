@@ -9,6 +9,7 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
+import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 
 const CallbackSchema = z.object({
   Body: z.object({
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest) {
       {
         $set: {
           status,
+          ...(metadata.amount ? { amount: metadata.amount } : {}),
           mpesaCode: metadata.receipt || null,
           paymentDate: parseMpesaDate(metadata.transactionDate).toISOString(),
           phoneNumber: metadata.phone || undefined,
@@ -121,29 +123,28 @@ export async function POST(request: NextRequest) {
 
     // Handle Airbnb direct booking payments
     if (payment.airbnbBookingId) {
-      await db.collection("airbnbBookings").updateOne(
-        { externalId: payment.airbnbBookingId, ownerId: payment.ownerId },
-        {
-          $set: {
-            payoutStatus: status === "completed" ? "paid" : status === "failed" ? "failed" : "pending",
-            updatedAt: new Date().toISOString(),
-          },
-        }
-      );
+      const nowIso = new Date().toISOString();
+      const bookingId = String(payment.airbnbBookingId);
+      const ownerId = String(payment.ownerId || "");
+
+      const sync = await syncAirbnbBookingPaymentStatus(db, { ownerId, bookingId, nowIso });
 
       if (status === "completed") {
-        if (payment.airbnbTenantId && ObjectId.isValid(payment.airbnbTenantId)) {
-          await db.collection("tenants").updateOne(
-            { _id: new ObjectId(payment.airbnbTenantId), accountType: "airbnb_guest" },
-            { $set: { status: "inactive", updatedAt: new Date().toISOString() } }
-          );
+        if (sync?.payoutStatus === "paid") {
+          if (payment.airbnbTenantId && ObjectId.isValid(payment.airbnbTenantId)) {
+            await db.collection("tenants").updateOne(
+              { _id: new ObjectId(payment.airbnbTenantId), accountType: "airbnb_guest" },
+              { $set: { status: "inactive", updatedAt: nowIso } }
+            );
+          }
+          await deactivateAirbnbGuestTenantsForBooking(db, { ownerId, bookingId, nowIso });
         }
 
         const booking = await db.collection("airbnbBookings").findOne({
-          externalId: payment.airbnbBookingId,
-          ownerId: payment.ownerId,
+          externalId: bookingId,
+          ownerId,
         });
-        const settings = await db.collection("airbnbSettings").findOne({ ownerId: payment.ownerId });
+        const settings = await db.collection("airbnbSettings").findOne({ ownerId });
         if (booking?.guestEmail && settings?.sendPaymentReceipt !== false) {
           try {
             await sendAirbnbPaymentReceivedEmail({

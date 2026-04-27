@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
+import { resolveTenantContext } from "@/lib/impersonation";
 
 const StatusSchema = z.object({
   transaction_request_id: z.string().trim().min(1),
@@ -12,10 +13,8 @@ const StatusSchema = z.object({
 export async function POST(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
-
-  if (!userId || role !== "tenant" || !ObjectId.isValid(userId)) {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const isImpersonating = request.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = request.cookies.get("impersonatingTenantId")?.value;
 
   const csrfToken = request.headers.get("x-csrf-token");
   if (!validateCsrfToken(request, csrfToken)) {
@@ -36,10 +35,22 @@ export async function POST(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const tenantContext = await resolveTenantContext({
+      db,
+      userId,
+      role,
+      isImpersonating,
+      impersonatingTenantId,
+    });
+
+    if (!tenantContext || !ObjectId.isValid(tenantContext.tenantId)) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const transactionRequestId = parsed.data.transaction_request_id;
 
     const payment = await db.collection("payments").findOne({
-      airbnbTenantId: userId,
+      airbnbTenantId: tenantContext.tenantId,
       $or: [
         { transactionId: transactionRequestId },
         { checkoutRequestId: transactionRequestId },
@@ -75,4 +86,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

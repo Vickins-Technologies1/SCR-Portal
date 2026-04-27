@@ -15,7 +15,7 @@ import {
 } from "@/lib/mpesa";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
-import { buildAirbnbPaymentReference } from "@/lib/airbnb-payments";
+import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
 
 const CollectSchema = z.object({
   bookingId: z.string().trim().min(1),
@@ -67,8 +67,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
   }
 
-  if (String(booking.payoutStatus || "").toLowerCase() === "paid") {
-    return NextResponse.json({ success: false, message: "Booking is already marked as paid." }, { status: 400 });
+  const totalDue = Number(booking.total || 0);
+  const { amountPaid } = await getAirbnbBookingPaymentSummary(db, { ownerId, bookingId });
+  const remaining = Math.max(0, totalDue - amountPaid);
+  if (totalDue <= 0 || remaining <= 0) {
+    return NextResponse.json({ success: false, message: "Booking is already fully paid." }, { status: 400 });
+  }
+
+  const amountToCollect = Math.min(amount, remaining);
+  if (!Number.isFinite(amountToCollect) || amountToCollect <= 0) {
+    return NextResponse.json({ success: false, message: "Invalid amount" }, { status: 400 });
   }
 
   await connectMongoose();
@@ -110,7 +118,7 @@ export async function POST(request: NextRequest) {
   if (tumaConfigured) {
     const description = `Airbnb booking ${bookingId}`;
     const incoming = await createTumaStkPush({
-      amount,
+      amount: amountToCollect,
       phone: normalizedPhone,
       description,
       callbackUrl: `${tumaCallbackBase}/api/tuma/webhook`,
@@ -126,7 +134,7 @@ export async function POST(request: NextRequest) {
     await db.collection("payments").insertOne({
       tenantId: null,
       ownerId,
-      amount,
+      amount: amountToCollect,
       propertyId: booking.listingId,
       propertyName: booking.listingName,
       paymentDate: nowIso,
@@ -168,7 +176,7 @@ export async function POST(request: NextRequest) {
   const stkResponse = await initiateStkPush({
     shortcode,
     passkey,
-    amount,
+    amount: amountToCollect,
     phone: normalizedPhone,
     accountReference: account,
     transactionDesc: `Airbnb booking ${bookingId}`,
@@ -186,7 +194,7 @@ export async function POST(request: NextRequest) {
   await db.collection("payments").insertOne({
     tenantId: null,
     ownerId,
-    amount,
+    amount: amountToCollect,
     propertyId: booking.listingId,
     propertyName: booking.listingName,
     paymentDate: nowIso,

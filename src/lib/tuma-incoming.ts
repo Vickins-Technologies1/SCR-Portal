@@ -6,6 +6,7 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
+import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 
 export type TumaIncomingUpdate = {
   id: string;
@@ -100,6 +101,13 @@ export async function applyTumaPaymentUpdate(params: {
     patch.paymentDate = parsedTimestamp;
   }
 
+  if (update.amount != null) {
+    const amount = Number(update.amount);
+    if (Number.isFinite(amount) && amount > 0) {
+      patch.amount = amount;
+    }
+  }
+
   if (update.phoneNumber) {
     patch.phoneNumber = update.phoneNumber;
   }
@@ -135,27 +143,17 @@ export async function applyTumaPaymentUpdate(params: {
   }
 
   if (updatedPayment.airbnbBookingId) {
-    await db.collection("airbnbBookings").updateOne(
-      { externalId: updatedPayment.airbnbBookingId, ownerId: updatedPayment.ownerId },
-      {
-        $set: {
-          payoutStatus:
-            normalizedStatus === "completed"
-              ? "paid"
-              : normalizedStatus === "failed"
-                ? "failed"
-                : "pending",
-          updatedAt: new Date().toISOString(),
-        },
-      }
-    );
+    const nowIso = new Date().toISOString();
+    const bookingId = String(updatedPayment.airbnbBookingId);
+    const ownerId = String(updatedPayment.ownerId || "");
+    const sync = await syncAirbnbBookingPaymentStatus(db, { ownerId, bookingId, nowIso });
 
     if (normalizedStatus === "completed") {
       const booking = await db.collection("airbnbBookings").findOne({
-        externalId: updatedPayment.airbnbBookingId,
-        ownerId: updatedPayment.ownerId,
+        externalId: bookingId,
+        ownerId,
       });
-      const settings = await db.collection("airbnbSettings").findOne({ ownerId: updatedPayment.ownerId });
+      const settings = await db.collection("airbnbSettings").findOne({ ownerId });
       if (booking?.guestEmail && settings?.sendPaymentReceipt !== false) {
         const parsedOrigination = parsedTimestamp ? new Date(parsedTimestamp) : null;
         const validOrigination = parsedOrigination && !Number.isNaN(parsedOrigination.getTime());
@@ -185,11 +183,14 @@ export async function applyTumaPaymentUpdate(params: {
       }
     }
 
-    if (normalizedStatus === "completed" && updatedPayment.airbnbTenantId && ObjectId.isValid(updatedPayment.airbnbTenantId)) {
-      await db.collection("tenants").updateOne(
-        { _id: new ObjectId(updatedPayment.airbnbTenantId), accountType: "airbnb_guest" },
-        { $set: { status: "inactive", updatedAt: new Date().toISOString() } }
-      );
+    if (normalizedStatus === "completed" && sync?.payoutStatus === "paid") {
+      if (updatedPayment.airbnbTenantId && ObjectId.isValid(updatedPayment.airbnbTenantId)) {
+        await db.collection("tenants").updateOne(
+          { _id: new ObjectId(updatedPayment.airbnbTenantId), accountType: "airbnb_guest" },
+          { $set: { status: "inactive", updatedAt: nowIso } }
+        );
+      }
+      await deactivateAirbnbGuestTenantsForBooking(db, { ownerId, bookingId, nowIso });
     }
   }
 

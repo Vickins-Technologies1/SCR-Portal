@@ -59,10 +59,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const redirect = tenant.accountType === "airbnb_guest" ? "/airbnb-tenant-dashboard" : "/tenant-dashboard";
+
     const response = NextResponse.json({
       success: true,
       message: "Impersonation started",
-      redirect: "/tenant-dashboard",
+      redirect,
     });
 
     // Impersonation cookies — must NOT be httpOnly so client-side JS can read them

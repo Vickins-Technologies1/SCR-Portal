@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { connectToDatabase } from "@/lib/mongodb";
 import { sendAirbnbPaymentReceivedEmail } from "@/lib/email";
+import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 
 const STRIPE_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_TOLERANCE = Number(process.env.STRIPE_WEBHOOK_TOLERANCE || 300);
@@ -108,10 +109,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (bookingId) {
-    await db.collection("airbnbBookings").updateOne(
-      { externalId: bookingId, ownerId },
-      { $set: { payoutStatus: "paid", updatedAt: new Date().toISOString() } }
-    );
+    const nowIso = new Date().toISOString();
+    const sync = await syncAirbnbBookingPaymentStatus(db, { ownerId: String(ownerId), bookingId: String(bookingId), nowIso });
+    if (sync?.payoutStatus === "paid") {
+      await deactivateAirbnbGuestTenantsForBooking(db, { ownerId: String(ownerId), bookingId: String(bookingId), nowIso });
+    }
   }
 
   if (bookingId && guestEmail) {

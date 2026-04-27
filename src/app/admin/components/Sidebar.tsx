@@ -19,6 +19,7 @@ import {
   Plug,
   Activity,
   Star,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -97,6 +98,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const generalLinks: NavLink[] = [
     { key: "users", href: "/admin/users", label: "Property Owners", icon: <Users size={20} /> },
     { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
+    { key: "quotations", href: "/admin/quotations", label: "Quotations", icon: <FileText size={20} /> },
     { key: "reviews", href: "/admin/reviews", label: "Reviews", icon: <Star size={20} /> },
     { key: "tuma-webhooks", href: "/admin/tuma-webhooks", label: "Tuma Webhooks", icon: <Activity size={20} /> },
     { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Integrations", icon: <Plug size={20} /> },

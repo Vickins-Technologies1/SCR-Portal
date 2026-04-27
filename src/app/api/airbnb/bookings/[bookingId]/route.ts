@@ -32,6 +32,8 @@ export async function GET(
   }
 
   const id = booking.externalId || booking._id?.toString?.() || bookingId;
+  const amountPaid = Number(booking.amountPaid || 0);
+  const total = Number(booking.total || 0);
   const tenant = await db.collection("tenants").findOne(
     { ownerId, accountType: "airbnb_guest", airbnbBookingId: id },
     { projection: { _id: 1 } }
@@ -49,7 +51,9 @@ export async function GET(
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
       nights: booking.nights,
-      total: booking.total,
+      total,
+      amountPaid,
+      amountDue: Math.max(0, total - amountPaid),
       status: booking.status,
       source: booking.source,
       payoutStatus: booking.payoutStatus,
@@ -59,4 +63,3 @@ export async function GET(
     },
   });
 }
-
