@@ -9,7 +9,8 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
-import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
+import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
+import { diffNights, parseDate } from "@/lib/airbnb-utils";
 
 const CallbackSchema = z.object({
   Body: z.object({
@@ -130,14 +131,51 @@ export async function POST(request: NextRequest) {
       const sync = await syncAirbnbBookingPaymentStatus(db, { ownerId, bookingId, nowIso });
 
       if (status === "completed") {
+        // Guest portal stays active through the stay (controlled by expiresAt),
+        // so we do not deactivate Airbnb guest tenant accounts on payment completion.
         if (sync?.payoutStatus === "paid") {
-          if (payment.airbnbTenantId && ObjectId.isValid(payment.airbnbTenantId)) {
-            await db.collection("tenants").updateOne(
-              { _id: new ObjectId(payment.airbnbTenantId), accountType: "airbnb_guest" },
-              { $set: { status: "inactive", updatedAt: nowIso } }
-            );
+          const pendingExtension = await db
+            .collection("airbnbStayExtensions")
+            .findOne({ ownerId, bookingId, status: "pending_payment" }, { sort: { createdAt: -1, _id: -1 } });
+
+          if (pendingExtension?.requestedCheckOut) {
+            const bookingDoc = await db.collection("airbnbBookings").findOne({ ownerId, externalId: bookingId });
+            const checkIn = parseDate(bookingDoc?.checkIn) || new Date();
+            const requestedCheckOut = parseDate(pendingExtension.requestedCheckOut);
+
+            if (requestedCheckOut && bookingDoc) {
+              const nights = diffNights(checkIn, requestedCheckOut);
+
+              await db.collection("airbnbBookings").updateOne(
+                { ownerId, externalId: bookingId },
+                {
+                  $set: {
+                    checkOut: requestedCheckOut.toISOString(),
+                    nights,
+                    updatedAt: nowIso,
+                  },
+                }
+              );
+
+              const extendedExpiresAt = new Date(requestedCheckOut.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+              await db.collection("tenants").updateMany(
+                { ownerId, accountType: "airbnb_guest", airbnbBookingId: bookingId },
+                {
+                  $set: {
+                    leaseEndDate: requestedCheckOut.toISOString(),
+                    expiresAt: extendedExpiresAt,
+                    status: "active",
+                    updatedAt: nowIso,
+                  },
+                }
+              );
+
+              await db.collection("airbnbStayExtensions").updateOne(
+                { _id: pendingExtension._id },
+                { $set: { status: "active", activatedAt: nowIso, updatedAt: nowIso } }
+              );
+            }
           }
-          await deactivateAirbnbGuestTenantsForBooking(db, { ownerId, bookingId, nowIso });
         }
 
         const booking = await db.collection("airbnbBookings").findOne({

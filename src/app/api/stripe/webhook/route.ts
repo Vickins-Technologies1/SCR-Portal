@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { connectToDatabase } from "@/lib/mongodb";
 import { sendAirbnbPaymentReceivedEmail } from "@/lib/email";
-import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
+import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
+import { diffNights, parseDate } from "@/lib/airbnb-utils";
 
 const STRIPE_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_TOLERANCE = Number(process.env.STRIPE_WEBHOOK_TOLERANCE || 300);
@@ -112,7 +113,40 @@ export async function POST(request: NextRequest) {
     const nowIso = new Date().toISOString();
     const sync = await syncAirbnbBookingPaymentStatus(db, { ownerId: String(ownerId), bookingId: String(bookingId), nowIso });
     if (sync?.payoutStatus === "paid") {
-      await deactivateAirbnbGuestTenantsForBooking(db, { ownerId: String(ownerId), bookingId: String(bookingId), nowIso });
+      const pendingExtension = await db
+        .collection("airbnbStayExtensions")
+        .findOne(
+          { ownerId: String(ownerId), bookingId: String(bookingId), status: "pending_payment" },
+          { sort: { createdAt: -1, _id: -1 } }
+        );
+
+      if (pendingExtension?.requestedCheckOut) {
+        const bookingDoc = await db.collection("airbnbBookings").findOne({
+          ownerId: String(ownerId),
+          externalId: String(bookingId),
+        });
+        const checkIn = parseDate(bookingDoc?.checkIn) || new Date();
+        const requestedCheckOut = parseDate(pendingExtension.requestedCheckOut);
+
+        if (requestedCheckOut && bookingDoc) {
+          const nights = diffNights(checkIn, requestedCheckOut);
+          await db.collection("airbnbBookings").updateOne(
+            { ownerId: String(ownerId), externalId: String(bookingId) },
+            { $set: { checkOut: requestedCheckOut.toISOString(), nights, updatedAt: nowIso } }
+          );
+
+          const extendedExpiresAt = new Date(requestedCheckOut.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          await db.collection("tenants").updateMany(
+            { ownerId: String(ownerId), accountType: "airbnb_guest", airbnbBookingId: String(bookingId) },
+            { $set: { leaseEndDate: requestedCheckOut.toISOString(), expiresAt: extendedExpiresAt, status: "active", updatedAt: nowIso } }
+          );
+
+          await db.collection("airbnbStayExtensions").updateOne(
+            { _id: pendingExtension._id },
+            { $set: { status: "active", activatedAt: nowIso, updatedAt: nowIso } }
+          );
+        }
+      }
     }
   }
 

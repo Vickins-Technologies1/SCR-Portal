@@ -5,9 +5,9 @@ import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import {
   buildAirbnbPaymentReference,
-  deactivateAirbnbGuestTenantsForBooking,
   syncAirbnbBookingPaymentStatus,
 } from "@/lib/airbnb-payments";
+import { diffNights, parseDate } from "@/lib/airbnb-utils";
 
 const ManualPaymentSchema = z.object({
   bookingId: z.string().trim().min(1),
@@ -81,7 +81,34 @@ export async function POST(request: NextRequest) {
 
   const sync = await syncAirbnbBookingPaymentStatus(db, { ownerId, bookingId, nowIso });
   if (sync?.payoutStatus === "paid") {
-    await deactivateAirbnbGuestTenantsForBooking(db, { ownerId, bookingId, nowIso });
+    const pendingExtension = await db
+      .collection("airbnbStayExtensions")
+      .findOne({ ownerId, bookingId, status: "pending_payment" }, { sort: { createdAt: -1, _id: -1 } });
+
+    if (pendingExtension?.requestedCheckOut) {
+      const bookingDoc = await db.collection("airbnbBookings").findOne({ ownerId, externalId: bookingId });
+      const checkIn = parseDate(bookingDoc?.checkIn) || new Date();
+      const requestedCheckOut = parseDate(pendingExtension.requestedCheckOut);
+
+      if (requestedCheckOut && bookingDoc) {
+        const nights = diffNights(checkIn, requestedCheckOut);
+        await db.collection("airbnbBookings").updateOne(
+          { ownerId, externalId: bookingId },
+          { $set: { checkOut: requestedCheckOut.toISOString(), nights, updatedAt: nowIso } }
+        );
+
+        const extendedExpiresAt = new Date(requestedCheckOut.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        await db.collection("tenants").updateMany(
+          { ownerId, accountType: "airbnb_guest", airbnbBookingId: bookingId },
+          { $set: { leaseEndDate: requestedCheckOut.toISOString(), expiresAt: extendedExpiresAt, status: "active", updatedAt: nowIso } }
+        );
+
+        await db.collection("airbnbStayExtensions").updateOne(
+          { _id: pendingExtension._id },
+          { $set: { status: "active", activatedAt: nowIso, updatedAt: nowIso } }
+        );
+      }
+    }
   }
 
   return NextResponse.json({
