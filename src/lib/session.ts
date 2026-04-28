@@ -7,6 +7,7 @@ export type SessionPayload = JWTPayload & {
   sub: string;
   role: string;
   ownerId?: string | null;
+  managementType?: "rentals" | "airbnb" | null;
   impersonator?: {
     userId: string;
     role: string;

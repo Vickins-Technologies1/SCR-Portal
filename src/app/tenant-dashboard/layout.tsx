@@ -74,6 +74,7 @@ export default function TenantDashboardLayout({
       Cookies.remove("role");
       Cookies.remove("permissions");
       Cookies.remove("ownerId");
+      Cookies.remove("managementType");
       Cookies.remove("csrf-token");
       Cookies.remove("impersonatingTenantId", { path: "/" });
       Cookies.remove("isImpersonating", { path: "/" });
@@ -136,6 +137,7 @@ export default function TenantDashboardLayout({
   const handleLogout = () => {
     Cookies.remove("userId");
     Cookies.remove("role");
+    Cookies.remove("managementType");
     Cookies.remove("impersonatingTenantId", { path: "/" });
     Cookies.remove("isImpersonating", { path: "/" });
     window.location.href = "/tenant-login";
@@ -154,7 +156,9 @@ export default function TenantDashboardLayout({
       if (data.success) {
         Cookies.remove("impersonatingTenantId", { path: "/" });
         Cookies.remove("isImpersonating", { path: "/" });
-        router.push("/property-owner-dashboard");
+        const fallback =
+          Cookies.get("managementType") === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+        router.push(data.redirect || fallback);
       }
     } catch {
       setError("Failed to exit impersonation");

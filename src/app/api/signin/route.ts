@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
       let finalRole = providedRole || "unknown";
       let isTeamMember = false;
       let isOwner = false;
+      let ownerManagementType: OwnerManagementType | null = null;
       let userCollection: "tenants" | "propertyOwners" | "teamMembers" | null = null;
 
       // Try tenant
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest) {
 
         if (finalRole === "propertyOwner" || isTeamMember) {
           const managementType = await resolveOwnerManagementType(db, user, finalRole, isTeamMember);
+          ownerManagementType = managementType;
           redirectPath = getOwnerRedirectPath(managementType);
         }
 
@@ -251,6 +253,7 @@ export async function POST(request: NextRequest) {
           sub: user._id.toString(),
           role: finalRole,
           ownerId: isTeamMember ? user.ownerId?.toString() ?? null : finalRole === "propertyOwner" ? user._id.toString() : null,
+          managementType: ownerManagementType,
         });
         response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
@@ -274,6 +277,15 @@ export async function POST(request: NextRequest) {
           maxAge: 7 * 24 * 60 * 60,
           path: "/",
         });
+
+        if (ownerManagementType) {
+          response.cookies.set("managementType", ownerManagementType, {
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60,
+            path: "/",
+          });
+        }
 
         // Set ownerId cookie for team members
         if (isTeamMember && user.ownerId) {
@@ -326,6 +338,7 @@ export async function POST(request: NextRequest) {
     let finalRole = "unknown";
     let isTeamMember = false;
     let isOwner = false;
+    let ownerManagementType: OwnerManagementType | null = null;
     let userCollection: "tenants" | "propertyOwners" | "teamMembers" | null = null;
 
     // 1. Check propertyOwners (most privileged)
@@ -395,10 +408,11 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        if (finalRole === "propertyOwner" || isTeamMember) {
-          const managementType = await resolveOwnerManagementType(db, user, finalRole, isTeamMember);
-          redirectPath = getOwnerRedirectPath(managementType);
-        }
+      if (finalRole === "propertyOwner" || isTeamMember) {
+        const managementType = await resolveOwnerManagementType(db, user, finalRole, isTeamMember);
+        ownerManagementType = managementType;
+        redirectPath = getOwnerRedirectPath(managementType);
+      }
 
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
@@ -509,6 +523,7 @@ export async function POST(request: NextRequest) {
           sub: user._id.toString(),
           role: finalRole,
           ownerId: isTeamMember ? user.ownerId?.toString() ?? null : finalRole === "propertyOwner" ? user._id.toString() : null,
+          managementType: ownerManagementType,
         });
         response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
@@ -532,6 +547,15 @@ export async function POST(request: NextRequest) {
           maxAge: 7 * 24 * 60 * 60,
           path: "/",
         });
+
+        if (ownerManagementType) {
+          response.cookies.set("managementType", ownerManagementType, {
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60,
+            path: "/",
+          });
+        }
 
         // Set ownerId cookie for team members
         if (isTeamMember && user.ownerId) {

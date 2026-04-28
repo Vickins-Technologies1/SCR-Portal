@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 
@@ -8,13 +8,17 @@ type DueStatus = {
   isDue: boolean;
 };
 
-const ALLOWED_PATHS = ["/property-owner-dashboard", "/property-owner-dashboard/reports"];
+function getOwnerDashboardBasePath(): "/property-owner-dashboard" | "/airbnb-dashboard" {
+  return Cookies.get("managementType") === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+}
 
 export default function InvoiceRestrictionGate() {
   const pathname = usePathname();
   const router = useRouter();
   const [dueStatus, setDueStatus] = useState<DueStatus | null>(null);
   const [checked, setChecked] = useState(false);
+  const basePath = useMemo(() => getOwnerDashboardBasePath(), []);
+  const allowedPaths = useMemo(() => [basePath, `${basePath}/reports`], [basePath]);
 
   useEffect(() => {
     const userId = Cookies.get("userId");
@@ -48,11 +52,11 @@ export default function InvoiceRestrictionGate() {
 
   useEffect(() => {
     if (!checked || !dueStatus?.isDue) return;
-    const isAllowed = ALLOWED_PATHS.some((base) => pathname === base || pathname.startsWith(base + "/"));
+    const isAllowed = allowedPaths.some((base) => pathname === base || pathname.startsWith(base + "/"));
     if (!isAllowed) {
-      router.replace("/property-owner-dashboard");
+      router.replace(basePath);
     }
-  }, [checked, dueStatus, pathname, router]);
+  }, [checked, dueStatus, pathname, router, basePath, allowedPaths]);
 
   return null;
 }

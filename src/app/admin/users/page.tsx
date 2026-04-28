@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
 import {
   Users,
   ArrowUpDown,
@@ -298,7 +299,9 @@ export default function PropertyOwnersPage() {
         return;
       }
 
-      const redirect = data.redirect || "/property-owner-dashboard";
+      const fallback =
+        Cookies.get("managementType") === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+      const redirect = data.redirect || fallback;
       window.location.href = redirect;
     } catch {
       setImpersonateError("Impersonation request failed.");

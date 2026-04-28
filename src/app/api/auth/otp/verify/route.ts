@@ -120,6 +120,7 @@ export async function POST(request: Request) {
     const isOwner = otp.collection === "propertyOwners" && otp.role === "propertyOwner";
 
     let redirectPath = otp.redirectPath;
+    let ownerManagementType: "rentals" | "airbnb" | null = null;
     if (otp.role === "propertyOwner" || isTeamMember) {
       let managementType: "rentals" | "airbnb" = "rentals";
       if (isTeamMember) {
@@ -134,6 +135,7 @@ export async function POST(request: Request) {
       } else {
         managementType = normalizeManagementType(user?.managementType);
       }
+      ownerManagementType = managementType;
       redirectPath = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
     }
 
@@ -175,6 +177,7 @@ export async function POST(request: Request) {
       sub: user._id.toString(),
       role: otp.role,
       ownerId: isTeamMember ? user.ownerId?.toString() ?? null : otp.role === "propertyOwner" ? user._id.toString() : null,
+      managementType: ownerManagementType,
     });
     response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
@@ -194,6 +197,15 @@ export async function POST(request: Request) {
 
     if (finalPermissions.length > 0) {
       response.cookies.set("permissions", JSON.stringify(finalPermissions), {
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60,
+        path: "/",
+      });
+    }
+
+    if (ownerManagementType) {
+      response.cookies.set("managementType", ownerManagementType, {
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         maxAge: 7 * 24 * 60 * 60,

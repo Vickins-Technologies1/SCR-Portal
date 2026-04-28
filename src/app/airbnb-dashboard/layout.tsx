@@ -22,6 +22,7 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
       Cookies.remove("role");
       Cookies.remove("permissions");
       Cookies.remove("ownerId");
+      Cookies.remove("managementType");
       Cookies.remove("csrf-token");
       Cookies.remove("impersonatingTenantId", { path: "/" });
       Cookies.remove("isImpersonating", { path: "/" });

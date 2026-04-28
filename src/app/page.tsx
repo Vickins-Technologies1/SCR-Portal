@@ -93,7 +93,9 @@ export default function LoginPage() {
         });
       }
 
-      router.push(data.redirect || "/property-owner-dashboard");
+      const fallback =
+        Cookies.get("managementType") === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+      router.push(data.redirect || fallback);
     } catch (err: any) {
       setError(err.message || "Authentication failed. Please check your credentials.");
     } finally {
@@ -143,7 +145,9 @@ export default function LoginPage() {
         });
       }
 
-      router.push(data.redirect || "/property-owner-dashboard");
+      const fallback =
+        Cookies.get("managementType") === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+      router.push(data.redirect || fallback);
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
       autoVerifyRef.current = "";

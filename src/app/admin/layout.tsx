@@ -17,6 +17,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       Cookies.remove("role");
       Cookies.remove("permissions");
       Cookies.remove("ownerId");
+      Cookies.remove("managementType");
       Cookies.remove("csrf-token");
       router.replace("/admin/login");
     },

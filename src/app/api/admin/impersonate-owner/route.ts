@@ -61,9 +61,18 @@ export async function POST(request: NextRequest) {
       sub: owner._id.toString(),
       role: "propertyOwner",
       ownerId: owner._id.toString(),
+      managementType,
       impersonator: { userId: adminUserId, role: "admin" },
     });
     response.cookies.set("session", impersonationToken, getSessionCookieOptions());
+
+    response.cookies.set("managementType", managementType, {
+      path: "/",
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 3600,
+    });
 
     response.cookies.set("adminOriginalUserId", adminUserId, {
       path: "/",

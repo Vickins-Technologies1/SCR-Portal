@@ -99,7 +99,9 @@ export default function AirbnbTenantDashboardPage() {
         });
         const json = await res.json();
         if (json?.success) {
-          window.location.href = json.redirect || "/property-owner-dashboard";
+          const fallback =
+            Cookies.get("managementType") === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+          window.location.href = json.redirect || fallback;
           return;
         }
       } catch {
@@ -111,6 +113,7 @@ export default function AirbnbTenantDashboardPage() {
     Cookies.remove("role");
     Cookies.remove("permissions");
     Cookies.remove("ownerId");
+    Cookies.remove("managementType");
     Cookies.remove("csrf-token");
     window.location.href = "/airbnb-tenant-login";
   };

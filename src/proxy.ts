@@ -10,6 +10,13 @@ import {
 } from "./lib/csrf";
 
 type Role = "admin" | "propertyOwner" | "teamMember" | "tenant" | null;
+type OwnerManagementType = "rentals" | "airbnb";
+
+function normalizeManagementType(value: unknown): OwnerManagementType {
+  if (typeof value !== "string") return "rentals";
+  const normalized = value.trim().toLowerCase();
+  return normalized === "airbnb" ? "airbnb" : "rentals";
+}
 
 interface RouteAccess {
   roles: Role[];
@@ -235,6 +242,10 @@ export async function proxy(request: NextRequest) {
     const role = (session?.role ?? null) as Role;
     const userId = session?.sub ?? null;
     const ownerId = session?.ownerId ?? null;
+    const managementType =
+      role === "propertyOwner" || role === "teamMember"
+        ? normalizeManagementType(session?.managementType ?? cookies.get("managementType")?.value)
+        : null;
     const isImpersonating =
       role === "propertyOwner" && cookies.get("isImpersonating")?.value === "true";
     const impersonatingTenantId = isImpersonating
@@ -246,6 +257,7 @@ export async function proxy(request: NextRequest) {
       userId,
       role,
       ownerId,
+      managementType,
     });
     if (cookieHeader) {
       requestHeaders.set("cookie", cookieHeader);
@@ -326,6 +338,46 @@ export async function proxy(request: NextRequest) {
       return config.isApi
         ? NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
         : NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    // Owner portal separation: Airbnb owners must stay in Airbnb portal, rentals owners must stay in rentals portal.
+    // Applies to property owners + their team members (but not to admins/tenants).
+    if (role === "propertyOwner" || role === "teamMember") {
+      const isAirbnbPortalPath =
+        path === "/airbnb-dashboard" ||
+        path.startsWith("/airbnb-dashboard/") ||
+        path === "/api/airbnb" ||
+        path.startsWith("/api/airbnb/");
+
+      const isRentalsPortalPath =
+        path === "/property-owner-dashboard" ||
+        path.startsWith("/property-owner-dashboard/") ||
+        path === "/api/ownerstats" ||
+        path.startsWith("/api/ownerstats/") ||
+        path === "/api/ownercharts" ||
+        path.startsWith("/api/ownercharts/") ||
+        path === "/api/properties" ||
+        path.startsWith("/api/properties/") ||
+        path === "/api/list-properties" ||
+        path.startsWith("/api/list-properties/") ||
+        path === "/api/tenants" ||
+        path.startsWith("/api/tenants/") ||
+        path === "/api/rent-price-overrides" ||
+        path.startsWith("/api/rent-price-overrides/");
+
+      if (managementType === "airbnb" && isRentalsPortalPath) {
+        logger.warn("Owner portal mismatch (airbnb -> rentals)", { path, role });
+        return config.isApi
+          ? NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL("/airbnb-dashboard", request.url));
+      }
+
+      if (managementType === "rentals" && isAirbnbPortalPath) {
+        logger.warn("Owner portal mismatch (rentals -> airbnb)", { path, role });
+        return config.isApi
+          ? NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL("/property-owner-dashboard", request.url));
+      }
     }
 
     // Tenant self-protection: prevent accessing other tenants' data

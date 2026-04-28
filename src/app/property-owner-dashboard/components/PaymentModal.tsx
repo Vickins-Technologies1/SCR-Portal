@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import Modal from "./Modal";
+import Cookies from "js-cookie";
 
 // Define ClientProperty interface to match TenantsPage
 interface ClientProperty {
@@ -71,6 +72,8 @@ export default function PaymentModal({
   userId,
   billingPlan,
 }: PaymentModalProps) {
+  const dashboardBasePath =
+    Cookies.get("managementType") === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
   const [paymentPropertyId, setPaymentPropertyId] = useState(initialPropertyId);
   const [paymentPhone, setPaymentPhone] = useState(initialPhone);
   const [paymentAmount, setPaymentAmount] = useState<string>("");
@@ -421,7 +424,7 @@ export default function PaymentModal({
                 Cancel
               </button>
               <button
-                onClick={() => (window.location.href = "/property-owner-dashboard/payments")}
+                onClick={() => (window.location.href = `${dashboardBasePath}/payments`)}
                 className="px-4 py-2 bg-[#1E3A8A] text-white rounded-full hover:bg-[#1E40AF] transition text-sm"
                 aria-label="Go to payments"
               >
