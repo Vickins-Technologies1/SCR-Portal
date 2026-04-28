@@ -1,5 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from "next/server";
 import { put } from '@vercel/blob';
 import { v4 as uuidv4 } from 'uuid';
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
@@ -30,21 +29,28 @@ export async function POST(request: NextRequest) {
       url: request.url,
     });
 
-    // Authentication check
-    const cookieStore = await cookies();
-    const role = cookieStore.get('role')?.value;
-    const userId = cookieStore.get('userId')?.value;
+    // Authentication check (owners + team members)
+    const role = request.cookies.get("role")?.value;
+    const userId = request.cookies.get("userId")?.value;
+    const ownerId = request.cookies.get("ownerId")?.value || userId;
+    if (!role || !userId || !ownerId) {
+      logger.warn("Unauthorized access attempt", { role, userId });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
 
-    if (!role || role !== 'propertyOwner' || !userId) {
-      logger.warn('Unauthorized access attempt', { role, userId });
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized or invalid user ID' },
-        { status: 401 }
-      );
+    if (!["propertyOwner", "teamMember"].includes(role)) {
+      logger.warn("Unauthorized access attempt (invalid role)", { role, userId });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    // Extra guard: property owners should never present a different ownerId.
+    if (role === "propertyOwner" && ownerId !== userId) {
+      logger.warn("Unauthorized access attempt (owner mismatch)", { role, userId, ownerId });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
     }
 
     // CSRF token validation
-    const csrfToken = request.headers.get('X-CSRF-Token');
+    const csrfToken = request.headers.get("x-csrf-token") || request.headers.get("X-CSRF-Token");
     if (!validateCsrfToken(request, csrfToken)) {
       logger.warn('Invalid CSRF token', { userId, csrfToken });
       return buildInvalidCsrfResponse(request);
@@ -106,11 +112,10 @@ export async function POST(request: NextRequest) {
     const urls: string[] = [];
     for (const file of validFiles) {
       const extension = file.name.split('.').pop()?.toLowerCase();
-      const fileName = `uploads/${userId}/${uuidv4()}.${extension}`;
-      const fileContent = Buffer.from(await file.arrayBuffer());
+      const fileName = `uploads/${ownerId}/${uuidv4()}.${extension}`;
 
       try {
-        const { url } = await put(fileName, fileContent, {
+        const { url } = await put(fileName, file, {
           access: 'public',
           token: process.env.BLOB_READ_WRITE_TOKEN,
         });
@@ -145,8 +150,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error: unknown) {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get('userId')?.value || 'unknown';
+    const userId = request.cookies.get("userId")?.value || "unknown";
     logger.error('Error uploading images', {
       userId,
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -160,5 +164,5 @@ export async function POST(request: NextRequest) {
 }
 
 // Configure runtime for Vercel serverless
-export const runtime = 'edge';
+export const runtime = "edge";
 export const maxDuration = 30;

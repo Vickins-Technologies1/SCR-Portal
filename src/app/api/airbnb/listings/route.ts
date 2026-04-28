@@ -4,6 +4,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
+import { buildListingIdFilter, normalizeListingStatus } from "@/lib/airbnb-listings";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
       id: listing.externalId || listing._id?.toString?.() || "",
       name: listing.name,
       location: listing.location,
-      status: listing.status,
+      status: normalizeListingStatus(listing.status),
       units: listing.units,
       baseRate: listing.baseRate,
       weekendRate: listing.weekendRate,
@@ -48,7 +49,13 @@ const ListingSchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(2),
   location: z.string().trim().min(2),
-  status: z.enum(["draft", "published", "paused"]).optional(),
+  status: z
+    .preprocess((value) => {
+      if (typeof value !== "string") return value;
+      const normalized = value.trim().toLowerCase();
+      return normalized === "active" ? "published" : normalized;
+    }, z.enum(["draft", "published", "paused"]))
+    .optional(),
   units: z.preprocess((value) => Number(value), z.number().int().min(1).max(200)),
   baseRate: z.preprocess((value) => Number(value), z.number().nonnegative()),
   weekendRate: z.preprocess((value) => Number(value), z.number().nonnegative()),
@@ -155,9 +162,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const listingId = parsed.data.id;
-  const filter = ObjectId.isValid(listingId)
-    ? { _id: new ObjectId(listingId), ownerId }
-    : { externalId: listingId, ownerId };
+  const filter = buildListingIdFilter(ownerId, listingId);
 
   const update = {
     name: parsed.data.name,
@@ -226,9 +231,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Listing ID is required" }, { status: 400 });
   }
 
-  const filter = ObjectId.isValid(listingId)
-    ? { _id: new ObjectId(listingId), ownerId }
-    : { externalId: listingId, ownerId };
+  const filter = buildListingIdFilter(ownerId, listingId);
 
   const { db } = await connectToDatabase();
   const result = await db.collection("airbnbListings").findOneAndDelete(filter);
