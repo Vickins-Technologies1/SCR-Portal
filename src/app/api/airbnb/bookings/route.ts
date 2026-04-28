@@ -6,6 +6,7 @@ import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { sendAirbnbBookingConfirmationEmail } from "@/lib/email";
+import { ensureAirbnbGuestPortalAccount } from "@/lib/airbnb-guest-portal";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -75,8 +76,8 @@ export async function GET(request: NextRequest) {
 const DirectBookingSchema = z.object({
   listingId: z.string().trim().min(1),
   guestName: z.string().trim().min(2),
-  guestEmail: z.string().email().optional(),
-  guestPhone: z.string().trim().optional(),
+  guestEmail: z.string().trim().email(),
+  guestPhone: z.string().trim().min(7),
   checkIn: z.string().trim().min(1),
   checkOut: z.string().trim().min(1),
   total: z.preprocess((value) => Number(value), z.number().nonnegative()),
@@ -180,6 +181,30 @@ export async function POST(request: NextRequest) {
         bookingId: booking.externalId,
       });
     }
+  }
+
+  try {
+    await ensureAirbnbGuestPortalAccount(db, {
+      ownerId,
+      booking: {
+        externalId: booking.externalId,
+        listingId: booking.listingId,
+        listingName: booking.listingName,
+        guestName: booking.guestName,
+        guestEmail: booking.guestEmail,
+        guestPhone: booking.guestPhone,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        total: booking.total,
+      },
+      deliveryMethod: "both",
+      forceResetPassword: true,
+    });
+  } catch (error) {
+    console.error("Failed to create Airbnb guest portal account", {
+      bookingId: booking.externalId,
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
 
   return NextResponse.json({

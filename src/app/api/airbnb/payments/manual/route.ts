@@ -8,6 +8,7 @@ import {
   syncAirbnbBookingPaymentStatus,
 } from "@/lib/airbnb-payments";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
+import { ensureAirbnbGuestPortalAccount } from "@/lib/airbnb-guest-portal";
 
 const ManualPaymentSchema = z.object({
   bookingId: z.string().trim().min(1),
@@ -44,6 +45,31 @@ export async function POST(request: NextRequest) {
   const booking = await db.collection("airbnbBookings").findOne({ ownerId, externalId: bookingId });
   if (!booking) {
     return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
+  }
+
+  try {
+    await ensureAirbnbGuestPortalAccount(db, {
+      ownerId,
+      booking: {
+        externalId: bookingId,
+        listingId: booking.listingId,
+        listingExternalId: booking.listingExternalId,
+        listingName: booking.listingName,
+        guestName: booking.guestName,
+        guestEmail: booking.guestEmail,
+        guestPhone: booking.guestPhone,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        total: booking.total,
+      },
+      deliveryMethod: "both",
+      forceResetPassword: false,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, message: error instanceof Error ? error.message : "Failed to create guest portal account." },
+      { status: 400 }
+    );
   }
 
   if (String(booking.payoutStatus || "").toLowerCase() === "paid") {

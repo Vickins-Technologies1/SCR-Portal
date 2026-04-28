@@ -135,12 +135,12 @@ export default function AirbnbBookingsPage() {
       setFormMessage("Please fill in all required fields.");
       return;
     }
-    if ((form.paymentMode === "mpesa" || form.paymentMode === "link") && !form.guestPhone) {
-      setFormMessage("Phone number is required for M-Pesa payments.");
+    if (!form.guestEmail) {
+      setFormMessage("Guest email is required to create the guest portal.");
       return;
     }
-    if (form.paymentMode === "link" && !form.guestEmail) {
-      setFormMessage("Guest email is required to send a payment link.");
+    if (!form.guestPhone) {
+      setFormMessage("Guest phone number is required to create the guest portal.");
       return;
     }
     setIsSubmitting(true);
@@ -203,17 +203,7 @@ export default function AirbnbBookingsPage() {
         }
         setFormMessage("Booking created and cash payment recorded.");
       } else {
-        const res = await fetch("/api/airbnb/tenants/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
-          credentials: "include",
-          body: JSON.stringify({ bookingId, deliveryMethod: "both" }),
-        });
-        const inviteData = await res.json();
-        if (!res.ok || !inviteData.success) {
-          throw new Error(inviteData.message || "Failed to create payment account");
-        }
-        setFormMessage("Booking created. Payment link and login details sent to the guest.");
+        setFormMessage("Booking created. Login details sent to the guest.");
       }
 
       setForm({
@@ -280,7 +270,7 @@ export default function AirbnbBookingsPage() {
     if (!res.ok || !json.success) {
       throw new Error(json.message || "Failed to send payment link");
     }
-    setTableMessage("Payment link and login details sent.");
+    setTableMessage("Guest portal login details sent.");
   };
 
   const recordCash = async (booking: AirbnbBooking) => {
@@ -302,7 +292,7 @@ export default function AirbnbBookingsPage() {
       throw new Error("Only the property owner can impersonate tenant accounts.");
     }
     if (!booking.tenantId) {
-      throw new Error("Payment portal account not created yet. Click “Payment link” first.");
+      throw new Error("Guest portal account not created yet. Click “Payment link” first.");
     }
 
     const res = await fetch("/api/impersonate", {

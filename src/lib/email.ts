@@ -638,7 +638,6 @@ export async function sendAirbnbPaymentPortalInviteEmail({
   bookingId,
   amount,
   loginUrl,
-  paymentUrl,
   email,
   password,
   supportEmail,
@@ -650,14 +649,13 @@ export async function sendAirbnbPaymentPortalInviteEmail({
 
     const html = generateStyledTemplate({
       name: guestName,
-      title: "Complete your booking payment",
-      intro: `Your payment portal has been created for ${listingName}. Use the details below to log in and complete your payment.`,
+      title: "Your guest portal access",
+      intro: `Your guest portal has been created for ${listingName}. Use the details below to log in.`,
       details: `
         <ul>
           <li><strong>Booking:</strong> ${bookingId}</li>
           <li><strong>Amount:</strong> KES ${Number(amount || 0).toLocaleString("en-KE")}</li>
           <li><strong>Login URL:</strong> <a href="${loginUrl}" class="button">Log in</a></li>
-          <li><strong>Payment page:</strong> <a href="${paymentUrl}" class="button">Make payment</a></li>
           <li><strong>Email:</strong> ${email}</li>
           <li><strong>Temporary Password:</strong> ${password}</li>
         </ul>
@@ -670,7 +668,7 @@ export async function sendAirbnbPaymentPortalInviteEmail({
     await transporter.sendMail({
       from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
-      subject: `Payment link for your booking (${listingName})`,
+      subject: `Guest portal access (${listingName})`,
       html,
     });
     console.log(`Airbnb payment portal invite email sent to ${to}`);

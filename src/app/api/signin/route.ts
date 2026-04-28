@@ -56,7 +56,7 @@ async function resolveOwnerManagementType(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, role: providedRole, userId } = body;
+    const { email, password, role: providedRole, userId, portal } = body;
 
     // Validate input
     if (!body || (!email || !password) && !userId) {
@@ -341,47 +341,72 @@ export async function POST(request: NextRequest) {
     let ownerManagementType: OwnerManagementType | null = null;
     let userCollection: "tenants" | "propertyOwners" | "teamMembers" | null = null;
 
-    // 1. Check propertyOwners (most privileged)
-    user = await db.collection("propertyOwners").findOne({
-      email: new RegExp(`^${email}$`, "i"),
-    });
-    if (user) {
-      finalRole = "propertyOwner";
-      redirectPath = "/property-owner-dashboard";
-      isOwner = true;
-      userCollection = "propertyOwners";
+    const emailRegex = new RegExp(`^${email}$`, "i");
+    const normalizedPortal = typeof portal === "string" ? portal.trim().toLowerCase() : "";
 
-      // ──── ADMIN APPROVAL CHECK ────
-      if (user.isApproved === false) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Your account is still pending admin approval. Please try again later or contact support.",
-          },
-          { status: 403 }
-        );
+    // When logging in via the Airbnb guest portal, prioritize guest tenant accounts
+    // even if an owner/team member uses the same email address.
+    if (normalizedPortal === "airbnb") {
+      user = await db.collection("tenants").findOne(
+        { email: emailRegex, accountType: "airbnb_guest" },
+        { sort: { updatedAt: -1, createdAt: -1, _id: -1 } }
+      );
+      if (user) {
+        finalRole = "tenant";
+        redirectPath = "/airbnb-tenant-dashboard";
+        userCollection = "tenants";
       }
-      // ─────────────────────────────────
-    } else {
-      // 2. Check teamMembers
-      user = await db.collection("teamMembers").findOne({
-        email: new RegExp(`^${email}$`, "i"),
-      });
+    }
+
+    // 1. Check propertyOwners (most privileged)
+    if (!user) {
+      user = await db.collection("propertyOwners").findOne({ email: emailRegex });
+      if (user) {
+        finalRole = "propertyOwner";
+        redirectPath = "/property-owner-dashboard";
+        isOwner = true;
+        userCollection = "propertyOwners";
+
+        // ──── ADMIN APPROVAL CHECK ────
+        if (user.isApproved === false) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Your account is still pending admin approval. Please try again later or contact support.",
+            },
+            { status: 403 }
+          );
+        }
+        // ─────────────────────────────────
+      }
+    }
+
+    // 2. Check teamMembers
+    if (!user) {
+      user = await db.collection("teamMembers").findOne({ email: emailRegex });
       if (user) {
         finalRole = user.role; // e.g. "Manager"
         redirectPath = "/property-owner-dashboard";
         isTeamMember = true;
         userCollection = "teamMembers";
-      } else {
-        // 3. Check tenants
-        user = await db.collection("tenants").findOne({
-          email: new RegExp(`^${email}$`, "i"),
-        });
-        if (user) {
-          finalRole = "tenant";
-          redirectPath = user?.accountType === "airbnb_guest" ? "/airbnb-tenant-dashboard" : "/tenant-dashboard";
-          userCollection = "tenants";
-        }
+      }
+    }
+
+    // 3. Check tenants (default)
+    if (!user) {
+      const tenantFilter: Record<string, unknown> = { email: emailRegex };
+
+      if (normalizedPortal === "rental") {
+        tenantFilter.accountType = { $ne: "airbnb_guest" };
+      }
+
+      user = await db.collection("tenants").findOne(tenantFilter, {
+        sort: { updatedAt: -1, createdAt: -1, _id: -1 },
+      });
+      if (user) {
+        finalRole = "tenant";
+        redirectPath = user?.accountType === "airbnb_guest" ? "/airbnb-tenant-dashboard" : "/tenant-dashboard";
+        userCollection = "tenants";
       }
     }
 

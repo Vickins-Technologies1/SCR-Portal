@@ -73,6 +73,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
       email: email.trim(),
       password,
       role: "tenant",
+      portal: isAirbnbGuestPortal ? "airbnb" : "rental",
     };
 
     try {
