@@ -233,12 +233,152 @@ export async function DELETE(request: NextRequest) {
 
   const filter = buildListingIdFilter(ownerId, listingId);
 
-  const { db } = await connectToDatabase();
-  const result = await db.collection("airbnbListings").findOneAndDelete(filter);
+  const { db, client } = await connectToDatabase();
 
-  if (!result?.value) {
-    return NextResponse.json({ success: false, message: "Listing not found" }, { status: 404 });
+  const session = client.startSession();
+  try {
+    let deletedListing: any = null;
+    let deletedBookings = 0;
+    let deletedPayments = 0;
+    let deletedTenants = 0;
+
+    await session.withTransaction(async () => {
+      const listingRes = await db.collection("airbnbListings").findOneAndDelete(filter, { session });
+      deletedListing = listingRes?.value;
+      if (!deletedListing) {
+        return;
+      }
+
+      const canonicalListingId =
+        deletedListing.externalId || deletedListing._id?.toString?.() || listingId;
+      const listingName = String(deletedListing.name || deletedListing.listingName || "").trim();
+
+      const bookingDocs = await db
+        .collection("airbnbBookings")
+        .find(
+          {
+            ownerId,
+            $or: [
+              { listingId: canonicalListingId },
+              ...(listingName ? [{ listingName }] : []),
+            ],
+          },
+          { projection: { externalId: 1, _id: 1 }, session }
+        )
+        .toArray();
+
+      const bookingIds = bookingDocs
+        .map((b: any) => b.externalId || b._id?.toString?.() || "")
+        .filter((id: string) => Boolean(id));
+
+      const bookingsRes = await db.collection("airbnbBookings").deleteMany(
+        {
+          ownerId,
+          $or: [
+            { listingId: canonicalListingId },
+            ...(listingName ? [{ listingName }] : []),
+          ],
+        },
+        { session }
+      );
+      deletedBookings = bookingsRes.deletedCount;
+
+      if (bookingIds.length > 0) {
+        const paymentsRes = await db.collection("payments").deleteMany(
+          {
+            ownerId,
+            type: "AirbnbDirect",
+            $or: [{ airbnbBookingId: { $in: bookingIds } }, { propertyId: canonicalListingId }],
+          },
+          { session }
+        );
+        deletedPayments += paymentsRes.deletedCount;
+      } else {
+        const paymentsRes = await db.collection("payments").deleteMany(
+          { ownerId, type: "AirbnbDirect", propertyId: canonicalListingId },
+          { session }
+        );
+        deletedPayments += paymentsRes.deletedCount;
+      }
+
+      const tenantsRes = await db.collection("tenants").deleteMany(
+        {
+          ownerId,
+          accountType: "airbnb_guest",
+          $or: [
+            { propertyId: canonicalListingId },
+            ...(bookingIds.length > 0 ? [{ airbnbBookingId: { $in: bookingIds } }] : []),
+            ...(listingName ? [{ houseNumber: listingName }] : []),
+          ],
+        },
+        { session }
+      );
+      deletedTenants = tenantsRes.deletedCount;
+
+      await db.collection("airbnbCalendar").deleteMany(
+        {
+          ownerId,
+          $or: [
+            { listingId: canonicalListingId },
+            { externalListingId: canonicalListingId },
+            ...(listingName ? [{ listingName }] : []),
+          ],
+        },
+        { session }
+      );
+
+      await db.collection("airbnbComplianceDocuments").deleteMany(
+        { ownerId, $or: [{ propertyId: canonicalListingId }, ...(listingName ? [{ propertyName: listingName }] : [])] },
+        { session }
+      );
+
+      await db.collection("airbnbCompliance").deleteMany(
+        { ownerId, $or: [{ externalId: canonicalListingId }, ...(listingName ? [{ propertyName: listingName }] : [])] },
+        { session }
+      );
+
+      if (listingName) {
+        await db.collection("airbnbTasks").deleteMany(
+          { ownerId, propertyName: listingName },
+          { session }
+        );
+      }
+
+      if (listingName) {
+        const convos = await db
+          .collection("airbnbConversations")
+          .find({ ownerId, listingName }, { projection: { externalId: 1, _id: 1 }, session })
+          .toArray();
+        const conversationIds = convos
+          .map((c: any) => c.externalId || c._id?.toString?.() || "")
+          .filter((id: string) => Boolean(id));
+
+        await db.collection("airbnbConversations").deleteMany({ ownerId, listingName }, { session });
+
+        if (conversationIds.length > 0) {
+          await db.collection("airbnbConversationMessages").deleteMany(
+            { ownerId, conversationId: { $in: conversationIds } },
+            { session }
+          );
+          await db.collection("airbnbMessageDeliveries").deleteMany(
+            { ownerId, conversationId: { $in: conversationIds } },
+            { session }
+          );
+        }
+      }
+    });
+
+    if (!deletedListing) {
+      return NextResponse.json({ success: false, message: "Listing not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      deletedBookings,
+      deletedPayments,
+      deletedTenants,
+    });
+  } finally {
+    await session.endSession();
   }
-
-  return NextResponse.json({ success: true });
 }

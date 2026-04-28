@@ -24,6 +24,7 @@ export default function AirbnbListingsPage() {
   const [listings, setListings] = useState<AirbnbListing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name?: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
@@ -310,21 +311,19 @@ export default function AirbnbListingsPage() {
     }
   };
 
-  const handleDeleteListing = async () => {
-    if (!form.id) return;
+  const handleDeleteListing = async (listingId: string) => {
+    if (!listingId) return;
     if (!csrfToken) {
       setFormMessage("Missing session token. Refresh the page and try again.");
       return;
     }
-    const confirmed = window.confirm("Delete this listing? This action cannot be undone.");
-    if (!confirmed) return;
 
     setIsDeleting(true);
     setFormMessage(null);
     setListMessage(null);
     try {
       const res = await fetch(
-        `/api/airbnb/listings?listingId=${encodeURIComponent(form.id)}`,
+        `/api/airbnb/listings?listingId=${encodeURIComponent(listingId)}`,
         {
           method: "DELETE",
           headers: { "x-csrf-token": csrfToken },
@@ -336,10 +335,11 @@ export default function AirbnbListingsPage() {
         throw new Error(data.message || "Failed to delete listing");
       }
 
-      setListings((prev) => prev.filter((listing) => listing.id !== form.id));
+      setListings((prev) => prev.filter((listing) => listing.id !== listingId));
       setListMessage("Listing deleted.");
       resetImageItems([]);
       setShowModal(false);
+      setDeleteTarget(null);
     } catch (err) {
       setFormMessage(err instanceof Error ? err.message : "Failed to delete listing");
     } finally {
@@ -741,7 +741,7 @@ export default function AirbnbListingsPage() {
                   <div className="flex justify-end gap-3">
                     {form.id && (
                       <button
-                        onClick={handleDeleteListing}
+                        onClick={() => setDeleteTarget({ id: form.id, name: form.name })}
                         disabled={isDeleting || isSaving || isUploadingImages}
                         className="rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
                       >
@@ -763,6 +763,52 @@ export default function AirbnbListingsPage() {
                       className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
                     >
                       {isSaving || isUploadingImages ? "Saving..." : "Save listing"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {deleteTarget && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center modal-backdrop p-4">
+              <div className="modal-panel w-full max-w-sm overflow-hidden">
+                <div className="modal-header flex items-center justify-between px-5 py-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Delete listing</h3>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      This deletes the listing and all related Airbnb data.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="modal-close rounded-full p-1"
+                    aria-label="Close"
+                    disabled={isDeleting}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="px-5 pb-5 space-y-4 text-xs">
+                  <p className="text-muted-foreground">
+                    Confirm delete{deleteTarget.name ? ` “${deleteTarget.name}”` : ""}? This action cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(null)}
+                      className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-60"
+                      disabled={isDeleting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteListing(deleteTarget.id)}
+                      className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                      disabled={isDeleting || isSaving || isUploadingImages}
+                    >
+                      {isDeleting ? "Deleting..." : "Delete"}
                     </button>
                   </div>
                 </div>

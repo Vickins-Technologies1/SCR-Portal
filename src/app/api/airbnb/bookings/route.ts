@@ -215,21 +215,50 @@ export async function DELETE(request: NextRequest) {
   if (resolved.response) return resolved.response;
   const { ownerId } = resolved.context!;
 
-  const { db } = await connectToDatabase();
+  const { db, client } = await connectToDatabase();
 
-  const filters: Record<string, unknown>[] = [{ externalId: bookingId }];
+  const filters: Record<string, unknown>[] = [{ externalId: bookingId }, { _id: bookingId }];
   if (ObjectId.isValid(bookingId)) {
-    filters.push({ _id: new ObjectId(bookingId) });
+    filters.unshift({ _id: new ObjectId(bookingId) });
   }
 
-  const result = await db.collection("airbnbBookings").deleteOne({
-    ownerId,
-    $or: filters,
-  });
+  const session = client.startSession();
+  try {
+    let deletedBooking: any = null;
+    let deletedPayments = 0;
 
-  if (!result.deletedCount) {
-    return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
+    await session.withTransaction(async () => {
+      const bookingRes = await db.collection("airbnbBookings").findOneAndDelete(
+        { ownerId, $or: filters },
+        { session }
+      );
+      deletedBooking = bookingRes?.value;
+      if (!deletedBooking) {
+        return;
+      }
+
+      const canonicalBookingId =
+        deletedBooking.externalId || deletedBooking._id?.toString?.() || bookingId;
+
+      const paymentsRes = await db.collection("payments").deleteMany(
+        { ownerId, type: "AirbnbDirect", airbnbBookingId: canonicalBookingId },
+        { session }
+      );
+      deletedPayments = paymentsRes.deletedCount;
+
+      // Also remove any Airbnb guest tenant accounts created for this booking.
+      await db.collection("tenants").deleteMany(
+        { ownerId, accountType: "airbnb_guest", airbnbBookingId: canonicalBookingId },
+        { session }
+      );
+    });
+
+    if (!deletedBooking) {
+      return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, deletedPayments });
+  } finally {
+    await session.endSession();
   }
-
-  return NextResponse.json({ success: true });
 }

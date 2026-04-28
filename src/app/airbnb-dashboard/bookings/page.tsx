@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardList, PlusCircle } from "lucide-react";
+import { ClipboardList, PlusCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -40,6 +40,7 @@ export default function AirbnbBookingsPage() {
   const [listings, setListings] = useState<AirbnbListingOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label?: string } | null>(null);
   const [isActing, setIsActing] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({
     listingId: "",
@@ -322,8 +323,6 @@ export default function AirbnbBookingsPage() {
       setTableMessage("Missing session token. Refresh the page and try again.");
       return;
     }
-    const confirmed = window.confirm("Delete this booking? This action cannot be undone.");
-    if (!confirmed) return;
     setIsDeleting(bookingId);
     setTableMessage(null);
     try {
@@ -340,6 +339,7 @@ export default function AirbnbBookingsPage() {
       }
       setBookings((prev) => prev.filter((booking) => booking.id !== bookingId));
       setTableMessage("Booking deleted.");
+      setDeleteTarget(null);
     } catch (err) {
       setTableMessage(err instanceof Error ? err.message : "Failed to delete booking");
     } finally {
@@ -604,7 +604,12 @@ export default function AirbnbBookingsPage() {
                               {isActing[booking.id] ? "Working..." : "Impersonate"}
                             </button>
                             <button
-                              onClick={() => handleDeleteBooking(booking.id)}
+                              onClick={() =>
+                                setDeleteTarget({
+                                  id: booking.id,
+                                  label: `${booking.guestName} • ${booking.listingName}`,
+                                })
+                              }
                               disabled={isDeleting === booking.id}
                               className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-60"
                             >
@@ -619,6 +624,52 @@ export default function AirbnbBookingsPage() {
               </table>
             </div>
           </section>
+
+          {deleteTarget && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+              <div className="modal-panel w-full max-w-sm overflow-hidden">
+                <div className="modal-header flex items-center justify-between px-5 py-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Delete booking</h3>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      This also deletes any recorded payments for the booking.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="modal-close rounded-full p-1"
+                    aria-label="Close"
+                    disabled={isDeleting === deleteTarget.id}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="px-5 pb-5 space-y-4 text-xs">
+                  <p className="text-muted-foreground">
+                    Confirm delete{deleteTarget.label ? ` (${deleteTarget.label})` : ""}? This action cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(null)}
+                      className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-60"
+                      disabled={isDeleting === deleteTarget.id}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteBooking(deleteTarget.id)}
+                      className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                      disabled={!csrfToken || isDeleting === deleteTarget.id}
+                    >
+                      {isDeleting === deleteTarget.id ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
