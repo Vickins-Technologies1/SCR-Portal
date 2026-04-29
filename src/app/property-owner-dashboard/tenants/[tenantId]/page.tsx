@@ -16,6 +16,7 @@ import DuesSection from "../../components/DuesSection";
 import ActionButtons from "../../components/ActionButtons";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
 import ImpersonateModal from "../../components/ImpersonateModal";
+import TenantRentOverrideModal from "../../components/TenantRentOverrideModal";
 
 interface Property {
   _id: string;
@@ -80,6 +81,7 @@ export default function TenantDetailsPage() {
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showImpersonateModal, setShowImpersonateModal] = useState(false);
+  const [showRentOverrideModal, setShowRentOverrideModal] = useState(false);
 
   const [paymentData, setPaymentData] = useState<PaymentFormData>({
     amount: "",
@@ -707,6 +709,8 @@ export default function TenantDetailsPage() {
 
   const paymentSnapshot = getPaymentSnapshot(tenant);
   const unitSummary = getTenantUnitSummary(tenant);
+  const rentPaymentOverrides = Array.isArray(tenant.rentPaymentOverrides) ? tenant.rentPaymentOverrides : [];
+  const activeRentPaymentOverrides = rentPaymentOverrides.filter((override) => override?.status !== "inactive");
 
   return (
     <>
@@ -811,6 +815,63 @@ export default function TenantDetailsPage() {
               <div className="glass-panel rounded-2xl p-4 sm:p-5">
                 <DuesSection tenant={tenant} isDuesLoading={isDuesLoading} />
               </div>
+
+              <div className="surface-card rounded-2xl p-4 sm:p-5 border border-border/70">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">Overrides</p>
+                    <h3 className="text-base sm:text-lg font-semibold text-foreground">Tenant rent override</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                      Temporarily replace this tenant’s expected monthly rent for a selected period.
+                    </p>
+                  </div>
+
+                  {canManageTenants && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRentOverrideModal(true)}
+                      className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary-hover"
+                    >
+                      Override rent
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  {activeRentPaymentOverrides.length > 0 ? (
+                    <div className="space-y-2">
+                      {activeRentPaymentOverrides.slice(0, 2).map((override) => (
+                        <div
+                          key={override._id}
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 rounded-xl bg-white/70 border border-border px-4 py-3"
+                        >
+                          <p className="text-sm font-semibold text-foreground">
+                            Ksh {Number(override.price || 0).toLocaleString()} / mo
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(String(override.startDate)).toLocaleDateString("en-US", {
+                              month: "short",
+                              year: "numeric",
+                            })}{" "}
+                            -{" "}
+                            {new Date(String(override.endDate)).toLocaleDateString("en-US", {
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </p>
+                        </div>
+                      ))}
+                      {activeRentPaymentOverrides.length > 2 ? (
+                        <p className="text-xs text-muted-foreground">
+                          +{activeRentPaymentOverrides.length - 2} more active override(s)
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No active overrides for this tenant.</p>
+                  )}
+                </div>
+              </div>
             </section>
 
             <section className="glass-panel rounded-3xl p-5 sm:p-6">
@@ -871,6 +932,22 @@ export default function TenantDetailsPage() {
           tenantName={tenant.name}
           onConfirm={handleImpersonate}
           isLoading={isImpersonating}
+        />
+
+        <TenantRentOverrideModal
+          isOpen={showRentOverrideModal}
+          onClose={() => setShowRentOverrideModal(false)}
+          tenantId={tenant._id}
+          tenantName={tenant.name}
+          csrfToken={csrfToken}
+          getCsrfToken={fetchCsrfToken}
+          canEdit={canManageTenants}
+          onUpdated={async () => {
+            const token = csrfToken || (await fetchCsrfToken());
+            if (!token) return;
+            await fetchTenantData(token);
+            await fetchDues(token);
+          }}
         />
 
         <Modal

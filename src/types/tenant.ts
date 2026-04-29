@@ -9,6 +9,16 @@ export interface TenantLeaseUnit {
   deposit: number;
 }
 
+export interface TenantRentPaymentOverride {
+  _id: string;
+  price: number;
+  startDate: Date | string;
+  endDate: Date | string;
+  status?: "active" | "inactive";
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
 export interface Tenant {
   _id: ObjectId;
   ownerId: string;
@@ -37,6 +47,7 @@ export interface Tenant {
   totalUtilityPaid: number;
   totalDepositPaid: number;
   walletBalance: number;
+  rentPaymentOverrides?: TenantRentPaymentOverride[];
   deliveryMethod: "sms" | "email" | "whatsapp" | "both" | "app";
 }
 
@@ -67,6 +78,7 @@ export interface ResponseTenant {
   totalUtilityPaid: number;
   totalDepositPaid: number;
   walletBalance: number;
+  rentPaymentOverrides?: TenantRentPaymentOverride[];
   deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
   dues?: {
     rentDues: number;

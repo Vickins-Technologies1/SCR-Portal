@@ -5,6 +5,14 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAccountTier } from "@/lib/tier";
 import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
+type OwnerManagementType = "rentals" | "airbnb";
+
+function normalizeManagementType(value: unknown): OwnerManagementType {
+  if (typeof value !== "string") return "rentals";
+  const normalized = value.trim().toLowerCase();
+  return normalized === "airbnb" ? "airbnb" : "rentals";
+}
+
 export async function GET() {
   const cookieStore = await cookies();
   const role = cookieStore.get("role")?.value ?? null;
@@ -64,17 +72,15 @@ export async function POST(request: NextRequest) {
   const session = sessionCookie ? await verifySessionToken(sessionCookie) : null;
   const response = NextResponse.json({ success: true, tier: "premium" }, { status: 200 });
 
-  if (session?.sub && session?.role) {
-    const refreshedToken = await createSessionToken({
-      sub: session.sub,
-      role: session.role,
-      ownerId: session.ownerId ?? null,
-      managementType: session.managementType ?? null,
-      impersonator: session.impersonator ?? null,
-      tier: "premium",
-    });
-    response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, getSessionCookieOptions());
-  }
+  const refreshedToken = await createSessionToken({
+    sub: session?.sub ?? userId,
+    role: session?.role ?? "propertyOwner",
+    ownerId: session?.ownerId ?? userId,
+    managementType: session?.managementType ?? normalizeManagementType(cookieStore.get("managementType")?.value),
+    impersonator: session?.impersonator ?? null,
+    tier: "premium",
+  });
+  response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, getSessionCookieOptions());
 
   response.cookies.set("tier", "premium", {
     secure: process.env.NODE_ENV === "production",

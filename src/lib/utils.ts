@@ -1,6 +1,6 @@
 // src/lib/utils.ts
 import { UnitType } from '../types/property';
-import { Tenant, ResponseTenant, TenantLeaseUnit } from '../types/tenant';
+import { Tenant, ResponseTenant, TenantLeaseUnit, TenantRentPaymentOverride } from '../types/tenant';
 import { RentPriceOverride } from '../types/rent-price-override';
 import { Db, ObjectId } from 'mongodb';
 import { buildOverrideKey, filterOverridesForUnit } from './rent-overrides';
@@ -327,6 +327,14 @@ export const resolveTenantMonthlyRentForDate = ({
   date: Date;
   rentOverrideMap?: Map<string, RentPriceOverride[]>;
 }): number => {
+  const tenantOverride = resolveTenantOverrideForDate({
+    overrides: tenant.rentPaymentOverrides,
+    date,
+  });
+  if (tenantOverride) {
+    return Math.max(0, Number(tenantOverride.price) || 0);
+  }
+
   const leaseUnits = getTenantLeaseUnits(tenant);
   if (!leaseUnits.length) return 0;
   return leaseUnits.reduce(
@@ -403,19 +411,36 @@ export const calculateTenantRentDueToDate = ({
   let rentDueTotal = 0;
   for (let i = 0; i < monthsStayed; i += 1) {
     const monthStart = new Date(startMonthStart.getFullYear(), startMonthStart.getMonth() + i, 1);
-    const monthRent = leaseUnits.reduce(
-      (sum, unit) =>
-        sum + resolveMonthlyRentForLeaseUnit({ unit, date: monthStart, rentOverrideMap, propertyId: tenant.propertyId }),
-      0
-    );
-    rentDueTotal += monthRent;
+    const tenantOverride = resolveTenantOverrideForDate({
+      overrides: tenant.rentPaymentOverrides,
+      date: monthStart,
+    });
+
+    if (tenantOverride) {
+      rentDueTotal += Math.max(0, Number(tenantOverride.price) || 0);
+    } else {
+      const monthRent = leaseUnits.reduce(
+        (sum, unit) =>
+          sum +
+          resolveMonthlyRentForLeaseUnit({ unit, date: monthStart, rentOverrideMap, propertyId: tenant.propertyId }),
+        0
+      );
+      rentDueTotal += monthRent;
+    }
   }
 
-  const currentMonthlyRent = leaseUnits.reduce(
-    (sum, unit) =>
-      sum + resolveMonthlyRentForLeaseUnit({ unit, date: today, rentOverrideMap, propertyId: tenant.propertyId }),
-    0
-  );
+  const currentTenantOverride = resolveTenantOverrideForDate({
+    overrides: tenant.rentPaymentOverrides,
+    date: today,
+  });
+
+  const currentMonthlyRent = currentTenantOverride
+    ? Math.max(0, Number(currentTenantOverride.price) || 0)
+    : leaseUnits.reduce(
+        (sum, unit) =>
+          sum + resolveMonthlyRentForLeaseUnit({ unit, date: today, rentOverrideMap, propertyId: tenant.propertyId }),
+        0
+      );
 
   return {
     rentDue: roundCurrency(rentDueTotal),
@@ -475,6 +500,49 @@ export const calculateOverduePenalty = ({
 const normalizeOverrides = (overrides?: RentPriceOverride[]): RentPriceOverride[] => {
   if (!overrides?.length) return [];
   return overrides.filter((override) => override && override.status !== "inactive");
+};
+
+const normalizeTenantOverrides = (
+  overrides?: TenantRentPaymentOverride[]
+): TenantRentPaymentOverride[] => {
+  if (!overrides?.length) return [];
+  return overrides.filter((override) => override && override.status !== "inactive");
+};
+
+const resolveTenantOverrideForDate = ({
+  overrides,
+  date,
+}: {
+  overrides?: TenantRentPaymentOverride[];
+  date: Date;
+}): TenantRentPaymentOverride | null => {
+  const activeOverrides = normalizeTenantOverrides(overrides);
+  if (!activeOverrides.length) return null;
+
+  const monthStart = toMonthStart(date);
+  let matched: TenantRentPaymentOverride | null = null;
+
+  for (const override of activeOverrides) {
+    const start = toValidDate(override.startDate);
+    const end = toValidDate(override.endDate);
+    if (!start || !end) continue;
+    const startMonth = toMonthStart(start);
+    const endMonth = toMonthStart(end);
+
+    if (monthStart < startMonth || monthStart > endMonth) continue;
+
+    if (!matched) {
+      matched = override;
+      continue;
+    }
+
+    const matchedStart = toValidDate(matched.startDate);
+    if (matchedStart && start > matchedStart) {
+      matched = override;
+    }
+  }
+
+  return matched;
 };
 
 export const resolveMonthlyRentForDate = ({
@@ -697,23 +765,100 @@ export const calculateTenantDues = async (
 
   const rentOverrideMap = rentOverridesOrMap instanceof Map ? rentOverridesOrMap : undefined;
   const rentOverrides = Array.isArray(rentOverridesOrMap) ? rentOverridesOrMap : undefined;
-  const rentDueResult = tenant.leasedUnits && tenant.leasedUnits.length > 0
-    ? calculateTenantRentDueToDate({ tenant, today, rentOverrideMap })
-    : calculateRentDueToDate({
-        leaseStartDate: tenant.leaseStartDate,
-        monthlyRent: tenant.price,
-        today,
-        overrides: rentOverrides,
-      });
+  const rentDueResult =
+    tenant.leasedUnits && tenant.leasedUnits.length > 0
+      ? calculateTenantRentDueToDate({ tenant, today, rentOverrideMap })
+      : (() => {
+          const safeMonthlyRent = Math.max(0, tenant.price || 0);
+          const hasOverrides = normalizeOverrides(rentOverrides).length > 0;
+          const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+          const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+
+          if (!tenant.leaseStartDate || (!hasOverrides && safeMonthlyRent <= 0)) {
+            return {
+              rentDue: 0,
+              monthsStayed: 0,
+              daysInMonth: daysInCurrentMonth,
+              daysElapsedInMonth: 0,
+              dailyRent: 0,
+            };
+          }
+
+          const start = new Date(tenant.leaseStartDate);
+          if (Number.isNaN(start.getTime()) || today < start) {
+            return {
+              rentDue: 0,
+              monthsStayed: 0,
+              daysInMonth: daysInCurrentMonth,
+              daysElapsedInMonth: 0,
+              dailyRent: 0,
+            };
+          }
+
+          const startMonthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+          const monthDiff =
+            (currentMonthStart.getFullYear() - startMonthStart.getFullYear()) * 12 +
+            (currentMonthStart.getMonth() - startMonthStart.getMonth());
+
+          const monthsStayed = Math.max(1, monthDiff + 1);
+
+          let rentDueTotal = 0;
+          for (let i = 0; i < monthsStayed; i += 1) {
+            const monthStart = new Date(startMonthStart.getFullYear(), startMonthStart.getMonth() + i, 1);
+            const tenantOverride = resolveTenantOverrideForDate({
+              overrides: tenant.rentPaymentOverrides,
+              date: monthStart,
+            });
+            const effectiveMonthlyRent = tenantOverride
+              ? Math.max(0, Number(tenantOverride.price) || 0)
+              : resolveMonthlyRentForDate({
+                  monthlyRent: safeMonthlyRent,
+                  date: monthStart,
+                  overrides: rentOverrides,
+                });
+            rentDueTotal += effectiveMonthlyRent;
+          }
+
+          const currentTenantOverride = resolveTenantOverrideForDate({
+            overrides: tenant.rentPaymentOverrides,
+            date: today,
+          });
+          const currentMonthlyRent = currentTenantOverride
+            ? Math.max(0, Number(currentTenantOverride.price) || 0)
+            : resolveMonthlyRentForDate({
+                monthlyRent: safeMonthlyRent,
+                date: today,
+                overrides: rentOverrides,
+              });
+
+          return {
+            rentDue: roundCurrency(rentDueTotal),
+            monthsStayed,
+            daysInMonth: daysInCurrentMonth,
+            daysElapsedInMonth: Math.min(daysInCurrentMonth, today.getDate()),
+            dailyRent: currentMonthlyRent > 0 ? currentMonthlyRent / daysInCurrentMonth : 0,
+          };
+        })();
   const { rentDue: totalRentDue, monthsStayed } = rentDueResult;
 
-  const currentMonthlyRent = tenant.leasedUnits && tenant.leasedUnits.length > 0
-    ? resolveTenantMonthlyRentForDate({ tenant, date: today, rentOverrideMap })
-    : resolveMonthlyRentForDate({
-        monthlyRent: tenant.price,
-        date: today,
-        overrides: rentOverrides,
-      });
+  const currentMonthlyRent =
+    tenant.leasedUnits && tenant.leasedUnits.length > 0
+      ? resolveTenantMonthlyRentForDate({ tenant, date: today, rentOverrideMap })
+      : (() => {
+          const tenantOverride = resolveTenantOverrideForDate({
+            overrides: tenant.rentPaymentOverrides,
+            date: today,
+          });
+          if (tenantOverride) {
+            return Math.max(0, Number(tenantOverride.price) || 0);
+          }
+
+          return resolveMonthlyRentForDate({
+            monthlyRent: tenant.price,
+            date: today,
+            overrides: rentOverrides,
+          });
+        })();
 
   const propertyUnitTypes = await fetchPropertyUnitTypes();
   const totalDepositDue = resolveTenantRequiredDeposit({ tenant, unitTypes: propertyUnitTypes });
@@ -784,6 +929,7 @@ export const convertTenantToResponse = (tenant: Tenant & { unitIdentifier?: stri
   totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
   totalDepositPaid: tenant.totalDepositPaid ?? 0,
   walletBalance: tenant.walletBalance ?? 0,
+  rentPaymentOverrides: tenant.rentPaymentOverrides,
   deliveryMethod: tenant.deliveryMethod || "both",
 });
 

@@ -70,7 +70,7 @@ export default function UpgradePage() {
   }, [fetchCsrfToken, managementType, role]);
 
   return (
-    <div className="min-h-[100svh] bg-background text-foreground">
+    <div className="sorana-theme min-h-[100svh] bg-background text-foreground">
       <div className="pt-10 pb-28 px-4 sm:px-6 lg:px-8">
         <main className="max-w-6xl mx-auto space-y-6">
           <section className="glass-panel rounded-3xl p-6 sm:p-8">
@@ -165,7 +165,7 @@ export default function UpgradePage() {
                   type="button"
                   disabled={isPremium || isUpgrading}
                   onClick={handleUpgrade}
-                  className="w-full inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isPremium ? "You’re on Premium" : isUpgrading ? "Upgrading…" : "Upgrade to Premium"}
                 </button>
@@ -196,7 +196,7 @@ export default function UpgradePage() {
                 type="button"
                 disabled={isUpgrading || role !== "propertyOwner"}
                 onClick={handleUpgrade}
-                className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-white shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isUpgrading ? "Upgrading…" : "Upgrade to Premium"}
               </button>
