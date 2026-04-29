@@ -170,10 +170,7 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-        const requiresOtp =
-          finalRole === "tenant" && user?.accountType === "airbnb_guest"
-            ? false
-            : !shouldBypassOtp(user.email?.toString(), finalRole);
+        const requiresOtp = finalRole !== "tenant" && !shouldBypassOtp(user.email?.toString(), finalRole);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();
@@ -482,9 +479,7 @@ export async function POST(request: NextRequest) {
 
         const now = new Date();
         const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-        const isAirbnbGuestTenant =
-          finalRole === "tenant" && userCollection === "tenants" && user?.accountType === "airbnb_guest";
-        const requiresOtp = isAirbnbGuestTenant ? false : !shouldBypassOtp(user.email?.toString(), finalRole);
+        const requiresOtp = finalRole !== "tenant" && !shouldBypassOtp(user.email?.toString(), finalRole);
 
         if (requiresOtp) {
           const otpEmail = user.email?.toString();

@@ -1,7 +1,7 @@
 // app/tenant-login/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } from "react-icons/fa";
@@ -32,13 +32,6 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [otpRequired, setOtpRequired] = useState(false);
-  const [otpId, setOtpId] = useState<string | null>(null);
-  const [otpCode, setOtpCode] = useState("");
-  const [otpMessage, setOtpMessage] = useState<string | null>(null);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendCountdown, setResendCountdown] = useState(0);
-  const autoVerifyRef = useRef<string>("");
 
   // Auto-fill demo credentials
   useEffect(() => {
@@ -86,13 +79,6 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
 
       const result = await response.json();
 
-      if (result?.requiresOtp && result?.otpId) {
-        setOtpRequired(true);
-        setOtpId(result.otpId);
-        setOtpMessage(result.message || "Enter the OTP sent to your email and phone.");
-        return;
-      }
-
       if (!response.ok || !result.success) {
         throw new Error(
           result.message ||
@@ -117,103 +103,6 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
       setError(err.message || "An error occurred. Please try again.");
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const verifyOtp = async () => {
-    setError(null);
-    setIsSubmitting(true);
-
-    try {
-      if (!otpId) {
-        throw new Error("OTP session expired. Please log in again.");
-      }
-
-      const response = await fetch("/api/auth/otp/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ otpId, code: otpCode }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "OTP verification failed.");
-      }
-
-      Cookies.set("userId", result.userId, {
-        expires: 7,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-      });
-
-      Cookies.set("role", result.role, {
-        expires: 7,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-      });
-
-      router.push(result.redirect || defaultRedirectPath);
-    } catch (err: any) {
-      setError(err.message || "OTP verification failed.");
-      autoVerifyRef.current = "";
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleOtpVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await verifyOtp();
-  };
-
-  useEffect(() => {
-    if (!otpRequired) return;
-    if (otpCode.length !== 6) return;
-    if (isSubmitting) return;
-    if (autoVerifyRef.current === otpCode) return;
-    autoVerifyRef.current = otpCode;
-    verifyOtp();
-  }, [otpCode, otpRequired, isSubmitting]);
-
-  useEffect(() => {
-    if (resendCountdown <= 0) return;
-    const timer = setInterval(() => {
-      setResendCountdown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [resendCountdown]);
-
-  const handleResendOtp = async () => {
-    if (!otpId || resendLoading || resendCountdown > 0) return;
-    setResendLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/auth/otp/resend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ otpId }),
-      });
-
-      const result = await response.json();
-      if (!response.ok) {
-        const retryAfter = Math.ceil((result.retryAfterMs || 30000) / 1000);
-        if (response.status === 429) {
-          setResendCountdown(retryAfter);
-        }
-        throw new Error(result.message || "Failed to resend OTP.");
-      }
-
-      setOtpMessage(result.message || "OTP resent to your email and phone.");
-      const retryAfter = Math.ceil((result.retryAfterMs || 30000) / 1000);
-      setResendCountdown(retryAfter);
-    } catch (err: any) {
-      setError(err.message || "Failed to resend OTP.");
-    } finally {
-      setResendLoading(false);
     }
   };
 
@@ -438,63 +327,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
               </>
             ) : null}
 
-            {otpRequired ? (
-              <form onSubmit={handleOtpVerify} className="space-y-3.5 sm:space-y-4 pt-1">
-                {otpMessage && (
-                  <div className="p-2.5 xs:p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs sm:text-sm rounded-xl text-center">
-                    {otpMessage}
-                  </div>
-                )}
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="Enter 6-digit OTP"
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  className="w-full px-3.5 xs:px-4 py-2.5 bg-background/70 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.35em] text-center"
-                />
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="submit"
-                  disabled={isSubmitting || otpCode.length < 6}
-                  className="w-full bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
-                >
-                  {isSubmitting ? "Verifying..." : "Verify OTP"}
-                </motion.button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpRequired(false);
-                    setOtpId(null);
-                    setOtpCode("");
-                    setOtpMessage(null);
-                    setResendCountdown(0);
-                    autoVerifyRef.current = "";
-                  }}
-                  className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
-                >
-                  Back to login
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={resendLoading || resendCountdown > 0}
-                  className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-60"
-                >
-                  {resendLoading
-                    ? "Resending OTP..."
-                    : resendCountdown > 0
-                      ? `Resend OTP in ${resendCountdown}s`
-                      : "Resend OTP"}
-                </button>
-              </form>
-            ) : (
-              <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
+            <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
                 {/* Email */}
                 <input
                   type="email"
@@ -539,7 +372,6 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
                   {isSubmitting ? "Authenticating..." : "Sign In"}
                 </motion.button>
               </form>
-            )}
           </div>
         </motion.div>
       </div>
