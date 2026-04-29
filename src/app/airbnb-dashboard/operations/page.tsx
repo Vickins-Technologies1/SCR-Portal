@@ -7,9 +7,12 @@ import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
 import { useAirbnbAccess } from "../components/useAirbnbAccess";
 import type { AirbnbTask } from "@/types/airbnb";
+import { useAccountTier } from "@/hooks/useAccountTier";
+import PremiumGate from "@/components/PremiumGate";
 
 export default function AirbnbOperationsPage() {
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("expenses:view");
+  const { isFree } = useAccountTier();
   const [tasks, setTasks] = useState<AirbnbTask[]>([]);
   const [listingOptions, setListingOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -163,18 +166,51 @@ export default function AirbnbOperationsPage() {
             subtitle="Auto-generate cleaning tasks, assign staff, and track inventory."
             icon={Wrench}
             actions={
-              <button
-                onClick={() => {
-                  setTaskMessage(null);
-                  setShowTaskModal(true);
-                }}
-                className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold"
-              >
-                <PlusCircle size={16} />
-                New task
-              </button>
+              isFree ? (
+                <a
+                  href="/upgrade"
+                  className="flex items-center gap-2 px-6 py-3 bg-amber-600 text-white rounded-xl shadow-lg hover:bg-amber-700 transition-all text-xs sm:text-sm font-semibold"
+                >
+                  Upgrade
+                </a>
+              ) : (
+                <button
+                  onClick={() => {
+                    setTaskMessage(null);
+                    setShowTaskModal(true);
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/30 hover:bg-primary-hover transition-all text-xs sm:text-sm font-semibold"
+                >
+                  <PlusCircle size={16} />
+                  New task
+                </button>
+              )
             }
           />
+
+          {isFree && (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Operations are locked on Free tier
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Upgrade to Premium to manage tasks, staff assignments, and operational automation.
+              </p>
+              <a
+                href="/upgrade"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+              >
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock operations"
+            message="Cleaning tasks, staff workflows, and inventory tools are available on Premium."
+          >
 
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="surface-card rounded-3xl p-5 sm:p-6">
@@ -394,6 +430,7 @@ export default function AirbnbOperationsPage() {
               </div>
             </div>
           )}
+          </PremiumGate>
         </main>
       </div>
     </div>

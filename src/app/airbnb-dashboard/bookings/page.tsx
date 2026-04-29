@@ -45,6 +45,7 @@ export default function AirbnbBookingsPage() {
   const [form, setForm] = useState({
     listingId: "",
     guestName: "",
+    guestIdNumber: "",
     guestEmail: "",
     guestPhone: "",
     checkIn: "",
@@ -153,13 +154,14 @@ export default function AirbnbBookingsPage() {
           "x-csrf-token": csrfToken,
         },
         credentials: "include",
-        body: JSON.stringify({
-          listingId: form.listingId,
-          guestName: form.guestName,
-          guestEmail: form.guestEmail || undefined,
-          guestPhone: form.guestPhone,
-          checkIn: form.checkIn,
-          checkOut: form.checkOut,
+         body: JSON.stringify({
+           listingId: form.listingId,
+           guestName: form.guestName,
+           guestIdNumber: form.guestIdNumber || undefined,
+           guestEmail: form.guestEmail || undefined,
+           guestPhone: form.guestPhone,
+           checkIn: form.checkIn,
+           checkOut: form.checkOut,
           total: Number(form.amount || selectedListing?.baseRate || 0),
         }),
       });
@@ -209,6 +211,7 @@ export default function AirbnbBookingsPage() {
       setForm({
         listingId: "",
         guestName: "",
+        guestIdNumber: "",
         guestEmail: "",
         guestPhone: "",
         checkIn: "",
@@ -389,6 +392,12 @@ export default function AirbnbBookingsPage() {
                   />
                   <input
                     className="rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                    placeholder="ID number (optional)"
+                    value={form.guestIdNumber}
+                    onChange={(event) => setForm((prev) => ({ ...prev, guestIdNumber: event.target.value }))}
+                  />
+                  <input
+                    className="rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
                     placeholder="Guest email (for payment link)"
                     value={form.guestEmail}
                     onChange={(event) => setForm((prev) => ({ ...prev, guestEmail: event.target.value }))}
@@ -478,7 +487,7 @@ export default function AirbnbBookingsPage() {
                     <th>Dates</th>
                     <th>Nights</th>
                     <th>Total</th>
-                    <th>Status</th>
+                    <th>Verification</th>
                     <th>Payout</th>
                     <th>Actions</th>
                   </tr>
@@ -525,16 +534,14 @@ export default function AirbnbBookingsPage() {
                         <td>
                           <span
                             className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                              booking.status === "confirmed"
+                              booking.verificationStatus === "documents_uploaded"
                                 ? "bg-emerald-100 text-emerald-700"
-                                : booking.status === "pending"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : booking.status === "modified"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
                             }`}
                           >
-                            {booking.status}
+                            {booking.verificationStatus === "documents_uploaded"
+                              ? "Documents uploaded"
+                              : "Documents missing"}
                           </span>
                         </td>
                         <td>

@@ -17,6 +17,12 @@ export default function PropertyCard({ property, onView, onEdit, onDelete, canMa
   const availability = ensureAvailability(property);
   const showActions = canManage ?? true;
   const vacancyLabel = `${availability.totalVacant} vacant unit${availability.totalVacant === 1 ? "" : "s"}`;
+  const prices = (property.unitTypes || []).map((u) => Number(u.price || 0)).filter((v) => Number.isFinite(v) && v > 0);
+  const deposits = (property.unitTypes || []).map((u) => Number(u.deposit || 0)).filter((v) => Number.isFinite(v) && v > 0);
+  const minPrice = prices.length ? Math.min(...prices) : 0;
+  const maxPrice = prices.length ? Math.max(...prices) : 0;
+  const minDeposit = deposits.length ? Math.min(...deposits) : 0;
+  const maxDeposit = deposits.length ? Math.max(...deposits) : 0;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -45,7 +51,22 @@ export default function PropertyCard({ property, onView, onEdit, onDelete, canMa
           <div className="flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-primary" />
             <span>
-              From Ksh {Math.min(...property.unitTypes.map((u) => u.price)).toLocaleString()}
+              {minPrice > 0
+                ? maxPrice > minPrice
+                  ? `Ksh ${minPrice.toLocaleString()} – ${maxPrice.toLocaleString()} /mo`
+                  : `Ksh ${minPrice.toLocaleString()} /mo`
+                : "Pricing not set"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-primary" />
+            <span>
+              {minDeposit > 0
+                ? maxDeposit > minDeposit
+                  ? `Deposit: Ksh ${minDeposit.toLocaleString()} – ${maxDeposit.toLocaleString()}`
+                  : `Deposit: Ksh ${minDeposit.toLocaleString()}`
+                : "Deposit not set"}
             </span>
           </div>
 

@@ -8,6 +8,8 @@ import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import PaymentModal from "../components/PaymentModal";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAccountTier } from "@/hooks/useAccountTier";
+import PremiumGate from "@/components/PremiumGate";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -98,6 +100,7 @@ function ReportsAndInvoicesPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const perm = usePermissions();
+  const { isFree } = useAccountTier();
   const [activeTab, setActiveTab] = useState<"reports" | "invoices">("reports");
 
   useEffect(() => {
@@ -723,6 +726,29 @@ function ReportsAndInvoicesPageInner() {
             </div>
           </section>
 
+          {isFree && (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Reports & invoices insights are locked on Free tier
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Upgrade to Premium to access financial reports, exports, invoice analytics, and advanced statements.
+              </p>
+              <a
+                href="/upgrade"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+              >
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock reports & invoices"
+            message="Free tier hides critical reporting, exports, and invoice analytics. Upgrade to Premium for full access."
+          >
           {/* Tabs */}
           <div className="surface-card rounded-2xl px-4 py-3">
             <div className="flex flex-wrap gap-2">
@@ -1061,6 +1087,7 @@ function ReportsAndInvoicesPageInner() {
               </div>
             )
           )}
+          </PremiumGate>
         </main>
       </div>
 

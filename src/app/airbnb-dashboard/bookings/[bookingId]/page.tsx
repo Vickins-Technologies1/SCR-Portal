@@ -176,6 +176,9 @@ export default function AirbnbBookingDetailsPage() {
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">{booking.guestEmail || "—"}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{booking.guestPhone || "—"}</p>
+                    {booking.guestIdNumber ? (
+                      <p className="mt-1 text-xs text-muted-foreground">ID: {booking.guestIdNumber}</p>
+                    ) : null}
                   </div>
 
                   <div className="rounded-2xl border border-border bg-white/70 px-4 py-4">
@@ -201,10 +204,12 @@ export default function AirbnbBookingDetailsPage() {
                   </div>
 
                   <div className="rounded-2xl border border-border bg-white/70 px-4 py-4">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Status</p>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Guest verification</p>
                     <p className="mt-2 font-semibold text-foreground inline-flex items-center gap-2">
                       <BadgeCheck size={14} />
-                      {booking.status}
+                      {booking.verificationStatus === "documents_uploaded"
+                        ? "Documents uploaded"
+                        : "Documents missing"}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">Source: {booking.source}</p>
                   </div>

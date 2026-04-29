@@ -133,8 +133,8 @@ export async function GET(request: NextRequest) {
 
   drawMetric("Revenue (KES)", `Ksh ${summary.revenue.toLocaleString("en-KE")}`);
   drawMetric("Occupancy Rate", `${summary.occupancyRate}%`);
-  drawMetric("ADR", `Ksh ${summary.adr.toLocaleString("en-KE")}`);
-  drawMetric("RevPAR", `Ksh ${summary.revpar.toLocaleString("en-KE")}`);
+  drawMetric("Average Daily Price", `Ksh ${summary.adr.toLocaleString("en-KE")}`);
+  drawMetric("Revenue Per Room", `Ksh ${summary.revpar.toLocaleString("en-KE")}`);
 
   y -= 12;
   page.drawText("Tax Breakdown", { x: 50, y, size: 12, font: bold, color: rgb(0.01, 0.16, 0.29) });

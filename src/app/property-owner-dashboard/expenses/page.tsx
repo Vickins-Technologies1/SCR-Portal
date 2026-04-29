@@ -32,6 +32,8 @@ import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, startOfMonth, startOfYear } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAccountTier } from "@/hooks/useAccountTier";
+import PremiumGate from "@/components/PremiumGate";
 
 
 interface Expense {
@@ -67,8 +69,9 @@ const categoryConfig: Record<string, { icon: React.ElementType; color: string; b
 export default function ExpensesPage() {
   const router = useRouter();
   const perm = usePermissions();
-  const canCreateExpense = perm.hasPermission("expenses:create");
-  const canExportExpenses = perm.hasPermission("reports:export");
+  const { isFree } = useAccountTier();
+  const canCreateExpense = !isFree && perm.hasPermission("expenses:create");
+  const canExportExpenses = !isFree && perm.hasPermission("reports:export");
 
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -508,6 +511,29 @@ export default function ExpensesPage() {
           </div>
           </section>
 
+          {isFree && (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60 mb-6">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Expenses are locked on Free tier
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Upgrade to Premium to view detailed expense breakdowns, receipts, exports, and analytics.
+              </p>
+              <a
+                href="/upgrade"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+              >
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock expenses"
+            message="Free tier hides expenses, exports, receipts, and analytics. Upgrade to Premium for full financial operations."
+          >
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
@@ -861,6 +887,7 @@ export default function ExpensesPage() {
               </motion.div>
             </>
           )}
+          </PremiumGate>
         </main>
       </div>
 

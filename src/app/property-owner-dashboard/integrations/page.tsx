@@ -9,6 +9,8 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import Modal from "../components/Modal";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAccountTier } from "@/hooks/useAccountTier";
+import PremiumGate from "@/components/PremiumGate";
 
 type IntegrationStatus = "connected" | "available" | "coming_soon";
 
@@ -86,6 +88,7 @@ const comingSoonIntegrations: IntegrationCard[] = [
 export default function OwnerIntegrationsPage() {
   const router = useRouter();
   const perm = usePermissions();
+  const { isFree } = useAccountTier();
   const sessionRole = Cookies.get("role") || null;
   const isOwnerRole = sessionRole === "propertyOwner";
   const canViewIntegrations =
@@ -561,6 +564,29 @@ export default function OwnerIntegrationsPage() {
             </div>
           </section>
 
+          {isFree && (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Integrations are locked on Free tier
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Upgrade to Premium to connect payment providers and enable automated tenant payments.
+              </p>
+              <a
+                href="/upgrade"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+              >
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock integrations"
+            message="Connect payment providers, manage API keys, and automate collections with Premium."
+          >
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {loading ? (
               [...Array(6)].map((_, i) => (
@@ -608,6 +634,7 @@ export default function OwnerIntegrationsPage() {
               })
             )}
           </section>
+          </PremiumGate>
 
           <Modal
             title={selectedIntegration?.name || "Integration"}

@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { motion } from "framer-motion";
+import { useAccountTier } from "@/hooks/useAccountTier";
+import PremiumGate from "@/components/PremiumGate";
 
 interface TeamMember {
   _id: string;
@@ -258,6 +260,7 @@ const normalizeTeamRole = (role: string | undefined): TeamMember["teamRole"] =>
 
 export default function UsersPage() {
   const router = useRouter();
+  const { isFree } = useAccountTier();
   const [userId, setUserId] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -654,7 +657,7 @@ export default function UsersPage() {
                   </p>
                 </div>
               </div>
-              {canManageUsers ? (
+              {canManageUsers && !isFree ? (
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.98 }}
@@ -683,6 +686,29 @@ export default function UsersPage() {
             </div>
           </section>
 
+          {isFree && (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Team members & permissions are locked on Free tier
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Upgrade to Premium to view/manage users, roles, and permissions.
+              </p>
+              <a
+                href="/upgrade"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+              >
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock user management"
+            message="Free tier focuses on 1 property + tenant management. Upgrade to manage team members and permissions."
+          >
           {error && (
             <div className="mb-6 bg-red-50 text-red-700 px-5 py-4 rounded-2xl flex items-center gap-3">
               <AlertCircle className="h-5 w-5" />
@@ -790,6 +816,7 @@ export default function UsersPage() {
               ))}
             </div>
           )}
+          </PremiumGate>
         </main>
       </div>
 

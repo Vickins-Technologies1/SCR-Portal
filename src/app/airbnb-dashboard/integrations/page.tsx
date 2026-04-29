@@ -7,6 +7,8 @@ import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
 import { useAirbnbAccess } from "../components/useAirbnbAccess";
 import type { AirbnbIntegration } from "@/types/airbnb";
+import { useAccountTier } from "@/hooks/useAccountTier";
+import PremiumGate from "@/components/PremiumGate";
 
 type TumaState = {
   enabled: boolean;
@@ -35,6 +37,7 @@ type TumaBank = {
 
 export default function AirbnbIntegrationsPage() {
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("settings:view");
+  const { isFree } = useAccountTier();
   const [integrations, setIntegrations] = useState<AirbnbIntegration[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -308,6 +311,29 @@ export default function AirbnbIntegrationsPage() {
             icon={Plug}
           />
 
+          {isFree && (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Integrations are locked on Free tier
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Upgrade to Premium to connect partners and enable automation.
+              </p>
+              <a
+                href="/upgrade"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+              >
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock integrations"
+            message="Connect payments, analytics, and communication partners with Premium."
+          >
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {isLoading ? (
               [...Array(6)].map((_, i) => (
@@ -616,6 +642,7 @@ export default function AirbnbIntegrationsPage() {
               </div>
             </div>
           )}
+          </PremiumGate>
         </main>
       </div>
     </div>

@@ -21,6 +21,12 @@ export default function PropertyTableRow({
 }: PropertyTableRowProps) {
   const availability = ensureAvailability(property);
   const showActions = canManage ?? true;
+  const prices = (property.unitTypes || []).map((u) => Number(u.price || 0)).filter((v) => Number.isFinite(v) && v > 0);
+  const deposits = (property.unitTypes || []).map((u) => Number(u.deposit || 0)).filter((v) => Number.isFinite(v) && v > 0);
+  const minPrice = prices.length ? Math.min(...prices) : 0;
+  const maxPrice = prices.length ? Math.max(...prices) : 0;
+  const minDeposit = deposits.length ? Math.min(...deposits) : 0;
+  const maxDeposit = deposits.length ? Math.max(...deposits) : 0;
   return (
     <tr
       className="hover:bg-primary/5 transition cursor-pointer"
@@ -38,6 +44,24 @@ export default function PropertyTableRow({
         </span>
       </td>
       <td className="px-6 py-4 text-gray-600">{new Date(property.createdAt).toLocaleDateString()}</td>
+      <td className="px-6 py-4 text-xs sm:text-sm text-gray-700">
+        <div className="space-y-1">
+          <div className="font-semibold text-gray-900">
+            {minPrice > 0
+              ? maxPrice > minPrice
+                ? `Ksh ${minPrice.toLocaleString()} – ${maxPrice.toLocaleString()} /mo`
+                : `Ksh ${minPrice.toLocaleString()} /mo`
+              : "—"}
+          </div>
+          <div className="text-[11px] text-slate-500">
+            {minDeposit > 0
+              ? maxDeposit > minDeposit
+                ? `Deposit: Ksh ${minDeposit.toLocaleString()} – ${maxDeposit.toLocaleString()}`
+                : `Deposit: Ksh ${minDeposit.toLocaleString()}`
+              : "Deposit: —"}
+          </div>
+        </div>
+      </td>
       <td className="px-6 py-4 text-xs sm:text-sm text-gray-700 space-y-2">
         <div className="flex flex-col gap-1">
           <span className="text-[11px] text-slate-500">Vacant units: {availability.totalVacant}</span>

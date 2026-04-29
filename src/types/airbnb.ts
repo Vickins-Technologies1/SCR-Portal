@@ -85,6 +85,7 @@ export interface AirbnbBooking {
   guestName: string;
   guestEmail?: string;
   guestPhone?: string;
+  guestIdNumber?: string | null;
   tenantId?: string | null;
   checkIn: string;
   checkOut: string;
@@ -93,6 +94,7 @@ export interface AirbnbBooking {
   status: "confirmed" | "pending" | "cancelled" | "modified";
   source: "Airbnb" | "Direct";
   payoutStatus: "pending" | "paid" | "failed";
+  verificationStatus?: "documents_uploaded" | "documents_missing";
   specialRequests?: string;
 }
 

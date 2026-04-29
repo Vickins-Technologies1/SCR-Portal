@@ -113,14 +113,14 @@ export default function AirbnbDashboard() {
         bg: "bg-slate-100",
       },
       {
-        label: "ADR",
+        label: "Average Daily Price",
         value: formatKes(overview.stats.adr),
         icon: Sparkles,
         accent: "text-indigo-600",
         bg: "bg-indigo-100/70",
       },
       {
-        label: "RevPAR",
+        label: "Revenue Per Room",
         value: formatKes(overview.stats.revpar),
         icon: TrendingUp,
         accent: "text-emerald-700",
@@ -216,7 +216,7 @@ export default function AirbnbDashboard() {
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-xl">
                   Track bookings, revenue, and occupancy across your Kenyan short-term rentals in one view.
                 </p>
-                {overview && (
+                {overview && !isFree && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                       {overview.stats.upcomingBookings} upcoming stays
@@ -231,19 +231,37 @@ export default function AirbnbDashboard() {
                 )}
               </div>
 
-              {overview && (
+              {overview && !isFree && (
                 <div className="bg-white/70 border border-white/50 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
                   <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Monthly revenue</p>
                   <p className="text-lg sm:text-xl font-semibold text-foreground mt-1">
                     {formatKes(overview.stats.monthlyRevenue)}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    ADR {formatKes(overview.stats.adr)} • RevPAR {formatKes(overview.stats.revpar)}
+                    Average Daily Price {formatKes(overview.stats.adr)} • Revenue Per Room {formatKes(overview.stats.revpar)}
                   </p>
                   <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
                     <span className="h-2 w-2 rounded-full bg-primary" />
                     {overview.stats.todayCheckIns} check-ins today
                   </div>
+                </div>
+              )}
+
+              {overview && isFree && (
+                <div className="bg-amber-50/80 border border-amber-200 rounded-2xl px-4 py-4 shadow-sm backdrop-blur">
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier</p>
+                  <p className="text-sm sm:text-base font-semibold text-foreground mt-1">
+                    Upgrade to Premium to view revenue & performance insights
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Monthly revenue, Average Daily Price, and Revenue Per Room are hidden on Free.
+                  </p>
+                  <a
+                    href="/upgrade"
+                    className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
+                  >
+                    Upgrade
+                  </a>
                 </div>
               )}
             </div>
@@ -279,73 +297,124 @@ export default function AirbnbDashboard() {
                     No activity stats yet.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {stats.map((stat, index) => (
-                      <motion.div
-                        key={stat.label}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.04 }}
-                        className="surface-card rounded-2xl p-4 sm:p-5 transition-shadow hover:shadow-lg"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
-                            {stat.label}
+                  isFree ? (
+                    <div className="surface-card rounded-3xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier</p>
+                          <h3 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                            Upgrade to Premium to view today’s metrics
+                          </h3>
+                          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                            System calculations and performance counters are hidden on Free.
                           </p>
-                          <div className={`h-9 w-9 rounded-2xl flex items-center justify-center ${stat.bg}`}>
-                            <stat.icon className={`h-4 w-4 ${stat.accent}`} />
-                          </div>
                         </div>
-                        <p className="text-base sm:text-lg font-semibold text-foreground mt-1">{stat.value}</p>
-                        {isFree && (
-                          <p className="mt-1 text-[10px] text-amber-700 flex items-center gap-1">
-                            <Lock className="h-3 w-3" />
-                            <span>
-                              Upgrade for full access:{" "}
-                              <a href="/upgrade" className="underline underline-offset-2 font-semibold">
-                                {stat.label}
-                              </a>
-                            </span>
-                          </p>
-                        )}
-                      </motion.div>
-                    ))}
-                  </div>
+                        <a
+                          href="/upgrade"
+                          className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+                        >
+                          Upgrade
+                        </a>
+                      </div>
+
+                      <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {stats.map((stat) => (
+                          <div key={stat.label} className="surface-card rounded-2xl p-4 sm:p-5 opacity-85">
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">{stat.label}</p>
+                            <p className="mt-2 text-base sm:text-lg font-semibold text-foreground">Locked</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">Upgrade required</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {stats.map((stat, index) => (
+                        <motion.div
+                          key={stat.label}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.04 }}
+                          className="surface-card rounded-2xl p-4 sm:p-5 transition-shadow hover:shadow-lg"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                              {stat.label}
+                            </p>
+                            <div className={`h-9 w-9 rounded-2xl flex items-center justify-center ${stat.bg}`}>
+                              <stat.icon className={`h-4 w-4 ${stat.accent}`} />
+                            </div>
+                          </div>
+                          <p className="text-base sm:text-lg font-semibold text-foreground mt-1">{stat.value}</p>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )
                 )}
               </section>
 
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="surface-card rounded-3xl p-5 sm:p-6">
                   <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment trends</h2>
-                  {overview?.paymentTrends?.labels?.length ? (
-                    <div className="h-64 sm:h-72">
-                      <Bar
-                        data={paymentTrendData}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          scales: {
-                            y: { beginAtZero: true },
-                          },
-                        }}
-                      />
+                  {isFree ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-4 text-sm">
+                      <p className="font-semibold text-foreground">Locked on Free tier</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Upgrade to Premium to view payment trend charts.
+                      </p>
+                      <a
+                        href="/upgrade"
+                        className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
+                      >
+                        Upgrade
+                      </a>
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">
-                      No payment trends available yet.
-                    </div>
+                    overview?.paymentTrends?.labels?.length ? (
+                      <div className="h-64 sm:h-72">
+                        <Bar
+                          data={paymentTrendData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                              y: { beginAtZero: true },
+                            },
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">
+                        No payment trends available yet.
+                      </div>
+                    )
                   )}
                 </div>
                 <div className="surface-card rounded-3xl p-5 sm:p-6">
                   <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Bookings mix</h2>
-                  {overview?.bookingSplit?.labels?.length ? (
-                    <div className="h-64 sm:h-72">
-                      <Pie data={bookingSplitData} options={{ responsive: true, maintainAspectRatio: false }} />
+                  {isFree ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-4 text-sm">
+                      <p className="font-semibold text-foreground">Locked on Free tier</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Upgrade to Premium to view booking mix and occupancy breakdowns.
+                      </p>
+                      <a
+                        href="/upgrade"
+                        className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
+                      >
+                        Upgrade
+                      </a>
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">
-                      No booking data available yet.
-                    </div>
+                    overview?.bookingSplit?.labels?.length ? (
+                      <div className="h-64 sm:h-72">
+                        <Pie data={bookingSplitData} options={{ responsive: true, maintainAspectRatio: false }} />
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">
+                        No booking data available yet.
+                      </div>
+                    )
                   )}
                 </div>
               </section>

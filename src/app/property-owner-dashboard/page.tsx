@@ -470,6 +470,48 @@ export default function PropertyOwnerDashboard() {
                       <BarChart2 className="h-5 w-5 text-primary" />
                       <h2 className="text-lg sm:text-xl font-semibold text-foreground">Performance Metrics</h2>
                     </div>
+                    {isFree ? (
+                      <div className="surface-card rounded-3xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier</p>
+                            <h3 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                              Upgrade to Premium to view system calculations
+                            </h3>
+                            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                              Revenue totals, overdue analytics, penalties, and performance insights are hidden on Free.
+                            </p>
+                          </div>
+                          <a
+                            href="/upgrade"
+                            className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+                          >
+                            Upgrade
+                          </a>
+                        </div>
+
+                        <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                          {[
+                            "Expected Monthly Revenue",
+                            "Monthly Rent",
+                            "Total Rent Paid",
+                            "Overdue Amount",
+                            "Late Payment Penalties",
+                            "Active Tenants",
+                            "Vacant Units",
+                            "Properties",
+                            "Deposits",
+                            "Utilities Paid",
+                          ].map((label) => (
+                            <div key={label} className="surface-card rounded-2xl p-4 sm:p-5 opacity-85">
+                              <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">{label}</p>
+                              <p className="mt-2 text-base sm:text-lg font-semibold text-foreground">Locked</p>
+                              <p className="mt-1 text-[11px] text-muted-foreground">Upgrade required</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {[
                         {
@@ -609,32 +651,60 @@ export default function PropertyOwnerDashboard() {
                         );
                       })}
                     </div>
+                    )}
                   </section>
 
                   {/* CHARTS */}
-                  <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="surface-card rounded-3xl p-5 sm:p-6">
-                      <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment Trends</h2>
-                      <div className="h-64 sm:h-72">
-                        <Bar
-                          data={barData}
-                          options={{
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                              y: { beginAtZero: true },
-                            },
-                          }}
-                        />
+                  {isFree ? (
+                    <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {[
+                        { title: "Payment Trends", body: "Monthly rent, utilities, and deposits over time." },
+                        { title: "Tenant Payment Status", body: "Breakdown of current vs overdue tenants." },
+                      ].map((c) => (
+                        <div key={c.title} className="surface-card rounded-3xl p-5 sm:p-6 border border-amber-200 bg-amber-50/40">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h2 className="text-sm sm:text-base font-semibold mb-1 text-foreground">{c.title}</h2>
+                              <p className="text-[11px] text-muted-foreground">{c.body}</p>
+                            </div>
+                            <a
+                              href="/upgrade"
+                              className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
+                            >
+                              Upgrade
+                            </a>
+                          </div>
+                          <div className="mt-4 h-64 sm:h-72 rounded-2xl border border-border bg-white/70 flex items-center justify-center">
+                            <p className="text-sm font-semibold text-foreground">Locked on Free tier</p>
+                          </div>
+                        </div>
+                      ))}
+                    </section>
+                  ) : (
+                    <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="surface-card rounded-3xl p-5 sm:p-6">
+                        <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment Trends</h2>
+                        <div className="h-64 sm:h-72">
+                          <Bar
+                            data={barData}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              scales: {
+                                y: { beginAtZero: true },
+                              },
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div className="surface-card rounded-3xl p-5 sm:p-6">
-                      <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Tenant Payment Status</h2>
-                      <div className="h-64 sm:h-72">
-                        <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} />
+                      <div className="surface-card rounded-3xl p-5 sm:p-6">
+                        <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Tenant Payment Status</h2>
+                        <div className="h-64 sm:h-72">
+                          <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} />
+                        </div>
                       </div>
-                    </div>
-                  </section>
+                    </section>
+                  )}
 
                   {/* MAINTENANCE REQUESTS */}
                   <div className="mt-8 space-y-8">

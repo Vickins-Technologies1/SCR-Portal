@@ -129,7 +129,7 @@ export default function UpgradePage() {
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Crown className="h-4 w-4 text-primary" />
-                  Premium (1%)
+                  Premium
                 </h2>
                 {isPremium && (
                   <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold text-emerald-700">

@@ -38,6 +38,9 @@ export async function GET(
     { ownerId, accountType: "airbnb_guest", airbnbBookingId: id },
     { projection: { _id: 1 } }
   );
+  const docsCount = await db
+    .collection("airbnbGuestDocuments")
+    .countDocuments({ ownerId, bookingId: id }, { limit: 1 });
 
   return NextResponse.json({
     success: true,
@@ -47,6 +50,7 @@ export async function GET(
       guestName: booking.guestName,
       guestEmail: booking.guestEmail,
       guestPhone: booking.guestPhone,
+      guestIdNumber: booking.guestIdNumber,
       tenantId: tenant?._id?.toString?.() || null,
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
@@ -57,6 +61,7 @@ export async function GET(
       status: booking.status,
       source: booking.source,
       payoutStatus: booking.payoutStatus,
+      verificationStatus: docsCount > 0 ? "documents_uploaded" : "documents_missing",
       specialRequests: booking.specialRequests,
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt,

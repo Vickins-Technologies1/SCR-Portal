@@ -621,14 +621,12 @@ export default function SignUp() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <span className="block text-xs font-semibold text-foreground">Premium (1%)</span>
+                              <span className="block text-xs font-semibold text-foreground">Premium</span>
                               <span className="block text-[10px] text-muted-foreground mt-0.5">
                                 Unlock automated tenant payments + full operations suite.
                               </span>
                             </div>
-                            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
-                              1%
-                            </span>
+                            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">Premium</span>
                           </div>
                           <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground">
                             <li>• Automated payments & integrations</li>
@@ -927,7 +925,7 @@ export default function SignUp() {
                         <p className="text-[10px] text-muted-foreground">Tier</p>
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold text-sm">
-                            {tier === "premium" ? "Premium (1%)" : "Free (Forever)"}
+                            {tier === "premium" ? "Premium" : "Free (Forever)"}
                           </p>
                           <button
                             type="button"

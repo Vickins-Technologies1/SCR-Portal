@@ -18,6 +18,7 @@ import { useAccountTier } from "@/hooks/useAccountTier";
 
 import { Property, Listing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";  // ← Updated imports
+import PremiumGate from "@/components/PremiumGate";
 
 interface SortConfig {
   key: "name" | "address" | "createdAt" | "status";
@@ -55,7 +56,6 @@ export default function ListPropertiesPage() {
 
   const showListButton = isHydrated && canListProperties;
   const canManageActions = isHydrated && canEditProperties;
-  const freeTierLimitReached = isFree && originalProperties.length >= 1;
 
   useEffect(() => {
     setIsHydrated(true);
@@ -258,11 +258,11 @@ export default function ListPropertiesPage() {
                 </div>
               </div>
               {showListButton && (
-                freeTierLimitReached ? (
+                isFree ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-xs sm:text-sm text-foreground max-w-md">
-                    <p className="font-semibold">Free tier includes 1 property for life.</p>
+                    <p className="font-semibold">Property Listings are Premium-only.</p>
                     <p className="text-muted-foreground mt-1">
-                      Upgrade to Premium (1%) to add more properties and unlock automated tenant payments.
+                      Upgrade to Premium to publish listings, manage availability, and unlock automation.
                     </p>
                     <a href="/upgrade" className="mt-2 inline-flex text-amber-700 font-semibold underline underline-offset-2">
                       Upgrade now
@@ -280,27 +280,33 @@ export default function ListPropertiesPage() {
               )}
             </div>
           </motion.section>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {listingStatCards.map((stat) => (
-              <div key={stat.label} className="surface-card rounded-2xl p-5">
-                <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">{stat.label}</p>
-                <p className="text-lg sm:text-xl font-semibold text-foreground mt-2">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.detail}</p>
-              </div>
-            ))}
-          </div>
 
-          {error && (
-            <motion.div className="bg-red-50 text-red-700 p-3 rounded-2xl shadow-sm text-xs sm:text-sm">
-              {error}
-            </motion.div>
-          )}
-          {successMessage && (
-            <motion.div className="bg-primary/10 text-primary p-3 rounded-2xl shadow-sm flex items-center gap-2 text-xs sm:text-sm">
-              <CheckCircle className="h-4 w-4" />
-              {successMessage}
-            </motion.div>
-          )}
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock Property Listings"
+            message="Free tier hides listing management, pricing visibility, and availability controls. Upgrade to Premium to publish and manage listings."
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {listingStatCards.map((stat) => (
+                <div key={stat.label} className="surface-card rounded-2xl p-5">
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">{stat.label}</p>
+                  <p className="text-lg sm:text-xl font-semibold text-foreground mt-2">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground">{stat.detail}</p>
+                </div>
+              ))}
+            </div>
+
+            {error && (
+              <motion.div className="bg-red-50 text-red-700 p-3 rounded-2xl shadow-sm text-xs sm:text-sm">
+                {error}
+              </motion.div>
+            )}
+            {successMessage && (
+              <motion.div className="bg-primary/10 text-primary p-3 rounded-2xl shadow-sm flex items-center gap-2 text-xs sm:text-sm">
+                <CheckCircle className="h-4 w-4" />
+                {successMessage}
+              </motion.div>
+            )}
 
           {isLoading ? (
             <div className="flex justify-center py-12">
@@ -328,6 +334,7 @@ export default function ListPropertiesPage() {
                           {k === "name" ? "Property" : k === "address" ? "Location" : k === "status" ? "Status" : "Listed On"}
                         </th>
                       ))}
+                      <th>Pricing</th>
                       <th>Available Units</th>
                       <th>Actions</th>
                     </tr>
@@ -363,6 +370,7 @@ export default function ListPropertiesPage() {
               </div>
             </>
           )}
+          </PremiumGate>
         </main>
       </div>
 

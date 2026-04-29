@@ -55,6 +55,32 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
     }
   }, [router]);
 
+  useEffect(() => {
+    if (isImpersonating) return;
+    if (!pathname.startsWith("/airbnb-tenant-dashboard")) return;
+    if (pathname.startsWith("/airbnb-tenant-dashboard/documents")) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/airbnb-tenant/documents", { credentials: "include" });
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (!res.ok || !data?.success) return;
+        const docs = Array.isArray(data.documents) ? data.documents : [];
+        if (docs.length === 0) {
+          router.replace("/airbnb-tenant-dashboard/documents");
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router, isImpersonating]);
+
   const links = useMemo(
     () => [
       { key: "overview", href: "/airbnb-tenant-dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
@@ -189,4 +215,3 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
     </PublicThemeWrapper>
   );
 }
-

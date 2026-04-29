@@ -358,7 +358,7 @@ export async function POST(request: NextRequest) {
           {
             success: false,
             message:
-              "Free tier includes 1 property for life. Upgrade to Premium (1%) to add more properties and unlock automated tenant payments.",
+              "Free tier includes 1 property for life. Upgrade to Premium to add more properties and unlock automated tenant payments.",
             code: "FREE_TIER_PROPERTY_LIMIT",
           },
           { status: 403 }

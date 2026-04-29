@@ -19,6 +19,8 @@ import { useAirbnbAccess } from "../components/useAirbnbAccess";
 import type { AirbnbReportSummary } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
 import PaymentModal from "@/app/property-owner-dashboard/components/PaymentModal";
+import { useAccountTier } from "@/hooks/useAccountTier";
+import PremiumGate from "@/components/PremiumGate";
 
 ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend);
 
@@ -61,6 +63,7 @@ type AirbnbListing = {
 
 export default function AirbnbReportsPage() {
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("reports:view");
+  const { isFree } = useAccountTier();
   const [activeTab, setActiveTab] = useState<"reports" | "invoices">("reports");
   const [summary, setSummary] = useState<AirbnbReportSummary | null>(null);
   const [trend, setTrend] = useState<AirbnbTrendPoint[]>([]);
@@ -215,8 +218,8 @@ export default function AirbnbReportsPage() {
       ["Metric", "Value"],
       ["Occupancy Rate (%)", summary.occupancyRate.toString()],
       ["Revenue (KES)", summary.revenue.toString()],
-      ["ADR (KES)", summary.adr.toString()],
-      ["RevPAR (KES)", summary.revpar.toString()],
+      ["Average Daily Price (KES)", summary.adr.toString()],
+      ["Revenue Per Room (KES)", summary.revpar.toString()],
       ["Cancellation Rate (%)", summary.cancellationRate.toString()],
       ["Review Score", summary.reviewScore.toString()],
     ];
@@ -335,10 +338,17 @@ export default function AirbnbReportsPage() {
           <SectionHeader
             eyebrow="Airbnb Module"
             title={activeTab === "reports" ? "Reports & Analytics" : "Invoices"}
-            subtitle="Occupancy, revenue, ADR, RevPAR, and owner statements in KES."
+            subtitle="Occupancy, revenue, Average Daily Price, and Revenue Per Room in KES."
             icon={activeTab === "reports" ? BarChart3 : FileText}
             actions={
-              activeTab === "reports" ? (
+              isFree ? (
+                <a
+                  href="/upgrade"
+                  className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+                >
+                  Upgrade
+                </a>
+              ) : activeTab === "reports" ? (
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleExportCsv}
@@ -369,6 +379,29 @@ export default function AirbnbReportsPage() {
             }
           />
 
+          {isFree && (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Reports & invoices analytics are locked on Free tier
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Upgrade to Premium to access exports, statements, and deeper performance reporting.
+              </p>
+              <a
+                href="/upgrade"
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+              >
+                Upgrade
+              </a>
+            </div>
+          )}
+
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to unlock reports & invoices"
+            message="Free tier hides critical reports, exports, and invoice analytics. Upgrade to Premium for full access."
+          >
           <div className="surface-card rounded-2xl px-4 py-3">
             <div className="flex flex-wrap gap-2">
               <button
@@ -465,11 +498,11 @@ export default function AirbnbReportsPage() {
                       <p className="text-lg font-semibold text-foreground mt-2">{formatKes(summary.revenue)}</p>
                     </div>
                     <div className="surface-card rounded-2xl p-4 sm:p-5">
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">ADR</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Average Daily Price</p>
                       <p className="text-lg font-semibold text-foreground mt-2">{formatKes(summary.adr)}</p>
                     </div>
                     <div className="surface-card rounded-2xl p-4 sm:p-5">
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">RevPAR</p>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Revenue Per Room</p>
                       <p className="text-lg font-semibold text-foreground mt-2">{formatKes(summary.revpar)}</p>
                     </div>
                     <div className="surface-card rounded-2xl p-4 sm:p-5">
@@ -622,6 +655,7 @@ export default function AirbnbReportsPage() {
               </section>
             </>
           )}
+          </PremiumGate>
         </main>
       </div>
 

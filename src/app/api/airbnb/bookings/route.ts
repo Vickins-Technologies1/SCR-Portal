@@ -45,6 +45,14 @@ export async function GET(request: NextRequest) {
       )
     : new Map<string, string | null>();
 
+  const docs = bookingIds.length
+    ? await db
+        .collection("airbnbGuestDocuments")
+        .find({ ownerId, bookingId: { $in: bookingIds } }, { projection: { bookingId: 1 } })
+        .toArray()
+    : [];
+  const docsUploadedByBooking = new Set(docs.map((doc) => String(doc.bookingId || "")));
+
   return NextResponse.json({
     success: true,
     bookings: bookings.map((booking) => {
@@ -52,22 +60,24 @@ export async function GET(request: NextRequest) {
       const amountPaid = Number(booking.amountPaid || 0);
       const total = Number(booking.total || 0);
       return {
-      id: booking.externalId || booking._id?.toString?.() || "",
-      listingName: booking.listingName,
-      guestName: booking.guestName,
-      guestEmail: booking.guestEmail,
-      guestPhone: booking.guestPhone,
-      tenantId: tenantByBookingId.get(id) ?? null,
-      checkIn: booking.checkIn,
-      checkOut: booking.checkOut,
-      nights: booking.nights,
-      total,
-      amountPaid,
-      amountDue: Math.max(0, total - amountPaid),
-      status: booking.status,
-      source: booking.source,
-      payoutStatus: booking.payoutStatus,
-      specialRequests: booking.specialRequests,
+        id,
+        listingName: booking.listingName,
+        guestName: booking.guestName,
+        guestEmail: booking.guestEmail,
+        guestPhone: booking.guestPhone,
+        guestIdNumber: booking.guestIdNumber,
+        tenantId: tenantByBookingId.get(id) ?? null,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        nights: booking.nights,
+        total,
+        amountPaid,
+        amountDue: Math.max(0, total - amountPaid),
+        status: booking.status,
+        source: booking.source,
+        payoutStatus: booking.payoutStatus,
+        verificationStatus: docsUploadedByBooking.has(id) ? "documents_uploaded" : "documents_missing",
+        specialRequests: booking.specialRequests,
       };
     }),
   });
@@ -78,6 +88,7 @@ const DirectBookingSchema = z.object({
   guestName: z.string().trim().min(2),
   guestEmail: z.string().trim().email(),
   guestPhone: z.string().trim().min(7),
+  guestIdNumber: z.string().trim().min(3).optional(),
   checkIn: z.string().trim().min(1),
   checkOut: z.string().trim().min(1),
   total: z.preprocess((value) => Number(value), z.number().nonnegative()),
@@ -134,6 +145,7 @@ export async function POST(request: NextRequest) {
     guestName: parsed.data.guestName,
     guestEmail: parsed.data.guestEmail,
     guestPhone: parsed.data.guestPhone,
+    guestIdNumber: parsed.data.guestIdNumber || null,
     checkIn: checkInDate.toISOString(),
     checkOut: checkOutDate.toISOString(),
     nights: diffNights(checkInDate, checkOutDate),
