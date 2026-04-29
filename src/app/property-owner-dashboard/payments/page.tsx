@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
+import { CreditCard, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -46,6 +46,7 @@ export default function PaymentsPage() {
   const perm = usePermissions();
   const { isFree } = useAccountTier();
   const canViewPayments = perm.canViewPayments;
+  const canManagePayments = perm.hasPermission("payments:record");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
@@ -59,6 +60,7 @@ export default function PaymentsPage() {
   const [totalPayments, setTotalPayments] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterConfig>({
     tenantName: "",
     type: "",
@@ -298,6 +300,66 @@ export default function PaymentsPage() {
       setIsLoading(false);
     }
   }, [effectiveOwnerId, selectedPropertyId, currentPage, itemsPerPage, csrfToken, filters, fetchCsrfToken]);
+
+  const deleteManualPayment = useCallback(async (payment: Payment) => {
+    if (!canManagePayments) {
+      setError("You do not have permission to delete manual payments.");
+      return;
+    }
+
+    const isManual = payment.isManual ?? payment.transactionId?.startsWith("MANUAL-");
+    if (!isManual) {
+      setError("Only manual payments can be deleted.");
+      return;
+    }
+
+    const confirmed = window.confirm("Delete this manual payment? This action cannot be undone.");
+    if (!confirmed) return;
+
+    setDeletingPaymentId(payment._id);
+    setError(null);
+
+    const runDelete = async (token: string) => {
+      const res = await fetch(`/api/payments/${encodeURIComponent(payment._id)}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": token,
+        },
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => null);
+      return { res, data };
+    };
+
+    try {
+      const token = csrfToken || (await fetchCsrfToken());
+      if (!token) {
+        setError("Missing CSRF token. Refresh and try again.");
+        return;
+      }
+
+      let { res, data } = await runDelete(token);
+
+      if (!res.ok && res.status === 403) {
+        const newToken = await fetchCsrfToken();
+        if (newToken) {
+          ({ res, data } = await runDelete(newToken));
+        }
+      }
+
+      if (!res.ok || !data?.success) {
+        setError(data?.message || "Failed to delete manual payment.");
+        return;
+      }
+
+      await fetchPayments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to connect to the server.");
+    } finally {
+      setDeletingPaymentId(null);
+    }
+  }, [canManagePayments, csrfToken, fetchCsrfToken, fetchPayments]);
 
   // Fetch data when dependencies change
   useEffect(() => {
@@ -555,6 +617,7 @@ export default function PaymentsPage() {
                     <th className="px-4 py-3 text-left">Amount (Ksh)</th>
                     <th className="px-4 py-3 text-left">Payment Date</th>
                     <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -595,6 +658,21 @@ export default function PaymentsPage() {
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${getStatusStyles(payment.status)}`}>
                             {payment.status === "pending_stk" ? "pending" : payment.status}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {canManagePayments && transactionDisplay.isManual ? (
+                            <button
+                              type="button"
+                              onClick={() => deleteManualPayment(payment)}
+                              disabled={deletingPaymentId === payment._id}
+                              className="inline-flex items-center justify-center rounded-lg border border-border bg-white/80 px-2.5 py-2 text-xs font-semibold text-red-600 hover:border-red-200 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                              aria-label="Delete manual payment"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                     );
