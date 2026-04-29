@@ -14,6 +14,7 @@ import { Tenant } from "../../../types/tenant";
 import { calculateTenantDues, TenantDues } from "../../../lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds } from "../../../lib/payment-totals";
+import { resolveAccountTier } from "@/lib/tier";
 
 interface Notification {
   _id: ObjectId;
@@ -102,6 +103,24 @@ const validateTenantOwnership = async (db: Db, tenantId: string, effectiveOwnerI
   return !!tenant;
 };
 
+const assertOwnerNotificationsEnabled = async (db: Db, effectiveOwnerId: string) => {
+  const ownerTier = resolveAccountTier(
+    (
+      await db.collection("propertyOwners").findOne(
+        { _id: new ObjectId(effectiveOwnerId), role: "propertyOwner" },
+        { projection: { tier: 1 } }
+      )
+    )?.tier,
+    "premium"
+  );
+
+  if (ownerTier === "free") {
+    return { enabled: false as const, ownerTier };
+  }
+
+  return { enabled: true as const, ownerTier };
+};
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const auth = await authenticateUser(req, { requireCsrf: false });
@@ -125,6 +144,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     const { db } = await connectToDatabase();
+
+    const featureGate = await assertOwnerNotificationsEnabled(db, effectiveOwnerId);
+    if (!featureGate.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Notifications are locked on the Free tier. Upgrade to Premium to enable notifications.",
+          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
+        },
+        { status: 403 }
+      );
+    }
 
     if (unreadCountOnly) {
       const unreadCount = await db
@@ -190,6 +221,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     ({ db } = await connectToDatabase());
+
+    const featureGate = await assertOwnerNotificationsEnabled(db, effectiveOwnerId);
+    if (!featureGate.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Notifications are locked on the Free tier. Upgrade to Premium to enable notifications.",
+          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
+        },
+        { status: 403 }
+      );
+    }
 
     if (!(await validateTenantOwnership(db, tenantId, effectiveOwnerId))) {
       return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
@@ -441,6 +484,17 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     }
 
     const { db } = await connectToDatabase();
+    const featureGate = await assertOwnerNotificationsEnabled(db, effectiveOwnerId);
+    if (!featureGate.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Notifications are locked on the Free tier. Upgrade to Premium to enable notifications.",
+          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
+        },
+        { status: 403 }
+      );
+    }
     const filter: Record<string, unknown> = { ownerId: effectiveOwnerId };
 
     if (ObjectId.isValid(notificationId)) {
@@ -484,6 +538,17 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     if (!id) return NextResponse.json({ success: false, message: "notificationId required" }, { status: 400 });
 
     const { db } = await connectToDatabase();
+    const featureGate = await assertOwnerNotificationsEnabled(db, effectiveOwnerId);
+    if (!featureGate.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Notifications are locked on the Free tier. Upgrade to Premium to enable notifications.",
+          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
+        },
+        { status: 403 }
+      );
+    }
     const result = await db.collection("notifications").deleteOne({
       _id: new ObjectId(id),
       ownerId: effectiveOwnerId,

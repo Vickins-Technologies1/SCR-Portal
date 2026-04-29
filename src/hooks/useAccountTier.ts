@@ -1,19 +1,28 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import type { AccountTier } from "@/lib/tier";
 import { resolveAccountTier } from "@/lib/tier";
 
 export function useAccountTier() {
-  return useMemo(() => {
-    if (typeof window === "undefined") {
-      return { tier: null as AccountTier | null, isFree: false, isPremium: false };
-    }
+  const [tier, setTier] = useState<AccountTier | null>(null);
 
+  const refreshTier = useCallback(() => {
+    if (typeof window === "undefined") return;
     const raw = Cookies.get("tier");
-    const tier = resolveAccountTier(raw, "premium");
-    return { tier, isFree: tier === "free", isPremium: tier === "premium" };
+    setTier(resolveAccountTier(raw, "premium"));
   }, []);
-}
 
+  useEffect(() => {
+    refreshTier();
+  }, [refreshTier]);
+
+  const resolved = tier ?? resolveAccountTier(undefined, "premium");
+  return {
+    tier: resolved,
+    isFree: resolved === "free",
+    isPremium: resolved === "premium",
+    refreshTier,
+  };
+}

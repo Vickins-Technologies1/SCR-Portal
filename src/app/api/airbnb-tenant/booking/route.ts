@@ -6,6 +6,7 @@ import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
 import { decryptPasskey } from "@/lib/mpesa";
 import { resolveTenantContext } from "@/lib/impersonation";
+import { resolveAccountTier } from "@/lib/tier";
 
 function resolveStoredPasskey(rawPasskey: string): string {
   if (!rawPasskey) return "";
@@ -57,6 +58,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
   }
 
+  const ownerId = typeof tenant.ownerId === "string" ? tenant.ownerId : tenant.ownerId?.toString?.() || "";
+  const ownerTier = ObjectId.isValid(ownerId)
+    ? resolveAccountTier(
+        (
+          await db.collection("propertyOwners").findOne(
+            { _id: new ObjectId(ownerId), role: "propertyOwner" },
+            { projection: { tier: 1 } }
+          )
+        )?.tier,
+        "premium"
+      )
+    : "premium";
+  const canPay = ownerTier === "premium";
+
   const reference = buildAirbnbPaymentReference(bookingId);
   const { amountPaid } = await getAirbnbBookingPaymentSummary(db, { ownerId: String(tenant.ownerId), bookingId });
   const total = Number(booking.total || 0);
@@ -101,6 +116,13 @@ export async function GET(request: NextRequest) {
     // ignore
   }
 
+  if (!canPay) {
+    paymentType = "unknown";
+    shortcode = "";
+    paybillAccountNumber = "";
+    passkey = "";
+  }
+
   const latestPayment = await db.collection("payments").findOne(
     { ownerId: tenant.ownerId, airbnbBookingId: bookingId },
     { sort: { createdAt: -1 } }
@@ -108,6 +130,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
+    ownerTier,
+    features: { canPay },
     booking: {
       id: booking.externalId || bookingId,
       listingName: booking.listingName,

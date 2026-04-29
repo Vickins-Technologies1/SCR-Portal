@@ -18,6 +18,7 @@ import {
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
+import { resolveAccountTier } from "@/lib/tier";
 
 const StkPushSchema = z.object({
   amount: z.preprocess((v) => Number(v), z.number().int().positive()),
@@ -166,6 +167,29 @@ export async function POST(request: NextRequest) {
 
     if (!derivedLandlordId || derivedLandlordId !== parsed.data.landlordId) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
+    }
+
+    // Free tier: tenants cannot initiate payments (view-only).
+    if (role === "tenant" || (role === "propertyOwner" && isImpersonating)) {
+      const ownerTier = resolveAccountTier(
+        (
+          await db.collection("propertyOwners").findOne(
+            { _id: new ObjectId(derivedLandlordId), role: "propertyOwner" },
+            { projection: { tier: 1 } }
+          )
+        )?.tier,
+        "premium"
+      );
+      if (ownerTier === "free") {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Payments are locked on the Free tier. Ask the property owner to upgrade to Premium to enable tenant payments.",
+            code: "FREE_TIER_TENANT_PAYMENTS_LOCKED",
+          },
+          { status: 403 }
+        );
+      }
     }
 
     let paymentType: "paybill" | "till" | "bank" | "unknown" = "unknown";

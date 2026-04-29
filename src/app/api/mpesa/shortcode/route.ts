@@ -7,6 +7,7 @@ import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { getMpesaShortcode } from "@/lib/mpesa";
 import logger from "@/lib/logger";
+import { resolveAccountTier } from "@/lib/tier";
 
 const QuerySchema = z.object({
   landlordId: z.string().trim().min(1),
@@ -32,6 +33,25 @@ export async function GET(request: NextRequest) {
       const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(userId) });
       if (!tenant || tenant.ownerId?.toString?.() !== parsed.data.landlordId) {
         return NextResponse.json({ success: false, message: "Unauthorized landlord access" }, { status: 403 });
+      }
+
+      const ownerTier = resolveAccountTier(
+        (
+          await db.collection("propertyOwners").findOne(
+            { _id: new ObjectId(parsed.data.landlordId), role: "propertyOwner" },
+            { projection: { tier: 1 } }
+          )
+        )?.tier,
+        "premium"
+      );
+
+      if (ownerTier === "free") {
+        return NextResponse.json({
+          success: true,
+          shortcode: null,
+          paymentType: "unknown",
+          paybillAccountNumber: "",
+        });
       }
     }
 

@@ -7,7 +7,7 @@ import { useCsrfToken } from "@/hooks/useCsrfToken";
 
 export default function AirbnbGuestPaymentsPage() {
   const { csrfToken } = useCsrfToken();
-  const { booking, paymentRail, isLoading, error, refetch } = useAirbnbTenantBooking();
+  const { booking, paymentRail, canPay, isLoading, error, refetch } = useAirbnbTenantBooking();
   const [phone, setPhone] = useState("");
 
   const isPaid = String(booking?.payoutStatus || "").toLowerCase() === "paid";
@@ -32,6 +32,15 @@ export default function AirbnbGuestPaymentsPage() {
           <div className="text-sm text-muted-foreground">Loading booking…</div>
         ) : booking ? (
           <>
+            {!canPay ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+                <p className="font-semibold">Payments locked</p>
+                <p className="mt-1 text-[11px] text-amber-800">
+                  Your property owner is on the Free tier. Payments are view-only until they upgrade to Premium.
+                </p>
+              </div>
+            ) : null}
+
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Amount due</p>
@@ -78,7 +87,7 @@ export default function AirbnbGuestPaymentsPage() {
                 placeholder="e.g. 07xx xxx xxx"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                disabled={isPaid}
+                disabled={isPaid || !canPay}
               />
             </div>
 
@@ -87,10 +96,10 @@ export default function AirbnbGuestPaymentsPage() {
                 amount={amountDue}
                 phone={phone}
                 csrfToken={csrfToken}
-                disabled={isPaid || amountDue <= 0}
-                shortcode={paymentRail?.shortcode || null}
+                disabled={isPaid || amountDue <= 0 || !canPay}
+                shortcode={canPay ? paymentRail?.shortcode || null : null}
                 reference={booking.reference || null}
-                paybillAccountNumber={paymentRail?.paybillAccountNumber || null}
+                paybillAccountNumber={canPay ? paymentRail?.paybillAccountNumber || null : null}
                 onSuccess={refetch}
               />
             ) : (
@@ -104,4 +113,3 @@ export default function AirbnbGuestPaymentsPage() {
     </div>
   );
 }
-

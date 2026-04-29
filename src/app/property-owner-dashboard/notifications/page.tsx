@@ -11,6 +11,8 @@ import Modal from "../components/Modal";
 import NotificationsHeader from "../components/notifications/NotificationsHeader";
 import NotificationsTable from "../components/notifications/NotificationsTable";
 import PaginationControls from "../components/notifications/PaginationControls";
+import PremiumGate from "@/components/PremiumGate";
+import { useAccountTier } from "@/hooks/useAccountTier";
 
 // Interfaces
 interface Tenant {
@@ -112,6 +114,7 @@ const resolveTenantUnitNumbers = (tenant: Tenant) => {
 export default function NotificationsPage() {
   const router = useRouter();
   const perm = usePermissions();
+  const { isFree } = useAccountTier();
   const canViewNotifications = perm.hasPermission("notifications:view");
   const canViewReminders = perm.hasPermission("reminders:view");
   const canSendNotifications = perm.hasPermission("notifications:send");
@@ -515,73 +518,85 @@ export default function NotificationsPage() {
 
       <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8 transition-all duration-300">
         <main className="mx-auto max-w-7xl space-y-6">
-          <NotificationsHeader
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-            onCreateNotification={() => {
-              if (!canSendNotifications) {
-                setError("You do not have permission to send notifications.");
-                return;
-              }
-              setIsCreateModalOpen(true);
-            }}
-            onSendReminders={viewMode === "upcoming" && canTriggerReminders ? triggerReminders : undefined}
-            isLoading={isLoading}
-            tenantsCount={tenants.length}
-            csrfToken={csrfToken}
-          />
-
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-red-700 shadow-md text-xs sm:text-sm">
-              {error}
-            </div>
-          )}
-
-          {isLoading && paginatedItems.length === 0 ? (
-            <div className="flex flex-col items-center py-20">
-              <Bell className="mb-4 h-16 w-16 animate-pulse text-[#42c775]" />
-              <p className="text-xs sm:text-sm text-muted-foreground">Loading notifications...</p>
-            </div>
-          ) : paginatedItems.length === 0 ? (
-            <div className="flex flex-col items-center rounded-2xl surface-card py-20">
-              <Bell className="mb-6 h-16 w-16 text-gray-300" />
-              <p className="text-base sm:text-lg font-semibold text-foreground">
-                {viewMode === "sent" ? "No sent reminders yet" : "No upcoming reminders"}
-              </p>
-              <p className="mt-3 max-w-md text-center text-xs sm:text-sm text-muted-foreground">
-                {viewMode === "sent"
-                  ? "Start communicating with your tenants by creating a new notification."
-                  : "Automatic reminders will appear here when rent or utilities are due."}
-              </p>
-            </div>
-          ) : (
+          <PremiumGate
+            locked={isFree}
+            title="Upgrade to enable notifications"
+            message="Notifications and automated reminders are Premium features. Upgrade to unlock sending, viewing, and managing notifications."
+          >
             <>
-              <NotificationsTable
-                items={paginatedItems}
+              <NotificationsHeader
                 viewMode={viewMode}
-                onViewDetails={(item: any) =>
-                  viewMode === "sent"
-                    ? openNotificationDetails(item as Notification)
-                    : openReminderDetails(item as UpcomingReminder)
-                }
-                onRetry={viewMode === "sent" && canSendNotifications ? retryNotification : undefined}
-                onDelete={viewMode === "sent" && canManageNotifications ? openDeleteConfirmation : undefined}
+                setViewMode={setViewMode}
+                onCreateNotification={() => {
+                  if (isFree) {
+                    setError("Notifications are locked on the Free tier. Upgrade to Premium to send notifications.");
+                    return;
+                  }
+                  if (!canSendNotifications) {
+                    setError("You do not have permission to send notifications.");
+                    return;
+                  }
+                  setIsCreateModalOpen(true);
+                }}
+                onSendReminders={!isFree && viewMode === "upcoming" && canTriggerReminders ? triggerReminders : undefined}
+                isLoading={isLoading}
+                tenantsCount={tenants.length}
+                csrfToken={csrfToken}
               />
 
-              <div className="mt-8">
-                <PaginationControls
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  pageSize={pageSize}
-                  onPageChange={handlePageChange}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size);
-                    setCurrentPage(1);
-                  }}
-                />
-              </div>
+              {error && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-red-700 shadow-md text-xs sm:text-sm">
+                  {error}
+                </div>
+              )}
+
+              {isLoading && paginatedItems.length === 0 ? (
+                <div className="flex flex-col items-center py-20">
+                  <Bell className="mb-4 h-16 w-16 animate-pulse text-[#42c775]" />
+                  <p className="text-xs sm:text-sm text-muted-foreground">Loading notifications...</p>
+                </div>
+              ) : paginatedItems.length === 0 ? (
+                <div className="flex flex-col items-center rounded-2xl surface-card py-20">
+                  <Bell className="mb-6 h-16 w-16 text-gray-300" />
+                  <p className="text-base sm:text-lg font-semibold text-foreground">
+                    {viewMode === "sent" ? "No sent reminders yet" : "No upcoming reminders"}
+                  </p>
+                  <p className="mt-3 max-w-md text-center text-xs sm:text-sm text-muted-foreground">
+                    {viewMode === "sent"
+                      ? "Start communicating with your tenants by creating a new notification."
+                      : "Automatic reminders will appear here when rent or utilities are due."}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <NotificationsTable
+                    items={paginatedItems}
+                    viewMode={viewMode}
+                    onViewDetails={(item: any) =>
+                      viewMode === "sent"
+                        ? openNotificationDetails(item as Notification)
+                        : openReminderDetails(item as UpcomingReminder)
+                    }
+                    onRetry={!isFree && viewMode === "sent" && canSendNotifications ? retryNotification : undefined}
+                    onDelete={!isFree && viewMode === "sent" && canManageNotifications ? openDeleteConfirmation : undefined}
+                  />
+
+                  <div className="mt-8">
+                    <PaginationControls
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      pageSize={pageSize}
+                      onPageChange={handlePageChange}
+                      onPageSizeChange={(size) => {
+                        setPageSize(size);
+                        setCurrentPage(1);
+                      }}
+                    />
+                  </div>
+                </>
+              )}
             </>
-          )}
+          </PremiumGate>
 
           {/* Details Modal */}
           <Modal
@@ -620,7 +635,7 @@ export default function NotificationsPage() {
                   <p className="mt-1 capitalize">{selectedNotification.status}</p>
                 </div>
                 <div className="flex gap-3 mt-6">
-                  {selectedNotification.deliveryStatus === "failed" && canSendNotifications && (
+                  {selectedNotification.deliveryStatus === "failed" && !isFree && canSendNotifications && (
                     <button
                       onClick={() => retryNotification(selectedNotification._id)}
                       className="bg-yellow-600 text-white px-5 py-2.5 rounded-xl hover:bg-yellow-700 transition-colors shadow-md"

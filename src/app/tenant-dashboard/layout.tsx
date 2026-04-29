@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -65,6 +65,7 @@ export default function TenantDashboardLayout({
   const [error, setError] = useState<string | null>(null);
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
+  const [tenantFeatures, setTenantFeatures] = useState<{ canPay: boolean; canNotifications: boolean } | null>(null);
   const IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
 
   useIdleLogout({
@@ -82,19 +83,49 @@ export default function TenantDashboardLayout({
     },
   });
 
-  const links = [
-    { key: "overview", href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
-    { key: "payments", href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
-    { key: "maintenance", href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
-    { key: "notifications", href: "/tenant-dashboard/notifications", label: "Notifications", icon: <Bell size={18} /> },
-    { key: "vacate", href: "/tenant-dashboard/vacate", label: "Vacate Notice", icon: <DoorOpen size={18} /> },
-    { key: "settings", href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
-  ];
+  const links = useMemo(() => {
+    const base = [
+      { key: "overview", href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
+      { key: "payments", href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
+      { key: "maintenance", href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
+      { key: "notifications", href: "/tenant-dashboard/notifications", label: "Notifications", icon: <Bell size={18} /> },
+      { key: "vacate", href: "/tenant-dashboard/vacate", label: "Vacate Notice", icon: <DoorOpen size={18} /> },
+      { key: "settings", href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
+    ];
+
+    if (tenantFeatures?.canNotifications === false) {
+      return base.filter((link) => link.key !== "notifications");
+    }
+
+    return base;
+  }, [tenantFeatures]);
 
   useEffect(() => {
     const impersonating = Cookies.get("isImpersonating") === "true";
     setIsImpersonating(impersonating);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/tenant/features", { credentials: "include", cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.ok && data?.success) {
+          setTenantFeatures(data.features || null);
+        } else {
+          setTenantFeatures(null);
+        }
+      } catch {
+        if (!cancelled) setTenantFeatures(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     if (!userId) {

@@ -17,6 +17,7 @@ import {
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
 import { resolveTenantContext } from "@/lib/impersonation";
+import { resolveAccountTier } from "@/lib/tier";
 
 const StkSchema = z.object({
   phone: z.string().trim().optional(),
@@ -75,6 +76,30 @@ export async function POST(request: NextRequest) {
 
   if (tenant.accountType !== "airbnb_guest" || !tenant.airbnbBookingId) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  }
+
+  const ownerId = typeof tenant.ownerId === "string" ? tenant.ownerId : tenant.ownerId?.toString?.() || "";
+  const ownerTier = ObjectId.isValid(ownerId)
+    ? resolveAccountTier(
+        (
+          await db.collection("propertyOwners").findOne(
+            { _id: new ObjectId(ownerId), role: "propertyOwner" },
+            { projection: { tier: 1 } }
+          )
+        )?.tier,
+        "premium"
+      )
+    : "premium";
+  if (ownerTier === "free") {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Payments are locked on the Free tier. Ask the property owner to upgrade to Premium to enable guest payments.",
+        code: "FREE_TIER_GUEST_PAYMENTS_LOCKED",
+      },
+      { status: 403 }
+    );
   }
 
   const bookingId = String(tenant.airbnbBookingId);

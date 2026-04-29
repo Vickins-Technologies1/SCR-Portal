@@ -5,6 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 export type AirbnbTenantBookingResponse = {
   success: boolean;
   message?: string;
+  ownerTier?: "free" | "premium";
+  features?: {
+    canPay?: boolean;
+  };
   booking?: {
     id: string;
     listingName: string;
@@ -63,7 +67,7 @@ export function useAirbnbTenantBooking() {
   const booking = useMemo(() => data?.booking ?? null, [data]);
   const paymentRail = useMemo(() => data?.paymentRail ?? null, [data]);
   const latestPayment = useMemo(() => data?.latestPayment ?? null, [data]);
+  const canPay = useMemo(() => data?.features?.canPay ?? true, [data]);
 
-  return { data, booking, paymentRail, latestPayment, isLoading, error, refetch: fetchBooking };
+  return { data, booking, paymentRail, latestPayment, canPay, isLoading, error, refetch: fetchBooking };
 }
-

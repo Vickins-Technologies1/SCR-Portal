@@ -388,28 +388,49 @@ export default function PropertyOwnerDashboard() {
                       <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                         {stats.activeProperties} properties
                       </span>
-                      <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
-                        Occupancy {occupancyRate}%
-                      </span>
+                      {!isFree ? (
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                          Occupancy {occupancyRate}%
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-100/70 text-amber-700 text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                          Limited insights
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-100/70 text-amber-700 text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                         {stats.totalTenants} tenants
                       </span>
                     </div>
                   </div>
 
-                  <div className="bg-white/70 border border-white/50 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Monthly revenue</p>
-                    <p className="text-lg sm:text-xl font-semibold text-foreground mt-1">
-                      {formatCurrency(stats.totalMonthlyRent)}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Expected {formatCurrency(stats.expectedMonthlyRent)}
-                    </p>
-                    <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className="h-2 w-2 rounded-full bg-primary" />
-                      {stats.overduePayments} overdue tenants
+                  {isFree ? (
+                    <div className="bg-white/70 border border-amber-200 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Premium insights</p>
+                      <p className="text-base sm:text-lg font-semibold text-foreground mt-1">
+                        Upgrade to see revenue, occupancy, and overdue totals.
+                      </p>
+                      <a
+                        href="/upgrade"
+                        className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
+                      >
+                        Upgrade
+                      </a>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-white/70 border border-white/50 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Monthly revenue</p>
+                      <p className="text-lg sm:text-xl font-semibold text-foreground mt-1">
+                        {formatCurrency(stats.totalMonthlyRent)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Expected {formatCurrency(stats.expectedMonthlyRent)}
+                      </p>
+                      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                        {stats.overduePayments} overdue tenants
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
 

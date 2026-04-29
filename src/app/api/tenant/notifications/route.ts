@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 import logger from "../../../../lib/logger";
+import { resolveAccountTier } from "@/lib/tier";
 
 type NotificationType = "payment" | "maintenance" | "tenant" | "other";
 type NotificationStatus = "unread" | "read";
@@ -65,6 +66,29 @@ const buildTenantNotificationFilter = (targetTenantId: string) => {
   } as Record<string, unknown>;
 };
 
+async function assertTenantNotificationsEnabled(db: any, tenantId: string) {
+  const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(tenantId) }, { projection: { ownerId: 1 } });
+  const ownerId =
+    typeof tenant?.ownerId === "string" ? tenant.ownerId : tenant?.ownerId?.toString?.() || "";
+  if (!ObjectId.isValid(ownerId)) return { enabled: true as const };
+
+  const ownerTier = resolveAccountTier(
+    (
+      await db.collection("propertyOwners").findOne(
+        { _id: new ObjectId(ownerId), role: "propertyOwner" },
+        { projection: { tier: 1 } }
+      )
+    )?.tier,
+    "premium"
+  );
+
+  if (ownerTier === "free") {
+    return { enabled: false as const, ownerTier };
+  }
+
+  return { enabled: true as const, ownerTier };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { db } = await connectToDatabase();
@@ -72,6 +96,18 @@ export async function GET(req: NextRequest) {
     const auth = await resolveTargetTenantId(req, db);
     if (auth.error) {
       return NextResponse.json({ success: false, message: auth.error }, { status: auth.status || 401 });
+    }
+
+    const notificationAccess = await assertTenantNotificationsEnabled(db, auth.targetTenantId);
+    if (!notificationAccess.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Notifications are locked on the Free tier. Ask the property owner to upgrade to Premium.",
+          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
+        },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(req.url);
@@ -131,6 +167,18 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, message: auth.error }, { status: auth.status || 401 });
     }
 
+    const notificationAccess = await assertTenantNotificationsEnabled(db, auth.targetTenantId);
+    if (!notificationAccess.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Notifications are locked on the Free tier. Ask the property owner to upgrade to Premium.",
+          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const notificationId = (body as any)?.notificationId as string | undefined;
     const markAllRead = Boolean((body as any)?.markAllRead);
@@ -181,6 +229,18 @@ export async function DELETE(req: NextRequest) {
     const auth = await resolveTargetTenantId(req, db);
     if (auth.error) {
       return NextResponse.json({ success: false, message: auth.error }, { status: auth.status || 401 });
+    }
+
+    const notificationAccess = await assertTenantNotificationsEnabled(db, auth.targetTenantId);
+    if (!notificationAccess.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Notifications are locked on the Free tier. Ask the property owner to upgrade to Premium.",
+          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
+        },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(req.url);

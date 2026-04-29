@@ -8,7 +8,7 @@ import { useAccountTier } from "@/hooks/useAccountTier";
 
 export default function UpgradePage() {
   const router = useRouter();
-  const { tier, isFree, isPremium } = useAccountTier();
+  const { tier, isFree, isPremium, refreshTier } = useAccountTier();
   const [role, setRole] = useState<string | null>(null);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb">("rentals");
 
@@ -56,6 +56,9 @@ export default function UpgradePage() {
         throw new Error(data?.message || "Upgrade failed. Please try again.");
       }
 
+      Cookies.set("tier", "premium", { sameSite: "strict", path: "/", expires: 7 });
+      refreshTier();
+
       setMessage("Upgraded to Premium. Redirecting you to your dashboard…");
       const redirect = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
       window.location.assign(redirect);
@@ -68,7 +71,7 @@ export default function UpgradePage() {
 
   return (
     <div className="min-h-[100svh] bg-background text-foreground">
-      <div className="pt-10 pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="pt-10 pb-28 px-4 sm:px-6 lg:px-8">
         <main className="max-w-6xl mx-auto space-y-6">
           <section className="glass-panel rounded-3xl p-6 sm:p-8">
             <div className="flex items-start justify-between gap-4">
@@ -178,6 +181,36 @@ export default function UpgradePage() {
           </section>
         </main>
       </div>
+
+      {!isPremium ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/80 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <div className="text-xs sm:text-sm">
+              <p className="font-semibold text-foreground">Unlock Premium</p>
+              <p className="text-[11px] text-muted-foreground">
+                Automated tenant payments, notifications, reports, and critical operations.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isUpgrading || role !== "propertyOwner"}
+                onClick={handleUpgrade}
+                className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-white shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isUpgrading ? "Upgrading…" : "Upgrade to Premium"}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard")}
+                className="inline-flex items-center justify-center rounded-full border border-border bg-white/70 px-4 py-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

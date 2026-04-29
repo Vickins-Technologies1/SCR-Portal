@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Cookies from "js-cookie";
-import { Bell, CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
+import { Bell, CheckCircle2, ChevronLeft, ChevronRight, Lock, RefreshCw, Trash2 } from "lucide-react";
 
 interface Notification {
   _id: string;
@@ -37,6 +37,7 @@ const formatWhen = (iso: string) => {
 };
 
 export default function TenantNotificationsPage() {
+  const [canNotifications, setCanNotifications] = useState<boolean | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -49,6 +50,27 @@ export default function TenantNotificationsPage() {
   const requestId = useRef(0);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil((total || 0) / limit)), [total, limit]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/tenant/features", { credentials: "include", cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.ok && data?.success) {
+          setCanNotifications(Boolean(data.features?.canNotifications));
+        } else {
+          setCanNotifications(null);
+        }
+      } catch {
+        if (!cancelled) setCanNotifications(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchCsrfToken = useCallback(async () => {
     try {
@@ -115,11 +137,17 @@ export default function TenantNotificationsPage() {
   }, [filter, limit, page]);
 
   useEffect(() => {
+    if (canNotifications === false) {
+      setIsLoading(false);
+      return;
+    }
+    if (canNotifications === null) return;
+
     fetchCsrfToken().then(() => {
       fetchUnreadCount();
       fetchNotifications();
     });
-  }, [fetchCsrfToken, fetchNotifications, fetchUnreadCount]);
+  }, [canNotifications, fetchCsrfToken, fetchNotifications, fetchUnreadCount]);
 
   useEffect(() => {
     fetchNotifications();
@@ -218,6 +246,41 @@ export default function TenantNotificationsPage() {
     await fetchUnreadCount();
     await fetchNotifications();
   }, [fetchNotifications, fetchUnreadCount]);
+
+  if (canNotifications === false) {
+    return (
+      <div className="relative min-h-screen pb-10 text-[13px] sm:text-sm">
+        <div className="pointer-events-none absolute -top-24 right-[-12%] h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 left-[-10%] h-80 w-80 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
+
+        <div className="pt-10 sm:pt-14 relative z-10">
+          <div className="mx-4 sm:mx-6 lg:mx-8 max-w-4xl">
+            <section className="glass-panel rounded-3xl p-6 sm:p-8 md:p-9 relative overflow-hidden">
+              <div className="absolute -top-24 right-6 h-48 w-48 rounded-full bg-primary/25 blur-3xl" />
+              <div className="relative space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                    <Lock className="h-5 w-5 text-amber-700" />
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Premium feature</p>
+                    <h1 className="text-2xl sm:text-3xl font-semibold text-foreground">Notifications locked</h1>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-4 text-sm text-amber-900">
+                  <p className="font-semibold">View-only account</p>
+                  <p className="mt-1 text-[11px] text-amber-800">
+                    Your property owner is on the Free tier. Ask them to upgrade to Premium to enable notifications.
+                  </p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen pb-10 text-[13px] sm:text-sm">
@@ -369,4 +432,3 @@ export default function TenantNotificationsPage() {
     </div>
   );
 }
-

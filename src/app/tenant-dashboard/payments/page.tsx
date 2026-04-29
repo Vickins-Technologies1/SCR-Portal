@@ -41,6 +41,8 @@ export default function PaymentsPage() {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [displayedPayments, setDisplayedPayments] = useState<Payment[]>([]);
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [ownerTier, setOwnerTier] = useState<"free" | "premium" | null>(null);
+  const [tenantFeatures, setTenantFeatures] = useState<{ canPay: boolean; canNotifications: boolean } | null>(null);
   const [landlordId, setLandlordId] = useState<string>("");
   const [mpesaShortcode, setMpesaShortcode] = useState<string | null>(null);
   const [invoiceId, setInvoiceId] = useState<string>("");
@@ -138,7 +140,31 @@ export default function PaymentsPage() {
         if (normalizedOwnerId) setLandlordId(normalizedOwnerId);
       }
 
-      if (tenantData.tenant.ownerId) {
+      let canPay = true;
+      try {
+        const featuresRes = await fetch("/api/tenant/features", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const featuresData = await featuresRes.json();
+        if (featuresRes.ok && featuresData?.success) {
+          const resolvedTier = featuresData.ownerTier === "free" ? "free" : "premium";
+          setOwnerTier(resolvedTier);
+          const resolvedFeatures = featuresData.features || null;
+          setTenantFeatures(resolvedFeatures);
+          if (resolvedTier === "free") {
+            canPay = Boolean(resolvedFeatures?.canPay);
+          }
+        } else {
+          setOwnerTier(null);
+          setTenantFeatures(null);
+        }
+      } catch {
+        setOwnerTier(null);
+        setTenantFeatures(null);
+      }
+
+      if (tenantData.tenant.ownerId && canPay) {
         try {
           const ownerValue = tenantData.tenant.ownerId;
           const normalizedOwnerId = typeof ownerValue === "string" ? ownerValue : ownerValue.toString?.();
@@ -154,6 +180,8 @@ export default function PaymentsPage() {
         } catch {
           setMpesaShortcode(null);
         }
+      } else {
+        setMpesaShortcode(null);
       }
 
       const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}&page=${page}&limit=${limit}`, {
@@ -215,6 +243,17 @@ export default function PaymentsPage() {
   };
 
   const handleOpenModal = () => {
+    if (tenantFeatures?.canPay === false) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "error",
+          text: "Payments are locked because your property owner is on the Free tier. Contact the owner to upgrade to Premium.",
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
     setInvoiceId(`${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
     setIsModalOpen(true);
   };
@@ -312,15 +351,26 @@ export default function PaymentsPage() {
             )}
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-3">
+          <div className="mt-5 space-y-3">
+            {tenantFeatures?.canPay === false ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-800">
+                <p className="font-semibold text-amber-900">Payments locked</p>
+                <p className="mt-1">
+                  Your property owner is on the Free tier. Payments are view-only until they upgrade to Premium.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-3">
             <button
               data-tour="tenant-payments-action"
               onClick={handleOpenModal}
               className="w-full sm:w-auto bg-primary text-white font-semibold px-6 py-3 rounded-full shadow-lg hover:bg-primary-hover transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
-              disabled={!tenantId || !tenant?.propertyId || !csrfToken}
+              disabled={!tenantId || !tenant?.propertyId || !csrfToken || tenantFeatures?.canPay === false}
             >
               Make a Payment
             </button>
+            </div>
           </div>
         </section>
 

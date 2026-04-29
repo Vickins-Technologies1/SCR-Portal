@@ -83,7 +83,7 @@ export default function Sidebar() {
   }, [userId, role]);
 
   useEffect(() => {
-    if (!userId || !perm.hasPermission("notifications:view")) return;
+    if (!userId || !perm.hasPermission("notifications:view") || tier === "free") return;
     let cancelled = false;
 
     const fetchUnread = async () => {
@@ -104,7 +104,7 @@ export default function Sidebar() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [userId, perm]);
+  }, [userId, perm, tier]);
 
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
