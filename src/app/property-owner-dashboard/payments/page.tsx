@@ -7,6 +7,7 @@ import { CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAccountTier } from "@/hooks/useAccountTier";
 
 interface Payment {
   _id: string;
@@ -43,6 +44,7 @@ interface FilterConfig {
 export default function PaymentsPage() {
   const router = useRouter();
   const perm = usePermissions();
+  const { isFree } = useAccountTier();
   const canViewPayments = perm.canViewPayments;
   const [payments, setPayments] = useState<Payment[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -409,6 +411,28 @@ export default function PaymentsPage() {
               </div>
             </div>
           </section>
+
+          {isFree && (
+            <section className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier Notice</p>
+                  <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                    Upgrade to unlock automated tenant payments
+                  </h2>
+                  <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                    You can still view payment history here. Premium enables automated collections, integrations, and advanced operations.
+                  </p>
+                </div>
+                <a
+                  href="/upgrade"
+                  className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+                >
+                  Upgrade
+                </a>
+              </div>
+            </section>
+          )}
 
           <div className="surface-card rounded-2xl p-5 sm:p-6 space-y-5" data-tour="owner-payments-filters">
             <div>

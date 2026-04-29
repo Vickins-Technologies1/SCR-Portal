@@ -14,6 +14,7 @@ import PropertyTableRow from "./PropertyTableRow";
 import PropertyModal from "./PropertyModal";
 import ListingFormModal from "./ListingFormModal";
 import DeleteConfirmationModal from "./DeleteConfirmationModal";
+import { useAccountTier } from "@/hooks/useAccountTier";
 
 import { Property, Listing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";  // ← Updated imports
@@ -26,6 +27,7 @@ interface SortConfig {
 export default function ListPropertiesPage() {
   const router = useRouter();
   const perm = usePermissions();
+  const { isFree } = useAccountTier();
   const canViewProperties = perm.hasPermission("properties:view");
   const canListProperties = perm.hasPermission("properties:list_new");
   const canEditProperties = perm.hasPermission("properties:edit");
@@ -53,6 +55,7 @@ export default function ListPropertiesPage() {
 
   const showListButton = isHydrated && canListProperties;
   const canManageActions = isHydrated && canEditProperties;
+  const freeTierLimitReached = isFree && originalProperties.length >= 1;
 
   useEffect(() => {
     setIsHydrated(true);
@@ -255,13 +258,25 @@ export default function ListPropertiesPage() {
                 </div>
               </div>
               {showListButton && (
-                <button
-                  onClick={openListModal}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-emerald-500 text-white rounded-xl shadow-md hover:shadow-lg transition-all text-xs sm:text-sm font-semibold"
-                >
-                  <Plus className="h-4 w-4" />
-                  List Property
-                </button>
+                freeTierLimitReached ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-xs sm:text-sm text-foreground max-w-md">
+                    <p className="font-semibold">Free tier includes 1 property for life.</p>
+                    <p className="text-muted-foreground mt-1">
+                      Upgrade to Premium (1%) to add more properties and unlock automated tenant payments.
+                    </p>
+                    <a href="/upgrade" className="mt-2 inline-flex text-amber-700 font-semibold underline underline-offset-2">
+                      Upgrade now
+                    </a>
+                  </div>
+                ) : (
+                  <button
+                    onClick={openListModal}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-emerald-500 text-white rounded-xl shadow-md hover:shadow-lg transition-all text-xs sm:text-sm font-semibold"
+                  >
+                    <Plus className="h-4 w-4" />
+                    List Property
+                  </button>
+                )
               )}
             </div>
           </motion.section>

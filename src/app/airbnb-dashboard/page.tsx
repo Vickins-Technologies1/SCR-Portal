@@ -8,6 +8,7 @@ import {
   DoorClosed,
   DoorOpen,
   MessageCircle,
+  Lock,
   TrendingUp,
   BarChart3,
   Sparkles,
@@ -30,12 +31,14 @@ import Navbar from "./components/Navbar";
 import { useAirbnbAccess } from "./components/useAirbnbAccess";
 import type { AirbnbOverview } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
+import { useAccountTier } from "@/hooks/useAccountTier";
 
 ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
 export default function AirbnbDashboard() {
   const router = useRouter();
   const { hasAccess, ownerId } = useAirbnbAccess("dashboard:view");
+  const { isFree } = useAccountTier();
   const [overview, setOverview] = useState<AirbnbOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -294,6 +297,17 @@ export default function AirbnbDashboard() {
                           </div>
                         </div>
                         <p className="text-base sm:text-lg font-semibold text-foreground mt-1">{stat.value}</p>
+                        {isFree && (
+                          <p className="mt-1 text-[10px] text-amber-700 flex items-center gap-1">
+                            <Lock className="h-3 w-3" />
+                            <span>
+                              Upgrade for full access:{" "}
+                              <a href="/upgrade" className="underline underline-offset-2 font-semibold">
+                                {stat.label}
+                              </a>
+                            </span>
+                          </p>
+                        )}
                       </motion.div>
                     ))}
                   </div>

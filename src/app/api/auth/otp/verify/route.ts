@@ -6,6 +6,7 @@ import { getDefaultPermissions } from "@/lib/permissions";
 import { hashOtpCode } from "@/lib/otp";
 import { createSessionToken, getSessionCookieOptions } from "@/lib/session";
 import { generateCsrfToken, setCsrfCookie } from "@/lib/csrf";
+import { resolveAccountTier, type AccountTier } from "@/lib/tier";
 
 type OtpDoc = {
   _id: ObjectId;
@@ -33,6 +34,8 @@ const normalizeManagementType = (value: unknown): "rentals" | "airbnb" => {
   const normalized = value.trim().toLowerCase();
   return normalized === "airbnb" ? "airbnb" : "rentals";
 };
+
+const normalizeOwnerTier = (value: unknown): AccountTier => resolveAccountTier(value, "premium");
 
 export async function POST(request: Request) {
   try {
@@ -121,6 +124,7 @@ export async function POST(request: Request) {
 
     let redirectPath = otp.redirectPath;
     let ownerManagementType: "rentals" | "airbnb" | null = null;
+    let ownerTier: AccountTier | null = null;
     if (otp.role === "propertyOwner" || isTeamMember) {
       let managementType: "rentals" | "airbnb" = "rentals";
       if (isTeamMember) {
@@ -128,12 +132,14 @@ export async function POST(request: Request) {
         if (ownerId && ObjectId.isValid(ownerId)) {
           const owner = await db.collection("propertyOwners").findOne(
             { _id: new ObjectId(ownerId) },
-            { projection: { managementType: 1 } }
+            { projection: { managementType: 1, tier: 1 } }
           );
           managementType = normalizeManagementType(owner?.managementType);
+          ownerTier = normalizeOwnerTier(owner?.tier);
         }
       } else {
         managementType = normalizeManagementType(user?.managementType);
+        ownerTier = normalizeOwnerTier(user?.tier);
       }
       ownerManagementType = managementType;
       redirectPath = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
@@ -169,6 +175,7 @@ export async function POST(request: Request) {
         isTeamMember,
         isOwner,
         permissions: finalPermissions,
+        tier: ownerTier,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
@@ -178,6 +185,7 @@ export async function POST(request: Request) {
       role: otp.role,
       ownerId: isTeamMember ? user.ownerId?.toString() ?? null : otp.role === "propertyOwner" ? user._id.toString() : null,
       managementType: ownerManagementType,
+      tier: ownerTier,
     });
     response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
@@ -206,6 +214,15 @@ export async function POST(request: Request) {
 
     if (ownerManagementType) {
       response.cookies.set("managementType", ownerManagementType, {
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60,
+        path: "/",
+      });
+    }
+
+    if (ownerTier) {
+      response.cookies.set("tier", ownerTier, {
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         maxAge: 7 * 24 * 60 * 60,

@@ -9,9 +9,11 @@ import SectionHeader from "../components/SectionHeader";
 import { useAirbnbAccess } from "../components/useAirbnbAccess";
 import type { AirbnbPayout } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
+import { useAccountTier } from "@/hooks/useAccountTier";
 
 export default function AirbnbPaymentsPage() {
   const { hasAccess, ownerId } = useAirbnbAccess("payments:view");
+  const { isFree } = useAccountTier();
   const [payouts, setPayouts] = useState<AirbnbPayout[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
@@ -105,6 +107,28 @@ export default function AirbnbPaymentsPage() {
             subtitle="Track Airbnb payouts, direct M-Pesa collections, and trust accounting."
             icon={CreditCard}
           />
+
+          {isFree && (
+            <section className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier Notice</p>
+                  <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                    Upgrade to unlock automated payment workflows
+                  </h2>
+                  <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                    Premium enables integrations, automation, and deeper operational controls.
+                  </p>
+                </div>
+                <a
+                  href="/upgrade"
+                  className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
+                >
+                  Upgrade
+                </a>
+              </div>
+            </section>
+          )}
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="surface-card rounded-3xl p-5 sm:p-6">

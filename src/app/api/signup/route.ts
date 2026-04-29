@@ -51,6 +51,7 @@ interface SignupRequestBody {
   confirmPassword?: string;
   role: string;
   managementType?: string;
+  tier?: string;
   csrfToken: string;
 }
 
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, phone, role, csrfToken, managementType } = body;
+    const { name, email, password, phone, role, csrfToken, managementType, tier } = body;
 
     // 3. Required fields
     if (!name || !email || !password || !phone || !role || !csrfToken) {
@@ -101,6 +102,16 @@ export async function POST(request: NextRequest) {
       logger.warn("Invalid management type", { managementType });
       return NextResponse.json(
         { success: false, message: "Invalid management type" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedTier = typeof tier === "string" ? tier.trim().toLowerCase() : "free";
+
+    if (!["free", "premium"].includes(normalizedTier)) {
+      logger.warn("Invalid tier", { tier });
+      return NextResponse.json(
+        { success: false, message: "Invalid tier. Must be free or premium." },
         { status: 400 }
       );
     }
@@ -209,6 +220,7 @@ export async function POST(request: NextRequest) {
       phone: sanitizedPhone.trim(),
       role: "propertyOwner",
       managementType: normalizedManagementType,
+      tier: normalizedTier,
       isApproved: false,
       createdAt: new Date().toISOString(),
     };

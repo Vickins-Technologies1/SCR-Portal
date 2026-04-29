@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import logger from "./lib/logger";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./lib/session";
+import { resolveAccountTier, type AccountTier } from "./lib/tier";
 import {
   buildInvalidCsrfResponse,
   CSRF_COOKIE_NAME,
@@ -21,6 +22,7 @@ function normalizeManagementType(value: unknown): OwnerManagementType {
 interface RouteAccess {
   roles: Role[];
   isApi: boolean;
+  minTier?: AccountTier;
 }
 
 // Rate limiting (per IP)
@@ -177,6 +179,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/property-owners/vacate": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/property-owners/tenant-deletions": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/update-wallet": { roles: ["propertyOwner", "teamMember"], isApi: true },
+  "/api/owner/tier": { roles: ["propertyOwner", "teamMember"], isApi: true },
 
   // Impersonation
   "/api/impersonate": { roles: ["propertyOwner"], isApi: true },
@@ -191,7 +194,15 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
 
   // Page routes (client-side routing protection)
   "/property-owner-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
+  "/property-owner-dashboard/integrations": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
+  "/property-owner-dashboard/users": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
+  "/property-owner-dashboard/expenses": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
+  "/property-owner-dashboard/reports": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
   "/airbnb-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
+  "/airbnb-dashboard/integrations": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
+  "/airbnb-dashboard/users": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
+  "/airbnb-dashboard/operations": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
+  "/airbnb-dashboard/reports": { roles: ["propertyOwner", "teamMember"], isApi: false, minTier: "premium" },
   "/admin/support": { roles: ["admin"], isApi: false },
   "/admin/reviews": { roles: ["admin"], isApi: false },
   "/tenant-dashboard": { roles: ["tenant", "propertyOwner"], isApi: false },
@@ -200,6 +211,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/properties": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: false },
   "/tenants": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/property-listings": { roles: [], isApi: false }, // public
+  "/upgrade": { roles: ["propertyOwner", "teamMember"], isApi: false },
 };
 
 const ADMIN_API_PATHS = [
@@ -246,6 +258,10 @@ export async function proxy(request: NextRequest) {
       role === "propertyOwner" || role === "teamMember"
         ? normalizeManagementType(session?.managementType ?? cookies.get("managementType")?.value)
         : null;
+    const tier =
+      role === "propertyOwner" || role === "teamMember"
+        ? resolveAccountTier(session?.tier ?? cookies.get("tier")?.value, "premium")
+        : null;
     const isImpersonating =
       role === "propertyOwner" && cookies.get("isImpersonating")?.value === "true";
     const impersonatingTenantId = isImpersonating
@@ -258,6 +274,7 @@ export async function proxy(request: NextRequest) {
       role,
       ownerId,
       managementType,
+      tier,
     });
     if (cookieHeader) {
       requestHeaders.set("cookie", cookieHeader);
@@ -338,6 +355,21 @@ export async function proxy(request: NextRequest) {
       return config.isApi
         ? NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
         : NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (config.minTier === "premium") {
+      const isPremium = tier === "premium";
+      if (!isPremium) {
+        logger.warn("Tier restricted access attempt", {
+          path,
+          role,
+          tier,
+          required: config.minTier,
+        });
+        return config.isApi
+          ? NextResponse.json({ success: false, message: "Upgrade required" }, { status: 402 })
+          : NextResponse.redirect(new URL("/upgrade", request.url));
+      }
     }
 
     // Owner portal separation: Airbnb owners must stay in Airbnb portal, rentals owners must stay in rentals portal.

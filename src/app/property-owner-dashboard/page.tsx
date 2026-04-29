@@ -38,6 +38,7 @@ import { Property } from "../../types/property";
 import { OwnerStats } from "../../types/stats";
 import { usePermissions } from "@/hooks/usePermissions"; // ← import your permissions hook
 import PaymentModal from "./components/PaymentModal";
+import { useAccountTier } from "@/hooks/useAccountTier";
 
 ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
@@ -51,6 +52,7 @@ interface ChartData {
 export default function PropertyOwnerDashboard() {
   const router = useRouter();
   const perm = usePermissions(); // ← use your permissions hook
+  const { isFree } = useAccountTier();
 
   // Read cookies directly
   const loggedInUserId = Cookies.get("userId") ?? null;
@@ -583,6 +585,17 @@ export default function PropertyOwnerDashboard() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <p className="text-base sm:text-lg font-semibold text-foreground mt-1">{s.value}</p>
+                                {isFree && (
+                                  <p className="mt-1 text-[10px] text-amber-700 flex items-center gap-1">
+                                    <Lock className="h-3 w-3" />
+                                    <span>
+                                      Upgrade for full access:{" "}
+                                      <a href="/upgrade" className="underline underline-offset-2 font-semibold">
+                                        {s.title}
+                                      </a>
+                                    </span>
+                                  </p>
+                                )}
                                 {s.subtitle && !s.explanation.includes(s.subtitle) && (
                                   <p className="text-[11px] text-muted-foreground mt-1">{s.subtitle}</p>
                                 )}

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Lock } from "lucide-react";
 import {
   LayoutDashboard,
   Users,
@@ -23,12 +23,13 @@ import { useSidebar } from "./SidebarContext";
 
 const useAuth = () => {
   if (typeof window === "undefined") {
-    return { userId: null, role: null, ownerId: null, permissions: [] as string[] };
+    return { userId: null, role: null, ownerId: null, tier: null, permissions: [] as string[] };
   }
   return {
     userId: Cookies.get("userId") ?? null,
     role: Cookies.get("role") ?? null,
     ownerId: Cookies.get("ownerId") ?? Cookies.get("userId") ?? null,
+    tier: Cookies.get("tier") ?? null,
     permissions: Cookies.get("permissions")
       ? JSON.parse(Cookies.get("permissions")!)
       : [],
@@ -47,7 +48,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { isOpen, close } = useSidebar();
-  const { userId, role, permissions } = useAuth();
+  const { userId, role, tier, permissions } = useAuth();
   const perm = usePermissions();
   const [name, setName] = useState("User");
   const [teamRole, setTeamRole] = useState("Team Member");
@@ -108,6 +109,8 @@ export default function Sidebar() {
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
   const restrictedKeys = new Set(["dashboard", "reports"]);
+  const isFreeTier = tier === "free";
+  const premiumLockedKeys = new Set(["users", "integrations", "expenses", "reports"]);
 
   const allLinks: NavLink[] = [
     { key: "dashboard", href: "/property-owner-dashboard", label: "Overview", icon: <LayoutDashboard size={20} />, requiredPermission: "dashboard:view" },
@@ -194,17 +197,27 @@ export default function Sidebar() {
                 <span className="h-2 w-2 rounded-full bg-primary animate-pulse"></span>
                 {roleLabel}
               </span>
+              {mounted && (
+                <span
+                  className={`mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider rounded-full ${
+                    isFreeTier ? "bg-amber-500/10 text-amber-700" : "bg-emerald-500/10 text-emerald-700"
+                  }`}
+                >
+                  {isFreeTier ? "Free Tier" : "Premium (1%)"}
+                </span>
+              )}
             </div>
           </div>
 
           <nav className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 space-y-1.5">
             {navLinks.map(({ key, href, label, icon }) => {
+              const isTierLocked = isFreeTier && premiumLockedKeys.has(key);
               const isActive = pathname === href || pathname.startsWith(href + "/");
               const showUnreadBadge = key === "notifications" && unreadNotifications > 0;
               return (
                 <Link
                   key={key}
-                  href={href}
+                  href={isTierLocked ? "/upgrade" : href}
                   onClick={close}
                   data-tour={`owner-nav-${key}`}
                   className={`group flex items-center gap-3 sm:gap-4 rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
@@ -224,8 +237,14 @@ export default function Sidebar() {
                       </span>
                     )}
                   </span>
-                  <span className="truncate">
-                    {label}
+                  <span className="truncate flex-1 flex items-center gap-2">
+                    <span className="truncate">{label}</span>
+                    {isTierLocked && (
+                      <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                        <Lock className="h-3 w-3" />
+                        Upgrade
+                      </span>
+                    )}
                     {showUnreadBadge && (
                       <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
                         {unreadNotifications > 99 ? "99+" : unreadNotifications}
@@ -252,6 +271,14 @@ export default function Sidebar() {
 
           <div className="mt-auto border-t border-border px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
             <div className="text-center space-y-1">
+              <div className="flex justify-center pb-2">
+                <Link
+                  href="/upgrade"
+                  className="inline-flex items-center justify-center rounded-xl bg-primary/10 px-3 py-2 text-[11px] font-semibold text-primary hover:bg-primary/15 transition"
+                >
+                  Upgrade to Premium
+                </Link>
+              </div>
               <p className="text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
                 © {new Date().getFullYear()} Sorana Property Managers Limited
               </p>

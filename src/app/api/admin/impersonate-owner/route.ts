@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { SESSION_COOKIE_NAME, createSessionToken, getSessionCookieOptions, verifySessionToken } from "@/lib/session";
+import { resolveAccountTier } from "@/lib/tier";
 
 type OwnerManagementType = "rentals" | "airbnb";
 
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
 
     const managementType = normalizeManagementType(owner.managementType);
     const redirectPath = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
+    const ownerTier = resolveAccountTier(owner?.tier, "premium");
 
     const response = NextResponse.json({
       success: true,
@@ -62,6 +64,7 @@ export async function POST(request: NextRequest) {
       role: "propertyOwner",
       ownerId: owner._id.toString(),
       managementType,
+      tier: ownerTier,
       impersonator: { userId: adminUserId, role: "admin" },
     });
     response.cookies.set("session", impersonationToken, getSessionCookieOptions());
@@ -123,6 +126,14 @@ export async function POST(request: NextRequest) {
     });
 
     response.cookies.set("role", "propertyOwner", {
+      path: "/",
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 3600,
+    });
+
+    response.cookies.set("tier", ownerTier, {
       path: "/",
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",

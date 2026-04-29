@@ -62,6 +62,7 @@ export default function SignUp() {
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb">("rentals");
+  const [tier, setTier] = useState<"free" | "premium">("free");
 
   const [criteria, setCriteria] = useState({
     length: false,
@@ -219,6 +220,7 @@ export default function SignUp() {
           phone: fullPhone,
           role: "propertyOwner",
           managementType,
+          tier,
           csrfToken,
         }),
         credentials: "include",
@@ -574,6 +576,67 @@ export default function SignUp() {
                         </button>
                       </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                        Choose Your Tier
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTier("free")}
+                          className={`rounded-xl border px-3.5 py-3 text-left transition-all ${
+                            tier === "free"
+                              ? "border-primary/40 bg-primary/10 ring-1 ring-primary/30"
+                              : "border-border bg-muted/30 hover:bg-muted/50"
+                          }`}
+                          aria-pressed={tier === "free"}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span className="block text-xs font-semibold text-foreground">Free (Forever)</span>
+                              <span className="block text-[10px] text-muted-foreground mt-0.5">
+                                1 property free for life + full Tenants & Property details.
+                              </span>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-foreground/5 px-2.5 py-1 text-[10px] font-semibold text-foreground">
+                              Free
+                            </span>
+                          </div>
+                          <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground">
+                            <li>• Dashboard access (with limited insights)</li>
+                            <li>• Locked premium operations & automation</li>
+                          </ul>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setTier("premium")}
+                          className={`rounded-xl border px-3.5 py-3 text-left transition-all ${
+                            tier === "premium"
+                              ? "border-primary/40 bg-primary/10 ring-1 ring-primary/30"
+                              : "border-border bg-muted/30 hover:bg-muted/50"
+                          }`}
+                          aria-pressed={tier === "premium"}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span className="block text-xs font-semibold text-foreground">Premium (1%)</span>
+                              <span className="block text-[10px] text-muted-foreground mt-0.5">
+                                Unlock automated tenant payments + full operations suite.
+                              </span>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">
+                              1%
+                            </span>
+                          </div>
+                          <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground">
+                            <li>• Automated payments & integrations</li>
+                            <li>• Advanced reports, users, expenses</li>
+                          </ul>
+                        </button>
+                      </div>
+                    </div>
                   </motion.div>
                 )}
 
@@ -853,6 +916,22 @@ export default function SignUp() {
                             onClick={() =>
                               setManagementType((prev) => (prev === "airbnb" ? "rentals" : "airbnb"))
                             }
+                            className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition"
+                          >
+                            Switch
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2 sm:col-span-2">
+                        <p className="text-[10px] text-muted-foreground">Tier</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-sm">
+                            {tier === "premium" ? "Premium (1%)" : "Free (Forever)"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setTier((prev) => (prev === "premium" ? "free" : "premium"))}
                             className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition"
                           >
                             Switch

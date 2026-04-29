@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
+import type { AccountTier } from "./tier";
 
 export const SESSION_COOKIE_NAME = "session";
 export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
@@ -8,6 +9,7 @@ export type SessionPayload = JWTPayload & {
   role: string;
   ownerId?: string | null;
   managementType?: "rentals" | "airbnb" | null;
+  tier?: AccountTier | null;
   impersonator?: {
     userId: string;
     role: string;

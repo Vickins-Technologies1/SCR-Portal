@@ -7,6 +7,7 @@ import { getDefaultPermissions } from "../../../lib/permissions";
 import { deliverOtp } from "../../../lib/otp-delivery";
 import { createSessionToken, getSessionCookieOptions } from "../../../lib/session";
 import { generateCsrfToken, setCsrfCookie } from "../../../lib/csrf";
+import { resolveAccountTier, type AccountTier } from "../../../lib/tier";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -51,6 +52,30 @@ async function resolveOwnerManagementType(
   }
 
   return "rentals";
+}
+
+async function resolveOwnerTier(
+  db: Db,
+  user: any,
+  finalRole: string,
+  isTeamMember: boolean
+): Promise<AccountTier> {
+  if (finalRole === "propertyOwner") {
+    return resolveAccountTier(user?.tier, "premium");
+  }
+
+  if (isTeamMember) {
+    const ownerId = user?.ownerId?.toString?.() ?? (typeof user?.ownerId === "string" ? user.ownerId : null);
+    if (ownerId && ObjectId.isValid(ownerId)) {
+      const owner = await db.collection("propertyOwners").findOne(
+        { _id: new ObjectId(ownerId) },
+        { projection: { tier: 1 } }
+      );
+      return resolveAccountTier(owner?.tier, "premium");
+    }
+  }
+
+  return "premium";
 }
 
 export async function POST(request: NextRequest) {
@@ -237,6 +262,11 @@ export async function POST(request: NextRequest) {
           finalPermissions = getDefaultPermissions("tenant");
         }
 
+        const ownerTier =
+          finalRole === "propertyOwner" || isTeamMember
+            ? await resolveOwnerTier(db, user, finalRole, isTeamMember)
+            : null;
+
         const response = new NextResponse(
           JSON.stringify({
             success: true,
@@ -245,6 +275,7 @@ export async function POST(request: NextRequest) {
             redirect: redirectPath,
             isTeamMember,
             isOwner,
+            tier: ownerTier,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -254,6 +285,7 @@ export async function POST(request: NextRequest) {
           role: finalRole,
           ownerId: isTeamMember ? user.ownerId?.toString() ?? null : finalRole === "propertyOwner" ? user._id.toString() : null,
           managementType: ownerManagementType,
+          tier: ownerTier,
         });
         response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
@@ -280,6 +312,15 @@ export async function POST(request: NextRequest) {
 
         if (ownerManagementType) {
           response.cookies.set("managementType", ownerManagementType, {
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60,
+            path: "/",
+          });
+        }
+
+        if (ownerTier) {
+          response.cookies.set("tier", ownerTier, {
             secure: process.env.NODE_ENV === "production",
             sameSite: "strict",
             maxAge: 7 * 24 * 60 * 60,
@@ -532,6 +573,11 @@ export async function POST(request: NextRequest) {
           finalPermissions = getDefaultPermissions("tenant");
         }
 
+        const ownerTier =
+          finalRole === "propertyOwner" || isTeamMember
+            ? await resolveOwnerTier(db, user, finalRole, isTeamMember)
+            : null;
+
         const response = new NextResponse(
           JSON.stringify({
             success: true,
@@ -540,6 +586,7 @@ export async function POST(request: NextRequest) {
             redirect: redirectPath,
             isTeamMember,
             isOwner,
+            tier: ownerTier,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -549,6 +596,7 @@ export async function POST(request: NextRequest) {
           role: finalRole,
           ownerId: isTeamMember ? user.ownerId?.toString() ?? null : finalRole === "propertyOwner" ? user._id.toString() : null,
           managementType: ownerManagementType,
+          tier: ownerTier,
         });
         response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
@@ -575,6 +623,15 @@ export async function POST(request: NextRequest) {
 
         if (ownerManagementType) {
           response.cookies.set("managementType", ownerManagementType, {
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60,
+            path: "/",
+          });
+        }
+
+        if (ownerTier) {
+          response.cookies.set("tier", ownerTier, {
             secure: process.env.NODE_ENV === "production",
             sameSite: "strict",
             maxAge: 7 * 24 * 60 * 60,

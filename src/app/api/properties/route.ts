@@ -8,6 +8,7 @@ import { Property, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
 import { buildInvalidCsrfResponse } from '../../../lib/csrf';
 import { fetchTenantsActiveOnDay } from '@/lib/tenant-occupancy';
+import { resolveAccountTier } from '@/lib/tier';
 
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
@@ -337,6 +338,33 @@ export async function POST(request: NextRequest) {
 
     const { db } = await connectToDatabase();
     logger.debug('Connected to MongoDB database: rentaldb');
+
+    // Free tier: allow only 1 property for life
+    const tierCookie = cookieStore.get('tier')?.value;
+    let accountTier = resolveAccountTier(tierCookie, 'premium');
+
+    if (!tierCookie) {
+      const ownerDoc = await db.collection('propertyOwners').findOne(
+        { _id: new ObjectId(ownerId) },
+        { projection: { tier: 1 } }
+      );
+      accountTier = resolveAccountTier(ownerDoc?.tier, 'premium');
+    }
+
+    if (accountTier === 'free') {
+      const existingProperties = await db.collection<Property>('properties').countDocuments({ ownerId });
+      if (existingProperties >= 1) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Free tier includes 1 property for life. Upgrade to Premium (1%) to add more properties and unlock automated tenant payments.",
+            code: "FREE_TIER_PROPERTY_LIMIT",
+          },
+          { status: 403 }
+        );
+      }
+    }
     const { name, address, unitTypes, status, rentPaymentDate, billingType, penaltyAmount, penaltyFrequency } = body;
 
     if (
