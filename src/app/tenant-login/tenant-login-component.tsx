@@ -1,8 +1,8 @@
 // app/tenant-login/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle } from "react-icons/fa";
 import Cookies from "js-cookie";
@@ -14,7 +14,6 @@ type TenantLoginVariant = "rental" | "airbnb";
 
 export default function TenantLoginPage({ variant = "rental" }: { variant?: TenantLoginVariant }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const isAirbnbGuestPortal = variant === "airbnb";
   const portalTitle = isAirbnbGuestPortal ? "Guest Payment Portal" : "Tenant Portal";
@@ -32,19 +31,6 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  // Auto-fill demo credentials
-  useEffect(() => {
-    const demo = searchParams.get("demo");
-    if (!isAirbnbGuestPortal && demo === "tenant") {
-      setEmail("tenant@demo.com");
-      setPassword("Tenant@2025!");
-      setTimeout(() => {
-        const form = document.getElementById("tenant-login-form") as HTMLFormElement;
-        form?.requestSubmit();
-      }, 600);
-    }
-  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

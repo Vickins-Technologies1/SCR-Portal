@@ -66,7 +66,8 @@ export async function PATCH(
       { returnDocument: "after" }
     );
 
-    if (!result) {
+    const updated = result?.value;
+    if (!updated) {
       return NextResponse.json(
         { success: false, message: "Review not found" },
         { status: 404 }
@@ -77,11 +78,11 @@ export async function PATCH(
       {
         success: true,
         review: {
-          _id: result._id?.toString?.() || "",
-          status: result.status || nextStatus,
-          moderatedAt: result.moderatedAt ? new Date(result.moderatedAt).toISOString() : null,
-          moderatedByName: result.moderatedByName || adminName,
-          moderationNote: result.moderationNote || undefined,
+          _id: updated._id?.toString?.() || "",
+          status: updated.status || nextStatus,
+          moderatedAt: updated.moderatedAt ? new Date(updated.moderatedAt).toISOString() : null,
+          moderatedByName: updated.moderatedByName || adminName,
+          moderationNote: updated.moderationNote || undefined,
         },
       },
       { status: 200 }

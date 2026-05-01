@@ -7,9 +7,9 @@ import { sendReminderEmail } from "./email";
 import logger from "./logger";
 import { Property } from "../types/property";
 import { Tenant } from "../types/tenant";
-import { resolveMonthlyRentForDate } from "./utils";
+import { calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "./utils";
 import { calculateReminderDueAmounts } from "./reminder-calculations";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "./rent-overrides";
+import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 
 type ReminderType = "fiveDaysBefore" | "paymentDate";
 
@@ -110,6 +110,16 @@ const resolvePaymentDate = (payment: Payment): Date | null => {
   return parseDate(payment.createdAt);
 };
 
+const sumPaid = (payments: Payment[], type: Payment["type"], paidBeforeOrOn: Date): number => {
+  return payments
+    .filter((payment) => payment.type === type)
+    .filter((payment) => {
+      const paidAt = resolvePaymentDate(payment);
+      return !!paidAt && paidAt <= paidBeforeOrOn;
+    })
+    .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+};
+
 const isLeaseActiveOn = (tenant: Tenant, date: Date): boolean => {
   const leaseStart = parseDate(tenant.leaseStartDate);
   const leaseEnd = parseDate(tenant.leaseEndDate);
@@ -126,20 +136,46 @@ const isLeaseCoveringDate = (tenant: Tenant, date: Date): boolean => {
   return true;
 };
 
-const buildReminderMessages = (
+export const buildReminderMessages = (
   reminderType: ReminderType,
   tenantName: string,
   propertyName: string,
   houseNumber: string,
   formattedDueDate: string,
+  smsDueDate: string,
   rentDue: number,
   utilityDue: number,
   depositDue: number,
   totalDue: number
 ) => {
+  const whenText = reminderType === "fiveDaysBefore" ? `by ${formattedDueDate}` : `today (${formattedDueDate})`;
   const shortTotal = totalDue.toFixed(2);
-  const whenText = reminderType === "fiveDaysBefore" ? `by ${formattedDueDate}` : "today";
-  const smsMessage = `Payment reminder: Ksh ${shortTotal} due ${whenText} for ${propertyName} (${houseNumber}).`;
+
+  const MAX_SMS_CHARS = 160;
+  const normalizeSms = (value: string) => value.replace(/\s+/g, " ").trim();
+  const truncate = (value: string, max: number) =>
+    value.length <= max ? value : value.slice(0, Math.max(0, max - 1)).trimEnd() + "…";
+
+  const propertyShort = truncate(propertyName, 28);
+
+  const shortBreakdown = [
+    rentDue > 0 ? `R${rentDue.toFixed(0)}` : null,
+    utilityDue > 0 ? `U${utilityDue.toFixed(0)}` : null,
+    depositDue > 0 ? `D${depositDue.toFixed(0)}` : null,
+  ].filter(Boolean).join(" ");
+
+  const smsTotal = totalDue.toFixed(0);
+  const smsWhen = reminderType === "fiveDaysBefore" ? smsDueDate : `${smsDueDate} (today)`;
+  const smsCore = `Rent reminder: Ksh ${smsTotal} due ${smsWhen} ${propertyShort} (${houseNumber}).`;
+  const smsWithBreakdown = shortBreakdown ? `${smsCore} [${shortBreakdown}]` : smsCore;
+  const smsWithFooter = `${smsWithBreakdown} Pay portal. If paid, ignore.`;
+
+  const smsCandidate = normalizeSms(smsWithFooter);
+  const smsMessage = smsCandidate.length <= MAX_SMS_CHARS
+    ? smsCandidate
+    : normalizeSms(smsWithBreakdown).length <= MAX_SMS_CHARS
+      ? normalizeSms(smsWithBreakdown)
+      : normalizeSms(truncate(smsWithBreakdown, MAX_SMS_CHARS));
 
   const breakdownLines = [
     rentDue > 0 ? `Rent: Ksh ${rentDue.toFixed(2)}` : null,
@@ -164,6 +200,7 @@ const buildReminderMessages = (
 export async function sendPaymentReminders(params: { ownerId?: string; today?: Date }): Promise<ReminderResult> {
   const { ownerId, today = new Date() } = params;
   const todayStart = startOfDay(today);
+  const paidCutoff = endOfDay(todayStart);
 
   const { db } = await connectToDatabase();
 
@@ -266,68 +303,21 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       continue;
     }
 
-    const leaseUnits = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits
-      : [{
-          unitIdentifier: tenant.unitIdentifier,
-          unitType: tenant.unitType,
-          houseNumber: tenant.houseNumber,
-          price: tenant.price,
-          deposit: tenant.deposit,
-        }];
-
-    const rentAmount = leaseUnits.reduce((sum, unit) => {
-      const unitKey = unit.unitIdentifier || unit.unitType;
-      const unitConfig = property.unitTypes.find((config) =>
-        config.uniqueType === unitKey || config.type === unit.unitType
-      );
-      const baseRentAmount = unitConfig?.price ?? unit.price ?? tenant.price ?? 0;
-      const overrides = filterOverridesForUnit(
-        rentOverrideMap.get(buildOverrideKey(tenant.propertyId, unit.unitType)) ?? [],
-        unit.unitIdentifier
-      );
-      return sum + resolveMonthlyRentForDate({
-        monthlyRent: baseRentAmount,
-        date: dueDate,
-        overrides,
-      });
-    }, 0);
-
-    const depositAmount = leaseUnits.reduce((sum, unit) => {
-      const unitKey = unit.unitIdentifier || unit.unitType;
-      const unitConfig = property.unitTypes.find((config) =>
-        config.uniqueType === unitKey || config.type === unit.unitType
-      );
-      return sum + (unitConfig?.deposit ?? unit.deposit ?? 0);
-    }, 0);
-
-    const rangeStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
-    const rangeEnd = endOfDay(new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0));
-
     const tenantPayments = paymentsByTenant.get(tenantId) ?? [];
 
-    const rentPaid = tenantPayments
-      .filter((payment) => payment.type === "Rent")
-      .filter((payment) => {
-        const paidAt = resolvePaymentDate(payment);
-        return !!paidAt && paidAt >= rangeStart && paidAt <= rangeEnd;
-      })
-      .reduce((sum, payment) => sum + payment.amount, 0);
+    const rentPaid = sumPaid(tenantPayments, "Rent", paidCutoff);
+    const utilityPaid = sumPaid(tenantPayments, "Utility", paidCutoff);
+    const depositPaid = sumPaid(tenantPayments, "Deposit", paidCutoff);
 
-    const utilityPaid = tenantPayments
-      .filter((payment) => payment.type === "Utility")
-      .filter((payment) => {
-        const paidAt = resolvePaymentDate(payment);
-        return !!paidAt && paidAt >= rangeStart && paidAt <= rangeEnd;
-      })
-      .reduce((sum, payment) => sum + payment.amount, 0);
-
-    const depositPaid = tenantPayments
-      .filter((payment) => payment.type === "Deposit")
-      .reduce((sum, payment) => sum + payment.amount, 0);
+    const { rentDue: rentAmountDueToDueDate } = calculateTenantRentDueToDate({
+      tenant,
+      today: dueDate,
+      rentOverrideMap,
+    });
+    const depositAmount = resolveTenantRequiredDeposit({ tenant, unitTypes: property.unitTypes });
 
     const { rentDue, utilityDue, depositDue, totalDue } = calculateReminderDueAmounts({
-      rentAmount,
+      rentAmount: rentAmountDueToDueDate,
       rentPaid,
       depositAmount,
       depositPaid,
@@ -345,18 +335,20 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       day: "numeric",
       year: "numeric",
     });
+    const smsDueDate = dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 
-    const unitLabel = leaseUnits
-      .map((unit) => unit.houseNumber)
-      .filter(Boolean)
-      .join(", ") || tenant.houseNumber || "Unit";
+    const unitLabel = (tenant.leasedUnits && tenant.leasedUnits.length > 0)
+      ? tenant.leasedUnits.map((unit) => unit.houseNumber).filter(Boolean).join(", ")
+      : tenant.houseNumber;
+    const effectiveUnitLabel = unitLabel || "Unit";
 
     const { smsMessage, whatsappMessage, appMessage } = buildReminderMessages(
       reminderType,
       tenant.name,
       property.name,
-      unitLabel,
+      effectiveUnitLabel,
       formattedDueDate,
+      smsDueDate,
       rentDue,
       utilityDue,
       depositDue,
@@ -466,6 +458,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
 export async function getUpcomingPaymentReminders(params: { ownerId?: string; today?: Date }): Promise<UpcomingReminder[]> {
   const { ownerId, today = new Date() } = params;
   const todayStart = startOfDay(today);
+  const paidCutoff = endOfDay(todayStart);
 
   const { db } = await connectToDatabase();
 
@@ -565,68 +558,21 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
       continue;
     }
 
-    const leaseUnits = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits
-      : [{
-          unitIdentifier: tenant.unitIdentifier,
-          unitType: tenant.unitType,
-          houseNumber: tenant.houseNumber,
-          price: tenant.price,
-          deposit: tenant.deposit,
-        }];
-
-    const rentAmount = leaseUnits.reduce((sum, unit) => {
-      const unitKey = unit.unitIdentifier || unit.unitType;
-      const unitConfig = property.unitTypes.find((config) =>
-        config.uniqueType === unitKey || config.type === unit.unitType
-      );
-      const baseRentAmount = unitConfig?.price ?? unit.price ?? tenant.price ?? 0;
-      const overrides = filterOverridesForUnit(
-        rentOverrideMap.get(buildOverrideKey(tenant.propertyId, unit.unitType)) ?? [],
-        unit.unitIdentifier
-      );
-      return sum + resolveMonthlyRentForDate({
-        monthlyRent: baseRentAmount,
-        date: dueDate,
-        overrides,
-      });
-    }, 0);
-
-    const depositAmount = leaseUnits.reduce((sum, unit) => {
-      const unitKey = unit.unitIdentifier || unit.unitType;
-      const unitConfig = property.unitTypes.find((config) =>
-        config.uniqueType === unitKey || config.type === unit.unitType
-      );
-      return sum + (unitConfig?.deposit ?? unit.deposit ?? 0);
-    }, 0);
-
-    const rangeStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
-    const rangeEnd = endOfDay(new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0));
-
     const tenantPayments = paymentsByTenant.get(tenantId) ?? [];
 
-    const rentPaid = tenantPayments
-      .filter((payment) => payment.type === "Rent")
-      .filter((payment) => {
-        const paidAt = resolvePaymentDate(payment);
-        return !!paidAt && paidAt >= rangeStart && paidAt <= rangeEnd;
-      })
-      .reduce((sum, payment) => sum + payment.amount, 0);
+    const rentPaid = sumPaid(tenantPayments, "Rent", paidCutoff);
+    const utilityPaid = sumPaid(tenantPayments, "Utility", paidCutoff);
+    const depositPaid = sumPaid(tenantPayments, "Deposit", paidCutoff);
 
-    const utilityPaid = tenantPayments
-      .filter((payment) => payment.type === "Utility")
-      .filter((payment) => {
-        const paidAt = resolvePaymentDate(payment);
-        return !!paidAt && paidAt >= rangeStart && paidAt <= rangeEnd;
-      })
-      .reduce((sum, payment) => sum + payment.amount, 0);
-
-    const depositPaid = tenantPayments
-      .filter((payment) => payment.type === "Deposit")
-      .reduce((sum, payment) => sum + payment.amount, 0);
+    const { rentDue: rentAmountDueToDueDate } = calculateTenantRentDueToDate({
+      tenant,
+      today: dueDate,
+      rentOverrideMap,
+    });
+    const depositAmount = resolveTenantRequiredDeposit({ tenant, unitTypes: property.unitTypes });
 
     const { rentDue, utilityDue, depositDue, totalDue } = calculateReminderDueAmounts({
-      rentAmount,
+      rentAmount: rentAmountDueToDueDate,
       rentPaid,
       depositAmount,
       depositPaid,
@@ -643,17 +589,18 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
       day: "numeric",
       year: "numeric",
     });
+    const smsDueDate = dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 
-    const unitLabel = leaseUnits
-      .map((unit) => unit.houseNumber)
-      .filter(Boolean)
-      .join(", ") || tenant.houseNumber || "Unit";
+    const unitLabel = (tenant.leasedUnits && tenant.leasedUnits.length > 0)
+      ? tenant.leasedUnits.map((unit) => unit.houseNumber).filter(Boolean).join(", ")
+      : tenant.houseNumber;
+    const effectiveUnitLabel = unitLabel || "Unit";
 
     reminders.push({
       tenantId,
       tenantName: tenant.name,
       propertyName: property.name,
-      houseNumber: unitLabel,
+      houseNumber: effectiveUnitLabel,
       rentDue,
       utilityDue,
       depositDue,

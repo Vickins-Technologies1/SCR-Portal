@@ -30,17 +30,6 @@ export default function LoginPage() {
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const demo = params.get("demo");
-
-    if (demo === "owner") {
-      setEmail("demo@admin.com");
-      setPassword("Demo@2025!");
-      setTimeout(() => submitForm(), 600);
-    }
-  }, []);
-
   const submitForm = () => {
     const form = document.getElementById("login-form") as HTMLFormElement;
     form?.requestSubmit();
@@ -613,16 +602,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Quick Demo */}
-          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-border bg-muted/40">
-            <p className="text-center text-[10px] text-muted-foreground font-medium mb-2">Quick Demo Access</p>
-            <a
-              href="/?demo=owner"
-              className="block w-full bg-[linear-gradient(110deg,rgba(30,58,138,0.12),rgba(30,58,138,0.04))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 rounded-xl text-center transition-all shadow-md text-xs xs:text-sm sm:text-base"
-            >
-              Launch Owner Demo
-            </a>
-          </div>
         </motion.div>
       </div>
     </div>

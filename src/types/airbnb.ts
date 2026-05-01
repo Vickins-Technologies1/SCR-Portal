@@ -64,6 +64,7 @@ export interface AirbnbListing {
   id: string;
   name: string;
   location: string;
+  contactPhone?: string;
   status: "draft" | "published" | "paused";
   units: number;
   baseRate: number;

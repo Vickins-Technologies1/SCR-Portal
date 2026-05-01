@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
       id: listing.externalId || listing._id?.toString?.() || "",
       name: listing.name,
       location: listing.location,
+      contactPhone: listing.contactPhone || undefined,
       status: normalizeListingStatus(listing.status),
       units: listing.units,
       baseRate: listing.baseRate,
@@ -49,6 +50,11 @@ const ListingSchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(2),
   location: z.string().trim().min(2),
+  contactPhone: z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }, z.string().min(7).max(30).optional()),
   status: z
     .preprocess((value) => {
       if (typeof value !== "string") return value;
@@ -96,6 +102,7 @@ export async function POST(request: NextRequest) {
     externalId,
     name: parsed.data.name,
     location: parsed.data.location,
+    contactPhone: parsed.data.contactPhone ?? null,
     status: parsed.data.status || "draft",
     units: parsed.data.units,
     baseRate: parsed.data.baseRate,
@@ -122,6 +129,7 @@ export async function POST(request: NextRequest) {
       id: externalId,
       name: listingDoc.name,
       location: listingDoc.location,
+      contactPhone: listingDoc.contactPhone || undefined,
       status: listingDoc.status,
       units: listingDoc.units,
       baseRate: listingDoc.baseRate,
@@ -167,6 +175,7 @@ export async function PUT(request: NextRequest) {
   const update = {
     name: parsed.data.name,
     location: parsed.data.location,
+    contactPhone: parsed.data.contactPhone ?? null,
     status: parsed.data.status || "draft",
     units: parsed.data.units,
     baseRate: parsed.data.baseRate,
@@ -198,6 +207,7 @@ export async function PUT(request: NextRequest) {
       id: updated.externalId || updated._id?.toString?.() || "",
       name: updated.name,
       location: updated.location,
+      contactPhone: updated.contactPhone || undefined,
       status: updated.status,
       units: updated.units,
       baseRate: updated.baseRate,

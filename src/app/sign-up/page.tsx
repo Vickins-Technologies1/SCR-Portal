@@ -987,24 +987,6 @@ export default function SignUp() {
             </p>
           </div>
 
-          {/* Quick Demo section */}
-          <div className="px-4 xs:px-6 sm:px-8 py-4 sm:py-5 border-t border-border bg-muted/40">
-            <p className="text-center text-[10px] text-muted-foreground font-medium mb-2">Quick Demo Access</p>
-            <div className="grid grid-cols-2 gap-3">
-              <a
-                href="/?demo=owner"
-                className="block text-center bg-[linear-gradient(110deg,rgba(30,58,138,0.12),rgba(30,58,138,0.04))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 rounded-xl transition-all shadow-md text-xs xs:text-sm sm:text-base"
-              >
-                Owner Demo
-              </a>
-              <a
-                href="/tenant-login?demo=tenant"
-                className="block text-center bg-[linear-gradient(110deg,rgba(30,58,138,0.12),rgba(30,58,138,0.04))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 rounded-xl transition-all shadow-md text-xs xs:text-sm sm:text-base"
-              >
-                Tenant Demo
-              </a>
-            </div>
-          </div>
         </motion.div>
       </div>
     </div>

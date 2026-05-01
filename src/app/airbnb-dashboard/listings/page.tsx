@@ -42,6 +42,7 @@ export default function AirbnbListingsPage() {
     id: "",
     name: "",
     location: "",
+    contactPhone: "",
     status: "draft",
     units: 1,
     baseRate: 0,
@@ -191,6 +192,7 @@ export default function AirbnbListingsPage() {
       id: "",
       name: "",
       location: "",
+      contactPhone: "",
       status: "draft",
       units: 1,
       baseRate: 0,
@@ -210,6 +212,7 @@ export default function AirbnbListingsPage() {
       id: listing.id,
       name: listing.name,
       location: listing.location,
+      contactPhone: listing.contactPhone || "",
       status: listing.status,
       units: listing.units,
       baseRate: listing.baseRate,
@@ -270,6 +273,7 @@ export default function AirbnbListingsPage() {
         id: form.id || undefined,
         name: form.name.trim(),
         location: form.location.trim(),
+        contactPhone: form.contactPhone.trim() || undefined,
         status: form.status,
         units: Number(form.units || 1),
         baseRate: Number(form.baseRate || 0),
@@ -553,6 +557,18 @@ export default function AirbnbListingsPage() {
                         value={form.location}
                         onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
                         className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        Contact phone (shown publicly)
+                      </label>
+                      <input
+                        value={form.contactPhone}
+                        onChange={(event) => setForm((prev) => ({ ...prev, contactPhone: event.target.value }))}
+                        className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
+                        placeholder="+2547XXXXXXXX"
+                        inputMode="tel"
                       />
                     </div>
                     <div>
