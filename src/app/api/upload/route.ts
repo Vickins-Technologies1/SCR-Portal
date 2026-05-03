@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       url: request.url,
     });
 
-    // Authentication check (owners + team members)
+    // Authentication check (owners + team members + admins)
     const role = request.cookies.get("role")?.value;
     const userId = request.cookies.get("userId")?.value;
     const ownerId = request.cookies.get("ownerId")?.value || userId;
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    if (!["propertyOwner", "teamMember"].includes(role)) {
+    if (!["propertyOwner", "teamMember", "admin"].includes(role)) {
       logger.warn("Unauthorized access attempt (invalid role)", { role, userId });
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }

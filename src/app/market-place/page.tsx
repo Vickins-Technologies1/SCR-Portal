@@ -230,7 +230,7 @@ export default function PropertyListings() {
               Sorana Market Place.
             </h1>
             <p className="mt-4 text-sm text-slate-600 max-w-xl">
-              Verified rentals, short-term stays, and curated properties for sale — all in one marketplace.
+              Browse verified listings across Kenya.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {[
@@ -256,7 +256,7 @@ export default function PropertyListings() {
           <div>
             <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Listings</p>
             <h2 className="mt-3 text-xl sm:text-2xl lg:text-3xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
-              Curated inventory for every stay.
+              Browse listings.
             </h2>
             <p className="mt-3 text-sm text-slate-600 max-w-2xl">
               Verified properties with clear terms and professional oversight.

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   AlertCircle,
@@ -11,6 +12,7 @@ import {
   RefreshCw,
   Star,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
@@ -55,6 +57,12 @@ const parseLines = (value: string) =>
 
 const toTextarea = (values: string[]) => (values || []).join("\n");
 
+const revokePreviewUrl = (url: string) => {
+  if (url.startsWith("blob:")) {
+    URL.revokeObjectURL(url);
+  }
+};
+
 export default function AdminMarketPlacePage() {
   const router = useRouter();
 
@@ -67,6 +75,9 @@ export default function AdminMarketPlacePage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SaleListing | null>(null);
+  const [imageItems, setImageItems] = useState<Array<{ url: string; file?: File }>>([]);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [form, setForm] = useState({
     name: "",
     address: "",
@@ -80,7 +91,6 @@ export default function AdminMarketPlacePage() {
     price: "",
     currency: "Ksh",
     amenitiesText: "",
-    imagesText: "",
     status: "draft" as ListingStatus,
     isFeatured: false,
     contactEmail: "",
@@ -174,6 +184,9 @@ export default function AdminMarketPlacePage() {
 
   const openCreateModal = () => {
     setEditing(null);
+    imageItems.forEach((item) => revokePreviewUrl(item.url));
+    setImageItems([]);
+    setImageUploadError(null);
     setForm({
       name: "",
       address: "",
@@ -187,7 +200,6 @@ export default function AdminMarketPlacePage() {
       price: "",
       currency: "Ksh",
       amenitiesText: "",
-      imagesText: "",
       status: "draft",
       isFeatured: false,
       contactEmail: "",
@@ -198,6 +210,9 @@ export default function AdminMarketPlacePage() {
 
   const openEditModal = (listing: SaleListing) => {
     setEditing(listing);
+    imageItems.forEach((item) => revokePreviewUrl(item.url));
+    setImageItems((listing.images || []).map((url) => ({ url })));
+    setImageUploadError(null);
     setForm({
       name: listing.name || "",
       address: listing.address || "",
@@ -211,7 +226,6 @@ export default function AdminMarketPlacePage() {
       price: listing.price !== undefined ? String(listing.price) : "",
       currency: listing.currency || "Ksh",
       amenitiesText: toTextarea(listing.amenities || []),
-      imagesText: toTextarea(listing.images || []),
       status: listing.status || "draft",
       isFeatured: !!listing.isFeatured,
       contactEmail: listing.contactEmail || "",
@@ -223,6 +237,77 @@ export default function AdminMarketPlacePage() {
   const closeModal = () => {
     setModalOpen(false);
     setEditing(null);
+    setImageUploadError(null);
+    setIsUploadingImages(false);
+    setImageItems((prev) => {
+      prev.forEach((item) => revokePreviewUrl(item.url));
+      return [];
+    });
+  };
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+
+    const valid: File[] = [];
+    const errors: string[] = [];
+
+    files.forEach((file) => {
+      if (!["image/jpeg", "image/png"].includes(file.type)) {
+        errors.push(`${file.name}: JPEG or PNG only`);
+      } else if (file.size > 5 * 1024 * 1024) {
+        errors.push(`${file.name}: Max 5MB`);
+      } else {
+        valid.push(file);
+      }
+    });
+
+    const maxImages = 10;
+    const totalAfter = imageItems.length + valid.length;
+    if (totalAfter > maxImages) {
+      errors.push(`Only ${maxImages} images allowed.`);
+      valid.splice(Math.max(0, maxImages - imageItems.length));
+    }
+
+    if (errors.length > 0) setImageUploadError(errors.join(" "));
+    else setImageUploadError(null);
+
+    if (valid.length > 0) {
+      setImageItems((prev) => [
+        ...prev,
+        ...valid.map((file) => ({ url: URL.createObjectURL(file), file })),
+      ]);
+    }
+  };
+
+  const removeImageAt = (index: number) => {
+    setImageItems((prev) => {
+      const next = [...prev];
+      const removed = next.splice(index, 1)[0];
+      if (removed?.url) revokePreviewUrl(removed.url);
+      return next;
+    });
+  };
+
+  const uploadImages = async (csrfToken: string, files: File[]) => {
+    if (files.length === 0) return [];
+    const formData = new FormData();
+    files.forEach((file) => formData.append("images", file));
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+      headers: { "X-CSRF-Token": csrfToken },
+      credentials: "include",
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Failed to upload images");
+    }
+
+    return (data.urls || []) as string[];
   };
 
   const saveListing = async (event: React.FormEvent) => {
@@ -248,7 +333,6 @@ export default function AdminMarketPlacePage() {
       price: form.price ? Number(form.price) : 0,
       currency: form.currency.trim() || "Ksh",
       amenities: parseLines(form.amenitiesText),
-      images: parseLines(form.imagesText),
       status: form.status,
       isFeatured: !!form.isFeatured,
       contactEmail: form.contactEmail.trim(),
@@ -257,6 +341,15 @@ export default function AdminMarketPlacePage() {
 
     try {
       setIsLoading(true);
+
+      const newFiles = imageItems.filter((item) => item.file).map((item) => item.file!) as File[];
+      let finalImageUrls = imageItems.filter((item) => !item.file).map((item) => item.url);
+      if (newFiles.length > 0) {
+        setIsUploadingImages(true);
+        const uploaded = await uploadImages(csrfToken, newFiles);
+        setIsUploadingImages(false);
+        finalImageUrls = [...finalImageUrls, ...uploaded];
+      }
 
       const url = editing
         ? `/api/admin/market-place-sale-listings/${editing._id}`
@@ -270,7 +363,7 @@ export default function AdminMarketPlacePage() {
           "Content-Type": "application/json",
           "x-csrf-token": csrfToken,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, images: finalImageUrls }),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -288,7 +381,8 @@ export default function AdminMarketPlacePage() {
       await fetchListings();
     } catch (err) {
       console.error("Save listing error:", err);
-      setError("Failed to save listing.");
+      setError(err instanceof Error ? err.message : "Failed to save listing.");
+      setIsUploadingImages(false);
     } finally {
       setIsLoading(false);
     }
@@ -527,9 +621,9 @@ export default function AdminMarketPlacePage() {
 
       {/* Create/Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm px-4 py-6">
-          <div className="w-full max-w-3xl rounded-3xl border border-border bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm px-2 sm:px-4 py-3 sm:py-6">
+          <div className="w-full max-w-3xl max-h-[92svh] sm:max-h-[86svh] rounded-t-3xl sm:rounded-3xl border border-border bg-white shadow-xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-border px-5 sm:px-6 py-4 flex-none">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Market Place</p>
                 <h2 className="text-lg font-semibold text-foreground">
@@ -545,8 +639,12 @@ export default function AdminMarketPlacePage() {
               </button>
             </div>
 
-            <form onSubmit={saveListing} className="px-6 py-5">
-              <div className="grid gap-4 sm:grid-cols-2">
+            <form
+              id="__admin-market-place-form"
+              onSubmit={saveListing}
+              className="flex-1 overflow-y-auto px-5 sm:px-6 py-5"
+            >
+              <div className="grid gap-4 sm:grid-cols-2 pb-24">
                 <div className="sm:col-span-2">
                   <label className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                     Title / Name
@@ -688,14 +786,59 @@ export default function AdminMarketPlacePage() {
 
                 <div className="sm:col-span-2">
                   <label className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Images (one URL per line)
+                    Images
                   </label>
-                  <textarea
-                    value={form.imagesText}
-                    onChange={(e) => setForm((p) => ({ ...p, imagesText: e.target.value }))}
-                    className="w-full min-h-24 rounded-2xl border border-border bg-white/90 px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-primary/10"
-                    placeholder="https://.../photo1.jpg"
-                  />
+                  <div className="rounded-2xl border border-border bg-white/70 p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="text-sm text-muted-foreground">
+                        Upload up to 10 images (JPEG/PNG, max 5MB each).
+                      </div>
+                      <label className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-5 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition cursor-pointer">
+                        <Upload size={14} />
+                        Add images
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          multiple
+                          className="hidden"
+                          onChange={handleImageChange}
+                        />
+                      </label>
+                    </div>
+
+                    {imageUploadError && (
+                      <p className="mt-3 text-xs text-rose-700">{imageUploadError}</p>
+                    )}
+
+                    {imageItems.length > 0 && (
+                      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {imageItems.map((item, idx) => (
+                          <div
+                            key={`${item.url}-${idx}`}
+                            className="relative overflow-hidden rounded-2xl border border-border bg-white"
+                          >
+                            <div className="relative h-28 w-full">
+                              <Image
+                                src={item.url}
+                                alt={`Listing image ${idx + 1}`}
+                                fill
+                                className="object-cover"
+                                sizes="(max-width: 640px) 50vw, 33vw"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeImageAt(idx)}
+                              className="absolute top-2 right-2 rounded-full bg-white/90 p-2 text-slate-700 shadow hover:bg-white"
+                              aria-label="Remove image"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="sm:col-span-2">
@@ -760,8 +903,10 @@ export default function AdminMarketPlacePage() {
                   />
                 </div>
               </div>
+            </form>
 
-              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <div className="flex-none border-t border-border bg-white/90 backdrop-blur px-5 sm:px-6 py-4">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
                 <button
                   type="button"
                   onClick={closeModal}
@@ -771,13 +916,14 @@ export default function AdminMarketPlacePage() {
                 </button>
                 <button
                   type="submit"
+                  form="__admin-market-place-form"
                   className="rounded-full bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition disabled:opacity-60"
-                  disabled={isLoading}
+                  disabled={isLoading || isUploadingImages}
                 >
-                  {editing ? "Save changes" : "Create listing"}
+                  {isUploadingImages ? "Uploading…" : editing ? "Save changes" : "Create listing"}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -818,4 +964,3 @@ export default function AdminMarketPlacePage() {
     </div>
   );
 }
-
