@@ -161,6 +161,7 @@ export async function GET(request: NextRequest) {
     // ────────────────────────────────────────────────────────────────
     let authorized = false;
     let effectiveOwnerId = requestedUserId;
+    let teamMemberAssignedPropertyIds: string[] | null = null;
 
     if (role === 'propertyOwner') {
       if (loggedInUserId === requestedUserId) {
@@ -178,6 +179,15 @@ export async function GET(request: NextRequest) {
 
         if (teamMember) {
           authorized = true;
+          teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+            ? Array.from(
+                new Set(
+                  (teamMember as any).assignedPropertyIds
+                    .map((value: any) => String(value || '').trim())
+                    .filter((value: string) => ObjectId.isValid(value))
+                )
+              )
+            : null;
           logger.info('Team member authorized for owner data', {
             teamMemberId: loggedInUserId,
             ownerId: requestedUserId,
@@ -211,9 +221,14 @@ export async function GET(request: NextRequest) {
     //           PROPERTY OWNER / TEAM MEMBER – enriched with occupiedUnits
     // ────────────────────────────────────────────────────────────────
     if (role === 'propertyOwner' || role === 'teamMember') {
+      const propertyQuery: any = { ownerId: effectiveOwnerId };
+      if (role === 'teamMember' && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0) {
+        propertyQuery._id = { $in: teamMemberAssignedPropertyIds.map((id) => new ObjectId(id)) };
+      }
+
       const properties = await db
         .collection<Property>('properties')
-        .find({ ownerId: effectiveOwnerId })
+        .find(propertyQuery)
         .toArray();
 
       // Enrich each property with occupied units count

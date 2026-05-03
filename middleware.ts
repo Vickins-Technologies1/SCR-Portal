@@ -10,6 +10,7 @@ export const config = {
     "/api/:path*",
     "/properties/:path*",
     "/property-listings/:path*",
+    "/market-place/:path*",
     "/tenant-dashboard/:path*",
     "/airbnb-tenant-dashboard/:path*",
     "/property-owner-dashboard/:path*",

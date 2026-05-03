@@ -84,6 +84,7 @@ export async function GET(request: NextRequest) {
 
     const { db } = await connectToDatabase();
     let effectiveOwnerId = sessionUserId;
+    let teamMemberAssignedPropertyIds: string[] | null = null;
 
     if (role === "teamMember") {
       const teamMember = await db.collection("teamMembers").findOne({
@@ -96,6 +97,15 @@ export async function GET(request: NextRequest) {
       }
 
       const ownerIdFromTeam = teamMember.ownerId.toString();
+      teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? Array.from(
+            new Set(
+              (teamMember as any).assignedPropertyIds
+                .map((value: any) => String(value || "").trim())
+                .filter((value: string) => value.length > 0)
+            )
+          )
+        : null;
       if (requestedOwnerId && requestedOwnerId !== ownerIdFromTeam) {
         return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
       }
@@ -114,7 +124,20 @@ export async function GET(request: NextRequest) {
     if (searchParams.get("name")) filters.name = { $regex: searchParams.get("name")!, $options: "i" };
     if (searchParams.get("email")) filters.email = { $regex: searchParams.get("email")!, $options: "i" };
     if (searchParams.get("phone")) filters.phone = { $regex: searchParams.get("phone")!, $options: "i" };
-    if (searchParams.get("propertyId")) filters.propertyId = searchParams.get("propertyId");
+    const requestedPropertyId = searchParams.get("propertyId");
+    if (requestedPropertyId) {
+      if (
+        role === "teamMember" &&
+        teamMemberAssignedPropertyIds &&
+        teamMemberAssignedPropertyIds.length > 0 &&
+        !teamMemberAssignedPropertyIds.includes(requestedPropertyId)
+      ) {
+        return NextResponse.json({ success: true, tenants: [], total: 0, page, limit, totalPages: 0 }, { status: 200 });
+      }
+      filters.propertyId = requestedPropertyId;
+    } else if (role === "teamMember" && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0) {
+      filters.propertyId = { $in: teamMemberAssignedPropertyIds };
+    }
     const unitTypeFilter = searchParams.get("unitType");
     if (unitTypeFilter) {
       const regex = { $regex: unitTypeFilter, $options: "i" };

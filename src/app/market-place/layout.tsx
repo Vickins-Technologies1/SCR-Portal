@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function PropertyListingsLayout({ children }: { children: ReactNode }) {
+export default function MarketPlaceLayout({ children }: { children: ReactNode }) {
   const gaId = process.env.NEXT_PUBLIC_GA_ID;
   const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
 
@@ -50,10 +50,7 @@ export default function PropertyListingsLayout({ children }: { children: ReactNo
     <div className={`${sora.variable} ${cormorant.variable} ${jetbrains.variable} sorana-theme`}>
       {gaId && (
         <>
-          <Script
-            src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-            strategy="afterInteractive"
-          />
+          <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} strategy="afterInteractive" />
           <Script id="ga-init" strategy="afterInteractive">
             {`window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', '${gaId}');`}
           </Script>
@@ -83,3 +80,4 @@ export default function PropertyListingsLayout({ children }: { children: ReactNo
     </div>
   );
 }
+

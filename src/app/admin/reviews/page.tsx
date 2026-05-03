@@ -19,7 +19,7 @@ type ReviewStatus = "pending" | "approved" | "rejected";
 interface ReviewItem {
   _id: string;
   listingId: string;
-  listingType: "rentals" | "airbnb";
+  listingType: "rentals" | "airbnb" | "sale";
   propertyName: string;
   reviewerName: string;
   reviewerEmail?: string;

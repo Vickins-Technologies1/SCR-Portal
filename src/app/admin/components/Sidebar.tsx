@@ -20,6 +20,7 @@ import {
   Activity,
   Star,
   FileText,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -100,6 +101,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
     { key: "quotations", href: "/admin/quotations", label: "Quotations", icon: <FileText size={20} /> },
     { key: "reviews", href: "/admin/reviews", label: "Reviews", icon: <Star size={20} /> },
+    { key: "market-place", href: "/admin/market-place", label: "Market Place", icon: <Store size={20} /> },
     { key: "tuma-webhooks", href: "/admin/tuma-webhooks", label: "Tuma Webhooks", icon: <Activity size={20} /> },
     { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Integrations", icon: <Plug size={20} /> },
     { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },

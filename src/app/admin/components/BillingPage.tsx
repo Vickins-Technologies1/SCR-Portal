@@ -9,6 +9,7 @@ import {
   RefreshCw,
   X,
   FileText,
+  Send,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "./Navbar";
@@ -57,6 +58,7 @@ export default function BillingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
+  const [isSendingInvoice, setIsSendingInvoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
@@ -302,6 +304,46 @@ export default function BillingPage() {
       }
     },
     [csrfToken, router]
+  );
+
+  const handleSendInvoiceEmail = useCallback(
+    async (invoice: InvoiceTransaction) => {
+      if (!csrfToken) {
+        setError("Security token missing. Please refresh.");
+        return;
+      }
+
+      setIsSendingInvoice(invoice._id);
+      try {
+        const res = await fetch("/api/admin/invoices/send-email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          credentials: "include",
+          body: JSON.stringify({ invoiceId: invoice._id }),
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          setError("Session expired. Redirecting...");
+          router.replace("/admin/login?session=expired");
+          return;
+        }
+
+        const data = await res.json().catch(() => ({} as any));
+        if (res.ok && data.success) {
+          showToast("Invoice email sent to owner.", "success");
+        } else {
+          setError(data.message || "Failed to send invoice email.");
+        }
+      } catch {
+        setError("Failed to connect to server.");
+      } finally {
+        setIsSendingInvoice(null);
+      }
+    },
+    [csrfToken, router, showToast]
   );
 
   // ── Update status ────────────────────────────────────────────────────────
@@ -689,26 +731,50 @@ export default function BillingPage() {
                             </select>
                           </td>
                           <td className="px-4 py-3">
-                            <button
-                              onClick={() => handleGenerateInvoice(p)}
-                              disabled={isGenerating === p._id}
-                              className={cn(
-                                "inline-flex items-center gap-2 px-4 py-2 bg-primary text-white font-medium rounded-md hover:bg-primary-hover transition shadow-md disabled:opacity-60 text-xs",
-                                isGenerating === p._id && "opacity-70 cursor-wait"
-                              )}
-                            >
-                              {isGenerating === p._id ? (
-                                <>
-                                  <RefreshCw className="h-4 w-4 animate-spin" />
-                                  Generating...
-                                </>
-                              ) : (
-                                <>
-                                  <FileText className="h-4 w-4" />
-                                  Generate PDF
-                                </>
-                              )}
-                            </button>
+                            <div className="flex flex-col gap-2">
+                              <button
+                                onClick={() => handleGenerateInvoice(p)}
+                                disabled={isGenerating === p._id}
+                                className={cn(
+                                  "inline-flex items-center gap-2 px-4 py-2 bg-primary text-white font-medium rounded-md hover:bg-primary-hover transition shadow-md disabled:opacity-60 text-xs",
+                                  isGenerating === p._id && "opacity-70 cursor-wait"
+                                )}
+                              >
+                                {isGenerating === p._id ? (
+                                  <>
+                                    <RefreshCw className="h-4 w-4 animate-spin" />
+                                    Generating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <FileText className="h-4 w-4" />
+                                    Generate PDF
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                onClick={() => handleSendInvoiceEmail(p)}
+                                disabled={isSendingInvoice === p._id}
+                                className={cn(
+                                  "inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-primary font-medium rounded-md border border-primary/30 hover:bg-primary/5 transition shadow-sm disabled:opacity-60 text-xs",
+                                  isSendingInvoice === p._id && "opacity-70 cursor-wait"
+                                )}
+                                title="Send invoice email to property owner"
+                              >
+                                {isSendingInvoice === p._id ? (
+                                  <>
+                                    <RefreshCw className="h-4 w-4 animate-spin" />
+                                    Sending...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="h-4 w-4" />
+                                    Send Invoice
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

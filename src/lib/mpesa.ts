@@ -10,6 +10,8 @@ const MPESA_ENVIRONMENT = (process.env.MPESA_ENVIRONMENT || "sandbox") as MpesaE
 const MPESA_ENCRYPTION_SECRET = process.env.MPESA_ENCRYPTION_SECRET || "";
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || "";
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY || "";
+const KOPOKOPO_TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || "";
+const KOPOKOPO_PASSKEY = process.env.KOPOKOPO_PASSKEY || "";
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -47,6 +49,16 @@ export function getMpesaShortcode(): string {
 export function getMpesaPasskey(): string {
   requireEnv("MPESA_PASSKEY", MPESA_PASSKEY);
   return MPESA_PASSKEY;
+}
+
+export function getKopokopoTillNumber(): string {
+  requireEnv("KOPOKOPO_TILL_NUMBER", KOPOKOPO_TILL_NUMBER);
+  return KOPOKOPO_TILL_NUMBER;
+}
+
+export function getKopokopoPasskey(): string {
+  if (KOPOKOPO_PASSKEY) return KOPOKOPO_PASSKEY;
+  return getMpesaPasskey();
 }
 
 export function encryptPasskey(text: string): string {

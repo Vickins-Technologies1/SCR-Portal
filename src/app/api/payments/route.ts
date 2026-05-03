@@ -108,6 +108,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
   // Determine effective owner for propertyOwner and teamMember
   let effectiveOwnerId = loggedInUserId;
+  let teamMemberAssignedPropertyIds: string[] | null = null;
 
   if (role === "teamMember") {
     const { db }: { db: Db } = await connectToDatabase();
@@ -126,6 +127,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     effectiveOwnerId = teamMember.ownerId.toString();
+    teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+      ? Array.from(
+          new Set(
+            (teamMember as any).assignedPropertyIds
+              .map((value: any) => String(value || "").trim())
+              .filter((value: string) => ObjectId.isValid(value))
+          )
+        )
+      : null;
   }
 
   // ── CSRF validation only for mutating methods ───────────────────────────────
@@ -148,14 +158,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const query: Filter<PaymentDb> = {};
 
     if (role === "propertyOwner" || role === "teamMember") {
+      const propertyFilter: Filter<Property> = {
+        $or: [{ ownerId: effectiveOwnerId }, { ownerId: new ObjectId(effectiveOwnerId) }],
+      };
+      if (role === "teamMember" && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0) {
+        propertyFilter._id = { $in: teamMemberAssignedPropertyIds.map((id) => new ObjectId(id)) };
+      }
       const properties = await db
         .collection<Property>("properties")
-        .find(
-          {
-            $or: [{ ownerId: effectiveOwnerId }, { ownerId: new ObjectId(effectiveOwnerId) }],
-          },
-          { projection: { _id: 1 } }
-        )
+        .find(propertyFilter, { projection: { _id: 1 } })
         .toArray();
       const propertyIds = properties.map((p) => p._id.toString());
 

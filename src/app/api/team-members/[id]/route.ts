@@ -23,6 +23,8 @@ interface TeamMember {
   role: string;
   teamRole?: string;
   permissions: string[];
+  assignedPropertyIds?: string[];
+  assignedAirbnbListingIds?: string[];
   password: string;
   active: boolean;
   lastActive?: Date;
@@ -92,6 +94,8 @@ function toSafeTeamMember(doc: any): SafeTeamMember {
     role: rest.role ?? "teamMember",
     teamRole: rest.teamRole ?? "Team Member",
     permissions: rest.permissions ?? [],
+    assignedPropertyIds: Array.isArray(rest.assignedPropertyIds) ? rest.assignedPropertyIds : [],
+    assignedAirbnbListingIds: Array.isArray(rest.assignedAirbnbListingIds) ? rest.assignedAirbnbListingIds : [],
     active: rest.active ?? true,
     lastActive: rest.lastActive ?? undefined,
     createdAt: rest.createdAt ?? new Date(),
@@ -122,7 +126,18 @@ export async function PATCH(
     const { db } = await connectToDatabase();
 
     const body = await req.json();
-    const { ownerId, name, email, phone, teamRole, permissions, active, password } = body;
+    const {
+      ownerId,
+      name,
+      email,
+      phone,
+      teamRole,
+      permissions,
+      active,
+      password,
+      assignedPropertyIds,
+      assignedAirbnbListingIds,
+    } = body;
 
     if (!ownerId) {
       return NextResponse.json({ success: false, message: "ownerId required" }, { status: 400 });
@@ -197,6 +212,59 @@ export async function PATCH(
     if (teamRole !== undefined) updateData.$set.teamRole = teamRole;
     if (permissions !== undefined && Array.isArray(permissions)) updateData.$set.permissions = permissions;
     if (active !== undefined) updateData.$set.active = !!active;
+
+    const normalizedAssignedPropertyIds = Array.isArray(assignedPropertyIds)
+      ? Array.from(
+          new Set(
+            assignedPropertyIds
+              .map((value: any) => String(value || "").trim())
+              .filter((value: string) => ObjectId.isValid(value))
+          )
+        )
+      : null;
+
+    const normalizedAssignedAirbnbListingIds = Array.isArray(assignedAirbnbListingIds)
+      ? Array.from(
+          new Set(
+            assignedAirbnbListingIds
+              .map((value: any) => String(value || "").trim())
+              .filter((value: string) => value.length > 0)
+          )
+        )
+      : null;
+
+    if (normalizedAssignedPropertyIds) {
+      const owned = await db
+        .collection("properties")
+        .find({
+          ownerId: ObjectId.isValid(ownerId) ? { $in: [ownerId, new ObjectId(ownerId)] } : ownerId,
+          _id: { $in: normalizedAssignedPropertyIds.map((id) => new ObjectId(id)) },
+        })
+        .project({ _id: 1 })
+        .toArray();
+      if (owned.length !== normalizedAssignedPropertyIds.length) {
+        return NextResponse.json(
+          { success: false, message: "One or more assigned properties are invalid." },
+          { status: 400 }
+        );
+      }
+      updateData.$set.assignedPropertyIds = normalizedAssignedPropertyIds;
+    }
+
+    if (normalizedAssignedAirbnbListingIds) {
+      const ownedListings = await db
+        .collection("airbnbListings")
+        .find({ ownerId, externalId: { $in: normalizedAssignedAirbnbListingIds } })
+        .project({ externalId: 1 })
+        .toArray();
+      if (ownedListings.length !== normalizedAssignedAirbnbListingIds.length) {
+        return NextResponse.json(
+          { success: false, message: "One or more assigned Airbnb listings are invalid." },
+          { status: 400 }
+        );
+      }
+      updateData.$set.assignedAirbnbListingIds = normalizedAssignedAirbnbListingIds;
+    }
 
     if (password && typeof password === "string") {
       if (password.length < 8) {

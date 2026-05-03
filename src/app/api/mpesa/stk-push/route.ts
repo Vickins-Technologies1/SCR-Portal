@@ -9,6 +9,8 @@ import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
 import {
   decryptPasskey,
+  getKopokopoPasskey,
+  getKopokopoTillNumber,
   getMpesaPasskey,
   getMpesaShortcode,
   initiateStkPush,
@@ -42,6 +44,22 @@ function safeGetMpesaShortcode(): string {
 function safeGetMpesaPasskey(): string {
   try {
     return getMpesaPasskey();
+  } catch {
+    return "";
+  }
+}
+
+function safeGetKopokopoTillNumber(): string {
+  try {
+    return getKopokopoTillNumber();
+  } catch {
+    return "";
+  }
+}
+
+function safeGetKopokopoPasskey(): string {
+  try {
+    return getKopokopoPasskey();
   } catch {
     return "";
   }
@@ -117,6 +135,7 @@ export async function POST(request: NextRequest) {
     let propertyId: string | null = null;
     let tenantId: string | null = null;
     let derivedLandlordId: string | null = null;
+    let isPlatformInvoicePayment = false;
 
     // Resolve tenant + landlord context
     if (role === "tenant" || (role === "propertyOwner" && isImpersonating)) {
@@ -163,6 +182,7 @@ export async function POST(request: NextRequest) {
       }
       propertyId = invoice.propertyId || null;
       derivedLandlordId = userId;
+      isPlatformInvoicePayment = true;
     }
 
     if (!derivedLandlordId || derivedLandlordId !== parsed.data.landlordId) {
@@ -199,35 +219,49 @@ export async function POST(request: NextRequest) {
     let storedShortcode = "";
     let storedPasskey = "";
 
-    try {
-      await connectMongoose();
-      const doc = await LandlordMpesa.findOne({ landlord: derivedLandlordId })
-        .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1, shortcode: 1, passkey: 1 })
-        .lean<{
-          paymentType?: string;
-          paybillNumber?: string;
-          paybillAccountNumber?: string;
-          tillNumber?: string;
-          shortcode?: string;
-          passkey?: string;
-        }>()
-        .exec();
+    if (isPlatformInvoicePayment) {
+      paymentType = "till";
+      tillNumber = safeGetKopokopoTillNumber();
+      storedShortcode = tillNumber;
+      storedPasskey = safeGetKopokopoPasskey();
 
-      paybillNumber = doc?.paybillNumber?.trim() || "";
-      paybillAccountNumber = doc?.paybillAccountNumber?.trim() || "";
-      tillNumber = doc?.tillNumber?.trim() || "";
-      storedShortcode = doc?.shortcode?.trim() || "";
-      storedPasskey = doc?.passkey?.trim() || "";
-
-      if (doc?.paymentType === "till" || doc?.paymentType === "paybill" || doc?.paymentType === "bank") {
-        paymentType = doc.paymentType;
-      } else if (tillNumber) {
-        paymentType = "till";
-      } else if (paybillNumber) {
-        paymentType = "paybill";
+      if (!tillNumber) {
+        return NextResponse.json(
+          { success: false, message: "Missing KOPOKOPO_TILL_NUMBER for invoice payments." },
+          { status: 500 }
+        );
       }
-    } catch {
-      // Ignore lookup errors and fall back to env defaults below.
+    } else {
+      try {
+        await connectMongoose();
+        const doc = await LandlordMpesa.findOne({ landlord: derivedLandlordId })
+          .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1, shortcode: 1, passkey: 1 })
+          .lean<{
+            paymentType?: string;
+            paybillNumber?: string;
+            paybillAccountNumber?: string;
+            tillNumber?: string;
+            shortcode?: string;
+            passkey?: string;
+          }>()
+          .exec();
+
+        paybillNumber = doc?.paybillNumber?.trim() || "";
+        paybillAccountNumber = doc?.paybillAccountNumber?.trim() || "";
+        tillNumber = doc?.tillNumber?.trim() || "";
+        storedShortcode = doc?.shortcode?.trim() || "";
+        storedPasskey = doc?.passkey?.trim() || "";
+
+        if (doc?.paymentType === "till" || doc?.paymentType === "paybill" || doc?.paymentType === "bank") {
+          paymentType = doc.paymentType;
+        } else if (tillNumber) {
+          paymentType = "till";
+        } else if (paybillNumber) {
+          paymentType = "paybill";
+        }
+      } catch {
+        // Ignore lookup errors and fall back to env defaults below.
+      }
     }
 
     const connectedShortcode =
@@ -254,7 +288,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (tumaConfigured) {
+    if (tumaConfigured && !isPlatformInvoicePayment) {
       const description = `${parsed.data.type || "Rent"} payment ${invoiceReference}`;
       const incoming = await createTumaStkPush({
         amount: parsed.data.amount,

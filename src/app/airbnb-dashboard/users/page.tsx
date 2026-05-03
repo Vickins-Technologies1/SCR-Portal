@@ -51,8 +51,14 @@ interface TeamMember {
     | "Security Coordinator";      // Gate access, security in gated estates
 
   permissions: string[];
+  assignedAirbnbListingIds?: string[];
   active: boolean;
   lastActive?: string;
+}
+
+interface ListingOption {
+  id: string;
+  name: string;
 }
 
 const AVAILABLE_PERMISSIONS = [
@@ -230,24 +236,16 @@ const ROLE_PRESETS: Record<TeamMember["teamRole"], string[]> = {
 };
 
 const TEAM_ROLE_OPTIONS: Array<{ value: TeamMember["teamRole"]; label: string }> = [
-  { value: "Viewer", label: "Viewer – read-only access" },
-  { value: "Administrative Assistant", label: "Administrative Assistant" },
-  { value: "Field Inspector", label: "Field Inspector" },
-  { value: "Rent Collection Officer", label: "Rent Collection Officer" },
-  { value: "Tenant Relations Officer", label: "Tenant Relations Officer" },
-  { value: "Maintenance Coordinator", label: "Maintenance Coordinator" },
-  { value: "Accounts Manager", label: "Accounts Manager" },
-  { value: "Leasing Manager", label: "Leasing Manager" },
-  { value: "Finance Officer", label: "Finance Officer" },
-  { value: "Marketing & Listings Specialist", label: "Marketing & Listings Specialist" },
-  { value: "Real Estate Agent", label: "Real Estate Agent" },
-  { value: "Legal & Compliance Officer", label: "Legal & Compliance Officer" },
-  { value: "Property Manager", label: "Property Manager" },
-  { value: "Portfolio Manager", label: "Portfolio Manager" },
-  { value: "IT / Systems Admin", label: "IT / Systems Admin" },
-  { value: "Security Coordinator", label: "Security Coordinator" },
-  { value: "Co-Owner", label: "Co-Owner" },
   { value: "Owner", label: "Owner (full control)" },
+  { value: "Co-Owner", label: "Co-Host / Partner" },
+  { value: "Property Manager", label: "Operations Manager" },
+  { value: "Portfolio Manager", label: "Portfolio Manager" },
+  { value: "Tenant Relations Officer", label: "Guest Communications" },
+  { value: "Marketing & Listings Specialist", label: "Listings & Pricing" },
+  { value: "Maintenance Coordinator", label: "Maintenance Coordinator" },
+  { value: "Accounts Manager", label: "Finance / Payouts" },
+  { value: "Administrative Assistant", label: "Front Desk / Admin" },
+  { value: "Viewer", label: "Viewer – read-only access" },
 ];
 
 const getRolePreset = (teamRole: TeamMember["teamRole"]) =>
@@ -264,6 +262,7 @@ export default function UsersPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [listings, setListings] = useState<ListingOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionRole, setSessionRole] = useState<"propertyOwner" | "teamMember" | null>(null);
@@ -277,6 +276,7 @@ export default function UsersPage() {
     phone: "",
     teamRole: "Administrative Assistant" as TeamMember["teamRole"],
     permissions: getRolePreset("Administrative Assistant"),
+    assignedAirbnbListingIds: [] as string[],
     password: "",
     confirmPassword: "",
   });
@@ -308,6 +308,7 @@ export default function UsersPage() {
 
   const editPermissions = Array.isArray(editForm.permissions) ? editForm.permissions : [];
   const editRoleValue = normalizeTeamRole(editForm.teamRole);
+  const editAssignedListingIds = Array.isArray(editForm.assignedAirbnbListingIds) ? editForm.assignedAirbnbListingIds : [];
 
   // Auth & CSRF
   useEffect(() => {
@@ -397,6 +398,31 @@ export default function UsersPage() {
     if (userId && csrfToken && canViewUsers) fetchUsers();
   }, [userId, csrfToken, canViewUsers, fetchUsers]);
 
+  useEffect(() => {
+    if (!userId || !canViewUsers) return;
+    const fetchListings = async () => {
+      try {
+        const res = await fetch(`/api/airbnb/listings?ownerId=${encodeURIComponent(userId)}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.listings)) {
+          setListings(
+            data.listings
+              .map((l: any) => ({ id: String(l.id || ""), name: String(l.name || "Listing") }))
+              .filter((l: ListingOption) => l.id)
+          );
+        } else {
+          setListings([]);
+        }
+      } catch {
+        setListings([]);
+      }
+    };
+    fetchListings();
+  }, [userId, canViewUsers]);
+
   // Auto-select permissions based on teamRole
   const applyRolePresetToAdd = (teamRole: TeamMember["teamRole"]) => {
     setAddForm(prev => ({ ...prev, teamRole, permissions: getRolePreset(teamRole) }));
@@ -433,8 +459,9 @@ export default function UsersPage() {
     setAddSubmitting(true);
 
     try {
-      const { confirmPassword, permissions, ...payload } = addForm;
+      const { confirmPassword, permissions, assignedAirbnbListingIds, ...payload } = addForm;
       const safePermissions = normalizePermissions(permissions);
+      const safeAssignedListingIds = Array.from(new Set((assignedAirbnbListingIds || []).filter(Boolean)));
 
       const res = await fetch("/api/team-members", {
         method: "POST",
@@ -447,6 +474,7 @@ export default function UsersPage() {
           ownerId: userId,
           ...payload,
           permissions: safePermissions,
+          assignedAirbnbListingIds: safeAssignedListingIds,
         }),
       });
 
@@ -462,6 +490,7 @@ export default function UsersPage() {
         phone: "",
         teamRole: defaultRole,
         permissions: getRolePreset(defaultRole),
+        assignedAirbnbListingIds: [],
         password: "",
         confirmPassword: "",
       });
@@ -481,6 +510,7 @@ export default function UsersPage() {
       phone: member.phone || "",
       teamRole: normalizeTeamRole(member.teamRole),
       permissions: normalizePermissions(member.permissions || []),
+      assignedAirbnbListingIds: Array.isArray(member.assignedAirbnbListingIds) ? member.assignedAirbnbListingIds : [],
       active: member.active,
     });
     setIsEditModalOpen(true);
@@ -511,6 +541,9 @@ export default function UsersPage() {
       if (editForm.teamRole !== undefined) payload.teamRole = editForm.teamRole;
       if (editForm.permissions !== undefined) {
         payload.permissions = normalizePermissions(editForm.permissions);
+      }
+      if (editForm.assignedAirbnbListingIds !== undefined) {
+        payload.assignedAirbnbListingIds = Array.from(new Set((editForm.assignedAirbnbListingIds as any[]).map(String))).filter(Boolean);
       }
       if (editForm.active !== undefined) payload.active = editForm.active;
 
@@ -607,6 +640,8 @@ export default function UsersPage() {
   };
 
   const getRoleBadge = (teamRole: string) => {
+    const displayLabel =
+      TEAM_ROLE_OPTIONS.find((option) => option.value === (teamRole as any))?.label || teamRole;
     const colors: Record<string, string> = {
       "Owner": "bg-purple-100 text-purple-800 border-purple-300",
       "Co-Owner": "bg-primary/10 text-primary border-primary/40",
@@ -632,7 +667,7 @@ export default function UsersPage() {
       <span
         className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${colors[teamRole] || "bg-gray-100 text-gray-800 border-gray-300"}`}
       >
-        {teamRole}
+        {displayLabel}
       </span>
     );
   };
@@ -668,6 +703,7 @@ export default function UsersPage() {
                       phone: "",
                       teamRole: "Administrative Assistant",
                       permissions: getRolePreset("Administrative Assistant"),
+                      assignedAirbnbListingIds: [],
                       password: "",
                       confirmPassword: "",
                     });
@@ -938,6 +974,37 @@ export default function UsersPage() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assigned Listings</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Select which Airbnb listings this member can access. Leave empty to allow access to all listings.
+                </p>
+                {listings.length === 0 ? (
+                  <div className="text-xs text-gray-500 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
+                    No listings found.
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto pr-2 grid grid-cols-1 gap-2">
+                    {listings.map((l) => (
+                      <label key={l.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={addForm.assignedAirbnbListingIds.includes(l.id)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...addForm.assignedAirbnbListingIds, l.id]
+                              : addForm.assignedAirbnbListingIds.filter((id) => id !== l.id);
+                            setAddForm({ ...addForm, assignedAirbnbListingIds: next });
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/40"
+                        />
+                        <span className="text-sm text-gray-700">{l.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Granular Permissions</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6 max-h-80 overflow-y-auto pr-2">
                   {AVAILABLE_PERMISSIONS.map(perm => (
@@ -1064,6 +1131,37 @@ export default function UsersPage() {
                     <option key={role.value} value={role.value}>{role.label}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assigned Listings</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Select which Airbnb listings this member can access. Leave empty to allow access to all listings.
+                </p>
+                {listings.length === 0 ? (
+                  <div className="text-xs text-gray-500 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
+                    No listings found.
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto pr-2 grid grid-cols-1 gap-2">
+                    {listings.map((l) => (
+                      <label key={l.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editAssignedListingIds.includes(l.id)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...editAssignedListingIds, l.id]
+                              : editAssignedListingIds.filter((id) => id !== l.id);
+                            setEditForm((prev) => ({ ...prev, assignedAirbnbListingIds: next }));
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/40"
+                        />
+                        <span className="text-sm text-gray-700">{l.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <label className="flex items-center gap-2 cursor-pointer">

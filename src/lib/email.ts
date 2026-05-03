@@ -34,6 +34,18 @@ interface ReminderEmailOptions {
   reminderType: "fiveDaysBefore" | "paymentDate";
 }
 
+interface InvoiceEmailOptions {
+  to: string;
+  ownerName: string;
+  propertyName: string;
+  amount: number;
+  dueDate: string;
+  reminderType: "fiveDaysBefore" | "dueDate" | "manual";
+  dashboardUrl: string;
+  invoiceNumber: string;
+  pdfBytes?: Uint8Array | Buffer;
+}
+
 interface ConfirmationEmailOptions {
   to: string;
   name: string;
@@ -341,6 +353,74 @@ export async function sendReminderEmail({
   } catch (error) {
     console.error(`Error sending reminder email to ${to}:`, error);
     throw new Error("Failed to send reminder email");
+  }
+}
+
+export async function sendInvoiceEmail({
+  to,
+  ownerName,
+  propertyName,
+  amount,
+  dueDate,
+  reminderType,
+  dashboardUrl,
+  invoiceNumber,
+  pdfBytes,
+}: InvoiceEmailOptions): Promise<void> {
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error("SMTP credentials are missing");
+    }
+
+    const title =
+      reminderType === "manual"
+        ? "Invoice Copy"
+        : reminderType === "fiveDaysBefore"
+          ? "Invoice Reminder"
+          : "Invoice Due Today";
+    const intro =
+      reminderType === "manual"
+        ? `Attached is a copy of your invoice for ${propertyName}.`
+        : reminderType === "fiveDaysBefore"
+          ? `This is a reminder that your invoice for ${propertyName} is due on ${dueDate}.`
+          : `Your invoice for ${propertyName} is due today (${dueDate}).`;
+
+    const html = generateStyledTemplate({
+      name: ownerName || "Property Owner",
+      title,
+      intro,
+      details: `
+        <ul>
+          <li><strong>Property:</strong> ${propertyName}</li>
+          <li><strong>Invoice No.:</strong> ${invoiceNumber}</li>
+          <li><strong>Amount:</strong> Ksh. ${amount.toFixed(2)}</li>
+          <li><strong>Due Date:</strong> ${dueDate}</li>
+        </ul>
+        <p style="text-align: center; margin-top: 28px;">
+          <a href="${dashboardUrl}" class="button">Open Dashboard</a>
+        </p>
+      `,
+    });
+
+    await transporter.sendMail({
+      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      to,
+      subject: `${title} • ${propertyName}`,
+      html,
+      attachments: pdfBytes
+        ? [
+            {
+              filename: `invoice-${invoiceNumber}.pdf`,
+              content: Buffer.isBuffer(pdfBytes) ? pdfBytes : Buffer.from(pdfBytes),
+              contentType: "application/pdf",
+            },
+          ]
+        : [],
+    });
+    console.log(`Invoice email sent to ${to}`);
+  } catch (error) {
+    console.error(`Error sending invoice email to ${to}:`, error);
+    throw new Error("Failed to send invoice email");
   }
 }
 

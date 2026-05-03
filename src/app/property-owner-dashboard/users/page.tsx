@@ -51,8 +51,14 @@ interface TeamMember {
     | "Security Coordinator";      // Gate access, security in gated estates
 
   permissions: string[];
+  assignedPropertyIds?: string[];
   active: boolean;
   lastActive?: string;
+}
+
+interface PropertyOption {
+  _id: string;
+  name: string;
 }
 
 const AVAILABLE_PERMISSIONS = [
@@ -230,24 +236,17 @@ const ROLE_PRESETS: Record<TeamMember["teamRole"], string[]> = {
 };
 
 const TEAM_ROLE_OPTIONS: Array<{ value: TeamMember["teamRole"]; label: string }> = [
-  { value: "Viewer", label: "Viewer – read-only access" },
-  { value: "Administrative Assistant", label: "Administrative Assistant" },
-  { value: "Field Inspector", label: "Field Inspector" },
-  { value: "Rent Collection Officer", label: "Rent Collection Officer" },
-  { value: "Tenant Relations Officer", label: "Tenant Relations Officer" },
+  { value: "Owner", label: "Owner (full control)" },
+  { value: "Co-Owner", label: "Co-Owner" },
+  { value: "Property Manager", label: "Property Manager" },
+  { value: "Leasing Manager", label: "Leasing Manager" },
   { value: "Maintenance Coordinator", label: "Maintenance Coordinator" },
   { value: "Accounts Manager", label: "Accounts Manager" },
-  { value: "Leasing Manager", label: "Leasing Manager" },
-  { value: "Finance Officer", label: "Finance Officer" },
-  { value: "Marketing & Listings Specialist", label: "Marketing & Listings Specialist" },
-  { value: "Real Estate Agent", label: "Real Estate Agent" },
-  { value: "Legal & Compliance Officer", label: "Legal & Compliance Officer" },
-  { value: "Property Manager", label: "Property Manager" },
-  { value: "Portfolio Manager", label: "Portfolio Manager" },
-  { value: "IT / Systems Admin", label: "IT / Systems Admin" },
-  { value: "Security Coordinator", label: "Security Coordinator" },
-  { value: "Co-Owner", label: "Co-Owner" },
-  { value: "Owner", label: "Owner (full control)" },
+  { value: "Rent Collection Officer", label: "Rent Collection Officer" },
+  { value: "Tenant Relations Officer", label: "Tenant Relations Officer" },
+  { value: "Field Inspector", label: "Field Inspector" },
+  { value: "Administrative Assistant", label: "Administrative Assistant" },
+  { value: "Viewer", label: "Viewer – read-only access" },
 ];
 
 const getRolePreset = (teamRole: TeamMember["teamRole"]) =>
@@ -264,6 +263,7 @@ export default function UsersPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionRole, setSessionRole] = useState<"propertyOwner" | "teamMember" | null>(null);
@@ -277,6 +277,7 @@ export default function UsersPage() {
     phone: "",
     teamRole: "Administrative Assistant" as TeamMember["teamRole"],
     permissions: getRolePreset("Administrative Assistant"),
+    assignedPropertyIds: [] as string[],
     password: "",
     confirmPassword: "",
   });
@@ -308,6 +309,7 @@ export default function UsersPage() {
 
   const editPermissions = Array.isArray(editForm.permissions) ? editForm.permissions : [];
   const editRoleValue = normalizeTeamRole(editForm.teamRole);
+  const editAssignedPropertyIds = Array.isArray(editForm.assignedPropertyIds) ? editForm.assignedPropertyIds : [];
 
   // Auth & CSRF
   useEffect(() => {
@@ -397,6 +399,30 @@ export default function UsersPage() {
     if (userId && csrfToken && canViewUsers) fetchUsers();
   }, [userId, csrfToken, canViewUsers, fetchUsers]);
 
+  useEffect(() => {
+    if (!userId || !csrfToken || !canViewUsers) return;
+    const fetchProperties = async () => {
+      try {
+        const res = await fetch(`/api/properties?userId=${encodeURIComponent(userId)}&simple=true`, {
+          headers: { "x-csrf-token": csrfToken },
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.properties)) {
+          setProperties(
+            data.properties
+              .map((p: any) => ({ _id: String(p._id || ""), name: String(p.name || "Property") }))
+              .filter((p: PropertyOption) => p._id)
+          );
+        }
+      } catch {
+        setProperties([]);
+      }
+    };
+    fetchProperties();
+  }, [userId, csrfToken, canViewUsers]);
+
   // Auto-select permissions based on teamRole
   const applyRolePresetToAdd = (teamRole: TeamMember["teamRole"]) => {
     setAddForm(prev => ({ ...prev, teamRole, permissions: getRolePreset(teamRole) }));
@@ -433,8 +459,9 @@ export default function UsersPage() {
     setAddSubmitting(true);
 
     try {
-      const { confirmPassword, permissions, ...payload } = addForm;
+      const { confirmPassword, permissions, assignedPropertyIds, ...payload } = addForm;
       const safePermissions = normalizePermissions(permissions);
+      const safeAssignedPropertyIds = Array.from(new Set((assignedPropertyIds || []).filter(Boolean)));
 
       const res = await fetch("/api/team-members", {
         method: "POST",
@@ -447,6 +474,7 @@ export default function UsersPage() {
           ownerId: userId,
           ...payload,
           permissions: safePermissions,
+          assignedPropertyIds: safeAssignedPropertyIds,
         }),
       });
 
@@ -462,6 +490,7 @@ export default function UsersPage() {
         phone: "",
         teamRole: defaultRole,
         permissions: getRolePreset(defaultRole),
+        assignedPropertyIds: [],
         password: "",
         confirmPassword: "",
       });
@@ -481,6 +510,7 @@ export default function UsersPage() {
       phone: member.phone || "",
       teamRole: normalizeTeamRole(member.teamRole),
       permissions: normalizePermissions(member.permissions || []),
+      assignedPropertyIds: Array.isArray(member.assignedPropertyIds) ? member.assignedPropertyIds : [],
       active: member.active,
     });
     setIsEditModalOpen(true);
@@ -511,6 +541,9 @@ export default function UsersPage() {
       if (editForm.teamRole !== undefined) payload.teamRole = editForm.teamRole;
       if (editForm.permissions !== undefined) {
         payload.permissions = normalizePermissions(editForm.permissions);
+      }
+      if (editForm.assignedPropertyIds !== undefined) {
+        payload.assignedPropertyIds = Array.from(new Set((editForm.assignedPropertyIds as any[]).map(String))).filter(Boolean);
       }
       if (editForm.active !== undefined) payload.active = editForm.active;
 
@@ -668,6 +701,7 @@ export default function UsersPage() {
                       phone: "",
                       teamRole: "Administrative Assistant",
                       permissions: getRolePreset("Administrative Assistant"),
+                      assignedPropertyIds: [],
                       password: "",
                       confirmPassword: "",
                     });
@@ -938,6 +972,37 @@ export default function UsersPage() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assigned Properties</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Select which properties this member can access. Leave empty to allow access to all your properties.
+                </p>
+                {properties.length === 0 ? (
+                  <div className="text-xs text-gray-500 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
+                    No properties found.
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto pr-2 grid grid-cols-1 gap-2">
+                    {properties.map((p) => (
+                      <label key={p._id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={addForm.assignedPropertyIds.includes(p._id)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...addForm.assignedPropertyIds, p._id]
+                              : addForm.assignedPropertyIds.filter((id) => id !== p._id);
+                            setAddForm({ ...addForm, assignedPropertyIds: next });
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/40"
+                        />
+                        <span className="text-sm text-gray-700">{p.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Granular Permissions</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6 max-h-80 overflow-y-auto pr-2">
                   {AVAILABLE_PERMISSIONS.map(perm => (
@@ -1064,6 +1129,37 @@ export default function UsersPage() {
                     <option key={role.value} value={role.value}>{role.label}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assigned Properties</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Select which properties this member can access. Leave empty to allow access to all your properties.
+                </p>
+                {properties.length === 0 ? (
+                  <div className="text-xs text-gray-500 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
+                    No properties found.
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto pr-2 grid grid-cols-1 gap-2">
+                    {properties.map((p) => (
+                      <label key={p._id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editAssignedPropertyIds.includes(p._id)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...editAssignedPropertyIds, p._id]
+                              : editAssignedPropertyIds.filter((id) => id !== p._id);
+                            setEditForm((prev) => ({ ...prev, assignedPropertyIds: next }));
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/40"
+                        />
+                        <span className="text-sm text-gray-700">{p.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <label className="flex items-center gap-2 cursor-pointer">

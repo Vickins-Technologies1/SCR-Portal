@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
     console.log("Connected to MongoDB");
 
     let effectiveOwnerId: string | undefined;
+    let teamMemberAssignedPropertyIds: string[] | null = null;
 
     if (role === "propertyOwner") {
       if (requestedOwnerId && requestedOwnerId !== userId) {
@@ -103,6 +104,15 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? Array.from(
+            new Set(
+              (teamMember as any).assignedPropertyIds
+                .map((value: any) => String(value || "").trim())
+                .filter((value: string) => value.length > 0)
+            )
+          )
+        : null;
       effectiveOwnerId = ownerIdToUse;
     } else if (role === "admin") {
       if (requestedOwnerId && !ObjectId.isValid(requestedOwnerId)) {
@@ -115,6 +125,17 @@ export async function GET(request: NextRequest) {
     }
 
     if (propertyId) {
+      if (
+        role === "teamMember" &&
+        teamMemberAssignedPropertyIds &&
+        teamMemberAssignedPropertyIds.length > 0 &&
+        !teamMemberAssignedPropertyIds.includes(propertyId)
+      ) {
+        return NextResponse.json(
+          { success: true, status: "none", pendingInvoices: 0, invoices: [] },
+          { status: 200 }
+        );
+      }
       const allowNonObjectId = billingPlanFilter?.$in?.includes("Airbnb");
       // Validate propertyId
       if (!ObjectId.isValid(propertyId) && !allowNonObjectId) {
@@ -192,7 +213,10 @@ export async function GET(request: NextRequest) {
       ? (effectiveOwnerId ? { userId: effectiveOwnerId } : {})
       : { userId: effectiveOwnerId as string };
     const planQuery = billingPlanFilter ? { billingPlan: billingPlanFilter } : {};
-    const query = { ...baseQuery, ...planQuery };
+    const query: any = { ...baseQuery, ...planQuery };
+    if (role === "teamMember" && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0) {
+      query.propertyId = { $in: teamMemberAssignedPropertyIds };
+    }
     const invoices = await db
       .collection<Invoice>("invoices")
       .find(query).toArray();

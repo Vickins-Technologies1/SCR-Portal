@@ -3,17 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import {
-  Menu,
-  X,
-  LogIn,
-  UserPlus,
-  Info,
-  Building2,
-  Compass,
-  Wallet,
-  Mail,
-} from "lucide-react";
+import { Menu, X, LogIn, UserPlus, Info, Building2, Compass, Wallet, Mail } from "lucide-react";
 
 const MAIN_SITE = "https://www.soranapropertymanagers.com";
 
@@ -170,3 +160,4 @@ export default function PublicNavbar() {
     </>
   );
 }
+

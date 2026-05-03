@@ -87,8 +87,85 @@ export async function GET(
       }
 
       if (!airbnbListing) {
-        console.log("Property not found for ID:", id);
-        return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+        // Fallback: check for-sale listings
+        let saleListing: any = null;
+        if (isValidHexId(id)) {
+          saleListing = await db.collection("marketplaceSaleListings").findOne({
+            _id: new ObjectId(id),
+            status: { $in: ["published"] },
+          });
+        }
+        if (!saleListing) {
+          saleListing = await db.collection("marketplaceSaleListings").findOne({
+            _id: id,
+            status: { $in: ["published"] },
+          } as any);
+        }
+
+        if (!saleListing) {
+          console.log("Property not found for ID:", id);
+          return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+        }
+
+        const ownerIdValue = saleListing.ownerId ? String(saleListing.ownerId) : "";
+        const owner = ownerIdValue && isValidHexId(ownerIdValue)
+          ? await db
+              .collection("propertyOwners")
+              .findOne(
+                { _id: new ObjectId(ownerIdValue) },
+                { projection: { email: 1, phone: 1 } }
+              )
+          : null;
+        const listingContactPhone = pickListingContactPhone(saleListing);
+
+        const formatted: any = {
+          _id: saleListing._id?.toString?.() || id,
+          ownerId: ownerIdValue,
+          listingType: "sale",
+          name: saleListing.name || "Property for Sale",
+          address: saleListing.address || "Kenya",
+          description: saleListing.description || "",
+          propertyType: saleListing.propertyType || "",
+          bedrooms: Number.isFinite(Number(saleListing.bedrooms)) ? Number(saleListing.bedrooms) : undefined,
+          bathrooms: Number.isFinite(Number(saleListing.bathrooms)) ? Number(saleListing.bathrooms) : undefined,
+          interiorSizeSqft: Number.isFinite(Number(saleListing.interiorSizeSqft))
+            ? Number(saleListing.interiorSizeSqft)
+            : undefined,
+          lotSizeSqft: Number.isFinite(Number(saleListing.lotSizeSqft)) ? Number(saleListing.lotSizeSqft) : undefined,
+          yearBuilt: Number.isFinite(Number(saleListing.yearBuilt)) ? Number(saleListing.yearBuilt) : undefined,
+          price: Number(saleListing.price || 0),
+          currency: saleListing.currency || "Ksh",
+          amenities: saleListing.amenities || [],
+          images: saleListing.images || [],
+          status: saleListing.status || "draft",
+          createdAt: toISO(saleListing.createdAt) || "",
+          updatedAt: toISO(saleListing.updatedAt),
+          isFeatured: !!saleListing.isFeatured,
+          rating: 0,
+          reviewCount: 0,
+        };
+
+        const reviewSummary = await getReviewSummaryForListing(db, formatted._id);
+        formatted.rating = reviewSummary.rating;
+        formatted.reviewCount = reviewSummary.reviewCount;
+
+        return NextResponse.json(
+          {
+            success: true,
+            property: formatted,
+            owner:
+              owner || listingContactPhone || saleListing.contactEmail
+                ? {
+                    email: saleListing.contactEmail ?? owner?.email,
+                    phone: listingContactPhone ?? owner?.phone,
+                  }
+                : null,
+          },
+          {
+            status: 200,
+            headers: { "Cache-Control": "no-store" },
+          }
+        );
       }
 
       const ownerIdValue = airbnbListing.ownerId ? String(airbnbListing.ownerId) : "";

@@ -43,6 +43,8 @@ interface CreateTeamMemberBody {
   phone?: string;
   teamRole: string;
   permissions: string[];
+  assignedPropertyIds?: string[];
+  assignedAirbnbListingIds?: string[];
   password: string;
 }
 
@@ -59,7 +61,17 @@ export async function POST(req: NextRequest) {
     }
 
     const body: CreateTeamMemberBody = await req.json();
-    const { ownerId: requestedOwnerId, name, email, phone, teamRole, permissions, password } = body;
+    const {
+      ownerId: requestedOwnerId,
+      name,
+      email,
+      phone,
+      teamRole,
+      permissions,
+      assignedPropertyIds,
+      assignedAirbnbListingIds,
+      password,
+    } = body;
 
     if (!requestedOwnerId || !name || !email || !teamRole || !password) {
       return NextResponse.json(
@@ -144,6 +156,60 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 12);
     const now = new Date();
 
+    const normalizedAssignedPropertyIds = Array.isArray(assignedPropertyIds)
+      ? Array.from(
+          new Set(
+            assignedPropertyIds
+              .map((value) => String(value || "").trim())
+              .filter((value) => ObjectId.isValid(value))
+          )
+        )
+      : [];
+
+    const normalizedAssignedAirbnbListingIds = Array.isArray(assignedAirbnbListingIds)
+      ? Array.from(
+          new Set(
+            assignedAirbnbListingIds
+              .map((value) => String(value || "").trim())
+              .filter((value) => value.length > 0)
+          )
+        )
+      : [];
+
+    if (normalizedAssignedPropertyIds.length > 0) {
+      const ownerFilter = ObjectId.isValid(requestedOwnerId)
+        ? { $in: [requestedOwnerId, new ObjectId(requestedOwnerId)] }
+        : requestedOwnerId;
+      const owned = await db
+        .collection("properties")
+        .find({
+          ownerId: ownerFilter,
+          _id: { $in: normalizedAssignedPropertyIds.map((id) => new ObjectId(id)) },
+        })
+        .project({ _id: 1 })
+        .toArray();
+      if (owned.length !== normalizedAssignedPropertyIds.length) {
+        return NextResponse.json(
+          { success: false, message: "One or more assigned properties are invalid." },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (normalizedAssignedAirbnbListingIds.length > 0) {
+      const ownedListings = await db
+        .collection("airbnbListings")
+        .find({ ownerId: requestedOwnerId, externalId: { $in: normalizedAssignedAirbnbListingIds } })
+        .project({ externalId: 1 })
+        .toArray();
+      if (ownedListings.length !== normalizedAssignedAirbnbListingIds.length) {
+        return NextResponse.json(
+          { success: false, message: "One or more assigned Airbnb listings are invalid." },
+          { status: 400 }
+        );
+      }
+    }
+
     const newMember = {
       ownerId: new ObjectId(requestedOwnerId),
       name: sanitizedName,
@@ -152,6 +218,8 @@ export async function POST(req: NextRequest) {
       role: "teamMember",
       teamRole,
       permissions: Array.isArray(permissions) ? permissions : [],
+      assignedPropertyIds: normalizedAssignedPropertyIds,
+      assignedAirbnbListingIds: normalizedAssignedAirbnbListingIds,
       password: hashedPassword,
       active: true,
       createdAt: now,
@@ -169,6 +237,8 @@ export async function POST(req: NextRequest) {
       role: "teamMember",
       teamRole,
       permissions: newMember.permissions,
+      assignedPropertyIds: newMember.assignedPropertyIds,
+      assignedAirbnbListingIds: newMember.assignedAirbnbListingIds,
       active: true,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
@@ -273,6 +343,8 @@ export async function GET(req: NextRequest) {
       role: m.role || "teamMember",
       teamRole: m.teamRole || "Team Member",
       permissions: m.permissions || [],
+      assignedPropertyIds: Array.isArray((m as any).assignedPropertyIds) ? (m as any).assignedPropertyIds : [],
+      assignedAirbnbListingIds: Array.isArray((m as any).assignedAirbnbListingIds) ? (m as any).assignedAirbnbListingIds : [],
       active: m.active,
       createdAt: m.createdAt?.toISOString(),
       updatedAt: m.updatedAt?.toISOString(),

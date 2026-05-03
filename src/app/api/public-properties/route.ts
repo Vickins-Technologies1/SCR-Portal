@@ -66,7 +66,13 @@ export async function GET(request: NextRequest) {
       .find({ status: { $in: ["published", "active"] } })
       .toArray();
 
-    if (listings.length === 0 && airbnbListings.length === 0) {
+    // Fetch published for-sale listings (admin-managed)
+    const saleListings = await db
+      .collection("marketplaceSaleListings")
+      .find({ status: { $in: ["published"] } })
+      .toArray();
+
+    if (listings.length === 0 && airbnbListings.length === 0 && saleListings.length === 0) {
       return NextResponse.json({ success: true, properties: [] });
     }
 
@@ -74,9 +80,10 @@ export async function GET(request: NextRequest) {
     const airbnbListingIds = airbnbListings
       .map((listing) => listing.externalId || listing._id?.toString?.() || "")
       .filter(Boolean);
+    const saleListingIds = saleListings.map((listing) => listing._id?.toString?.() || "").filter(Boolean);
     const reviewSummaryMap = await getReviewSummaryForListings(
       db,
-      Array.from(new Set([...rentalListingIds, ...airbnbListingIds]))
+      Array.from(new Set([...rentalListingIds, ...airbnbListingIds, ...saleListingIds]))
     );
 
     const propertyIdByListingId = new Map<string, string>();
@@ -100,6 +107,7 @@ export async function GET(request: NextRequest) {
       ...new Set([
         ...listings.map((l) => l.ownerId),
         ...airbnbListings.map((l) => l.ownerId),
+        ...saleListings.map((l) => l.ownerId),
       ]),
     ].filter(Boolean);
     const ownerObjectIds = ownerIds
@@ -261,8 +269,93 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
       })
       .filter(Boolean);
 
-    const sorted = [...(enriched as any[]), ...(airbnbEnriched as any[])].sort((a, b) =>
-      a.isAdvertised === b.isAdvertised ? 0 : a.isAdvertised ? -1 : 1
+    const saleEnriched = saleListings
+      .map((listing) => {
+        const listingId = listing._id?.toString?.() || "";
+        if (!listingId) return null;
+
+        const name = listing.name || "Property for Sale";
+        const address = listing.address || "Kenya";
+        const price = Number(listing.price || 0);
+
+        const matchesPrice = hasPriceFilter
+          ? Number.isFinite(price) && price >= minPrice && price <= maxPrice
+          : true;
+
+        const listingAddress = typeof address === "string" ? address.toLowerCase() : "";
+        const listingName = typeof name === "string" ? name.toLowerCase() : "";
+        const matchesLocation = !location || listingAddress.includes(location) || listingName.includes(location);
+
+        const isFeatured = !!listing.isFeatured;
+        const matchesFeatured =
+          !featured ||
+          featured === "all" ||
+          ((featured === "true" || featured === "featured") && isFeatured) ||
+          ((featured === "false" || featured === "standard") && !isFeatured);
+
+        if (!matchesPrice || !matchesLocation || !matchesFeatured) {
+          return null;
+        }
+
+        const ownerIdValue = listing.ownerId ? String(listing.ownerId) : "";
+        const listingContactPhone = pickListingContactPhone(listing);
+        const ownerFromAccount = ownerMap[ownerIdValue] || null;
+        const owner =
+          ownerFromAccount || listingContactPhone || listing.contactEmail
+            ? {
+                email: listing.contactEmail ?? ownerFromAccount?.email,
+                phone: listingContactPhone ?? ownerFromAccount?.phone,
+              }
+            : null;
+
+        const reviewSummary = reviewSummaryMap.get(listingId);
+        const rating = reviewSummary?.rating ?? 0;
+        const reviewCount = reviewSummary?.reviewCount ?? 0;
+
+        return {
+          _id: listingId,
+          ownerId: ownerIdValue,
+          listingType: "sale",
+          name,
+          address,
+          description: listing.description || "",
+          propertyType: listing.propertyType || "",
+          bedrooms: Number.isFinite(Number(listing.bedrooms)) ? Number(listing.bedrooms) : undefined,
+          bathrooms: Number.isFinite(Number(listing.bathrooms)) ? Number(listing.bathrooms) : undefined,
+          interiorSizeSqft: Number.isFinite(Number(listing.interiorSizeSqft))
+            ? Number(listing.interiorSizeSqft)
+            : undefined,
+          lotSizeSqft: Number.isFinite(Number(listing.lotSizeSqft)) ? Number(listing.lotSizeSqft) : undefined,
+          yearBuilt: Number.isFinite(Number(listing.yearBuilt)) ? Number(listing.yearBuilt) : undefined,
+          price,
+          currency: listing.currency || "Ksh",
+          amenities: listing.amenities || [],
+          images: listing.images || [],
+          status: listing.status || "draft",
+          createdAt: toISO(listing.createdAt) || "",
+          updatedAt: toISO(listing.updatedAt),
+          isFeatured,
+          rating,
+          reviewCount,
+          owner,
+        };
+      })
+      .filter(Boolean);
+
+    const isFeaturedListing = (listing: any): boolean => {
+      if (!listing) return false;
+      if (listing.listingType === "rentals") return !!listing.isAdvertised;
+      if (listing.listingType === "sale") return !!listing.isFeatured;
+      if (listing.listingType === "airbnb") {
+        const rating = Number(listing.rating || 0);
+        const reviewCount = Number(listing.reviewCount || 0);
+        return rating >= 4.6 && reviewCount >= 8;
+      }
+      return false;
+    };
+
+    const sorted = [...(enriched as any[]), ...(airbnbEnriched as any[]), ...(saleEnriched as any[])].sort(
+      (a, b) => Number(isFeaturedListing(b)) - Number(isFeaturedListing(a))
     );
 
     return NextResponse.json(

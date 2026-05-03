@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
     }
 
     let effectiveOwnerId = ownerIdParam;
+    let teamMemberAssignedPropertyIds: string[] | null = null;
 
     if (sessionRole === "teamMember") {
       const teamMember = await db.collection("teamMembers").findOne({
@@ -68,6 +69,15 @@ export async function GET(req: NextRequest) {
       }
 
       effectiveOwnerId = teamMember.ownerId.toString();
+      teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? Array.from(
+            new Set(
+              (teamMember as any).assignedPropertyIds
+                .map((value: any) => String(value || "").trim())
+                .filter((value: string) => ObjectId.isValid(value))
+            )
+          )
+        : null;
     } else if (sessionRole !== "propertyOwner" || sessionUserId !== ownerIdParam) {
       logger.warn("Unauthorized expenses access attempt", {
         requestedOwner: ownerIdParam,
@@ -100,7 +110,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (propertyId && ObjectId.isValid(propertyId)) {
+      if (
+        sessionRole === "teamMember" &&
+        teamMemberAssignedPropertyIds &&
+        teamMemberAssignedPropertyIds.length > 0 &&
+        !teamMemberAssignedPropertyIds.includes(propertyId)
+      ) {
+        return NextResponse.json({ success: true, expenses: [] });
+      }
       query.propertyId = new ObjectId(propertyId);
+    } else if (sessionRole === "teamMember" && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0) {
+      query.propertyId = { $in: teamMemberAssignedPropertyIds.map((id) => new ObjectId(id)) };
     }
 
     const expenses = await collection
@@ -195,6 +215,19 @@ export async function POST(req: NextRequest) {
       if (!teamMember || teamMember.ownerId.toString() !== ownerId) {
         return NextResponse.json(
           { success: false, message: "Unauthorized – not assigned to this owner" },
+          { status: 403 }
+        );
+      }
+
+      const assignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? (teamMember as any).assignedPropertyIds
+            .map((value: any) => String(value || "").trim())
+            .filter((value: string) => ObjectId.isValid(value))
+        : [];
+
+      if (assignedPropertyIds.length > 0 && propertyId && ObjectId.isValid(propertyId) && !assignedPropertyIds.includes(propertyId)) {
+        return NextResponse.json(
+          { success: false, message: "Unauthorized: Property not assigned to this team member" },
           { status: 403 }
         );
       }

@@ -49,6 +49,28 @@ const resolveListing = async (db: any, id: string) => {
     };
   }
 
+  // For-sale listings
+  let saleListing = null;
+  if (isValidHexId(id)) {
+    saleListing = await db.collection("marketplaceSaleListings").findOne({
+      _id: new ObjectId(id),
+      status: { $in: ["published"] },
+    });
+  }
+  if (!saleListing) {
+    saleListing = await db.collection("marketplaceSaleListings").findOne({
+      _id: id,
+      status: { $in: ["published"] },
+    } as any);
+  }
+  if (saleListing) {
+    return {
+      listingId: saleListing._id?.toString?.() || id,
+      listingType: "sale" as ListingType,
+      name: saleListing.name || "Property for Sale",
+    };
+  }
+
   let airbnbListing = null;
   if (isValidHexId(id)) {
     airbnbListing = await db.collection("airbnbListings").findOne({

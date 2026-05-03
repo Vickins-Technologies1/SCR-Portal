@@ -111,7 +111,32 @@ export interface AirbnbPublicListing {
 }
 
 export type PublicRentalListing = Listing & { listingType: "rentals" };
-export type PublicListing = PublicRentalListing | AirbnbPublicListing;
+export interface SalePublicListing {
+  _id: string;
+  ownerId?: string;
+  name: string;
+  address: string;
+  description?: string;
+  propertyType?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  interiorSizeSqft?: number;
+  lotSizeSqft?: number;
+  yearBuilt?: number;
+  price: number;
+  currency?: string;
+  amenities?: string[];
+  images?: string[];
+  status: "published" | "draft" | "sold";
+  createdAt: string;
+  updatedAt?: string;
+  isFeatured?: boolean;
+  listingType: "sale";
+  rating?: number;
+  reviewCount?: number;
+}
+
+export type PublicListing = PublicRentalListing | AirbnbPublicListing | SalePublicListing;
 
 
 

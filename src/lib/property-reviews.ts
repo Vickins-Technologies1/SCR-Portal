@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 
-export type ListingType = "rentals" | "airbnb";
+export type ListingType = "rentals" | "airbnb" | "sale";
 
 export interface ReviewSummary {
   rating: number;

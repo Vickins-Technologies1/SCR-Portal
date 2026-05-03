@@ -10,6 +10,8 @@ export interface TeamMember {
   role: string;
   teamRole: string;          
   permissions: string[];
+  assignedPropertyIds?: string[]; // Rental properties (ObjectId strings)
+  assignedAirbnbListingIds?: string[]; // Airbnb listings (externalId strings)
   password?: string;         
   active: boolean;
   createdAt: Date;

@@ -152,6 +152,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/quotations/generate": { roles: ["admin"], isApi: true },
   "/api/admins": { roles: ["admin"], isApi: true },
   "/api/admin/properties": { roles: ["admin"], isApi: true },
+  "/api/admin/market-place-sale-listings": { roles: ["admin"], isApi: true },
   "/api/admin/reviews": { roles: ["admin"], isApi: true },
   "/api/admin/property-owners": { roles: ["admin"], isApi: true },
   "/api/admin/impersonate-owner": { roles: ["admin"], isApi: true },
@@ -202,12 +203,14 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/properties": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: false },
   "/tenants": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/property-listings": { roles: [], isApi: false }, // public
+  "/market-place": { roles: [], isApi: false }, // public
   "/upgrade": { roles: ["propertyOwner", "teamMember"], isApi: false },
 };
 
 const ADMIN_API_PATHS = [
   "/api/admin/property-owners",
   "/api/admin/properties",
+  "/api/admin/market-place-sale-listings",
   "/api/admin/reviews",
   "/api/admins",
   "/api/users",
@@ -231,7 +234,7 @@ export async function proxy(request: NextRequest) {
   // Redirect legacy property URLs
   if (path.match(/^\/properties\/[^\/]+$/)) {
     const id = path.split("/")[2];
-    return NextResponse.redirect(new URL(`/property-listings/${id}`, request.url));
+    return NextResponse.redirect(new URL(`/market-place/${id}`, request.url));
   }
 
   const startTime = Date.now();
@@ -459,6 +462,7 @@ export const config = {
     "/api/:path*",
     "/properties/:path*",
     "/property-listings/:path*",
+    "/market-place/:path*",
     "/tenant-dashboard/:path*",
     "/airbnb-tenant-dashboard/:path*",
     "/property-owner-dashboard/:path*",

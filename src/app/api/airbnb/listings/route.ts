@@ -12,13 +12,30 @@ export async function GET(request: NextRequest) {
 
   const resolved = await resolveAirbnbOwner(request, requestedOwnerId);
   if (resolved.response) return resolved.response;
-  const { ownerId } = resolved.context!;
+  const { ownerId, role, userId } = resolved.context!;
 
   const { db } = await connectToDatabase();
 
+  let assignedListingIds: string[] | null = null;
+  if (role === "teamMember" && userId && ObjectId.isValid(userId)) {
+    const member = await db.collection("teamMembers").findOne({ _id: new ObjectId(userId), active: true });
+    assignedListingIds = Array.isArray((member as any)?.assignedAirbnbListingIds)
+      ? Array.from(
+          new Set(
+            (member as any).assignedAirbnbListingIds
+              .map((value: any) => String(value || "").trim())
+              .filter((value: string) => value.length > 0)
+          )
+        )
+      : null;
+  }
+
   const listings = await db
     .collection("airbnbListings")
-    .find({ ownerId })
+    .find({
+      ownerId,
+      ...(assignedListingIds && assignedListingIds.length > 0 ? { externalId: { $in: assignedListingIds } } : {}),
+    })
     .sort({ createdAt: -1 })
     .toArray();
 
