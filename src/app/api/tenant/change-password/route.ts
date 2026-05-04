@@ -30,27 +30,30 @@ interface ChangePasswordRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  const now = new Date();
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
   const csrfToken = request.headers.get("x-csrf-token");
+  const isImpersonating = request.cookies.get("isImpersonating")?.value === "true";
+  const impersonatingTenantId = request.cookies.get("impersonatingTenantId")?.value;
+
   let body: ChangePasswordRequestBody | null = null;
 
-  // Authentication check
-  if (!userId || !role || role !== "tenant") {
-    logger.error("Unauthorized access attempt", { userId, role, timestamp: "2025-08-07T14:59:00+03:00" });
+  if (!userId || !role) {
+    logger.warn("Unauthorized access attempt (missing auth cookies)", { userId, role, at: now.toISOString() });
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   // CSRF validation
   if (!validateCsrfToken(request, csrfToken)) {
-    logger.error("Invalid CSRF token", { userId, timestamp: "2025-08-07T14:59:00+03:00" });
+    logger.warn("Invalid CSRF token", { userId, role, at: now.toISOString() });
     return buildInvalidCsrfResponse(request);
   }
 
   try {
-    body = await request.json();
+    body = await request.json().catch(() => null);
     if (!body) {
-      logger.error("Invalid request body", { userId, timestamp: "2025-08-07T14:59:00+03:00" });
+      logger.warn("Invalid request body", { userId, role, at: now.toISOString() });
       return NextResponse.json({ success: false, message: "Invalid request body" }, { status: 400 });
     }
 
@@ -58,15 +61,15 @@ export async function POST(request: NextRequest) {
 
     // Input validation
     if (!tenantId) {
-      logger.error("Missing tenantId", { userId, timestamp: "2025-08-07T14:59:00+03:00" });
+      logger.warn("Missing tenantId", { userId, role, at: now.toISOString() });
       return NextResponse.json({ success: false, message: "Missing tenantId" }, { status: 400 });
     }
-    if (tenantId !== userId) {
-      logger.error("User ID mismatch", { userId, tenantId, timestamp: "2025-08-07T14:59:00+03:00" });
-      return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 403 });
+    if (!ObjectId.isValid(tenantId)) {
+      logger.warn("Invalid tenantId", { userId, role, tenantId, at: now.toISOString() });
+      return NextResponse.json({ success: false, message: "Invalid tenantId" }, { status: 400 });
     }
     if (!password || password.length < 8) {
-      logger.error("Invalid password", { userId, timestamp: "2025-08-07T14:59:00+03:00" });
+      logger.warn("Invalid password", { userId, role, at: now.toISOString() });
       return NextResponse.json(
         { success: false, message: "Password must be at least 8 characters long" },
         { status: 400 }
@@ -75,11 +78,46 @@ export async function POST(request: NextRequest) {
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    // Verify tenant exists
-    const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
-    if (!tenant) {
-      logger.error("Tenant not found", { tenantId, timestamp: "2025-08-07T14:59:00+03:00" });
-      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+    if (role === "tenant") {
+      if (tenantId !== userId) {
+        logger.warn("User ID mismatch", { userId, tenantId, role, at: now.toISOString() });
+        return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 403 });
+      }
+    } else if (role === "propertyOwner") {
+      // Landlords can only change a tenant password while actively impersonating that tenant.
+      if (!isImpersonating || !impersonatingTenantId || impersonatingTenantId !== tenantId) {
+        logger.warn("Owner attempted password change without valid impersonation context", {
+          userId,
+          role,
+          isImpersonating,
+          impersonatingTenantId,
+          tenantId,
+          at: now.toISOString(),
+        });
+        return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+      }
+
+      if (!ObjectId.isValid(userId)) {
+        logger.warn("Invalid owner userId", { userId, role, at: now.toISOString() });
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+      }
+
+      const tenant = await db.collection<Tenant>("tenants").findOne({
+        _id: new ObjectId(tenantId),
+        ownerId: userId,
+      });
+
+      if (!tenant) {
+        logger.warn("Tenant not found or not owned by requester", {
+          ownerId: userId,
+          tenantId,
+          at: now.toISOString(),
+        });
+        return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+      }
+    } else {
+      logger.warn("Invalid role for change-password", { userId, role, at: now.toISOString() });
+      return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
     }
 
     // Hash the new password
@@ -88,22 +126,29 @@ export async function POST(request: NextRequest) {
     // Update tenant's password
     const updateResult = await db.collection<Tenant>("tenants").updateOne(
       { _id: new ObjectId(tenantId) },
-      { $set: { password: hashedPassword, updatedAt: new Date("2025-08-07T14:59:00+03:00") } }
+      { $set: { password: hashedPassword, updatedAt: now } }
     );
 
     if (updateResult.matchedCount === 0) {
-      logger.error("Failed to update password: tenant not found", { tenantId, timestamp: "2025-08-07T14:59:00+03:00" });
+      logger.warn("Failed to update password: tenant not found", { tenantId, role, at: now.toISOString() });
       return NextResponse.json({ success: false, message: "Failed to update password" }, { status: 404 });
     }
 
-    logger.debug("Password changed successfully", { tenantId, timestamp: "2025-08-07T14:59:00+03:00" });
+    logger.info("Password changed successfully", {
+      tenantId,
+      actorRole: role,
+      actorId: userId,
+      impersonating: role === "propertyOwner" ? isImpersonating : false,
+      at: now.toISOString(),
+    });
     return NextResponse.json({ success: true, message: "Password changed successfully" }, { status: 200 });
   } catch (error: unknown) {
     logger.error("POST Change Password Error", {
       message: error instanceof Error ? error.message : "Unknown error",
       userId,
       tenantId: body?.tenantId || "MISSING",
-      timestamp: "2025-08-07T14:59:00+03:00"
+      role,
+      at: now.toISOString(),
     });
     return NextResponse.json(
       { success: false, message: "Server error while changing password" },

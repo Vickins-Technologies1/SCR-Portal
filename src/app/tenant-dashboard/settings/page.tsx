@@ -31,6 +31,9 @@ export default function SettingsPage() {
 
   const isImpersonating = Cookies.get("isImpersonating") === "true";
   const impersonatingTenantId = Cookies.get("impersonatingTenantId");
+  const role = Cookies.get("role");
+  const isOwnerImpersonation =
+    isImpersonating && role === "propertyOwner" && !!impersonatingTenantId;
   const tenantId = isImpersonating && impersonatingTenantId ? impersonatingTenantId : Cookies.get("userId");
 
   const notify = (type: "success" | "error", msg: string) => {
@@ -108,19 +111,23 @@ export default function SettingsPage() {
   };
 
   const changePassword = async () => {
-    if (isImpersonating) {
-      notify("error", "Impersonation is view-only. Exit to change a tenant password.");
+    if (isImpersonating && !isOwnerImpersonation) {
+      notify("error", "Exit impersonation to change the password.");
       return;
     }
-    if (password !== confirmPassword || password.length < 6) {
-      notify("error", "Passwords must match and be 6+ characters");
+    if (!csrfToken) {
+      notify("error", "Security token missing. Please refresh and try again.");
+      return;
+    }
+    if (password !== confirmPassword || password.length < 8) {
+      notify("error", "Passwords must match and be 8+ characters");
       return;
     }
     setChanging(true);
     try {
       const res = await fetch("/api/tenant/change-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken! },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         credentials: "include",
         body: JSON.stringify({ tenantId, password }),
       });
@@ -211,7 +218,7 @@ export default function SettingsPage() {
         <div className="max-w-2xl mx-auto space-y-6 relative z-10">
           {isImpersonating && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs sm:text-sm text-amber-800">
-              Impersonation is view-only. Exit impersonation to edit profile details or change passwords.
+              Impersonation is view-only for profile details. You can reset the tenant password here.
             </div>
           )}
 
@@ -271,7 +278,9 @@ export default function SettingsPage() {
               <div className="p-2.5 bg-red-100 rounded-xl">
                 <Lock className="w-5 h-5 text-red-600" />
               </div>
-              <h2 className="text-lg sm:text-xl font-semibold text-foreground">Change Password</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-foreground">
+                {isOwnerImpersonation ? "Reset Tenant Password" : "Change Password"}
+              </h2>
             </div>
 
             <div className="space-y-4">
@@ -312,10 +321,10 @@ export default function SettingsPage() {
 
             <button
               onClick={changePassword}
-              disabled={changing || !password || password !== confirmPassword || isImpersonating}
+              disabled={changing || !password || password !== confirmPassword || (isImpersonating && !isOwnerImpersonation)}
               className="w-full sm:w-auto px-7 py-2.5 text-sm bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:bg-gray-300 transition"
             >
-              {changing ? "Changing..." : "Change Password"}
+              {changing ? "Changing..." : isOwnerImpersonation ? "Set Password" : "Change Password"}
             </button>
           </div>
         </div>

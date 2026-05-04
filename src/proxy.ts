@@ -173,6 +173,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/tenants": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/tenants/:tenantId": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/tenant/profile": { roles: ["tenant", "propertyOwner", "teamMember"], isApi: true },
+  "/api/tenant/change-password": { roles: ["tenant", "propertyOwner"], isApi: true },
   "/api/tenants/check-dues": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: true },
   "/api/tenants/maintenance": { roles: ["tenant", "propertyOwner", "teamMember"], isApi: true },
   "/api/tenants/vacate": { roles: ["tenant", "propertyOwner"], isApi: true },
