@@ -272,7 +272,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               <p className="mt-2">
                 Developed by{" "}
                 <a
-                  href="https://vickins-technologies.vercel.app/"
+                  href="https://www.vickinstechnologies.com/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-muted-foreground underline underline-offset-2 transition-colors hover:text-primary"

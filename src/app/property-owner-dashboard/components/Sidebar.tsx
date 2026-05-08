@@ -279,7 +279,7 @@ export default function Sidebar() {
               <p className="text-[9px] text-muted-foreground font-light opacity-70">
                 Developed by{" "}
                 <a
-                  href="https://vickins-technologies.vercel.app/"
+                  href="https://www.vickinstechnologies.com/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-primary transition-colors duration-200 underline underline-offset-2 decoration-gray-300/50 hover:decoration-primary/60"
