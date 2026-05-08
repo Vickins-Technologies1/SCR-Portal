@@ -421,18 +421,34 @@ export default function PropertyOwnerDashboard() {
                   </div>
 
                   {isFree ? (
-                    <div className="bg-white/70 border border-amber-200 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Premium insights</p>
-                      <p className="text-base sm:text-lg font-semibold text-foreground mt-1">
-                        Upgrade to see revenue, occupancy, and overdue totals.
-                      </p>
-                      <a
-                        href="/upgrade"
-                        className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
-                      >
-                        Upgrade
-                      </a>
-                    </div>
+                    dueStatus?.isDue ? (
+                      <div className="bg-white/70 border border-amber-200 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Payment required</p>
+                        <p className="text-base sm:text-lg font-semibold text-foreground mt-1">
+                          Your invoice is overdue. Pay to regain full access.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenInvoicePayment(dueStatus?.dueProperties?.[0]?.propertyId)}
+                          className="mt-3 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow hover:bg-primary-hover"
+                        >
+                          Pay invoice
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="bg-white/70 border border-amber-200 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Premium insights</p>
+                        <p className="text-base sm:text-lg font-semibold text-foreground mt-1">
+                          Upgrade to see revenue, occupancy, and overdue totals.
+                        </p>
+                        <a
+                          href="/upgrade"
+                          className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
+                        >
+                          Upgrade
+                        </a>
+                      </div>
+                    )
                   ) : (
                     <div className="bg-white/70 border border-white/50 rounded-2xl px-4 py-3 shadow-sm backdrop-blur">
                       <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Monthly revenue</p>
@@ -539,19 +555,25 @@ export default function PropertyOwnerDashboard() {
                       <div className="surface-card rounded-3xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier</p>
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">
+                              {dueStatus?.isDue ? "Payment required" : "Free Tier"}
+                            </p>
                             <h3 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
-                              Upgrade to Premium to view system calculations
+                              {dueStatus?.isDue
+                                ? "Your invoice is overdue. Pay to regain full access."
+                                : "Upgrade to Premium to view system calculations"}
                             </h3>
                             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                              Revenue totals, overdue analytics, penalties, and performance insights are hidden on Free.
+                              {dueStatus?.isDue
+                                ? "Once your invoice is settled, Premium analytics will unlock again."
+                                : "Revenue totals, overdue analytics, penalties, and performance insights are hidden on Free."}
                             </p>
                           </div>
                           <a
-                            href="/upgrade"
+                            href={dueStatus?.isDue ? "/property-owner-dashboard/reports" : "/upgrade"}
                             className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
                           >
-                            Upgrade
+                            {dueStatus?.isDue ? "Pay invoice" : "Upgrade"}
                           </a>
                         </div>
 
@@ -696,8 +718,11 @@ export default function PropertyOwnerDashboard() {
                                   <p className="mt-1 text-[10px] text-amber-700 flex items-center gap-1">
                                     <Lock className="h-3 w-3" />
                                     <span>
-                                      Upgrade for full access:{" "}
-                                      <a href="/upgrade" className="underline underline-offset-2 font-semibold">
+                                      {dueStatus?.isDue ? "Pay invoice to regain access:" : "Upgrade for full access:"}{" "}
+                                      <a
+                                        href={dueStatus?.isDue ? "/property-owner-dashboard/reports" : "/upgrade"}
+                                        className="underline underline-offset-2 font-semibold"
+                                      >
                                         {s.title}
                                       </a>
                                     </span>
@@ -733,10 +758,10 @@ export default function PropertyOwnerDashboard() {
                               <p className="text-[11px] text-muted-foreground">{c.body}</p>
                             </div>
                             <a
-                              href="/upgrade"
+                              href={dueStatus?.isDue ? "/property-owner-dashboard/reports" : "/upgrade"}
                               className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
                             >
-                              Upgrade
+                              {dueStatus?.isDue ? "Pay invoice" : "Upgrade"}
                             </a>
                           </div>
                           <div className="mt-4 h-64 sm:h-72 rounded-2xl border border-border bg-white/70 flex items-center justify-center">

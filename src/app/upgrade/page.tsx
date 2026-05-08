@@ -11,6 +11,7 @@ export default function UpgradePage() {
   const { tier, isFree, isPremium, refreshTier } = useAccountTier();
   const [role, setRole] = useState<string | null>(null);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb">("rentals");
+  const [dueStatus, setDueStatus] = useState<{ isDue: boolean } | null>(null);
 
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -19,6 +20,28 @@ export default function UpgradePage() {
     if (typeof window === "undefined") return;
     setRole(Cookies.get("role") ?? null);
     setManagementType(Cookies.get("managementType") === "airbnb" ? "airbnb" : "rentals");
+  }, []);
+
+  const isDue = Boolean(dueStatus?.isDue);
+  const payInvoiceHref = managementType === "airbnb" ? "/airbnb-dashboard/reports" : "/property-owner-dashboard/reports";
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchDueStatus = async () => {
+      try {
+        const res = await fetch("/api/owner-dues", { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled && data?.success) {
+          setDueStatus({ isDue: Boolean(data?.isDue) });
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchDueStatus();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const fetchCsrfToken = useCallback(async () => {
@@ -36,6 +59,11 @@ export default function UpgradePage() {
   const handleUpgrade = useCallback(async () => {
     if (role !== "propertyOwner") {
       setMessage("Only the Property Owner can upgrade this account. Ask the owner to upgrade.");
+      return;
+    }
+
+    if (isDue) {
+      setMessage("You have an overdue invoice. Please pay your invoice to regain full access.");
       return;
     }
 
@@ -67,7 +95,7 @@ export default function UpgradePage() {
     } finally {
       setIsUpgrading(false);
     }
-  }, [fetchCsrfToken, managementType, role]);
+  }, [fetchCsrfToken, isDue, managementType, role]);
 
   return (
     <div className="sorana-theme min-h-[100svh] bg-background text-foreground">
@@ -161,14 +189,24 @@ export default function UpgradePage() {
               </ul>
 
               <div className="mt-6">
-                <button
-                  type="button"
-                  disabled={isPremium || isUpgrading}
-                  onClick={handleUpgrade}
-                  className="w-full inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isPremium ? "You’re on Premium" : isUpgrading ? "Upgrading…" : "Upgrade to Premium"}
-                </button>
+                {isDue ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push(payInvoiceHref)}
+                    className="w-full inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow hover:bg-primary-hover"
+                  >
+                    Pay invoice
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isPremium || isUpgrading}
+                    onClick={handleUpgrade}
+                    className="w-full inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isPremium ? "You’re on Premium" : isUpgrading ? "Upgrading…" : "Upgrade to Premium"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => router.push(managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard")}
@@ -192,14 +230,24 @@ export default function UpgradePage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={isUpgrading || role !== "propertyOwner"}
-                onClick={handleUpgrade}
-                className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isUpgrading ? "Upgrading…" : "Upgrade to Premium"}
-              </button>
+              {isDue ? (
+                <button
+                  type="button"
+                  onClick={() => router.push(payInvoiceHref)}
+                  className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary-hover"
+                >
+                  Pay invoice
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isUpgrading || role !== "propertyOwner"}
+                  onClick={handleUpgrade}
+                  className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isUpgrading ? "Upgrading…" : "Upgrade to Premium"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => router.push(managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard")}

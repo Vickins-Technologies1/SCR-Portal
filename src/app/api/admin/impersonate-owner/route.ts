@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { SESSION_COOKIE_NAME, createSessionToken, getSessionCookieOptions, verifySessionToken } from "@/lib/session";
 import { resolveAccountTier } from "@/lib/tier";
+import { getOwnerDueStatus } from "@/lib/billing";
 
 type OwnerManagementType = "rentals" | "airbnb";
 
@@ -51,7 +52,9 @@ export async function POST(request: NextRequest) {
 
     const managementType = normalizeManagementType(owner.managementType);
     const redirectPath = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
-    const ownerTier = resolveAccountTier(owner?.tier, "premium");
+    const planTier = resolveAccountTier(owner?.tier, "premium");
+    const dueStatus = await getOwnerDueStatus(db, owner._id.toString(), new Date());
+    const ownerTier = dueStatus.isDue ? "free" : planTier;
 
     const response = NextResponse.json({
       success: true,

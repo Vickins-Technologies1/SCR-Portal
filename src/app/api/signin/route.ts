@@ -8,6 +8,7 @@ import { deliverOtp } from "../../../lib/otp-delivery";
 import { createSessionToken, getSessionCookieOptions } from "../../../lib/session";
 import { generateCsrfToken, setCsrfCookie } from "../../../lib/csrf";
 import { resolveAccountTier, type AccountTier } from "../../../lib/tier";
+import { getOwnerDueStatus } from "../../../lib/billing";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -60,8 +61,11 @@ async function resolveOwnerTier(
   finalRole: string,
   isTeamMember: boolean
 ): Promise<AccountTier> {
+  const now = new Date();
   if (finalRole === "propertyOwner") {
-    return resolveAccountTier(user?.tier, "premium");
+    const planTier = resolveAccountTier(user?.tier, "premium");
+    const dueStatus = await getOwnerDueStatus(db, user?._id?.toString?.() ?? "", now).catch(() => null);
+    return dueStatus?.isDue ? "free" : planTier;
   }
 
   if (isTeamMember) {
@@ -71,7 +75,9 @@ async function resolveOwnerTier(
         { _id: new ObjectId(ownerId) },
         { projection: { tier: 1 } }
       );
-      return resolveAccountTier(owner?.tier, "premium");
+      const planTier = resolveAccountTier(owner?.tier, "premium");
+      const dueStatus = await getOwnerDueStatus(db, ownerId, now).catch(() => null);
+      return dueStatus?.isDue ? "free" : planTier;
     }
   }
 

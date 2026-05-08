@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAccountTier } from "@/lib/tier";
+import { getOwnerDueStatus } from "@/lib/billing";
 import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 type OwnerManagementType = "rentals" | "airbnb";
@@ -31,10 +32,16 @@ export async function GET() {
     { projection: { tier: 1 } }
   );
 
+  const dueStatus = await getOwnerDueStatus(db, effectiveOwnerId, new Date());
+  const planTier = resolveAccountTier(owner?.tier, "premium");
+  const effectiveTier = dueStatus.isDue ? "free" : planTier;
+
   return NextResponse.json(
     {
       success: true,
-      tier: resolveAccountTier(owner?.tier, "premium"),
+      tier: effectiveTier,
+      planTier,
+      isDue: dueStatus.isDue,
     },
     { status: 200 }
   );
@@ -56,6 +63,13 @@ export async function POST(request: NextRequest) {
   }
 
   const { db } = await connectToDatabase();
+  const dueStatus = await getOwnerDueStatus(db, userId, new Date());
+  if (dueStatus.isDue) {
+    return NextResponse.json(
+      { success: false, message: "You have an overdue invoice. Please pay your invoice to regain full access." },
+      { status: 409 }
+    );
+  }
   const result = await db.collection("propertyOwners").findOneAndUpdate(
     { _id: new ObjectId(userId), role: "propertyOwner" },
     { $set: { tier: "premium", updatedAt: new Date() } },

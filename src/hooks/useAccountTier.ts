@@ -18,6 +18,25 @@ export function useAccountTier() {
     refreshTier();
   }, [refreshTier]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncFromCookie = () => {
+      const raw = Cookies.get("tier");
+      const next = resolveAccountTier(raw, "premium");
+      setTier((prev) => (prev === next ? prev : next));
+    };
+
+    // Keep React state in sync when the server updates the cookie (e.g. invoice due -> free mode).
+    const interval = window.setInterval(syncFromCookie, 3000);
+    window.addEventListener("focus", syncFromCookie);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", syncFromCookie);
+    };
+  }, []);
+
   const resolved = tier ?? resolveAccountTier(undefined, "premium");
   return {
     tier: resolved,

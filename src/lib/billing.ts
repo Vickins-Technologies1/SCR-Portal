@@ -2,6 +2,7 @@ import { Db, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "./utils";
 import { Tenant } from "../types/tenant";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
+import type { AccountTier } from "./tier";
 
 export type BillingPlan = "RentCollection" | "FullManagement" | "Airbnb";
 
@@ -144,6 +145,21 @@ export async function getOwnerDueStatus(db: Db, ownerId: string, now: Date = new
     isDue: dueProperties.length > 0,
     pendingInvoices: pendingInvoices.length,
     dueProperties,
+  };
+}
+
+export async function resolveEffectiveOwnerTier(params: {
+  db: Db;
+  ownerId: string;
+  planTier: AccountTier;
+  now?: Date;
+}) {
+  const now = params.now ?? new Date();
+  const dueStatus = await getOwnerDueStatus(params.db, params.ownerId, now);
+  return {
+    effectiveTier: (dueStatus.isDue ? "free" : params.planTier) as AccountTier,
+    isDue: dueStatus.isDue,
+    dueStatus,
   };
 }
 

@@ -269,10 +269,10 @@ export default function Sidebar() {
               {isFreeTier && (
                 <div className="flex justify-center pb-2">
                   <Link
-                    href="/upgrade"
+                    href={isDue ? "/airbnb-dashboard/reports" : "/upgrade"}
                     className="inline-flex items-center justify-center rounded-xl bg-primary/10 px-3 py-2 text-[11px] font-semibold text-primary hover:bg-primary/15 transition"
                   >
-                    Upgrade to Premium
+                    {isDue ? "Pay invoice" : "Upgrade to Premium"}
                   </Link>
                 </div>
               )}

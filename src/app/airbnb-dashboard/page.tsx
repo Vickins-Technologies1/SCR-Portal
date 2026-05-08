@@ -39,9 +39,33 @@ export default function AirbnbDashboard() {
   const router = useRouter();
   const { hasAccess, ownerId } = useAirbnbAccess("dashboard:view");
   const { isFree } = useAccountTier();
+  const [dueStatus, setDueStatus] = useState<{ isDue: boolean } | null>(null);
+  const isDue = Boolean(dueStatus?.isDue);
   const [overview, setOverview] = useState<AirbnbOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ownerId) return;
+    let cancelled = false;
+
+    const fetchDueStatus = async () => {
+      try {
+        const res = await fetch("/api/owner-dues", { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled && data?.success) {
+          setDueStatus({ isDue: Boolean(data?.isDue) });
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchDueStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerId]);
 
   const fetchOverview = useCallback(async () => {
     if (!ownerId) return;
@@ -249,18 +273,24 @@ export default function AirbnbDashboard() {
 
               {overview && isFree && (
                 <div className="bg-amber-50/80 border border-amber-200 rounded-2xl px-4 py-4 shadow-sm backdrop-blur">
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier</p>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">
+                    {isDue ? "Payment required" : "Free Tier"}
+                  </p>
                   <p className="text-sm sm:text-base font-semibold text-foreground mt-1">
-                    Upgrade to Premium to view revenue & performance insights
+                    {isDue
+                      ? "Your invoice is overdue. Pay to regain full access."
+                      : "Upgrade to Premium to view revenue & performance insights"}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Monthly revenue, Average Daily Price, and Revenue Per Room are hidden on Free.
+                    {isDue
+                      ? "Once your invoice is settled, Premium insights will unlock again."
+                      : "Monthly revenue, Average Daily Price, and Revenue Per Room are hidden on Free."}
                   </p>
                   <a
-                    href="/upgrade"
+                    href={isDue ? "/airbnb-dashboard/reports" : "/upgrade"}
                     className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
                   >
-                    Upgrade
+                    {isDue ? "Pay invoice" : "Upgrade"}
                   </a>
                 </div>
               )}
@@ -303,17 +333,19 @@ export default function AirbnbDashboard() {
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Free Tier</p>
                           <h3 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
-                            Upgrade to Premium to view today’s metrics
+                            {isDue ? "Your invoice is overdue" : "Upgrade to Premium to view today’s metrics"}
                           </h3>
                           <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                            System calculations and performance counters are hidden on Free.
+                            {isDue
+                              ? "Pay your invoice to regain full access."
+                              : "System calculations and performance counters are hidden on Free."}
                           </p>
                         </div>
                         <a
-                          href="/upgrade"
+                          href={isDue ? "/airbnb-dashboard/reports" : "/upgrade"}
                           className="shrink-0 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-amber-700"
                         >
-                          Upgrade
+                          {isDue ? "Pay invoice" : "Upgrade"}
                         </a>
                       </div>
 
@@ -358,15 +390,15 @@ export default function AirbnbDashboard() {
                   <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment trends</h2>
                   {isFree ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-4 text-sm">
-                      <p className="font-semibold text-foreground">Locked on Free tier</p>
+                      <p className="font-semibold text-foreground">{isDue ? "Payment required" : "Locked on Free tier"}</p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        Upgrade to Premium to view payment trend charts.
+                        {isDue ? "Pay your invoice to regain full access." : "Upgrade to Premium to view payment trend charts."}
                       </p>
                       <a
-                        href="/upgrade"
+                        href={isDue ? "/airbnb-dashboard/reports" : "/upgrade"}
                         className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
                       >
-                        Upgrade
+                        {isDue ? "Pay invoice" : "Upgrade"}
                       </a>
                     </div>
                   ) : (
@@ -394,15 +426,15 @@ export default function AirbnbDashboard() {
                   <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Bookings mix</h2>
                   {isFree ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-4 text-sm">
-                      <p className="font-semibold text-foreground">Locked on Free tier</p>
+                      <p className="font-semibold text-foreground">{isDue ? "Payment required" : "Locked on Free tier"}</p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        Upgrade to Premium to view booking mix and occupancy breakdowns.
+                        {isDue ? "Pay your invoice to regain full access." : "Upgrade to Premium to view booking mix and occupancy breakdowns."}
                       </p>
                       <a
-                        href="/upgrade"
+                        href={isDue ? "/airbnb-dashboard/reports" : "/upgrade"}
                         className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-amber-700"
                       >
-                        Upgrade
+                        {isDue ? "Pay invoice" : "Upgrade"}
                       </a>
                     </div>
                   ) : (

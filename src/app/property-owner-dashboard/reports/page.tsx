@@ -726,7 +726,24 @@ function ReportsAndInvoicesPageInner() {
             </div>
           </section>
 
-          {isFree && (
+          {isFree && isDue ? (
+            <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Payment required</p>
+              <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
+                Your invoice is overdue
+              </h2>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Pay your invoice to regain full access.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleTabSwitch("invoices")}
+                className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow hover:bg-primary-hover"
+              >
+                Pay invoice
+              </button>
+            </div>
+          ) : isFree ? (
             <div className="surface-card rounded-2xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">
               <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700/80">Premium only</p>
               <h2 className="mt-1 text-sm sm:text-base font-semibold text-foreground">
@@ -742,10 +759,10 @@ function ReportsAndInvoicesPageInner() {
                 Upgrade
               </a>
             </div>
-          )}
+          ) : null}
 
           <PremiumGate
-            locked={isFree}
+            locked={isFree && !isDue}
             title="Upgrade to unlock reports & invoices"
             message="Free tier hides critical reporting, exports, and invoice analytics. Upgrade to Premium for full access."
           >
