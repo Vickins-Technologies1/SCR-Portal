@@ -66,6 +66,7 @@ export default function PropertyOwnerDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [hasDashboardAccess, setHasDashboardAccess] = useState<boolean | null>(null); // ← new: permission check
@@ -90,6 +91,20 @@ export default function PropertyOwnerDashboard() {
   });
 
   const [chartData, setChartData] = useState<ChartData | null>(null);
+
+  useEffect(() => {
+    if (selectedPropertyId !== "all" && properties.length > 0) {
+      const exists = properties.some((p) => String(p._id) === selectedPropertyId);
+      if (!exists) setSelectedPropertyId("all");
+    }
+  }, [properties, selectedPropertyId]);
+
+  useEffect(() => {
+    // When a team member is assigned to exactly one property, default to that property.
+    if (role === "teamMember" && selectedPropertyId === "all" && properties.length === 1) {
+      setSelectedPropertyId(String(properties[0]._id));
+    }
+  }, [properties, role, selectedPropertyId]);
 
   // ─── AUTH CHECK + PERMISSION CHECK ──────────────────────────────────────────
   useEffect(() => {
@@ -188,17 +203,19 @@ export default function PropertyOwnerDashboard() {
 
     try {
       const headers = { "x-csrf-token": csrfToken };
+      const propertyParam =
+        selectedPropertyId !== "all" ? `&propertyId=${encodeURIComponent(selectedPropertyId)}` : "";
 
       const [propsRes, statsRes, chartsRes] = await Promise.all([
         fetch(`/api/properties?userId=${effectiveOwnerId}`, {
           headers,
           credentials: "include",
         }),
-        fetch(`/api/ownerstats?userId=${effectiveOwnerId}`, {
+        fetch(`/api/ownerstats?userId=${effectiveOwnerId}${propertyParam}`, {
           headers,
           credentials: "include",
         }),
-        fetch(`/api/ownercharts?propertyOwnerId=${effectiveOwnerId}`, {
+        fetch(`/api/ownercharts?propertyOwnerId=${effectiveOwnerId}${propertyParam}`, {
           headers,
           credentials: "include",
         }),
@@ -223,7 +240,7 @@ export default function PropertyOwnerDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [hasDashboardAccess, csrfToken, role, loggedInUserId, ownerIdFromCookie]);
+  }, [hasDashboardAccess, csrfToken, role, loggedInUserId, ownerIdFromCookie, selectedPropertyId]);
 
   // Trigger data fetch when ready
   useEffect(() => {
@@ -487,9 +504,36 @@ export default function PropertyOwnerDashboard() {
                 <>
                   {/* TOP STATS */}
                   <section className="mt-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <BarChart2 className="h-5 w-5 text-primary" />
-                      <h2 className="text-lg sm:text-xl font-semibold text-foreground">Performance Metrics</h2>
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <BarChart2 className="h-5 w-5 text-primary" />
+                        <h2 className="text-lg sm:text-xl font-semibold text-foreground">Performance Metrics</h2>
+                      </div>
+                      {properties.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Property</span>
+                          {properties.length === 1 ? (
+                            <span className="text-xs sm:text-sm font-semibold text-foreground">
+                              {properties[0]?.name || "Selected"}
+                            </span>
+                          ) : (
+                            <select
+                              className="h-9 rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground shadow-sm"
+                              value={selectedPropertyId}
+                              onChange={(e) => setSelectedPropertyId(e.target.value)}
+                            >
+                              <option value="all">
+                                {role === "propertyOwner" ? "All properties" : "All assigned properties"}
+                              </option>
+                              {properties.map((p) => (
+                                <option key={String(p._id)} value={String(p._id)}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                     {isFree ? (
                       <div className="surface-card rounded-3xl p-5 sm:p-6 border border-amber-200 bg-amber-50/60">

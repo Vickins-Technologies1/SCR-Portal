@@ -13,6 +13,7 @@ interface ChartData {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const requestedOwnerId = searchParams.get("propertyOwnerId");
+  const requestedPropertyId = searchParams.get("propertyId");
 
   if (!requestedOwnerId) {
     return NextResponse.json({ success: false, message: "propertyOwnerId is required" }, { status: 400 });
@@ -20,6 +21,10 @@ export async function GET(request: NextRequest) {
 
   if (!ObjectId.isValid(requestedOwnerId)) {
     return NextResponse.json({ success: false, message: "Invalid propertyOwnerId format" }, { status: 400 });
+  }
+
+  if (requestedPropertyId && !ObjectId.isValid(requestedPropertyId)) {
+    return NextResponse.json({ success: false, message: "Invalid propertyId format" }, { status: 400 });
   }
 
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
@@ -32,6 +37,7 @@ export async function GET(request: NextRequest) {
 
   let authorized = false;
   let effectiveOwnerId = requestedOwnerId;
+  let teamMemberAssignedPropertyIds: string[] | null = null;
 
   if (role === "propertyOwner") {
     if (loggedInUserId === requestedOwnerId) {
@@ -51,6 +57,15 @@ export async function GET(request: NextRequest) {
 
     if (teamMember) {
       authorized = true;
+      teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? Array.from(
+            new Set(
+              (teamMember as any).assignedPropertyIds
+                .map((value: any) => String(value || "").trim())
+                .filter((value: string) => ObjectId.isValid(value))
+            )
+          )
+        : null;
     }
   }
 
@@ -64,10 +79,35 @@ export async function GET(request: NextRequest) {
   try {
     const { db } = await connectToDatabase();
 
-    // Fetch properties for the owner
+    if (
+      role === "teamMember" &&
+      requestedPropertyId &&
+      teamMemberAssignedPropertyIds &&
+      teamMemberAssignedPropertyIds.length > 0 &&
+      !teamMemberAssignedPropertyIds.includes(requestedPropertyId)
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized: You do not have access to this property" },
+        { status: 403 }
+      );
+    }
+
+    const allowedPropertyIds =
+      requestedPropertyId
+        ? [requestedPropertyId]
+        : role === "teamMember" && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0
+          ? teamMemberAssignedPropertyIds
+          : null;
+
+    // Fetch properties for the owner (optionally filtered by assignment / selection)
+    const propertyQuery: Record<string, unknown> = { ownerId: effectiveOwnerId };
+    if (allowedPropertyIds) {
+      propertyQuery._id = { $in: allowedPropertyIds.map((id) => new ObjectId(id)) };
+    }
+
     const properties = await db
       .collection("properties")
-      .find<WithId<{ _id: string }>>({ ownerId: effectiveOwnerId })
+      .find<WithId<{ _id: string }>>(propertyQuery)
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
 
