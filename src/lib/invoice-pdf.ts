@@ -1,8 +1,8 @@
 import "server-only";
 
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import * as fs from "fs";
-import * as path from "path";
+import { A4_PAGE_SIZE, applyPdfTemplate } from "@/lib/pdf-template";
+import { getPdfTemplateBytes } from "@/lib/pdf-template.server";
 
 export type InvoicePdfOwner = {
   name?: string | null;
@@ -35,8 +35,8 @@ export async function generateInvoicePdf(params: {
   const kopokopoTillNumber = (params.kopokopoTillNumber || "").trim();
 
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595, 842]);
-  const { width, height } = page.getSize();
+  const page = pdfDoc.addPage(A4_PAGE_SIZE);
+  const { height } = page.getSize();
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -44,17 +44,16 @@ export async function generateInvoicePdf(params: {
   const line = 15;
   let y = height - 220;
 
-  const bgPath = path.join(process.cwd(), "public", "bg.png");
-  if (!fs.existsSync(bgPath)) {
-    throw new Error("bg.png missing");
-  }
-  const bgImage = await pdfDoc.embedPng(fs.readFileSync(bgPath));
-  page.drawImage(bgImage, { x: 0, y: 0, width, height });
+  const { safeArea } = await applyPdfTemplate({
+    pdfDoc,
+    page,
+    backgroundBytes: getPdfTemplateBytes(),
+  });
 
   const rightX = 400;
   const valueX = 480;
 
-  y = height - 165;
+  y = height - safeArea.top + 5;
   page.drawText("DATE", { x: rightX, y, size, font: bold, color: rgb(0, 0, 0) });
   page.drawText(now.toLocaleDateString("en-GB"), { x: valueX, y, size, font, color: rgb(0, 0, 0) });
 
@@ -67,7 +66,7 @@ export async function generateInvoicePdf(params: {
 
   page.drawText(shortInvoiceNo, { x: valueX, y, size, font, color: rgb(0, 0, 0) });
 
-  y = height - 290;
+  y = height - safeArea.top - 120;
   page.drawText("BILL TO", { x: 50, y, size, font: bold });
   y -= line;
   page.drawText(owner?.name || "Property Owner", { x: 50, y, size, font });
@@ -163,7 +162,7 @@ export async function generateInvoicePdf(params: {
 
   page.drawText("Thank you for your business!", {
     x: 50,
-    y: 45,
+    y: safeArea.bottom + 10,
     size: 12,
     font: bold,
     color: rgb(0.0039, 0.1647, 0.2902),
@@ -172,4 +171,3 @@ export async function generateInvoicePdf(params: {
   const pdfBytes = await pdfDoc.save();
   return { pdfBytes, invoiceNumber: shortInvoiceNo };
 }
-

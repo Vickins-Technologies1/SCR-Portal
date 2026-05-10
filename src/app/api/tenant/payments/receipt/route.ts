@@ -4,8 +4,8 @@ import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import * as fs from "fs";
-import * as path from "path";
+import { A4_PAGE_SIZE, applyPdfTemplate } from "@/lib/pdf-template";
+import { getPdfTemplateBytes } from "@/lib/pdf-template.server";
 
 interface Payment {
   _id: ObjectId;
@@ -90,26 +90,17 @@ export async function GET(request: NextRequest) {
 
     // Generate PDF
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]);
-    const { width, height } = page.getSize();
+    const page = pdfDoc.addPage(A4_PAGE_SIZE);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const fontSize = 12;
     const titleFontSize = 24;
     const margin = 50;
-    const topMargin = 180; // Margin top to accommodate the logo in the image
 
-    // Read the background image from the public directory
-    const imagePath = path.join(process.cwd(), "public", "bg.png");
-    const imageBuffer = fs.readFileSync(imagePath);
-    const backgroundImageBase64 = `data:image/png;base64,${imageBuffer.toString("base64")}`;
-    const backgroundImageBytes = Uint8Array.from(atob(backgroundImageBase64.split(',')[1]), c => c.charCodeAt(0));
-    const backgroundImage = await pdfDoc.embedPng(backgroundImageBytes);
-    page.drawImage(backgroundImage, {
-      x: 0,
-      y: 0,
-      width: width,
-      height: height,
+    const { safeArea, contentTopY } = await applyPdfTemplate({
+      pdfDoc,
+      page,
+      backgroundBytes: getPdfTemplateBytes(),
     });
 
     const titleColor = rgb(0.0039, 0.1647, 0.2902);
@@ -117,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     page.drawText("Payment Receipt", {
       x: margin,
-      y: height - topMargin - titleFontSize,
+      y: contentTopY,
       size: titleFontSize,
       font: boldFont,
       color: titleColor,
@@ -137,8 +128,9 @@ export async function GET(request: NextRequest) {
       { label: "Reference", value: payment.reference || "N/A" },
     ];
 
-    let y = height - topMargin - titleFontSize - 50;
+    let y = contentTopY - titleFontSize - 26;
     for (const { label, value } of details) {
+      if (y < safeArea.bottom + 20) break;
       page.drawText(`${label}:`, { x: margin, y, size: fontSize, font: boldFont, color: textColor });
       page.drawText(value, { x: margin + 100, y, size: fontSize, font, color: textColor });
       y -= fontSize + 10;

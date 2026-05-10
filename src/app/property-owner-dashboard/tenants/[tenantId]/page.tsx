@@ -6,6 +6,8 @@ import { useRouter, useParams } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ArrowLeft } from "lucide-react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { A4_PAGE_SIZE, PDF_TEMPLATE_SAFE_AREA, embedTemplateImage } from "@/lib/pdf-template";
+import { fetchPdfTemplateBytes } from "@/lib/pdf-template.client";
 
 import { ResponseTenant } from "@/types/tenant";
 import Navbar from "../../components/Navbar";
@@ -271,16 +273,32 @@ export default function TenantDetailsPage() {
     const pdfDoc = await PDFDocument.create();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const pageSize: [number, number] = [595.28, 841.89];
-    const marginX = 48;
-    const marginTop = 52;
+    const pageSize: [number, number] = A4_PAGE_SIZE;
+    const marginX = PDF_TEMPLATE_SAFE_AREA.left;
+    const marginTop = PDF_TEMPLATE_SAFE_AREA.top;
+    const bottomMargin = PDF_TEMPLATE_SAFE_AREA.bottom;
     const lineHeight = 14;
-    let page = pdfDoc.addPage(pageSize);
+
+    const templateBytes = await fetchPdfTemplateBytes();
+    const templateImage = await embedTemplateImage(pdfDoc, templateBytes);
+
+    const createPage = () => {
+      const newPage = pdfDoc.addPage(pageSize);
+      newPage.drawImage(templateImage, {
+        x: 0,
+        y: 0,
+        width: newPage.getWidth(),
+        height: newPage.getHeight(),
+      });
+      return newPage;
+    };
+
+    let page = createPage();
     let y = page.getHeight() - marginTop;
 
     const ensureSpace = (height: number) => {
-      if (y - height < 60) {
-        page = pdfDoc.addPage(pageSize);
+      if (y - height < bottomMargin + 20) {
+        page = createPage();
         y = page.getHeight() - marginTop;
       }
     };
@@ -371,8 +389,8 @@ export default function TenantDetailsPage() {
 
       report.statements.forEach((statement) => {
         ensureSpace(14);
-        if (y < 70) {
-          page = pdfDoc.addPage(pageSize);
+        if (y < bottomMargin + 30) {
+          page = createPage();
           y = page.getHeight() - marginTop;
           drawTableHeader();
         }

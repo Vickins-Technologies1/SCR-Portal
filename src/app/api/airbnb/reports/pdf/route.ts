@@ -7,8 +7,8 @@ import { endOfDay, getMonthRange, parseDate, startOfDay } from "@/lib/airbnb-uti
 import { calculateAirbnbTaxes } from "@/lib/airbnb-taxes";
 import { sumAirbnbRevenueForRange } from "@/lib/airbnb-billing";
 import { ObjectId } from "mongodb";
-import * as fs from "fs";
-import * as path from "path";
+import { A4_PAGE_SIZE, applyPdfTemplate } from "@/lib/pdf-template";
+import { getPdfTemplateBytes } from "@/lib/pdf-template.server";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -102,29 +102,28 @@ export async function GET(request: NextRequest) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const page = pdfDoc.addPage([595, 842]);
-  const { width, height } = page.getSize();
+  const page = pdfDoc.addPage(A4_PAGE_SIZE);
 
-  const bgPath = path.join(process.cwd(), "public", "bg.png");
-  if (fs.existsSync(bgPath)) {
-    const bgImage = await pdfDoc.embedPng(fs.readFileSync(bgPath));
-    page.drawImage(bgImage, { x: 0, y: 0, width, height });
-  }
+  const { contentTopY } = await applyPdfTemplate({
+    pdfDoc,
+    page,
+    backgroundBytes: getPdfTemplateBytes(),
+  });
 
   page.drawText("Airbnb Tax & Performance Report", {
     x: 50,
-    y: height - 120,
+    y: contentTopY,
     size: 20,
     font: bold,
     color: rgb(0.01, 0.16, 0.29),
   });
   page.drawText(
     `Period: ${start.toLocaleDateString("en-KE", { month: "short", day: "numeric", year: "numeric" })} - ${end.toLocaleDateString("en-KE", { month: "short", day: "numeric", year: "numeric" })}`,
-    { x: 50, y: height - 145, size: 10, font }
+    { x: 50, y: contentTopY - 25, size: 10, font }
   );
-  page.drawText(`Owner: ${owner?.name || "Property Owner"}`, { x: 50, y: height - 160, size: 9, font });
+  page.drawText(`Owner: ${owner?.name || "Property Owner"}`, { x: 50, y: contentTopY - 40, size: 9, font });
 
-  let y = height - 210;
+  let y = contentTopY - 90;
   const drawMetric = (label: string, value: string) => {
     page.drawText(label, { x: 50, y, size: 10, font: bold });
     page.drawText(value, { x: 260, y, size: 10, font });

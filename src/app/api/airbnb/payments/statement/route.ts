@@ -4,8 +4,8 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { getMonthRange, parseDate } from "@/lib/airbnb-utils";
 import { ObjectId } from "mongodb";
-import * as fs from "fs";
-import * as path from "path";
+import { A4_PAGE_SIZE, PDF_TEMPLATE_SAFE_AREA, applyPdfTemplate, embedTemplateImage } from "@/lib/pdf-template";
+import { getPdfTemplateBytes } from "@/lib/pdf-template.server";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -69,37 +69,41 @@ export async function GET(request: NextRequest) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  let currentPage = pdfDoc.addPage([595, 842]);
-  let { width, height } = currentPage.getSize();
+  const templateBytes = getPdfTemplateBytes();
+  const templateImage = await embedTemplateImage(pdfDoc, templateBytes);
 
-  const bgPath = path.join(process.cwd(), "public", "bg.png");
-  if (fs.existsSync(bgPath)) {
-    const bgImage = await pdfDoc.embedPng(fs.readFileSync(bgPath));
-    currentPage.drawImage(bgImage, { x: 0, y: 0, width, height });
-  }
+  let currentPage = pdfDoc.addPage(A4_PAGE_SIZE);
+
+  const { safeArea, contentTopY } = await applyPdfTemplate({
+    pdfDoc,
+    page: currentPage,
+    backgroundBytes: templateBytes,
+    backgroundImage: templateImage,
+    safeArea: PDF_TEMPLATE_SAFE_AREA,
+  });
 
   const drawHeader = (currentPage: any) => {
     currentPage.drawText("Airbnb Owner Statement", {
       x: 50,
-      y: height - 120,
+      y: contentTopY,
       size: 20,
       font: bold,
       color: rgb(0.01, 0.16, 0.29),
     });
-    currentPage.drawText(`Period: ${periodLabel}`, { x: 50, y: height - 145, size: 10, font });
+    currentPage.drawText(`Period: ${periodLabel}`, { x: 50, y: contentTopY - 25, size: 10, font });
     currentPage.drawText(`Generated: ${new Date().toLocaleString("en-KE")}`, {
       x: 50,
-      y: height - 160,
+      y: contentTopY - 40,
       size: 9,
       font,
     });
-    currentPage.drawText(owner?.name || "Property Owner", { x: 400, y: height - 145, size: 10, font: bold });
-    currentPage.drawText(owner?.email || "support@soranapropertymanagers.com", { x: 400, y: height - 160, size: 9, font });
+    currentPage.drawText(owner?.name || "Property Owner", { x: 400, y: contentTopY - 25, size: 10, font: bold });
+    currentPage.drawText(owner?.email || "support@soranapropertymanagers.com", { x: 400, y: contentTopY - 40, size: 9, font });
   };
 
   drawHeader(currentPage);
 
-  let y = height - 210;
+  let y = contentTopY - 90;
   const tableX = 50;
   const col = { property: tableX, period: tableX + 200, amount: tableX + 320, status: tableX + 400, method: tableX + 480 };
 
@@ -116,15 +120,17 @@ export async function GET(request: NextRequest) {
   drawTableHeader(currentPage);
 
   for (const row of rows) {
-    if (y < 90) {
-      currentPage = pdfDoc.addPage([595, 842]);
-      ({ width, height } = currentPage.getSize());
-      if (fs.existsSync(bgPath)) {
-        const bgImage = await pdfDoc.embedPng(fs.readFileSync(bgPath));
-        currentPage.drawImage(bgImage, { x: 0, y: 0, width, height });
-      }
+    if (y < safeArea.bottom + 40) {
+      currentPage = pdfDoc.addPage(A4_PAGE_SIZE);
+      await applyPdfTemplate({
+        pdfDoc,
+        page: currentPage,
+        backgroundBytes: templateBytes,
+        backgroundImage: templateImage,
+        safeArea: PDF_TEMPLATE_SAFE_AREA,
+      });
       drawHeader(currentPage);
-      y = height - 210;
+      y = contentTopY - 90;
       drawTableHeader(currentPage);
     }
 
@@ -138,7 +144,7 @@ export async function GET(request: NextRequest) {
 
   currentPage.drawText(`Total: Ksh ${totalAmount.toLocaleString("en-KE")}`, {
     x: 50,
-    y: 60,
+    y: safeArea.bottom + 10,
     size: 11,
     font: bold,
     color: rgb(0.01, 0.16, 0.29),
