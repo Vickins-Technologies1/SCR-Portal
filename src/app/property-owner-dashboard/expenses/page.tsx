@@ -129,7 +129,7 @@ export default function ExpensesPage() {
     setRole(r || null);
     setOwnerId(oid || null);
 
-    let allowed = r === "propertyOwner" || perm.hasPermission("expenses:view");
+    const allowed = r === "propertyOwner" || perm.hasPermission("expenses:view");
 
     setHasAccess(allowed);
 

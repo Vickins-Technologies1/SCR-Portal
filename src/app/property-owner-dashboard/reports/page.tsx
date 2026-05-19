@@ -178,7 +178,7 @@ function ReportsAndInvoicesPageInner() {
       : new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1);
     const endDate = isValidDate(end) ? new Date(end) : new Date();
     const months: string[] = [];
-    let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
 
     while (current <= endDate) {
       months.push(current.toLocaleString("default", { year: "numeric", month: "short" }));

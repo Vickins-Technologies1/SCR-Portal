@@ -1,30 +1,40 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
+import { appendOwnerActivityFromRequest, resolveOwnerActivityActor } from "@/lib/owner-activity";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const ownerId = searchParams.get("ownerId");
+    const requestedOwnerId = searchParams.get("ownerId");
 
-    if (!ownerId) {
-      console.log("[PUT] Missing ownerId in query params");
+    const actor = await resolveOwnerActivityActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!requestedOwnerId) {
+      console.log("[GET] Missing ownerId in query params");
       return NextResponse.json(
         { success: false, message: "Owner ID is required" },
         { status: 400 }
       );
     }
 
+    if (!ObjectId.isValid(requestedOwnerId) || requestedOwnerId !== actor.ownerId) {
+      return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+    }
+
     const { db } = await connectToDatabase();
     
     const owner = await db.collection("propertyOwners").findOne(
-      { _id: new ObjectId(ownerId) },
+      { _id: new ObjectId(requestedOwnerId) },
       { projection: { name: 1, email: 1, phone: 1 } }
     );
 
     if (!owner) {
-      console.log("[GET] Owner not found for ownerId:", ownerId);
+      console.log("[GET] Owner not found for ownerId:", requestedOwnerId);
       return NextResponse.json(
         { success: false, message: "Owner not found" },
         { status: 404 }
@@ -32,7 +42,7 @@ export async function GET(request: Request) {
     }
 
     const paymentSettings = await db.collection("paymentSettings").findOne(
-      { ownerId: new ObjectId(ownerId) }
+      { ownerId: new ObjectId(requestedOwnerId) }
     );
 
     return NextResponse.json({
@@ -64,7 +74,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   let body = null;
 
   try {
@@ -73,12 +83,21 @@ export async function PUT(request: Request) {
 
     const { ownerId, name, email, phone } = body;
 
+    const actor = await resolveOwnerActivityActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     if (!ownerId || !name || !email || !phone) {
       console.log("[PUT] Validation failed:", { ownerId, name, email, phone });
       return NextResponse.json(
         { success: false, message: "All fields are required" },
         { status: 400 }
       );
+    }
+
+    if (!ObjectId.isValid(ownerId) || ownerId !== actor.ownerId) {
+      return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
     }
 
     const { db } = await connectToDatabase();
@@ -110,6 +129,14 @@ export async function PUT(request: Request) {
     }
 
     console.log("[PUT] Profile updated successfully for ownerId:", ownerId);
+
+    await appendOwnerActivityFromRequest(db, request, {
+      action: "settings.profile.update",
+      summary: "Profile updated.",
+      entity: { type: "propertyOwner", id: ownerId },
+      metadata: { fields: ["name", "email", "phone"] },
+    });
+
     return NextResponse.json({
       success: true,
       message: "Profile updated successfully",
@@ -128,7 +155,7 @@ export async function PUT(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     console.log("[POST] Received payment settings payload:", body);
@@ -152,6 +179,15 @@ export async function POST(request: Request) {
         { success: false, message: "Owner ID is required" },
         { status: 400 }
       );
+    }
+
+    const actor = await resolveOwnerActivityActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!ObjectId.isValid(ownerId) || ownerId !== actor.ownerId) {
+      return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
     }
 
     const { db } = await connectToDatabase();
@@ -178,6 +214,19 @@ export async function POST(request: Request) {
     );
 
     console.log("[POST] Payment settings updated for ownerId:", ownerId);
+
+    await appendOwnerActivityFromRequest(db, request, {
+      action: "settings.payments.update",
+      summary: "Payment settings updated.",
+      entity: { type: "paymentSettings", id: ownerId },
+      metadata: {
+        stripeEnabled: !!stripeEnabled,
+        paypalEnabled: !!paypalEnabled,
+        bankTransferEnabled: !!bankTransferEnabled,
+        umsCommsEnabled: !!umsCommsEnabled,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       message: "Payment settings updated successfully",
@@ -195,11 +244,16 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
     console.log("[PATCH] Received password change payload:", body);
     const { ownerId, password } = body;
+
+    const actor = await resolveOwnerActivityActor(request);
+    if (!actor) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
 
     if (!ownerId || !password) {
       console.log("[PATCH] Validation failed:", { ownerId, password });
@@ -207,6 +261,10 @@ export async function PATCH(request: Request) {
         { success: false, message: "Owner ID and password are required" },
         { status: 400 }
       );
+    }
+
+    if (!ObjectId.isValid(ownerId) || ownerId !== actor.ownerId) {
+      return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
     }
 
     const { db } = await connectToDatabase();
@@ -219,6 +277,13 @@ export async function PATCH(request: Request) {
     );
 
     console.log("[PATCH] Password updated successfully for ownerId:", ownerId);
+
+    await appendOwnerActivityFromRequest(db, request, {
+      action: "settings.password.update",
+      summary: "Password changed.",
+      entity: { type: "propertyOwner", id: ownerId },
+    });
+
     return NextResponse.json({
       success: true,
       message: "Password updated successfully",

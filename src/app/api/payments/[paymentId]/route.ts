@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { appendOwnerActivity, resolveOwnerActivityActor } from "@/lib/owner-activity";
 
 type Role = "propertyOwner" | "teamMember" | "admin";
 
@@ -214,6 +215,33 @@ export async function DELETE(
 
   if (payment.tenantId) {
     await syncTenantTotals(db, payment.tenantId);
+  }
+
+  let ownerIdForActivity: string | null = null;
+  if (role === "admin") {
+    const property = ObjectId.isValid(payment.propertyId)
+      ? await db.collection<PropertyDoc>("properties").findOne({ _id: new ObjectId(payment.propertyId) })
+      : null;
+    ownerIdForActivity = property?.ownerId?.toString?.() ?? null;
+  } else {
+    const actor = await resolveOwnerActivityActor(request);
+    ownerIdForActivity = actor?.ownerId ?? null;
+  }
+
+  if (ownerIdForActivity) {
+    await appendOwnerActivity(db, {
+      ownerId: ownerIdForActivity,
+      actor: {
+        userId,
+        role,
+        ownerId: ownerIdForActivity,
+        impersonator: null,
+      },
+      action: "payments.manual.delete",
+      summary: `Deleted manual payment of ${payment.amount}.`,
+      entity: { type: "payment", id: paymentId },
+      metadata: { tenantId: payment.tenantId ?? null, propertyId: payment.propertyId, type: payment.type ?? null },
+    });
   }
 
   return NextResponse.json({ success: true, message: "Manual payment deleted" }, { status: 200 });

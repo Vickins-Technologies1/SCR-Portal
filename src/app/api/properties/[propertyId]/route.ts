@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { buildInvalidCsrfResponse, validateCsrfToken } from '@/lib/csrf';
 import { ObjectId } from 'mongodb';
+import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 
 // ===============================================
 // INTERFACES
@@ -414,6 +415,14 @@ export async function PUT(
       );
     }
 
+    const label = (typeof update.name === 'string' && update.name.trim().length ? update.name.trim() : existing.name) || 'Property';
+    await appendOwnerActivityFromRequest(db, request, {
+      action: 'properties.update',
+      summary: `Updated property: ${label}.`,
+      entity: { type: 'property', id: propertyId, label },
+      metadata: { fields: Object.keys(payload ?? {}) },
+    });
+
     return NextResponse.json({
       success: true,
       message: 'Property updated successfully',
@@ -499,6 +508,13 @@ export async function DELETE(
       propertyId,
       tenantsDeleted: tenDel.deletedCount,
       invoicesDeleted: invDel.deletedCount,
+    });
+
+    await appendOwnerActivityFromRequest(db, request, {
+      action: 'properties.delete',
+      summary: `Deleted property: ${property.name ?? propertyId}.`,
+      entity: { type: 'property', id: propertyId, label: property.name ?? null },
+      metadata: { tenantsDeleted: tenDel.deletedCount, invoicesDeleted: invDel.deletedCount },
     });
 
     return NextResponse.json({

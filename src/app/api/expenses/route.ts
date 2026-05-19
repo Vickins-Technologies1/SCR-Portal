@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    let effectiveOwnerId = ownerId;
+    const effectiveOwnerId = ownerId;
 
     if (sessionRole === "teamMember") {
       const teamMember = await db.collection("teamMembers").findOne({
@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
     const expenseDate = date ? new Date(date) : now;
 
     const expenseToInsert: ExpenseInsert = {
-      ownerId: new ObjectId(ownerId),
+      ownerId: new ObjectId(effectiveOwnerId),
       propertyId: propertyId && ObjectId.isValid(propertyId)
         ? new ObjectId(propertyId)
         : null,

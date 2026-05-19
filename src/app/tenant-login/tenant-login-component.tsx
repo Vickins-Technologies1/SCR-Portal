@@ -1,14 +1,26 @@
 // app/tenant-login/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle, FaTimes } from "react-icons/fa";
-import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import {
+  getBiometricCredentials,
+  getPinCredentials,
+  hasBiometricCredentials,
+  hasPinSetupForKind,
+  isBiometricsAvailable,
+  isNativeCapacitor,
+  saveBiometricCredentials,
+  setPinCredentials,
+  setUserOptedOutOfQuickLoginPrompt,
+  userOptedOutOfQuickLoginPrompt,
+} from "@/lib/quick-login";
+import { signInTenant } from "@/lib/signin-client";
 
 type TenantLoginVariant = "rental" | "airbnb";
 
@@ -31,6 +43,14 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricReady, setBiometricReady] = useState(false);
+  const [pinReady, setPinReady] = useState(false);
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinValue, setPinValue] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinMode, setPinMode] = useState<"login" | "setup" | null>(null);
 
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
@@ -104,6 +124,141 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const native = await isNativeCapacitor();
+      if (!native || cancelled) return;
+      const [bioAvail, bioSaved, pinSaved] = await Promise.all([
+        isBiometricsAvailable(),
+        hasBiometricCredentials("tenant"),
+        hasPinSetupForKind("tenant"),
+      ]);
+      if (cancelled) return;
+      setBiometricAvailable(Boolean(bioAvail));
+      setBiometricReady(Boolean(bioAvail && bioSaved));
+      setPinReady(Boolean(pinSaved));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openPinLogin = () => {
+    setPinError(null);
+    setPinValue("");
+    setPinMode("login");
+    setShowPinModal(true);
+  };
+
+  const openPinSetup = () => {
+    setPinError(null);
+    setPinValue("");
+    setPinMode("setup");
+    setShowPinModal(true);
+  };
+
+  const closePinModal = () => {
+    setShowPinModal(false);
+    setPinMode(null);
+    setPinValue("");
+    setPinError(null);
+  };
+
+  const maybeOfferQuickLoginSetup = async (creds: { email: string; password: string }) => {
+    const native = await isNativeCapacitor();
+    if (!native) return;
+
+    const optedOut = await userOptedOutOfQuickLoginPrompt();
+    if (optedOut) return;
+
+    if (!creds.email || !creds.password) return;
+
+    const bioAvail = await isBiometricsAvailable();
+    if (bioAvail) {
+      const enableBio = window.confirm("Enable biometric login for faster sign in on this device?");
+      if (enableBio) {
+        try {
+          await saveBiometricCredentials({ email: creds.email, password: creds.password, kind: "tenant" });
+          setBiometricReady(true);
+        } catch (err: any) {
+          console.warn("Biometric setup failed:", err?.message || err);
+        }
+      }
+    }
+
+    const enablePin = window.confirm("Set an app PIN for quick login on this device?");
+    if (enablePin) {
+      const pin = window.prompt("Enter a 4–8 digit app PIN (numbers only):") || "";
+      try {
+        await setPinCredentials({ pin, credentials: { email: creds.email, password: creds.password, kind: "tenant" } });
+        setPinReady(true);
+      } catch (err: any) {
+        console.warn("PIN setup failed:", err?.message || err);
+      }
+    }
+
+    const dontAskAgain = window.confirm("Don't ask again about quick login on this device?");
+    if (dontAskAgain) {
+      await setUserOptedOutOfQuickLoginPrompt(true);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    setError(null);
+    setQuickLoading(true);
+    try {
+      const creds = await getBiometricCredentials("tenant");
+      const result = await signInTenant({
+        email: creds.email,
+        password: creds.password,
+        portal: isAirbnbGuestPortal ? "airbnb" : "rental",
+      });
+      if (result.requiresOtp && result.otpId) {
+        throw new Error("OTP is required for this account. Please sign in with password once.");
+      }
+      if (!result.success) throw new Error(result.message || "Login failed");
+      router.push(result.redirect || defaultRedirectPath);
+    } catch (err: any) {
+      setError(err?.message || "Biometric login failed.");
+    } finally {
+      setQuickLoading(false);
+    }
+  };
+
+  const handlePinContinue = async () => {
+    setPinError(null);
+    setError(null);
+    setQuickLoading(true);
+    try {
+      if (pinMode === "login") {
+        const creds = await getPinCredentials({ pin: pinValue, kind: "tenant" });
+        const result = await signInTenant({
+          email: creds.email,
+          password: creds.password,
+          portal: isAirbnbGuestPortal ? "airbnb" : "rental",
+        });
+        if (!result.success) throw new Error(result.message || "Login failed");
+        closePinModal();
+        router.push(result.redirect || defaultRedirectPath);
+        return;
+      }
+
+      if (pinMode === "setup") {
+        const trimmedEmail = email.trim();
+        if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+        await setPinCredentials({ pin: pinValue, credentials: { email: trimmedEmail, password, kind: "tenant" } });
+        setPinReady(true);
+        closePinModal();
+        return;
+      }
+    } catch (err: any) {
+      setPinError(err?.message || "PIN failed.");
+    } finally {
+      setQuickLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -120,42 +275,22 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
 
     setIsSubmitting(true);
 
+    const portal: "airbnb" | "rental" = isAirbnbGuestPortal ? "airbnb" : "rental";
     const payload = {
       email: email.trim(),
       password,
       role: "tenant",
-      portal: isAirbnbGuestPortal ? "airbnb" : "rental",
+      portal,
     };
 
     try {
-      const response = await fetch("/api/signin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
+      const result = await signInTenant({ email: payload.email, password: payload.password, portal: payload.portal });
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message ||
-            "Login failed. Please check your credentials."
-        );
+      if (!result.success) {
+        throw new Error(result.message || "Login failed. Please check your credentials.");
       }
 
-      Cookies.set("userId", result.userId, {
-        expires: 7,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-      });
-
-      Cookies.set("role", result.role, {
-        expires: 7,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-      });
-
+      await maybeOfferQuickLoginSetup({ email: payload.email, password: payload.password });
       router.push(result.redirect || defaultRedirectPath);
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
@@ -285,12 +420,12 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
       </div>
 
       {/* RIGHT: Form – compact & consistent with owner */}
-      <div className="flex-1 flex items-center justify-center px-4 py-3 sm:py-6 md:py-8 bg-background/80">
+      <div className="flex-1 flex items-start lg:items-center justify-center px-4 py-3 sm:py-6 md:py-8 bg-background/80">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: "easeOut" }}
-          className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem]"
+          className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem] max-h-[90svh] flex flex-col"
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
@@ -304,7 +439,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
             />
           </div>
 
-          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-3 sm:pt-4 pb-4 sm:pb-5 space-y-2.5 sm:space-y-3">
+          <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-3 sm:pt-4 pb-4 sm:pb-5 space-y-2.5 sm:space-y-3 flex-1 min-h-0 overflow-y-auto">
 
             <div className="text-center space-y-1">
               <h1 className="text-lg xs:text-xl sm:text-2xl md:text-2.5xl font-extrabold text-gradient-primary">
@@ -321,7 +456,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
                   className="flex items-center justify-center gap-2 w-full bg-[linear-gradient(110deg,rgba(66,199,117,0.18),rgba(30,58,138,0.08))] hover:bg-[linear-gradient(110deg,rgba(66,199,117,0.24),rgba(30,58,138,0.12))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 xs:py-3 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-xs xs:text-sm sm:text-base"
                 >
                   <FaUserTie className="text-primary text-lg" />
-                  <span>I'm a Property Owner</span>
+                    <span>I&apos;m a Property Owner</span>
                   <FaArrowRight className="text-primary opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </Link>
 
@@ -386,6 +521,34 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
             ) : null}
 
             <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
+                {(biometricReady || pinReady) && (
+                  <div className="space-y-2">
+                    {biometricReady && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        type="button"
+                        disabled={quickLoading || isSubmitting}
+                        onClick={handleBiometricLogin}
+                        className="w-full bg-[linear-gradient(110deg,#1e3a8a,#2c5bd6)] hover:bg-[linear-gradient(110deg,#2c5bd6,#1e3a8a)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                      >
+                        {quickLoading ? "Opening…" : "Sign in with Biometrics"}
+                      </motion.button>
+                    )}
+                    {pinReady && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        type="button"
+                        disabled={quickLoading || isSubmitting}
+                        onClick={openPinLogin}
+                        className="w-full border border-border bg-background/70 hover:bg-background text-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                      >
+                        Use PIN
+                      </motion.button>
+                    )}
+                  </div>
+                )}
                 {/* Email */}
                 <input
                   type="email"
@@ -440,6 +603,36 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
                 >
                   {isSubmitting ? "Authenticating..." : "Sign In"}
                 </motion.button>
+
+                {biometricAvailable && !biometricReady && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setError(null);
+                      try {
+                        const trimmedEmail = email.trim();
+                        if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+                        await saveBiometricCredentials({ email: trimmedEmail, password, kind: "tenant" });
+                        setBiometricReady(true);
+                      } catch (err: any) {
+                        setError(err?.message || "Failed to enable biometrics.");
+                      }
+                    }}
+                    className="w-full text-[11px] sm:text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Enable biometric login on this device
+                  </button>
+                )}
+
+                {pinReady === false && (
+                  <button
+                    type="button"
+                    onClick={openPinSetup}
+                    className="w-full text-[11px] sm:text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    Set up PIN login on this device
+                  </button>
+                )}
               </form>
           </div>
         </motion.div>
@@ -447,6 +640,74 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     </div>
 
     <AnimatePresence>
+      {showPinModal && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop px-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+            className="modal-panel w-full max-w-[92vw] sm:max-w-md overflow-hidden"
+          >
+            <div className="modal-header flex items-center justify-between px-4 sm:px-5 py-3">
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-foreground">
+                  {pinMode === "setup" ? "Set App PIN" : "Enter PIN"}
+                </h2>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
+                  {pinMode === "setup"
+                    ? "Use this PIN to quickly sign in on this device."
+                    : "Use your app PIN to sign in."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePinModal}
+                className="modal-close rounded-full p-1"
+                aria-label="Close PIN modal"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handlePinContinue();
+              }}
+              className="modal-body modal-stagger space-y-3 sm:space-y-4"
+            >
+              {pinError && (
+                <div className="p-2.5 sm:p-3 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl">
+                  {pinError}
+                </div>
+              )}
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="4+ digit PIN"
+                value={pinValue}
+                onChange={(e) => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                autoComplete="off"
+                className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.25em] text-center"
+              />
+              <button
+                type="submit"
+                disabled={quickLoading || pinValue.length < 4}
+                className="w-full bg-[linear-gradient(110deg,#1e3a8a,#2c5bd6)] hover:bg-[linear-gradient(110deg,#2c5bd6,#1e3a8a)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+              >
+                {quickLoading ? "Working…" : pinMode === "setup" ? "Save PIN" : "Continue"}
+              </button>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
       {showResetModal && (
         <motion.div
           className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop px-4"

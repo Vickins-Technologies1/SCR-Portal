@@ -9,6 +9,7 @@ import SupportWidget from "./components/SupportWidget";
 import Cookies from "js-cookie";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import InvoiceRestrictionGate from "./components/InvoiceRestrictionGate";
+import BottomTabs from "@/components/mobile/BottomTabs";
 
 export default function PropertyOwnerDashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -181,13 +182,14 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
     <PublicThemeWrapper>
       <SidebarProvider>
         <InvoiceRestrictionGate />
-        <div className="owner-portal relative min-h-screen bg-background text-foreground text-[12px] sm:text-[13px] lg:text-sm overflow-x-hidden">
+        <div className="owner-portal relative min-h-screen bg-background pb-28 text-foreground text-[12px] sm:text-[13px] lg:text-sm overflow-x-hidden md:pb-0">
           <div className="pointer-events-none absolute -top-24 right-[-12%] h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-32 left-[-10%] h-80 w-80 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
           <div className="relative z-10" data-tour="owner-workspace">
             {children}
           </div>
           <SupportWidget />
+          <BottomTabs variant="owner" />
           <TourGuide
             steps={steps}
             storageKey="owner-tour-v1"

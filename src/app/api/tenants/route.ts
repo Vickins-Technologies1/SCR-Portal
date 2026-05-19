@@ -12,6 +12,7 @@ import { Property } from "../../../types/property";
 import { getOwnerDueStatus } from "../../../lib/billing";
 import { buildInvalidCsrfResponse } from "../../../lib/csrf";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
+import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -454,6 +455,20 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await db.collection<Tenant>("tenants").insertOne(tenantData);
+
+    await appendOwnerActivityFromRequest(db, request, {
+      action: "tenants.create",
+      summary: `Added tenant: ${tenantData.name}.`,
+      entity: { type: "tenant", id: result.insertedId.toString(), label: tenantData.name },
+      metadata: {
+        propertyId: body.propertyId,
+        units: leasedUnits.map((unit) => ({
+          houseNumber: unit.houseNumber,
+          unitType: unit.unitType,
+          unitIdentifier: unit.unitIdentifier,
+        })),
+      },
+    });
 
     // ────────────────────────────────────────────────
     //          Welcome notifications with password

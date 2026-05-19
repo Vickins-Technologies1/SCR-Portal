@@ -1,16 +1,24 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+export default [
+  ...nextCoreWebVitals,
+  ...nextTypescript,
+  {
+    ignores: [
+      "android/**",
+      "ios/**",
+      ".android-*/**",
+      "www/**",
+    ],
+  },
+  {
+    rules: {
+      // Production readiness: keep lint focused on correctness, not banning `any` across the codebase.
+      "@typescript-eslint/no-explicit-any": "off",
 
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+      // Too noisy for this codebase; not a correctness blocker.
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ];
-
-export default eslintConfig;

@@ -9,6 +9,7 @@ import { Tenant } from '../../../types/tenant';
 import { buildInvalidCsrfResponse } from '../../../lib/csrf';
 import { fetchTenantsActiveOnDay } from '@/lib/tenant-occupancy';
 import { resolveAccountTier } from '@/lib/tier';
+import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
@@ -160,7 +161,7 @@ export async function GET(request: NextRequest) {
     //   Authorization: propertyOwner or authorized teamMember
     // ────────────────────────────────────────────────────────────────
     let authorized = false;
-    let effectiveOwnerId = requestedUserId;
+    const effectiveOwnerId = requestedUserId;
     let teamMemberAssignedPropertyIds: string[] | null = null;
 
     if (role === 'propertyOwner') {
@@ -475,6 +476,13 @@ export async function POST(request: NextRequest) {
     };
 
     const result = await db.collection<Property>('properties').insertOne(newProperty);
+
+    await appendOwnerActivityFromRequest(db, request, {
+      action: 'properties.create',
+      summary: `Created property: ${name}.`,
+      entity: { type: 'property', id: result.insertedId.toString(), label: name },
+      metadata: { status, billingType: billingPlan, rentPaymentDate },
+    });
 
     return NextResponse.json(
       {

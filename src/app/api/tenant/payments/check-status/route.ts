@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
 
     // Resolve status from our own payments collection (updated by callbacks)
-    let payment = await db.collection("payments").findOne({
+    const payment = await db.collection("payments").findOne({
       $or: [
         { transactionId: transaction_request_id },
         { checkoutRequestId: transaction_request_id },

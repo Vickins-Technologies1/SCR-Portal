@@ -20,11 +20,10 @@ export default function PremiumGate(props: {
     ctaLabel = "Upgrade",
   } = props;
 
-  if (!locked) return <>{children}</>;
-
   const [isDue, setIsDue] = useState<boolean>(false);
 
   useEffect(() => {
+    if (!locked) return;
     let cancelled = false;
     const checkDues = async () => {
       try {
@@ -41,9 +40,12 @@ export default function PremiumGate(props: {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locked]);
 
   const resolvedCta = useMemo(() => {
+    if (!locked) {
+      return { href: ctaHref, label: ctaLabel, title, message };
+    }
     if (!isDue) {
       return { href: ctaHref, label: ctaLabel, title, message };
     }
@@ -57,7 +59,9 @@ export default function PremiumGate(props: {
       title: "Payment required",
       message: "Your invoice is overdue. Pay to regain full access.",
     };
-  }, [ctaHref, ctaLabel, isDue, message, title]);
+  }, [ctaHref, ctaLabel, isDue, locked, message, title]);
+
+  if (!locked) return <>{children}</>;
 
   return (
     <div className="relative">

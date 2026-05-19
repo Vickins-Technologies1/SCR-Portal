@@ -55,22 +55,22 @@ export default function ImpersonateModal({
           <ul className="space-y-3 text-primary">
             <li className="flex items-start gap-3">
               <span className="text-primary mt-1">✓</span>
-              <span>Your current session will switch to the tenant's dashboard</span>
+              <span>Your current session will switch to the tenant&apos;s dashboard</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="text-primary mt-1">✓</span>
-              <span>You'll see their exact view, payments, dues, and requests</span>
+              <span>You&apos;ll see their exact view, payments, dues, and requests</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="text-primary mt-1">✓</span>
               <span>
-                A <strong>clear red banner</strong> will appear at the top showing you're in impersonation mode
+                A <strong>clear red banner</strong> will appear at the top showing you&apos;re in impersonation mode
               </span>
             </li>
             <li className="flex items-start gap-3">
               <span className="text-primary mt-1">✓</span>
               <span>
-                Click <strong>"Exit Impersonation"</strong> at any time to instantly return here
+                Click <strong>Exit Impersonation</strong> at any time to instantly return here
               </span>
             </li>
           </ul>

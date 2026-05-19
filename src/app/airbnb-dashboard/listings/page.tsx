@@ -38,6 +38,7 @@ export default function AirbnbListingsPage() {
     Array<{ id: string; url: string; file?: File }>
   >([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageIdCounterRef = useRef(0);
   const [form, setForm] = useState({
     id: "",
     name: "",
@@ -81,7 +82,8 @@ export default function AirbnbListingsPage() {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
       return crypto.randomUUID();
     }
-    return `img-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    imageIdCounterRef.current += 1;
+    return `img-${imageIdCounterRef.current}`;
   };
 
   const revokeImageUrl = (url: string) => {

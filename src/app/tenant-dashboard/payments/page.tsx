@@ -63,25 +63,7 @@ export default function PaymentsPage() {
     setIsClient(true);
   }, []);
 
-  useEffect(() => {
-    if (!isClient) return;
-
-    const isImpersonating = Cookies.get("isImpersonating") === "true";
-    const impersonatingTenantId = Cookies.get("impersonatingTenantId");
-    const id = isImpersonating && impersonatingTenantId ? impersonatingTenantId : Cookies.get("userId");
-    if (!id) {
-      setMessages((prev) => [
-        ...prev,
-        { type: "error", text: "Please log in to view payments.", timestamp: new Date().toISOString() },
-      ]);
-      setLoading(false);
-      return;
-    }
-    setTenantId(id);
-    fetchCsrfToken();
-  }, [isClient]);
-
-  const fetchCsrfToken = async () => {
+  const fetchCsrfToken = useCallback(async () => {
     try {
       const csrfRes = await fetch("/api/csrf-token", {
         method: "GET",
@@ -105,7 +87,25 @@ export default function PaymentsPage() {
       ]);
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    const isImpersonating = Cookies.get("isImpersonating") === "true";
+    const impersonatingTenantId = Cookies.get("impersonatingTenantId");
+    const id = isImpersonating && impersonatingTenantId ? impersonatingTenantId : Cookies.get("userId");
+    if (!id) {
+      setMessages((prev) => [
+        ...prev,
+        { type: "error", text: "Please log in to view payments.", timestamp: new Date().toISOString() },
+      ]);
+      setLoading(false);
+      return;
+    }
+    setTenantId(id);
+    fetchCsrfToken();
+  }, [isClient, fetchCsrfToken]);
 
   const fetchData = useCallback(async () => {
     if (!tenantId || !csrfToken) {
@@ -587,14 +587,14 @@ export default function PaymentsPage() {
                     >
                       Cancel
                     </button>
-                    <PayWithMpesaButton
-                      amount={amount}
-                      phone={formatPhoneNumber(phoneNumber)}
-                      invoiceId={invoiceId || `${Date.now()}`}
-                      landlordId={landlordId}
-                      tenantId={tenantId || ""}
-                      propertyId={tenant?.propertyId || ""}
-                      csrfToken={csrfToken || ""}
+                      <PayWithMpesaButton
+                        amount={amount}
+                        phone={formatPhoneNumber(phoneNumber)}
+                        invoiceId={invoiceId || (tenantId ? `tenant-${tenantId}` : "tenant")}
+                        landlordId={landlordId}
+                        tenantId={tenantId || ""}
+                        propertyId={tenant?.propertyId || ""}
+                        csrfToken={csrfToken || ""}
                       type={paymentType}
                       shortcode={mpesaShortcode}
                       disabled={isProcessing || amount < 1 || !validatePhoneNumber(phoneNumber) || !landlordId}

@@ -11,6 +11,7 @@ import { sendWelcomeSms } from "../../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
 import { buildInvalidCsrfResponse } from "../../../../lib/csrf";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
+import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
 
 const logger = {
   info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
@@ -321,6 +322,13 @@ export async function PUT(
 
     logger.info("Tenant updated", { tenantId, updatedFields: Object.keys(updateData) });
 
+    await appendOwnerActivityFromRequest(db, request, {
+      action: "tenants.update",
+      summary: `Updated tenant: ${result.name ?? tenantId}.`,
+      entity: { type: "tenant", id: tenantId, label: (result as any)?.name ?? null },
+      metadata: { fields: Object.keys(updateData) },
+    });
+
     return NextResponse.json({
       success: true,
       message: "Tenant updated successfully",
@@ -514,6 +522,13 @@ export async function DELETE(
         requestId: insertResult.insertedId.toString(),
       });
 
+      await appendOwnerActivityFromRequest(db, request, {
+        action: "tenants.delete.request",
+        summary: `Requested tenant deletion: ${tenant.name ?? tenantId}.`,
+        entity: { type: "tenant", id: tenantId, label: tenant.name ?? null },
+        metadata: { requestId: insertResult.insertedId.toString() },
+      });
+
       return NextResponse.json({
         success: true,
         message: "Delete request sent to owner for approval.",
@@ -531,6 +546,13 @@ export async function DELETE(
       tenantId,
       deletedPayments: deletedCount,
       paymentsPreserved: true,
+    });
+
+    await appendOwnerActivityFromRequest(db, request, {
+      action: "tenants.delete",
+      summary: `Deleted tenant: ${tenant.name ?? tenantId}.`,
+      entity: { type: "tenant", id: tenantId, label: tenant.name ?? null },
+      metadata: { paymentsPreserved: true },
     });
 
     return NextResponse.json({

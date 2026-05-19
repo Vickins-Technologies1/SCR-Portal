@@ -65,6 +65,21 @@ export default function ListingFormModal({
     );
   }, [originalProperties, existingListings]);
 
+  const resetForm = useCallback(() => {
+    setSelectedPropertyId("");
+    setIsAdvertised(false);
+    setDescription("");
+    setContactPhone("");
+    setFacilities([]);
+    setImages([]);
+    setImagePreviews([]);
+    setImageUploadError(null);
+    setFormErrors({});
+    setSubmitError(null);
+    setIsSubmitting(false);
+    setIsUploading(false);
+  }, []);
+
   // Reset / populate form when modal opens or mode changes
   useEffect(() => {
     if (!isOpen) {
@@ -87,22 +102,7 @@ export default function ListingFormModal({
     } else {
       resetForm();
     }
-  }, [isOpen, mode, editingPropertyId, existingListings]);
-
-  const resetForm = useCallback(() => {
-    setSelectedPropertyId("");
-    setIsAdvertised(false);
-    setDescription("");
-    setContactPhone("");
-    setFacilities([]);
-    setImages([]);
-    setImagePreviews([]);
-    setImageUploadError(null);
-    setFormErrors({});
-    setSubmitError(null);
-    setIsSubmitting(false);
-    setIsUploading(false);
-  }, []);
+  }, [isOpen, mode, editingPropertyId, existingListings, resetForm]);
 
   // Real-time form validation
   useEffect(() => {

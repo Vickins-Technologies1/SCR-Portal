@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Cookies from "js-cookie";
-import { Save, User, Lock, Settings } from "lucide-react";
+import { Save, User, Lock, Settings, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast"; // Import react-hot-toast
 import Sidebar from "../components/Sidebar";
@@ -157,6 +158,33 @@ export default function OwnerSettingsPage() {
                 <p className="text-xs sm:text-sm text-muted-foreground">Manage your profile and security preferences.</p>
               </div>
             </div>
+          </motion.section>
+
+          <motion.section
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.05 }}
+          >
+            <Link
+              href="/property-owner-dashboard/settings/activities"
+              className="surface-card rounded-2xl p-5 sm:p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start gap-3">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Clock size={18} className="text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-base sm:text-lg font-semibold text-foreground">Activity Log</h2>
+                  <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                    Track what happened, when it happened, and who did it.
+                  </p>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Logs are append-only for security.
+                  </p>
+                </div>
+              </div>
+            </Link>
           </motion.section>
 
           <motion.div

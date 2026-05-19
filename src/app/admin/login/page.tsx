@@ -3,10 +3,23 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
 import Cookies from "js-cookie";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import {
+  getBiometricCredentials,
+  getPinCredentials,
+  hasBiometricCredentials,
+  hasPinSetupForKind,
+  isBiometricsAvailable,
+  isNativeCapacitor,
+  saveBiometricCredentials,
+  setPinCredentials,
+  setUserOptedOutOfQuickLoginPrompt,
+  userOptedOutOfQuickLoginPrompt,
+} from "@/lib/quick-login";
+import { signInAdmin } from "@/lib/signin-client";
 
 interface LoginResponse {
   success: boolean;
@@ -30,6 +43,15 @@ export default function AdminLogin() {
   const [otpId, setOtpId] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [otpMessage, setOtpMessage] = useState<string | null>(null);
+  const otpInputRef = useRef<HTMLInputElement | null>(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricReady, setBiometricReady] = useState(false);
+  const [pinReady, setPinReady] = useState(false);
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinValue, setPinValue] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinMode, setPinMode] = useState<"login" | "setup" | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
   const autoVerifyRef = useRef<string>("");
@@ -42,6 +64,143 @@ export default function AdminLogin() {
       router.replace("/admin/dashboard");
     }
   }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const native = await isNativeCapacitor();
+      if (!native || cancelled) return;
+      const [bioAvail, bioSaved, pinSaved] = await Promise.all([
+        isBiometricsAvailable(),
+        hasBiometricCredentials("admin"),
+        hasPinSetupForKind("admin"),
+      ]);
+      if (cancelled) return;
+      setBiometricAvailable(Boolean(bioAvail));
+      setBiometricReady(Boolean(bioAvail && bioSaved));
+      setPinReady(Boolean(pinSaved));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openPinLogin = () => {
+    setPinError(null);
+    setPinValue("");
+    setPinMode("login");
+    setShowPinModal(true);
+  };
+
+  const openPinSetup = () => {
+    setPinError(null);
+    setPinValue("");
+    setPinMode("setup");
+    setShowPinModal(true);
+  };
+
+  const closePinModal = () => {
+    setShowPinModal(false);
+    setPinMode(null);
+    setPinValue("");
+    setPinError(null);
+  };
+
+  const maybeOfferQuickLoginSetup = async (creds: { email: string; password: string }) => {
+    const native = await isNativeCapacitor();
+    if (!native) return;
+
+    const optedOut = await userOptedOutOfQuickLoginPrompt();
+    if (optedOut) return;
+
+    if (!creds.email || !creds.password) return;
+
+    const bioAvail = await isBiometricsAvailable();
+    if (bioAvail) {
+      const enableBio = window.confirm("Enable biometric login for faster sign in on this device?");
+      if (enableBio) {
+        try {
+          await saveBiometricCredentials({ email: creds.email, password: creds.password, kind: "admin" });
+          setBiometricReady(true);
+        } catch (err: any) {
+          console.warn("Biometric setup failed:", err?.message || err);
+        }
+      }
+    }
+
+    const enablePin = window.confirm("Set an app PIN for quick login on this device?");
+    if (enablePin) {
+      const pin = window.prompt("Enter a 4–8 digit app PIN (numbers only):") || "";
+      try {
+        await setPinCredentials({ pin, credentials: { email: creds.email, password: creds.password, kind: "admin" } });
+        setPinReady(true);
+      } catch (err: any) {
+        console.warn("PIN setup failed:", err?.message || err);
+      }
+    }
+
+    const dontAskAgain = window.confirm("Don't ask again about quick login on this device?");
+    if (dontAskAgain) {
+      await setUserOptedOutOfQuickLoginPrompt(true);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    setError(null);
+    setQuickLoading(true);
+    try {
+      const creds = await getBiometricCredentials("admin");
+      const result = await signInAdmin({ email: creds.email, password: creds.password });
+      if (result.requiresOtp && result.otpId) {
+        setOtpRequired(true);
+        setOtpId(result.otpId);
+        setOtpMessage(result.message || "Enter the OTP sent to your email and phone.");
+        return;
+      }
+      if (!result.success) throw new Error(result.message || "Login failed");
+      router.push(result.redirect || "/admin/dashboard");
+    } catch (err: any) {
+      setError(err?.message || "Biometric login failed.");
+    } finally {
+      setQuickLoading(false);
+    }
+  };
+
+  const handlePinContinue = async () => {
+    setPinError(null);
+    setError(null);
+    setQuickLoading(true);
+    try {
+      if (pinMode === "login") {
+        const creds = await getPinCredentials({ pin: pinValue, kind: "admin" });
+        const result = await signInAdmin({ email: creds.email, password: creds.password });
+        if (result.requiresOtp && result.otpId) {
+          closePinModal();
+          setOtpRequired(true);
+          setOtpId(result.otpId);
+          setOtpMessage(result.message || "Enter the OTP sent to your email and phone.");
+          return;
+        }
+        if (!result.success) throw new Error(result.message || "Login failed");
+        closePinModal();
+        router.push(result.redirect || "/admin/dashboard");
+        return;
+      }
+
+      if (pinMode === "setup") {
+        const trimmedEmail = email.trim();
+        if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+        await setPinCredentials({ pin: pinValue, credentials: { email: trimmedEmail, password, kind: "admin" } });
+        setPinReady(true);
+        closePinModal();
+        return;
+      }
+    } catch (err: any) {
+      setPinError(err?.message || "PIN failed.");
+    } finally {
+      setQuickLoading(false);
+    }
+  };
 
   const validateForm = () => {
     const errors: typeof formErrors = {};
@@ -87,6 +246,7 @@ export default function AdminLogin() {
           secure: true,
           sameSite: "Strict",
         });
+        await maybeOfferQuickLoginSetup({ email: email.trim(), password });
         router.push(data.redirect || "/admin/dashboard");
       } else {
         setError(data.message || "Invalid credentials");
@@ -131,6 +291,7 @@ export default function AdminLogin() {
         sameSite: "Strict",
       });
 
+      await maybeOfferQuickLoginSetup({ email: email.trim(), password });
       router.push(data.redirect || "/admin/dashboard");
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
@@ -153,6 +314,15 @@ export default function AdminLogin() {
     autoVerifyRef.current = otpCode;
     verifyOtp();
   }, [otpCode, otpRequired, isLoading]);
+
+  useEffect(() => {
+    if (!otpRequired) return;
+    const timer = window.setTimeout(() => {
+      otpInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      otpInputRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [otpRequired]);
 
   useEffect(() => {
     if (resendCountdown <= 0) return;
@@ -196,7 +366,7 @@ export default function AdminLogin() {
 
   return (
     <PublicThemeWrapper>
-      <div className="min-h-[100svh] lg:h-[100svh] flex flex-col lg:flex-row bg-background text-foreground overflow-hidden">
+      <div className="min-h-[100svh] lg:h-[100svh] flex flex-col lg:flex-row bg-background text-foreground lg:overflow-hidden">
         {/* LEFT: Branding – hidden on mobile */}
         <div className="hidden lg:flex lg:w-1/2 bg-background text-foreground items-center justify-center p-6 xl:p-12 relative overflow-hidden shadow-[-20px_0_30px_-15px_rgba(30,58,138,0.08)] lg:shadow-[-30px_0_40px_-20px_rgba(30,58,138,0.10)]">
           {/* Floating bubbles */}
@@ -306,12 +476,12 @@ export default function AdminLogin() {
         </div>
 
         {/* RIGHT: Form */}
-        <div className="flex-1 flex items-center justify-center px-4 py-2 sm:py-4 md:py-6 bg-background/80">
+        <div className="flex-1 flex items-start lg:items-center justify-center px-4 py-2 sm:py-4 md:py-6 bg-background/80">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: "easeOut" }}
-            className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem] max-h-[90svh]"
+            className="w-full max-w-md sm:max-w-lg bg-card/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border overflow-hidden text-[0.9rem] sm:text-[0.95rem] max-h-[90svh] flex flex-col"
           >
             {/* Mobile logo */}
             <div className="lg:hidden flex justify-center pt-4 pb-3">
@@ -325,7 +495,7 @@ export default function AdminLogin() {
               />
             </div>
 
-            <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-2 sm:pt-3 pb-3 sm:pb-4 space-y-2 sm:space-y-2.5">
+            <div className="px-4 xs:px-6 sm:px-8 md:px-10 pt-2 sm:pt-3 pb-3 sm:pb-4 space-y-2 sm:space-y-2.5 flex-1 min-h-0 overflow-y-auto">
               <div className="text-center space-y-1">
                 <h1 className="text-lg xs:text-xl sm:text-2xl md:text-2.5xl font-extrabold text-gradient-primary">
                   Admin Portal Login
@@ -349,12 +519,14 @@ export default function AdminLogin() {
                     </div>
                   )}
                   <input
+                    ref={otpInputRef}
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     placeholder="Enter 6-digit OTP"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    autoComplete="one-time-code"
                     className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.35em] text-center"
                   />
 
@@ -398,6 +570,34 @@ export default function AdminLogin() {
                 </form>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-3.5 pt-1">
+                  {(biometricReady || pinReady) && (
+                    <div className="space-y-2">
+                      {biometricReady && (
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          type="button"
+                          disabled={quickLoading || isLoading}
+                          onClick={handleBiometricLogin}
+                          className="w-full bg-[linear-gradient(110deg,#1e3a8a,#2c5bd6)] hover:bg-[linear-gradient(110deg,#2c5bd6,#1e3a8a)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                        >
+                          {quickLoading ? "Opening…" : "Sign in with Biometrics"}
+                        </motion.button>
+                      )}
+                      {pinReady && (
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          type="button"
+                          disabled={quickLoading || isLoading}
+                          onClick={openPinLogin}
+                          className="w-full border border-border bg-background/70 hover:bg-background text-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                        >
+                          Use PIN
+                        </motion.button>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <input
                       type="email"
@@ -471,6 +671,36 @@ export default function AdminLogin() {
                       "Sign In"
                     )}
                   </motion.button>
+
+                  {biometricAvailable && !biometricReady && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setError(null);
+                        try {
+                          const trimmedEmail = email.trim();
+                          if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+                          await saveBiometricCredentials({ email: trimmedEmail, password, kind: "admin" });
+                          setBiometricReady(true);
+                        } catch (err: any) {
+                          setError(err?.message || "Failed to enable biometrics.");
+                        }
+                      }}
+                      className="w-full text-[11px] sm:text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Enable biometric login on this device
+                    </button>
+                  )}
+
+                  {pinReady === false && (
+                    <button
+                      type="button"
+                      onClick={openPinSetup}
+                      className="w-full text-[11px] sm:text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Set up PIN login on this device
+                    </button>
+                  )}
                 </form>
               )}
             </div>
@@ -490,6 +720,72 @@ export default function AdminLogin() {
           animation: admin-login-shimmer 1.4s ease-in-out infinite;
         }
       `}</style>
+
+      <AnimatePresence>
+        {showPinModal && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop px-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 30, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.98 }}
+              transition={{ duration: 0.25 }}
+              className="modal-panel w-full max-w-[92vw] sm:max-w-md overflow-hidden"
+            >
+              <div className="modal-header flex items-center justify-between px-4 sm:px-5 py-3">
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-foreground">
+                    {pinMode === "setup" ? "Set App PIN" : "Enter PIN"}
+                  </h2>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    {pinMode === "setup"
+                      ? "Use this PIN to quickly sign in on this device."
+                      : "Use your app PIN to sign in."}
+                  </p>
+                </div>
+                <button type="button" onClick={closePinModal} className="modal-close rounded-full p-1" aria-label="Close PIN modal">
+                  <FaTimes />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handlePinContinue();
+                }}
+                className="modal-body modal-stagger space-y-3 sm:space-y-4"
+              >
+                {pinError && (
+                  <div className="p-2.5 sm:p-3 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl">
+                    {pinError}
+                  </div>
+                )}
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="4+ digit PIN"
+                  value={pinValue}
+                  onChange={(e) => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  autoComplete="off"
+                  className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.25em] text-center"
+                />
+                <button
+                  type="submit"
+                  disabled={quickLoading || pinValue.length < 4}
+                  className="w-full bg-[linear-gradient(110deg,#1e3a8a,#2c5bd6)] hover:bg-[linear-gradient(110deg,#2c5bd6,#1e3a8a)] text-primary-foreground font-semibold py-2.5 xs:py-3 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                >
+                  {quickLoading ? "Working…" : pinMode === "setup" ? "Save PIN" : "Continue"}
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PublicThemeWrapper>
   );
 }

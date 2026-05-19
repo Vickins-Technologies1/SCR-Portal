@@ -74,7 +74,7 @@ export default function MaintenanceRequestsPage() {
     initAuth();
   }, []);
 
-  const fetchRequests = useCallback(async () => {
+  const fetchRequests = useCallback(async function fetchRequestsInner() {
     if (!csrfToken) return;
 
     setLoading(true);
@@ -103,7 +103,7 @@ export default function MaintenanceRequestsPage() {
         /unauthorized|forbidden|invalid csrf/i.test(message) && authRetryRef.current < 1;
       if (isAuthTransient) {
         authRetryRef.current += 1;
-        setTimeout(() => fetchRequests(), 400);
+        setTimeout(() => fetchRequestsInner(), 400);
         return;
       }
       setError(message);
@@ -251,7 +251,7 @@ export default function MaintenanceRequestsPage() {
               <div className="text-center py-16 surface-card rounded-3xl">
                 <Wrench className="w-20 h-20 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500 text-base sm:text-lg font-medium">No maintenance requests yet</p>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-2">Click "New Request" to report an issue</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-2">Click New Request to report an issue</p>
               </div>
             ) : (
               requests.map((req) => (

@@ -1,19 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css"; 
+import NativeBootstrap from "@/components/native/NativeBootstrap";
 
 const siteUrl = "https://app.soranapropertymanagers.com";
 const siteName = "Sorana Property Managers Ltd";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -89,8 +79,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en">
       <body className="antialiased">
+        <NativeBootstrap />
         {children}
       </body>
     </html>

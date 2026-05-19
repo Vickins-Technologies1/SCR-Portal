@@ -179,8 +179,10 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/tenants/vacate": { roles: ["tenant", "propertyOwner"], isApi: true },
   "/api/property-owners/vacate": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/property-owners/tenant-deletions": { roles: ["propertyOwner", "teamMember"], isApi: true },
+  "/api/settings": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/update-wallet": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/owner/tier": { roles: ["propertyOwner", "teamMember"], isApi: true },
+  "/api/owner/activities": { roles: ["propertyOwner", "teamMember"], isApi: true },
 
   // Impersonation
   "/api/impersonate": { roles: ["propertyOwner"], isApi: true },

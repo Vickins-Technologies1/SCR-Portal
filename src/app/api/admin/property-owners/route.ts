@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
 
-    let matchStage: any = { role: "propertyOwner" };
+    const matchStage: any = { role: "propertyOwner" };
 
     if (statusFilter === "pending") {
       matchStage.isApproved = false;

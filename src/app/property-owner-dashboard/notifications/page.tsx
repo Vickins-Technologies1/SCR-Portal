@@ -169,7 +169,7 @@ export default function NotificationsPage() {
   }, []);
 
   const makeAuthenticatedRequest = useCallback(
-    async (url: string, options: RequestInit, retries = 1): Promise<Response> => {
+    async function makeAuthenticatedRequestInner(url: string, options: RequestInit, retries = 1): Promise<Response> {
       let token = csrfToken;
       if (!token) {
         token = await fetchCsrfToken();
@@ -191,7 +191,7 @@ export default function NotificationsPage() {
           headers.set("X-CSRF-Token", newToken);
           setCsrfToken(newToken);
           Cookies.set("csrf-token", newToken, { sameSite: "strict", secure: true, path: "/" });
-          return makeAuthenticatedRequest(url, { ...options, headers }, retries - 1);
+          return makeAuthenticatedRequestInner(url, { ...options, headers }, retries - 1);
         }
       }
       return response;

@@ -17,6 +17,7 @@ import {
   OTP_REQUIRE_AFTER_MS,
   shouldBypassOtp,
 } from "../../../lib/otp";
+import { appendOwnerActivity } from "../../../lib/owner-activity";
 
 const OTP_COLLECTION = "otpChallenges";
 
@@ -348,6 +349,30 @@ export async function POST(request: NextRequest) {
           { $set: { lastLoginAt: now } }
         );
 
+        const ownerIdForActivity =
+          finalRole === "propertyOwner"
+            ? user._id.toString()
+            : isTeamMember
+              ? (user?.ownerId?.toString?.() ?? (typeof user?.ownerId === "string" ? user.ownerId : null))
+              : null;
+        if (ownerIdForActivity && (finalRole === "propertyOwner" || isTeamMember)) {
+          await appendOwnerActivity(db, {
+            ownerId: ownerIdForActivity,
+            actor: {
+              userId: user._id.toString(),
+              role: finalRole,
+              ownerId: ownerIdForActivity,
+              impersonator: null,
+            },
+            action: "auth.signin",
+            summary: isTeamMember ? "Team member signed in." : "Owner signed in.",
+            metadata: {
+              portal: typeof portal === "string" ? portal : null,
+              authMethod: "userId",
+            },
+          });
+        }
+
         console.log("Cookies set:", { 
           userId: user._id.toString(), 
           role: finalRole,
@@ -656,6 +681,30 @@ export async function POST(request: NextRequest) {
           { _id: user._id },
           { $set: { lastLoginAt: now } }
         );
+
+        const ownerIdForActivity =
+          finalRole === "propertyOwner"
+            ? user._id.toString()
+            : isTeamMember
+              ? (user?.ownerId?.toString?.() ?? (typeof user?.ownerId === "string" ? user.ownerId : null))
+              : null;
+        if (ownerIdForActivity && (finalRole === "propertyOwner" || isTeamMember)) {
+          await appendOwnerActivity(db, {
+            ownerId: ownerIdForActivity,
+            actor: {
+              userId: user._id.toString(),
+              role: finalRole,
+              ownerId: ownerIdForActivity,
+              impersonator: null,
+            },
+            action: "auth.signin",
+            summary: isTeamMember ? "Team member signed in." : "Owner signed in.",
+            metadata: {
+              portal: typeof portal === "string" ? portal : null,
+              authMethod: "password",
+            },
+          });
+        }
 
         console.log("Cookies set:", { 
           userId: user._id.toString(), 

@@ -22,6 +22,7 @@ import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import TourGuide, { TourStep } from "@/components/tour/TourGuide";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import NavbarDateTime from "@/components/NavbarDateTime";
+import BottomTabs from "@/components/mobile/BottomTabs";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -440,11 +441,13 @@ export default function TenantDashboardLayout({
 
       {/* ─── Main Content ─── */}
       <main
-        className={`flex-1 ${isImpersonating ? "pt-[6.5rem]" : "pt-16"} lg:ml-72 p-5 sm:p-6 lg:p-8`}
+        className={`flex-1 ${isImpersonating ? "pt-[6.5rem]" : "pt-16"} lg:ml-72 p-5 pb-28 sm:p-6 sm:pb-28 lg:p-8 lg:pb-8`}
         data-tour="tenant-workspace"
       >
         <div className="max-w-7xl mx-auto">{children}</div>
       </main>
+
+      <BottomTabs variant="tenant" />
 
       {isSidebarOpen && (
         <div

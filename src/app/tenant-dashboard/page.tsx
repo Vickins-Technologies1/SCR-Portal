@@ -390,7 +390,7 @@ export default function TenantDashboardPage() {
       setError(null);
 
       try {
-        let token = csrfToken || (await fetchCsrfToken());
+        const token = csrfToken || (await fetchCsrfToken());
         if (!token) throw new Error("Failed to get CSRF token");
 
         // ── 1. Get tenant profile (main source of truth) ────────────────

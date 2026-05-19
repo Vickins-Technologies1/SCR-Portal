@@ -29,6 +29,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.npm-cache/
+.gradle-user-home/
+.gradle-user-home2/
+.android-avd/
+.android-sdk/
+.android-user/
+.tmp/
 
 # env files (can opt-in for committing if needed)
 .env*

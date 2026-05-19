@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
   const loggedInUserId = cookies.get("userId")?.value;
 
   let authorized = false;
-  let effectiveOwnerId = requestedOwnerId;
+  const effectiveOwnerId = requestedOwnerId;
   let teamMemberAssignedPropertyIds: string[] | null = null;
 
   if (role === "propertyOwner") {
