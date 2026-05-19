@@ -37,7 +37,7 @@ function b64FromBytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function bytesFromB64(b64: string): Uint8Array {
+function bytesFromB64(b64: string): Uint8Array<ArrayBuffer> {
   const binary = atob(b64);
   // Construct from ArrayBuffer (not SharedArrayBuffer) so WebCrypto types accept it as BufferSource.
   const bytes = new Uint8Array(new ArrayBuffer(binary.length));
@@ -140,8 +140,8 @@ export async function getPinCredentials(params: { pin: string; kind: LoginKind }
   if (blob?.v !== 1) throw new Error("Unsupported PIN setup version.");
   if (blob.kind !== params.kind) throw new Error("PIN login is not configured for this login type.");
 
-  const salt = bytesFromB64(blob.saltB64) as Uint8Array<ArrayBuffer>;
-  const iv = bytesFromB64(blob.ivB64) as Uint8Array<ArrayBuffer>;
+  const salt = bytesFromB64(blob.saltB64);
+  const iv = bytesFromB64(blob.ivB64);
   const ciphertext = bytesFromB64(blob.ciphertextB64);
   const key = await deriveAesKeyFromPin(pin, salt);
 
