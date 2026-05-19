@@ -1,6 +1,7 @@
 {
   "name": "scr-portal",
   "version": "0.1.0",
+  "packageManager": "pnpm@10.15.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
