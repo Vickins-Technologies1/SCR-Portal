@@ -53,6 +53,15 @@ android {
                 logger.warn("keystore.properties not found. Release build will be unsigned and not Play Store-ready.")
             }
         }
+
+        // Troubleshooting build: same as release but without R8 shrinking/minification.
+        // Use this if a device shows "app keeps stopping" on startup (often due to missing ProGuard keep rules).
+        releaseNoMinify {
+            initWith release
+            minifyEnabled false
+            shrinkResources false
+            matchingFallbacks = ['release']
+        }
     }
 }
 
