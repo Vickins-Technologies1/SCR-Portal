@@ -39,12 +39,13 @@ function b64FromBytes(bytes: Uint8Array): string {
 
 function bytesFromB64(b64: string): Uint8Array {
   const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
+  // Construct from ArrayBuffer (not SharedArrayBuffer) so WebCrypto types accept it as BufferSource.
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
 
-async function deriveAesKeyFromPin(pin: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveAesKeyFromPin(pin: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey("raw", enc.encode(pin), { name: "PBKDF2" }, false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
@@ -103,8 +104,8 @@ export async function setPinCredentials(params: { pin: string; credentials: Stor
   const pin = normalizePin(params.pin);
   if (pin.length < 4) throw new Error("PIN must be at least 4 digits.");
 
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const salt = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(16)));
+  const iv = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(12)));
   const key = await deriveAesKeyFromPin(pin, salt);
 
   const plaintext = new TextEncoder().encode(JSON.stringify(params.credentials));
@@ -139,8 +140,8 @@ export async function getPinCredentials(params: { pin: string; kind: LoginKind }
   if (blob?.v !== 1) throw new Error("Unsupported PIN setup version.");
   if (blob.kind !== params.kind) throw new Error("PIN login is not configured for this login type.");
 
-  const salt = bytesFromB64(blob.saltB64);
-  const iv = bytesFromB64(blob.ivB64);
+  const salt = bytesFromB64(blob.saltB64) as Uint8Array<ArrayBuffer>;
+  const iv = bytesFromB64(blob.ivB64) as Uint8Array<ArrayBuffer>;
   const ciphertext = bytesFromB64(blob.ciphertextB64);
   const key = await deriveAesKeyFromPin(pin, salt);
 
