@@ -10,7 +10,7 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:e2e": "vitest run -c vitest.e2e.config.ts",
-    "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor=#0f172a --iconBackgroundColorDark=#0f172a --splashBackgroundColor=#0f172a --splashBackgroundColorDark=#0f172a",
+    "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor=#ffffff --iconBackgroundColorDark=#ffffff --splashBackgroundColor=#0f172a --splashBackgroundColorDark=#0f172a",
     "cap:sync": "npx cap sync",
     "cap:copy": "npx cap copy",
     "cap:add:android": "npx cap add android",
