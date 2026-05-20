@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Db, ObjectId } from "mongodb";
-import { SESSION_COOKIE_NAME, createSessionToken, getSessionCookieOptions, verifySessionToken } from "@/lib/session";
+import { createSessionToken, getSessionCookieOptions } from "@/lib/session";
 import { resolveAccountTier } from "@/lib/tier";
 import { getOwnerDueStatus } from "@/lib/billing";
+import { requireAdmin } from "@/lib/admin-auth";
 
 type OwnerManagementType = "rentals" | "airbnb";
 
@@ -15,13 +16,9 @@ const normalizeManagementType = (value: unknown): OwnerManagementType => {
 
 export async function POST(request: NextRequest) {
   try {
-    const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-    const session = sessionToken ? await verifySessionToken(sessionToken) : null;
-    const adminUserId = session?.sub;
-
-    if (!session || session.role !== "admin" || !adminUserId || !ObjectId.isValid(adminUserId)) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireAdmin(request, "admin:impersonation:manage");
+    if (auth instanceof NextResponse) return auth;
+    const adminUserId = auth.userId;
 
     const body = await request.json();
     const { ownerId } = body || {};
@@ -68,7 +65,7 @@ export async function POST(request: NextRequest) {
       ownerId: owner._id.toString(),
       managementType,
       tier: ownerTier,
-      impersonator: { userId: adminUserId, role: "admin" },
+      impersonator: { userId: adminUserId, role: auth.role },
     });
     response.cookies.set("session", impersonationToken, getSessionCookieOptions());
 
@@ -88,7 +85,7 @@ export async function POST(request: NextRequest) {
       maxAge: 3600,
     });
 
-    response.cookies.set("adminOriginalRole", "admin", {
+    response.cookies.set("adminOriginalRole", auth.role, {
       path: "/",
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",

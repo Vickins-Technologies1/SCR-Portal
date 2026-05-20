@@ -7,15 +7,14 @@ export async function GET() {
   const cookieStore = await cookies();
   const userId = cookieStore.get("userId")?.value;
   const role = cookieStore.get("role")?.value;
-  const normalizedRole = role?.toLowerCase();
 
-  if (!userId || normalizedRole !== "admin") {
+  if (!userId || !role || (role !== "admin" && role !== "adminTeamMember")) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
   return NextResponse.json({
     authenticated: true,
-    user: { id: userId, role: normalizedRole || role },
-    role: normalizedRole || role,
+    user: { id: userId, role },
+    role,
   });
 }

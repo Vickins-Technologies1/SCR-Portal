@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
+import { requireAdmin } from "../../../../lib/admin-auth";
 
 // === DEBUG HELPER ===
 const DEBUG = process.env.NODE_ENV === "development";
@@ -44,10 +45,8 @@ export async function GET(request: NextRequest) {
 
   debug("API CALL START", { ownerId, role, timestamp: new Date().toISOString() });
 
-  if (role !== "admin") {
-    debug("UNAUTHORIZED", { role });
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:payments:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { db }: { db: Db } = await connectToDatabase();

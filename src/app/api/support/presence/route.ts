@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
+import { requireAdmin } from "@/lib/admin-auth";
 
 interface SupportPresence {
   ownerId: string;
@@ -30,20 +31,21 @@ function deriveStatus(presence?: SupportPresence | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value as "admin" | "propertyOwner" | undefined;
+  const roleRaw = request.cookies.get("role")?.value;
   const userId = request.cookies.get("userId")?.value;
 
-  if (!role || !userId) {
+  if (!roleRaw || !userId) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!["admin", "propertyOwner"].includes(role)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  if (roleRaw !== "propertyOwner") {
+    const auth = await requireAdmin(request, "admin:support:view");
+    if (auth instanceof NextResponse) return auth;
   }
 
   const { searchParams } = new URL(request.url);
   const ownerIdParam = searchParams.get("ownerId");
-  const ownerId = role === "admin" ? ownerIdParam : userId;
+  const ownerId = roleRaw === "propertyOwner" ? userId : ownerIdParam;
 
   if (!ownerId || !ObjectId.isValid(ownerId)) {
     return NextResponse.json({ success: false, message: "Valid ownerId is required" }, { status: 400 });
@@ -68,22 +70,23 @@ export async function GET(request: NextRequest) {
     logger.error("Support presence fetch error", {
       message: error instanceof Error ? error.message : "Unknown error",
       ownerId,
-      role,
+      role: roleRaw,
     });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
-  const role = request.cookies.get("role")?.value as "admin" | "propertyOwner" | undefined;
+  const roleRaw = request.cookies.get("role")?.value;
   const userId = request.cookies.get("userId")?.value;
 
-  if (!role || !userId) {
+  if (!roleRaw || !userId) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!["admin", "propertyOwner"].includes(role)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  if (roleRaw !== "propertyOwner") {
+    const auth = await requireAdmin(request, "admin:support:respond");
+    if (auth instanceof NextResponse) return auth;
   }
 
   let payload: { ownerId?: string; typing?: boolean } = {};
@@ -93,13 +96,14 @@ export async function POST(request: NextRequest) {
     payload = {};
   }
 
-  const ownerId = role === "admin" ? payload.ownerId : userId;
+  const ownerId = roleRaw === "propertyOwner" ? userId : payload.ownerId;
   if (!ownerId || !ObjectId.isValid(ownerId)) {
     return NextResponse.json({ success: false, message: "Valid ownerId is required" }, { status: 400 });
   }
 
   try {
     const { db } = await connectToDatabase();
+    const role: SupportPresence["role"] = roleRaw === "propertyOwner" ? "propertyOwner" : "admin";
     const now = new Date().toISOString();
     const update: Partial<SupportPresence> = { lastSeen: now };
     if (typeof payload.typing === "boolean") {
@@ -125,7 +129,7 @@ export async function POST(request: NextRequest) {
     logger.error("Support presence update error", {
       message: error instanceof Error ? error.message : "Unknown error",
       ownerId,
-      role,
+      role: roleRaw,
     });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }

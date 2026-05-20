@@ -3,20 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
 import { cascadeDeleteOwner } from "../../../../../lib/admin-owner-delete";
+import { requireAdmin } from "../../../../../lib/admin-auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const role = request.cookies.get("role")?.value;
-
-  if (role !== "admin") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 }
-    );
-  }
+  const auth = await requireAdmin(request, "admin:owners:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     if (!ObjectId.isValid(id)) {
@@ -63,14 +58,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const role = request.cookies.get("role")?.value;
-
-  if (role !== "admin") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 }
-    );
-  }
+  const auth = await requireAdmin(request, "admin:owners:manage");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     if (!ObjectId.isValid(id)) {
@@ -130,14 +119,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const role = request.cookies.get("role")?.value;
-
-  if (role !== "admin") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 }
-    );
-  }
+  const auth = await requireAdmin(request, "admin:owners:manage");
+  if (auth instanceof NextResponse) return auth;
 
   if (!ObjectId.isValid(id)) {
     return NextResponse.json(

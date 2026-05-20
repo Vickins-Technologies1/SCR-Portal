@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
+import { requireAdmin } from "../../../../../../lib/admin-auth";
 
 export async function POST(
   request: NextRequest,
@@ -9,10 +10,8 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  const role = request.cookies.get("role")?.value;
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:owners:manage");
+  if (auth instanceof NextResponse) return auth;
 
   if (!ObjectId.isValid(id)) {
     return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 });

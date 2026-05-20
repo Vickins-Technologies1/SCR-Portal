@@ -2,14 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
+import { requireAdmin } from "../../../../lib/admin-auth";
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
-  console.log("GET /api/admin/property-owners - Role:", role);
-
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:owners:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
@@ -145,10 +142,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:owners:manage");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { name, email, phone, password } = await request.json();

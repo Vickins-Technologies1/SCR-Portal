@@ -24,7 +24,7 @@ type OtpDoc = {
   createdAt: Date;
   expiresAt: Date;
   redirectPath?: string;
-  collection: "tenants" | "propertyOwners" | "teamMembers";
+  collection: "tenants" | "propertyOwners" | "teamMembers" | "adminTeamMembers";
   lastSentAt?: Date;
   resendCount?: number;
 };
@@ -121,6 +121,7 @@ export async function POST(request: Request) {
 
     const isTeamMember = otp.collection === "teamMembers" || otp.isTeamMember;
     const isOwner = otp.collection === "propertyOwners" && otp.role === "propertyOwner";
+    const isAdminTeamMember = otp.collection === "adminTeamMembers" || otp.role === "adminTeamMember";
 
     let redirectPath = otp.redirectPath;
     let ownerManagementType: "rentals" | "airbnb" | null = null;
@@ -147,7 +148,7 @@ export async function POST(request: Request) {
 
     if (!redirectPath) {
       redirectPath =
-        otp.role === "admin"
+        otp.role === "admin" || isAdminTeamMember
           ? "/admin/dashboard"
           : otp.role === "tenant"
             ? "/tenant-dashboard"
@@ -162,6 +163,8 @@ export async function POST(request: Request) {
       finalPermissions = Array.isArray(user.permissions) && user.permissions.length > 0
         ? user.permissions
         : getDefaultPermissions(otp.role, true);
+    } else if (isAdminTeamMember) {
+      finalPermissions = Array.isArray(user.permissions) ? user.permissions : [];
     } else if (otp.role === "tenant") {
       finalPermissions = getDefaultPermissions("tenant");
     }
@@ -176,6 +179,7 @@ export async function POST(request: Request) {
         isOwner,
         permissions: finalPermissions,
         tier: ownerTier,
+        adminName: (otp.role === "admin" || isAdminTeamMember) ? (user?.name?.toString?.() || "Admin") : undefined,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );

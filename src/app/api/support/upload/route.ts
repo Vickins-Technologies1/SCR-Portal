@@ -24,8 +24,23 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     const role = cookieStore.get("role")?.value;
     const userId = cookieStore.get("userId")?.value;
+    const permissionsRaw = cookieStore.get("permissions")?.value;
+    const permissions = (() => {
+      if (!permissionsRaw) return [] as string[];
+      try {
+        const parsed = JSON.parse(permissionsRaw);
+        return Array.isArray(parsed) ? parsed.filter((p) => typeof p === "string") : [];
+      } catch {
+        return [] as string[];
+      }
+    })();
 
-    if (!role || !["propertyOwner", "admin"].includes(role) || !userId) {
+    const isAllowedRole =
+      role === "propertyOwner" ||
+      role === "admin" ||
+      (role === "adminTeamMember" && permissions.includes("admin:support:respond"));
+
+    if (!role || !isAllowedRole || !userId) {
       logger.warn("Unauthorized access attempt", { role, userId });
       return NextResponse.json({ success: false, message: "Unauthorized or invalid user ID" }, { status: 401 });
     }

@@ -5,6 +5,7 @@ import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcrypt";
 import { deliverOtp } from "../../../../lib/otp-delivery";
 import { createSessionToken, getSessionCookieOptions } from "../../../../lib/session";
+import { normalizeAdminPermissions } from "../../../../lib/admin-permissions";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -33,30 +34,38 @@ export async function POST(request: Request) {
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    const user = await db.collection("propertyOwners").findOne({
+    let user: any | null = await db.collection("propertyOwners").findOne({
       email,
       role: "admin",
     });
 
+    let userCollection: "propertyOwners" | "adminTeamMembers" = "propertyOwners";
+    let finalRole: "admin" | "adminTeamMember" = "admin";
+
     if (!user) {
-      return NextResponse.json(
-        { success: false, message: "Invalid credentials" },
-        { status: 401 }
-      );
+      user = await db.collection("adminTeamMembers").findOne({
+        email,
+        role: "adminTeamMember",
+        active: true,
+      });
+      if (user) {
+        userCollection = "adminTeamMembers";
+        finalRole = "adminTeamMember";
+      }
+    }
+
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Invalid credentials" }, { status: 401 });
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
-
     if (!passwordMatches) {
-      return NextResponse.json(
-        { success: false, message: "Invalid credentials" },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, message: "Invalid credentials" }, { status: 401 });
     }
 
     const now = new Date();
     const lastLoginAt = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
-    const requiresOtp = !shouldBypassOtp(user.email?.toString(), user.role);
+    const requiresOtp = !shouldBypassOtp(user.email?.toString(), finalRole);
 
     if (requiresOtp) {
       const otpEmail = user.email?.toString();
@@ -80,7 +89,7 @@ export async function POST(request: Request) {
       await db.collection(OTP_COLLECTION).insertOne({
         _id: otpRecordId,
         userId: user._id.toString(),
-        role: user.role,
+        role: finalRole,
         isTeamMember: false,
         isOwner: false,
         ownerId: null,
@@ -95,7 +104,7 @@ export async function POST(request: Request) {
         lastSentAt: now,
         resendCount: 0,
         redirectPath: "/admin/dashboard",
-        collection: "propertyOwners",
+        collection: userCollection,
       });
 
       let delivery;
@@ -132,16 +141,23 @@ export async function POST(request: Request) {
     }
 
     // ── Success ────────────────────────────────────────────────
+    const finalPermissions =
+      finalRole === "adminTeamMember"
+        ? normalizeAdminPermissions(user.permissions)
+        : [];
+
     const response = NextResponse.json({
       success: true,
       userId: user._id.toString(),
-      role: user.role,
+      role: finalRole,
       redirect: "/admin/dashboard",
+      permissions: finalPermissions,
+      adminName: user?.name?.toString?.() || "Admin",
     });
 
     const sessionToken = await createSessionToken({
       sub: user._id.toString(),
-      role: user.role,
+      role: finalRole,
       ownerId: null,
     });
     response.cookies.set("session", sessionToken, getSessionCookieOptions());
@@ -155,12 +171,9 @@ export async function POST(request: Request) {
     };
 
     response.cookies.set("userId", user._id.toString(), cookieOptions);
-    response.cookies.set("role", user.role, cookieOptions);
+    response.cookies.set("role", finalRole, cookieOptions);
 
-    await db.collection("propertyOwners").updateOne(
-      { _id: user._id },
-      { $set: { lastLoginAt: now } }
-    );
+    await db.collection(userCollection).updateOne({ _id: user._id }, { $set: { lastLoginAt: now } });
 
     return response;
   } catch (error) {

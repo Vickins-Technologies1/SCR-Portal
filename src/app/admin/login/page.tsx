@@ -27,6 +27,8 @@ interface LoginResponse {
   userId?: string;
   role?: string;
   redirect?: string;
+  permissions?: string[];
+  adminName?: string;
   requiresOtp?: boolean;
   otpId?: string;
   message?: string;
@@ -61,7 +63,7 @@ export default function AdminLogin() {
   useEffect(() => {
     const userId = Cookies.get("userId");
     const role = Cookies.get("role");
-    if (userId && role === "admin") {
+    if (userId && (role === "admin" || role === "adminTeamMember")) {
       router.replace("/admin/dashboard");
     }
   }, [router]);
@@ -247,6 +249,24 @@ export default function AdminLogin() {
           secure: true,
           sameSite: "Strict",
         });
+        if (data.permissions) {
+          try {
+            Cookies.set("permissions", JSON.stringify(data.permissions), {
+              expires: 7,
+              secure: true,
+              sameSite: "Strict",
+            });
+          } catch {
+            // ignore
+          }
+        }
+        if (data.adminName) {
+          Cookies.set("adminName", String(data.adminName || "Admin"), {
+            expires: 7,
+            secure: true,
+            sameSite: "Strict",
+          });
+        }
         await maybeOfferQuickLoginSetup({ email: email.trim(), password });
         router.push(data.redirect || "/admin/dashboard");
       } else {
@@ -291,6 +311,24 @@ export default function AdminLogin() {
         secure: true,
         sameSite: "Strict",
       });
+      if (data.permissions) {
+        try {
+          Cookies.set("permissions", JSON.stringify(data.permissions), {
+            expires: 7,
+            secure: true,
+            sameSite: "Strict",
+          });
+        } catch {
+          // ignore
+        }
+      }
+      if (data.adminName) {
+        Cookies.set("adminName", String(data.adminName || "Admin"), {
+          expires: 7,
+          secure: true,
+          sameSite: "Strict",
+        });
+      }
 
       await maybeOfferQuickLoginSetup({ email: email.trim(), password });
       router.push(data.redirect || "/admin/dashboard");

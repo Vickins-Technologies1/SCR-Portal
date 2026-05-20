@@ -10,7 +10,7 @@ import {
   getCsrfCookieOptions,
 } from "./lib/csrf";
 
-type Role = "admin" | "propertyOwner" | "teamMember" | "tenant" | null;
+type Role = "admin" | "adminTeamMember" | "propertyOwner" | "teamMember" | "tenant" | null;
 type OwnerManagementType = "rentals" | "airbnb";
 
 function normalizeManagementType(value: unknown): OwnerManagementType {
@@ -147,20 +147,21 @@ const CSRF_EXEMPT_ROUTES = [
 // Route → allowed roles mapping
 const routeAccessMap: { [key: string]: RouteAccess } = {
   // Admin-only APIs
-  "/api/users": { roles: ["admin"], isApi: true },
+  "/api/users": { roles: ["admin", "adminTeamMember"], isApi: true },
   "/api/invoices/generate": { roles: ["admin"], isApi: true },
   "/api/quotations/generate": { roles: ["admin"], isApi: true },
-  "/api/admins": { roles: ["admin"], isApi: true },
-  "/api/admin/properties": { roles: ["admin"], isApi: true },
-  "/api/admin/market-place-sale-listings": { roles: ["admin"], isApi: true },
-  "/api/admin/reviews": { roles: ["admin"], isApi: true },
-  "/api/admin/property-owners": { roles: ["admin"], isApi: true },
-  "/api/admin/impersonate-owner": { roles: ["admin"], isApi: true },
+  "/api/admins": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/properties": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/market-place-sale-listings": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/reviews": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/property-owners": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/team-members": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/impersonate-owner": { roles: ["admin", "adminTeamMember"], isApi: true },
   "/api/admin/revert-impersonation": { roles: ["admin", "propertyOwner"], isApi: true },
-  "/api/support/messages": { roles: ["admin", "propertyOwner"], isApi: true },
-  "/api/support/conversations": { roles: ["admin"], isApi: true },
-  "/api/support/presence": { roles: ["admin", "propertyOwner"], isApi: true },
-  "/api/support/upload": { roles: ["admin", "propertyOwner"], isApi: true },
+  "/api/support/messages": { roles: ["admin", "adminTeamMember", "propertyOwner"], isApi: true },
+  "/api/support/conversations": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/support/presence": { roles: ["admin", "adminTeamMember", "propertyOwner"], isApi: true },
+  "/api/support/upload": { roles: ["admin", "adminTeamMember", "propertyOwner"], isApi: true },
   "/api/user": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: true },
 
   // Shared / multi-role APIs
@@ -215,6 +216,7 @@ const ADMIN_API_PATHS = [
   "/api/admin/properties",
   "/api/admin/market-place-sale-listings",
   "/api/admin/reviews",
+  "/api/admin/team-members",
   "/api/admins",
   "/api/users",
 ];

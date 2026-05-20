@@ -7,7 +7,11 @@ export async function POST(request: NextRequest) {
   const session = sessionToken ? await verifySessionToken(sessionToken) : null;
   const impersonator = session?.impersonator;
 
-  if (!impersonator || impersonator.role !== "admin" || !ObjectId.isValid(impersonator.userId)) {
+  if (
+    !impersonator ||
+    (impersonator.role !== "admin" && impersonator.role !== "adminTeamMember") ||
+    !ObjectId.isValid(impersonator.userId)
+  ) {
     return NextResponse.json({ success: false, message: "No admin impersonation session" }, { status: 400 });
   }
 
@@ -31,7 +35,7 @@ export async function POST(request: NextRequest) {
     maxAge: 3600,
   });
 
-  response.cookies.set("role", "admin", {
+  response.cookies.set("role", impersonator.role, {
     path: "/",
     httpOnly: false,
     secure: process.env.NODE_ENV === "production",

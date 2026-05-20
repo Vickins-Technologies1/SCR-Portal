@@ -18,17 +18,21 @@ import {
   Wallet,
   Plug,
   Activity,
+  Shield,
   Star,
   FileText,
   Store,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useAdminPermissions } from "@/hooks/useAdminPermissions";
+import type { AdminPermission } from "@/lib/admin-permissions";
 
 type NavLink = {
   key: string;
   href: string;
   label: string;
   icon: React.ReactNode;
+  requiredPermission?: AdminPermission;
 };
 
 type AdminSidebarProps = {
@@ -43,6 +47,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const [name, setName] = useState("Admin");
   const [mounted, setMounted] = useState(false);
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
+  const { role, isAdminOwner, hasPermission } = useAdminPermissions();
 
   useEffect(() => {
     setMounted(true);
@@ -82,29 +87,114 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const firstName = name.split(" ")[0] || "Admin";
 
   const overviewLinks: NavLink[] = [
-    { key: "overview", href: "/admin/dashboard", label: "Overview", icon: <LayoutDashboard size={20} /> },
+    {
+      key: "overview",
+      href: "/admin/dashboard",
+      label: "Overview",
+      icon: <LayoutDashboard size={20} />,
+      requiredPermission: "admin:dashboard:view",
+    },
   ];
 
   const coreLinks: NavLink[] = [
-    { key: "properties", href: "/admin/properties", label: "Properties", icon: <Building2 size={20} /> },
+    {
+      key: "properties",
+      href: "/admin/properties",
+      label: "Properties",
+      icon: <Building2 size={20} />,
+      requiredPermission: "admin:properties:view",
+    },
   ];
 
   const airbnbLinks: NavLink[] = [
-    { key: "airbnb-listings", href: "/admin/airbnb/listings", label: "Airbnb Listings", icon: <Building2 size={20} /> },
-    { key: "airbnb-bookings", href: "/admin/airbnb/bookings", label: "Airbnb Bookings", icon: <CalendarCheck size={20} /> },
-    { key: "airbnb-messages", href: "/admin/airbnb/messages", label: "Airbnb Messages", icon: <MessageCircle size={20} /> },
-    { key: "airbnb-payouts", href: "/admin/airbnb/payouts", label: "Airbnb Payouts", icon: <Wallet size={20} /> },
+    {
+      key: "airbnb-listings",
+      href: "/admin/airbnb/listings",
+      label: "Airbnb Listings",
+      icon: <Building2 size={20} />,
+      requiredPermission: "admin:airbnb:view",
+    },
+    {
+      key: "airbnb-bookings",
+      href: "/admin/airbnb/bookings",
+      label: "Airbnb Bookings",
+      icon: <CalendarCheck size={20} />,
+      requiredPermission: "admin:airbnb:view",
+    },
+    {
+      key: "airbnb-messages",
+      href: "/admin/airbnb/messages",
+      label: "Airbnb Messages",
+      icon: <MessageCircle size={20} />,
+      requiredPermission: "admin:airbnb:view",
+    },
+    {
+      key: "airbnb-payouts",
+      href: "/admin/airbnb/payouts",
+      label: "Airbnb Payouts",
+      icon: <Wallet size={20} />,
+      requiredPermission: "admin:airbnb:view",
+    },
   ];
 
   const generalLinks: NavLink[] = [
-    { key: "users", href: "/admin/users", label: "Property Owners", icon: <Users size={20} /> },
-    { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: <CreditCard size={20} /> },
+    {
+      key: "users",
+      href: "/admin/users",
+      label: "Property Owners",
+      icon: <Users size={20} />,
+      requiredPermission: "admin:owners:view",
+    },
+    {
+      key: "team-members",
+      href: "/admin/team-members",
+      label: "Team Members",
+      icon: <Shield size={20} />,
+      requiredPermission: "admin:team-members:view",
+    },
+    {
+      key: "payments",
+      href: "/admin/payments",
+      label: "Payments & Invoices",
+      icon: <CreditCard size={20} />,
+      requiredPermission: "admin:payments:view",
+    },
     { key: "quotations", href: "/admin/quotations", label: "Quotations", icon: <FileText size={20} /> },
-    { key: "reviews", href: "/admin/reviews", label: "Reviews", icon: <Star size={20} /> },
-    { key: "market-place", href: "/admin/market-place", label: "Market Place", icon: <Store size={20} /> },
-    { key: "tuma-webhooks", href: "/admin/tuma-webhooks", label: "Tuma Webhooks", icon: <Activity size={20} /> },
-    { key: "airbnb-integrations", href: "/admin/airbnb/integrations", label: "Integrations", icon: <Plug size={20} /> },
-    { key: "support", href: "/admin/support", label: "Support", icon: <Headphones size={20} /> },
+    {
+      key: "reviews",
+      href: "/admin/reviews",
+      label: "Reviews",
+      icon: <Star size={20} />,
+      requiredPermission: "admin:reviews:view",
+    },
+    {
+      key: "market-place",
+      href: "/admin/market-place",
+      label: "Market Place",
+      icon: <Store size={20} />,
+      requiredPermission: "admin:marketplace:view",
+    },
+    {
+      key: "tuma-webhooks",
+      href: "/admin/tuma-webhooks",
+      label: "Tuma Webhooks",
+      icon: <Activity size={20} />,
+      requiredPermission: "admin:webhooks:view",
+    },
+    {
+      key: "airbnb-integrations",
+      href: "/admin/airbnb/integrations",
+      label: "Integrations",
+      icon: <Plug size={20} />,
+      requiredPermission: "admin:airbnb:view",
+    },
+    {
+      key: "support",
+      href: "/admin/support",
+      label: "Support",
+      icon: <Headphones size={20} />,
+      requiredPermission: "admin:support:view",
+    },
   ];
 
   const navSections = [
@@ -139,6 +229,9 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
+  const filterLinks = (links: NavLink[]) =>
+    links.filter((link) => !link.requiredPermission || hasPermission(link.requiredPermission));
+
   return (
     <>
       {/* Sidebar */}
@@ -169,7 +262,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
                   <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
                     <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                    Admin
+                    {isAdminOwner ? "Admin Owner" : role === "adminTeamMember" ? "Staff" : "Admin"}
                   </div>
                 </>
               )}
@@ -203,7 +296,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                     </div>
                   )}
                   <ul className="space-y-1.5">
-                    {section.links.map(({ key, href, label, icon }) => {
+                    {filterLinks(section.links).map(({ key, href, label, icon }) => {
                       const showUnreadBadge = key === "support" && unreadSupportCount > 0;
                       return (
                         <li key={key}>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
+import { requireAdmin } from "@/lib/admin-auth";
 
 interface SupportMessage {
   _id: ObjectId;
@@ -66,19 +67,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!["admin", "propertyOwner"].includes(role)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  if (role !== "propertyOwner") {
+    const auth = await requireAdmin(request, "admin:support:view");
+    if (auth instanceof NextResponse) return auth;
   }
 
   const { searchParams } = new URL(request.url);
   const ownerIdParam = searchParams.get("ownerId");
   const unreadCountOnly = searchParams.get("unreadCount") === "1";
-  const ownerId = role === "admin" ? ownerIdParam : userId;
+  const ownerId = role === "propertyOwner" ? userId : ownerIdParam;
 
   if (unreadCountOnly) {
     try {
       const { db } = await connectToDatabase();
-      if (role === "admin") {
+      if (role !== "propertyOwner") {
         if (ownerIdParam && !ObjectId.isValid(ownerIdParam)) {
           return NextResponse.json({ success: false, message: "Valid ownerId is required" }, { status: 400 });
         }
@@ -162,8 +164,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!["admin", "propertyOwner"].includes(role)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  if (role !== "propertyOwner") {
+    const auth = await requireAdmin(request, "admin:support:respond");
+    if (auth instanceof NextResponse) return auth;
   }
 
   let payload: {
@@ -209,7 +212,7 @@ export async function POST(request: NextRequest) {
     }));
   const replyTo = sanitizeReplyTo(payload.replyTo);
 
-  const ownerId = role === "admin" ? payload.ownerId : userId;
+  const ownerId = role === "propertyOwner" ? userId : payload.ownerId;
   if (!ownerId || !ObjectId.isValid(ownerId)) {
     return NextResponse.json({ success: false, message: "Valid ownerId is required" }, { status: 400 });
   }
@@ -217,23 +220,26 @@ export async function POST(request: NextRequest) {
   try {
     const { db } = await connectToDatabase();
 
-    let senderName = role === "admin" ? "Admin" : "Owner";
+    let senderName = role === "propertyOwner" ? "Owner" : "Support";
     if (role === "propertyOwner") {
       const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(userId) });
       senderName = owner?.name || "Owner";
+    } else if (role === "adminTeamMember") {
+      const member = await db.collection("adminTeamMembers").findOne({ _id: new ObjectId(userId) });
+      senderName = member?.name || "Support";
     }
 
     const messageDoc: SupportMessage = {
       _id: new ObjectId(),
       ownerId,
       senderId: userId,
-      senderRole: role as "propertyOwner" | "admin",
+      senderRole: role === "propertyOwner" ? "propertyOwner" : "admin",
       senderName,
       message: rawMessage,
       attachments: sanitizedAttachments.length > 0 ? sanitizedAttachments : undefined,
       replyTo,
       createdAt: new Date().toISOString(),
-      seenByAdmin: role === "admin",
+      seenByAdmin: role !== "propertyOwner",
       seenByOwner: role === "propertyOwner",
     };
 
@@ -292,8 +298,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!["admin", "propertyOwner"].includes(role)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  if (role !== "propertyOwner") {
+    const auth = await requireAdmin(request, "admin:support:respond");
+    if (auth instanceof NextResponse) return auth;
   }
 
   let payload: { messageId?: string; message?: string } = {};
@@ -318,10 +325,11 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const senderRole = role === "propertyOwner" ? "propertyOwner" : "admin";
     const existing = await db.collection<SupportMessage>("supportMessages").findOne({
       _id: new ObjectId(messageId),
       senderId: userId,
-      senderRole: role as "propertyOwner" | "admin",
+      senderRole,
     });
 
     if (!existing) {
@@ -361,8 +369,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!["admin", "propertyOwner"].includes(role)) {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  if (role !== "propertyOwner") {
+    const auth = await requireAdmin(request, "admin:support:respond");
+    if (auth instanceof NextResponse) return auth;
   }
 
   let payload: { messageId?: string } = {};
@@ -379,10 +388,11 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const senderRole = role === "propertyOwner" ? "propertyOwner" : "admin";
     const result = await db.collection<SupportMessage>("supportMessages").deleteOne({
       _id: new ObjectId(messageId),
       senderId: userId,
-      senderRole: role as "propertyOwner" | "admin",
+      senderRole,
     });
 
     if (!result.deletedCount) {

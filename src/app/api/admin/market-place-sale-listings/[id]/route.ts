@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
+import { requireAdmin } from "@/lib/admin-auth";
 
 type SaleListingStatus = "published" | "draft" | "sold";
 
@@ -37,10 +38,8 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const role = request.cookies.get("role")?.value;
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:marketplace:view");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;
   if (!ObjectId.isValid(id)) {
@@ -92,10 +91,8 @@ export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const role = request.cookies.get("role")?.value;
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:marketplace:view");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;
   if (!ObjectId.isValid(id)) {
@@ -161,10 +158,8 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const role = request.cookies.get("role")?.value;
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:marketplace:view");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;
   if (!ObjectId.isValid(id)) {
@@ -184,4 +179,3 @@ export async function DELETE(
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
-

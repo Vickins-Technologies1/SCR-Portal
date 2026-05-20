@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { REVIEW_COLLECTION } from "@/lib/property-reviews";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const normalizeStatus = (value?: string | null) => {
   const normalized = value?.toLowerCase();
@@ -13,13 +14,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const role = request.cookies.get("role")?.value?.toLowerCase();
-  if (!role || role !== "admin") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized: Admin access required" },
-      { status: 401 }
-    );
-  }
+  const auth = await requireAdmin(request, "admin:reviews:moderate");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
   if (!id) {

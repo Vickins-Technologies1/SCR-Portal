@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
+import { requireAdmin } from "@/lib/admin-auth";
 
 interface SupportConversation {
   ownerId: string;
@@ -17,16 +18,14 @@ interface SupportConversation {
 }
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
   const userId = request.cookies.get("userId")?.value;
 
-  if (!role || !userId) {
+  if (!userId) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
-  }
+  const auth = await requireAdmin(request, "admin:support:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { db } = await connectToDatabase();
@@ -144,16 +143,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
   const userId = request.cookies.get("userId")?.value;
 
-  if (!role || !userId) {
+  if (!userId) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
-  }
+  const auth = await requireAdmin(request, "admin:support:respond");
+  if (auth instanceof NextResponse) return auth;
 
   let payload: { ownerId?: string; assignedAdminId?: string | null; labels?: string[] } = {};
   try {

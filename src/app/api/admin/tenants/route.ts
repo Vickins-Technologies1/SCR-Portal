@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db } from "mongodb";
+import { requireAdmin } from "../../../../lib/admin-auth";
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
-  console.log("GET /api/admin/tenants - Cookie role:", role);
-
-  if (role !== "admin") {
-    console.log("Unauthorized access - role:", role);
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:properties:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { db }: { db: Db } = await connectToDatabase();

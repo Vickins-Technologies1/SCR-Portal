@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
+import { requireAdmin } from "@/lib/admin-auth";
 
 type SaleListingStatus = "published" | "draft" | "sold";
 
@@ -34,10 +35,8 @@ const toNumberOrUndefined = (value: unknown) => {
 };
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:marketplace:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { db } = await connectToDatabase();
@@ -79,10 +78,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
-  if (role !== "admin") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAdmin(request, "admin:marketplace:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const payload = await request.json();
@@ -157,4 +154,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
   }
 }
-

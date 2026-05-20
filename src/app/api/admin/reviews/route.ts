@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { REVIEW_COLLECTION } from "@/lib/property-reviews";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const normalizeStatus = (value?: string | null) => {
   if (!value) return "pending";
@@ -10,14 +11,8 @@ const normalizeStatus = (value?: string | null) => {
 };
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value?.toLowerCase();
-
-  if (!role || role !== "admin") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized: Admin access required" },
-      { status: 401 }
-    );
-  }
+  const auth = await requireAdmin(request, "admin:reviews:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { searchParams } = new URL(request.url);

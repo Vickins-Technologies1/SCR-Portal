@@ -3,42 +3,14 @@ import { connectToDatabase } from "../../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { computeExpectedMonthlyIncome, getGracePeriodEndDate, resolveBillingPlan, upsertPercentageInvoice } from "../../../../../lib/billing";
 import { Property } from "../../../../../types/property";
-
-// Helper: check if request is from authenticated admin
-async function isAuthenticatedAdmin(request: NextRequest): Promise<{ authenticated: boolean; errorResponse?: NextResponse }> {
-  try {
-    const sessionRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/auth/session`, {
-      method: "GET",
-      headers: {
-        // Forward cookies (important!)
-        cookie: request.headers.get("cookie") || "",
-      },
-      credentials: "include",
-    });
-
-    if (!sessionRes.ok) {
-      return { authenticated: false, errorResponse: NextResponse.json({ success: false, message: "Session check failed" }, { status: 401 }) };
-    }
-
-    const sessionData = await sessionRes.json();
-
-    if (!sessionData.authenticated || sessionData.role !== "admin") {
-      return { authenticated: false, errorResponse: NextResponse.json({ success: false, message: "Unauthorized: Admin access required" }, { status: 401 }) };
-    }
-
-    return { authenticated: true };
-  } catch (err) {
-    console.error("Session validation error:", err);
-    return { authenticated: false, errorResponse: NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 }) };
-  }
-}
+import { requireAdmin } from "../../../../../lib/admin-auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authenticated, errorResponse } = await isAuthenticatedAdmin(request);
-  if (!authenticated) return errorResponse!;
+  const auth = await requireAdmin(request, "admin:properties:view");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;   // ← await here
 
@@ -72,8 +44,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authenticated, errorResponse } = await isAuthenticatedAdmin(request);
-  if (!authenticated) return errorResponse!;
+  const auth = await requireAdmin(request, "admin:properties:edit");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;   // ← await here
 
@@ -177,8 +149,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authenticated, errorResponse } = await isAuthenticatedAdmin(request);
-  if (!authenticated) return errorResponse!;
+  const auth = await requireAdmin(request, "admin:properties:edit");
+  if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;   // ← await here
 

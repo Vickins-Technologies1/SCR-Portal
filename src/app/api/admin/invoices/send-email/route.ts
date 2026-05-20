@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { generateInvoicePdf } from "@/lib/invoice-pdf";
 import { sendInvoiceEmail } from "@/lib/email";
 import logger from "@/lib/logger";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const parseDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -13,15 +14,16 @@ const parseDate = (value: unknown): Date | null => {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.cookies.get("userId")?.value;
-    const role = request.cookies.get("role")?.value;
+    const auth = await requireAdmin(request, "admin:payments:manage");
+    if (auth instanceof NextResponse) return auth;
+
     const csrf =
       request.headers.get("X-CSRF-Token") ||
       request.headers.get("x-csrf-token") ||
       "";
     const storedCsrf = request.cookies.get("csrf-token")?.value || "";
 
-    if (!userId || role !== "admin" || !csrf || csrf !== storedCsrf) {
+    if (!csrf || csrf !== storedCsrf) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
       dueDate: dueAt ? `${dueAt.getFullYear()}-${String(dueAt.getMonth() + 1).padStart(2, "0")}-${String(dueAt.getDate()).padStart(2, "0")}` : null,
       createdAt: new Date().toISOString(),
       status: "success",
-      initiatedBy: userId,
+      initiatedBy: auth.userId,
     });
 
     await db.collection("auditLogs").insertOne({
@@ -144,4 +146,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Failed to send invoice email" }, { status: 500 });
   }
 }
-

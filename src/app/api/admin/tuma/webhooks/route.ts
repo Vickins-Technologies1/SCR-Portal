@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Db } from "mongodb";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
-
-  if (!role || role !== "admin") {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized: Admin access required" },
-      { status: 401 }
-    );
-  }
+  const auth = await requireAdmin(request, "admin:webhooks:view");
+  if (auth instanceof NextResponse) return auth;
 
   const { searchParams } = new URL(request.url);
   const limit = Math.max(1, Math.min(200, Number(searchParams.get("limit") || 50)));

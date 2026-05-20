@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
+import { requireAdmin } from "../../../lib/admin-auth";
 
 interface User {
   _id: ObjectId;
@@ -11,16 +12,8 @@ interface User {
 }
 
 export async function GET(request: NextRequest) {
-  const role = request.cookies.get("role")?.value;
-
-  // Validate role cookie
-  if (!role || role !== "admin") {
-    console.log("Unauthorized access attempt - role:", role || "missing");
-    return NextResponse.json(
-      { success: false, message: "Unauthorized: Admin access required" },
-      { status: 401 }
-    );
-  }
+  const auth = await requireAdmin(request, "admin:dashboard:view");
+  if (auth instanceof NextResponse) return auth;
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
