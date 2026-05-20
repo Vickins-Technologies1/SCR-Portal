@@ -5,6 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { ensureAirbnbGuestPortalAccount } from "@/lib/airbnb-guest-portal";
+import { ObjectId } from "mongodb";
 
 const CreateAirbnbTenantSchema = z.object({
   bookingId: z.string().trim().min(1),
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   const resolved = await resolveAirbnbOwner(request, null);
   if (resolved.response) return resolved.response;
-  const { ownerId } = resolved.context!;
+  const { ownerId, role, userId } = resolved.context!;
 
   let payload: unknown;
   try {
@@ -37,6 +38,25 @@ export async function POST(request: NextRequest) {
   const deliveryMethod = parsed.data.deliveryMethod || "both";
 
   const { db }: { db: Db } = await connectToDatabase();
+
+  if (role === "teamMember" && ObjectId.isValid(userId)) {
+    const member = await db.collection("teamMembers").findOne({
+      _id: new ObjectId(userId),
+      active: true,
+    });
+
+    if (!member || member.ownerId?.toString?.() !== ownerId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    const permissions: string[] = Array.isArray((member as any).permissions) ? (member as any).permissions : [];
+    if (!permissions.includes("tenants:edit")) {
+      return NextResponse.json(
+        { success: false, message: "Insufficient permissions to add tenants" },
+        { status: 403 }
+      );
+    }
+  }
 
   const booking = await db.collection("airbnbBookings").findOne({ ownerId, externalId: bookingId });
   if (!booking) {

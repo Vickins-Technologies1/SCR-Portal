@@ -239,20 +239,67 @@ export async function POST(request: NextRequest) {
       return buildInvalidCsrfResponse(request);
     }
 
-    const userId = (await cookies()).get("userId")?.value;
-    const role = (await cookies()).get("role")?.value;
+    const cookieStore = await cookies();
+    const userId = cookieStore.get("userId")?.value;
+    const role = cookieStore.get("role")?.value;
 
-    if (!userId || !ObjectId.isValid(userId) || role !== "propertyOwner") {
+    if (!userId || !ObjectId.isValid(userId) || !["propertyOwner", "teamMember"].includes(role || "")) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     const body: TenantRequest = await request.json();
+
+    const { db } = await connectToDatabase();
+
+    let effectiveOwnerId = userId;
+    let teamMemberAssignedPropertyIds: string[] | null = null;
+
+    if (role === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({
+        _id: new ObjectId(userId),
+        active: true,
+      });
+
+      if (!teamMember || !teamMember.ownerId) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+
+      if (!Array.isArray((teamMember as any).permissions) || !(teamMember as any).permissions.includes("tenants:edit")) {
+        return NextResponse.json(
+          { success: false, message: "Insufficient permissions to add tenants" },
+          { status: 403 }
+        );
+      }
+
+      effectiveOwnerId = teamMember.ownerId.toString();
+      teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? Array.from(
+            new Set(
+              (teamMember as any).assignedPropertyIds
+                .map((value: any) => String(value || "").trim())
+                .filter((value: string) => value.length > 0)
+            )
+          )
+        : null;
+    }
 
     // Required fields
     const required = ["name", "email", "phone", "password", "propertyId", "leaseStartDate", "leaseEndDate"];
     const missing = required.filter(f => !body[f as keyof TenantRequest]);
     if (missing.length > 0) {
       return NextResponse.json({ success: false, message: `Missing fields: ${missing.join(", ")}` }, { status: 400 });
+    }
+
+    if (
+      role === "teamMember" &&
+      Array.isArray(teamMemberAssignedPropertyIds) &&
+      teamMemberAssignedPropertyIds.length > 0 &&
+      !teamMemberAssignedPropertyIds.includes(String(body.propertyId || ""))
+    ) {
+      return NextResponse.json(
+        { success: false, message: "You are not assigned to this property." },
+        { status: 403 }
+      );
     }
 
     const leaseUnitInputs = Array.isArray(body.leasedUnits) && body.leasedUnits.length > 0
@@ -282,15 +329,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
     }
 
-    const { db } = await connectToDatabase();
-
     // ────────────────────────────────────────────────
     //           PREVENT DUPLICATE TENANTS (scoped to owner)
     // ────────────────────────────────────────────────
 
     // 1. Email already in use by this owner (case-insensitive)
     const duplicateEmail = await db.collection("tenants").findOne({
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
       email: { $regex: new RegExp(`^${body.email.trim()}$`, "i") }
     });
     if (duplicateEmail) {
@@ -302,7 +347,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Phone number already in use by this owner
     const duplicatePhone = await db.collection("tenants").findOne({
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
       phone: body.phone.trim()
     });
     if (duplicatePhone) {
@@ -360,7 +405,7 @@ export async function POST(request: NextRequest) {
     // Validate property ownership
     const property = await db.collection<Property>("properties").findOne({
       _id: new ObjectId(body.propertyId),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
     });
 
     if (!property) {
@@ -414,7 +459,7 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    const dueStatus = await getOwnerDueStatus(db, userId, new Date());
+    const dueStatus = await getOwnerDueStatus(db, effectiveOwnerId, new Date());
     if (dueStatus.isDue) {
       return NextResponse.json(
         { success: false, message: "Payment required: Outstanding invoice past grace period. Please pay your invoice to continue." },
@@ -428,7 +473,7 @@ export async function POST(request: NextRequest) {
 
     const tenantData: Tenant = {
       _id: new ObjectId(),
-      ownerId: userId,
+      ownerId: effectiveOwnerId,
       name: body.name.trim(),
       email: body.email.trim(),
       phone: body.phone.trim(),
