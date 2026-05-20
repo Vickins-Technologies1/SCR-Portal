@@ -635,6 +635,24 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
+
+            <div className="flex items-center justify-center gap-2 text-[11px] sm:text-xs text-muted-foreground">
+              <Link href="/airbnb-tenant-login" className="hover:text-primary hover:underline">
+                Guest payment
+              </Link>
+              <span aria-hidden className="opacity-40">
+                •
+              </span>
+              <Link href="/admin/login" className="hover:text-primary hover:underline">
+                Admin
+              </Link>
+              <span aria-hidden className="opacity-40">
+                •
+              </span>
+              <Link href="/portals" className="hover:text-primary hover:underline">
+                All portals
+              </Link>
+            </div>
             {error && (
               <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
                 {error}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
@@ -503,6 +504,30 @@ export default function AdminLogin() {
                 <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium">
                   Restricted access for administrators
                 </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-[11px] sm:text-xs text-muted-foreground">
+                <Link href="/portals/owner" className="hover:text-primary hover:underline">
+                  Owner portal
+                </Link>
+                <span aria-hidden className="opacity-40">
+                  •
+                </span>
+                <Link href="/tenant-login" className="hover:text-primary hover:underline">
+                  Tenant portal
+                </Link>
+                <span aria-hidden className="opacity-40">
+                  •
+                </span>
+                <Link href="/airbnb-tenant-login" className="hover:text-primary hover:underline">
+                  Guest payment
+                </Link>
+                <span aria-hidden className="opacity-40">
+                  •
+                </span>
+                <Link href="/portals" className="hover:text-primary hover:underline">
+                  All portals
+                </Link>
               </div>
 
               {error && (

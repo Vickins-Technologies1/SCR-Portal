@@ -452,7 +452,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
             {!isAirbnbGuestPortal ? (
               <div className="relative group">
                 <Link
-                  href="/"
+                  href="/portals/owner"
                   className="flex items-center justify-center gap-2 w-full bg-[linear-gradient(110deg,rgba(66,199,117,0.18),rgba(30,58,138,0.08))] hover:bg-[linear-gradient(110deg,rgba(66,199,117,0.24),rgba(30,58,138,0.12))] border border-border hover:border-primary/50 text-foreground font-semibold py-2.5 xs:py-3 px-4 xs:px-5 rounded-xl transition-all duration-300 shadow-sm hover:shadow active:scale-[0.98] text-xs xs:text-sm sm:text-base"
                 >
                   <FaUserTie className="text-primary text-lg" />
@@ -488,6 +488,40 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
                 </div>
               </div>
             ) : null}
+
+            <div className="flex items-center justify-center gap-2 text-[11px] sm:text-xs text-muted-foreground">
+              {isAirbnbGuestPortal ? (
+                <>
+                  <Link href="/tenant-login" className="hover:text-primary hover:underline">
+                    Tenant portal
+                  </Link>
+                  <span aria-hidden className="opacity-40">
+                    •
+                  </span>
+                  <Link href="/portals/owner" className="hover:text-primary hover:underline">
+                    Owner portal
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/airbnb-tenant-login" className="hover:text-primary hover:underline">
+                    Guest payment
+                  </Link>
+                </>
+              )}
+              <span aria-hidden className="opacity-40">
+                •
+              </span>
+              <Link href="/admin/login" className="hover:text-primary hover:underline">
+                Admin
+              </Link>
+              <span aria-hidden className="opacity-40">
+                •
+              </span>
+              <Link href="/portals" className="hover:text-primary hover:underline">
+                All portals
+              </Link>
+            </div>
 
             {error && (
               <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
