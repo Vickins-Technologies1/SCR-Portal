@@ -607,7 +607,7 @@ export default function AdminTeamMembersPage() {
             <div>
               <label className="block text-xs font-semibold text-muted-foreground">Name</label>
               <input
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                 value={createForm.name}
                 onChange={(e) => setCreateForm((p) => ({ ...p, name: e.target.value }))}
               />
@@ -615,7 +615,7 @@ export default function AdminTeamMembersPage() {
             <div>
               <label className="block text-xs font-semibold text-muted-foreground">Email</label>
               <input
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                 value={createForm.email}
                 onChange={(e) => setCreateForm((p) => ({ ...p, email: e.target.value }))}
               />
@@ -623,7 +623,7 @@ export default function AdminTeamMembersPage() {
             <div>
               <label className="block text-xs font-semibold text-muted-foreground">Phone (optional)</label>
               <input
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                 value={createForm.phone}
                 onChange={(e) => setCreateForm((p) => ({ ...p, phone: e.target.value }))}
               />
@@ -631,7 +631,7 @@ export default function AdminTeamMembersPage() {
             <div>
               <label className="block text-xs font-semibold text-muted-foreground">Role preset</label>
               <select
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground"
                 value={createForm.teamRole}
                 onChange={(e) => {
                   const teamRole = e.target.value;
@@ -659,7 +659,7 @@ export default function AdminTeamMembersPage() {
               </button>
             </div>
             <input
-              className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-mono"
+              className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground"
               value={createForm.password}
               onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))}
             />
@@ -719,7 +719,7 @@ export default function AdminTeamMembersPage() {
             <div>
               <label className="block text-xs font-semibold text-muted-foreground">Name</label>
               <input
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                 value={editForm.name}
                 onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
               />
@@ -727,7 +727,7 @@ export default function AdminTeamMembersPage() {
             <div>
               <label className="block text-xs font-semibold text-muted-foreground">Phone</label>
               <input
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                 value={editForm.phone}
                 onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))}
               />
@@ -735,7 +735,7 @@ export default function AdminTeamMembersPage() {
             <div>
               <label className="block text-xs font-semibold text-muted-foreground">Role preset</label>
               <select
-                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-foreground"
                 value={editForm.teamRole}
                 onChange={(e) => {
                   const teamRole = e.target.value;
@@ -764,7 +764,7 @@ export default function AdminTeamMembersPage() {
           <div>
             <label className="block text-xs font-semibold text-muted-foreground">Reset password (optional)</label>
             <input
-              className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-mono"
+              className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground"
               value={editForm.password}
               onChange={(e) => setEditForm((p) => ({ ...p, password: e.target.value }))}
               placeholder="Leave blank to keep current password"
@@ -841,4 +841,3 @@ export default function AdminTeamMembersPage() {
     </div>
   );
 }
-
