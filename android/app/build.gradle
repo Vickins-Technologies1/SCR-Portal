@@ -87,9 +87,25 @@ apply from: 'capacitor.build.gradle'
 
 try {
     def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
+    if (servicesJSON.exists() && servicesJSON.text) {
+        // Validate the package name inside google-services.json matches this appId to avoid silent FCM misconfiguration.
+        try {
+            def json = new groovy.json.JsonSlurper().parseText(servicesJSON.text)
+            def expectedPackage = android.defaultConfig.applicationId
+            def hasMatch = (json?.client ?: []).any { c ->
+                c?.client_info?.android_client_info?.package_name == expectedPackage
+            }
+            if (!hasMatch) {
+                throw new GradleException("google-services.json is present but does not contain a client with package_name=${expectedPackage}. Re-download it from Firebase for the correct appId.")
+            }
+        } catch (Exception e) {
+            throw new GradleException("Invalid google-services.json: ${e.message}", e)
+        }
+
         apply plugin: 'com.google.gms.google-services'
+    } else {
+        logger.warn("google-services.json not found; Firebase/FCM push token registration will be disabled until you add android/app/google-services.json")
     }
 } catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+    logger.warn("Failed to configure Firebase/FCM (google-services.json). Push Notifications won't work: ${e.message}")
 }

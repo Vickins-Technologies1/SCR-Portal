@@ -52,6 +52,7 @@ interface SignupRequestBody {
   role: string;
   managementType?: string;
   tier?: string;
+  acceptedTermsAndPrivacy?: boolean;
   csrfToken: string;
 }
 
@@ -84,13 +85,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, phone, role, csrfToken, managementType, tier } = body;
+    const { name, email, password, phone, role, csrfToken, managementType, tier, acceptedTermsAndPrivacy } = body;
 
     // 3. Required fields
     if (!name || !email || !password || !phone || !role || !csrfToken) {
       logger.warn("Missing required fields", { provided: Object.keys(body) });
       return NextResponse.json(
         { success: false, message: "All fields are required" },
+        { status: 400 }
+      );
+    }
+
+    if (acceptedTermsAndPrivacy !== true) {
+      logger.warn("Terms/privacy not accepted", { email: email ?? "unknown", ip });
+      return NextResponse.json(
+        { success: false, message: "You must accept the Terms of Service and Privacy Policy to create an account." },
         { status: 400 }
       );
     }
@@ -222,6 +231,7 @@ export async function POST(request: NextRequest) {
       managementType: normalizedManagementType,
       tier: normalizedTier,
       isApproved: false,
+      legalAcceptedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
 

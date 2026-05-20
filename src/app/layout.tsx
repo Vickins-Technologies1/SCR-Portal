@@ -3,7 +3,7 @@ import "./globals.css";
 import NativeBootstrap from "@/components/native/NativeBootstrap";
 
 const siteUrl = "https://app.soranapropertymanagers.com";
-const siteName = "Sorana Property Managers Ltd";
+const siteName = "Sorana";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     template: `%s | ${siteName}`,
   },
   description: "Your trusted partner in rental success",
-  applicationName: "Sorana Property Managers",
+  applicationName: "Sorana",
   keywords: [
     "property management",
     "rental management",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
         url: "/logo.png",
         width: 512,
         height: 512,
-        alt: "Sorana Property Managers Logo",
+        alt: "Sorana Logo",
       },
     ],
   },

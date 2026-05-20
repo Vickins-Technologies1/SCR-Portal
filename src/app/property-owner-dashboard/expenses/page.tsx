@@ -55,6 +55,7 @@ interface Property {
 
 interface Report {
   revenue: number;
+  type?: "Rent" | "Utility" | "Deposit" | "Other" | string;
 }
 
 const categoryConfig: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
@@ -229,7 +230,9 @@ export default function ExpensesPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setTotalIncome(data.data?.reduce((sum: number, r: Report) => sum + r.revenue, 0) ?? 0);
+        setTotalIncome(
+          data.data?.reduce((sum: number, r: Report) => sum + (r.type === "Deposit" ? 0 : r.revenue), 0) ?? 0
+        );
       }
     } catch { }
   }, [ownerId, csrfToken, period, customStart, customEnd, selectedProperty, hasAccess]);

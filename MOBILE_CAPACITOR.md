@@ -62,6 +62,8 @@ To enable real push delivery you still need platform credentials:
    - `android/app/google-services.json`
 4. In Android Studio, ensure Google Services + Firebase Messaging are configured for the app module (Firebase console prompts you with the exact Gradle additions).
 
+Note: if `google-services.json` is missing or misconfigured, the app will still run, but push token registration will fail (and no pushes will be delivered) until Firebase is set up correctly.
+
 ### iOS (APNS + FCM)
 
 1. In Apple Developer:

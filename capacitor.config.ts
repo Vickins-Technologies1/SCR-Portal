@@ -5,7 +5,7 @@ const allowCleartext = serverUrl.startsWith("http://");
 
 const config: CapacitorConfig = {
   appId: "com.soranapropertymanagers.portal",
-  appName: "Sorana Property Managers",
+  appName: "Sorana",
   webDir: "www",
   server: {
     // This project uses Next.js middleware, API route handlers, cookies, and CSRF.

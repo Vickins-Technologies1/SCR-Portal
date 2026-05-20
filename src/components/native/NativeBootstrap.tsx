@@ -103,8 +103,13 @@ export default function NativeBootstrap() {
       const afterPerm = await PushNotifications.checkPermissions();
       if (afterPerm.receive !== "granted") return;
 
-      // Register with APNS/FCM.
-      await PushNotifications.register();
+      // Register with APNS/FCM. If Firebase isn't configured on Android (missing `google-services.json`),
+      // registration can fail — treat as best-effort so the app doesn't crash on permission grant.
+      try {
+        await PushNotifications.register();
+      } catch {
+        return;
+      }
 
       registrationHandle = await PushNotifications.addListener("registration", async (token) => {
         if (cancelled) return;

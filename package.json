@@ -10,6 +10,7 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:e2e": "vitest run -c vitest.e2e.config.ts",
+    "postinstall": "patch-package",
     "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor=#ffffff --iconBackgroundColorDark=#ffffff --splashBackgroundColor=#0f172a --splashBackgroundColorDark=#0f172a",
     "cap:sync": "npx cap sync",
     "cap:copy": "npx cap copy",

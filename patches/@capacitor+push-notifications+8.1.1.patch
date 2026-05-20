@@ -1,0 +1,57 @@
+diff --git a/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java b/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
+index f338f49..9469a13 100644
+--- a/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
++++ b/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
+@@ -99,24 +99,40 @@ public class PushNotificationsPlugin extends Plugin {
+ 
+     @PluginMethod
+     public void register(PluginCall call) {
+-        FirebaseMessaging.getInstance().setAutoInitEnabled(true);
+-        FirebaseMessaging.getInstance()
+-            .getToken()
+-            .addOnCompleteListener((task) -> {
+-                if (!task.isSuccessful()) {
+-                    sendError(task.getException().getLocalizedMessage());
+-                    return;
+-                }
+-                sendToken(task.getResult());
+-            });
+-        call.resolve();
++        try {
++            FirebaseMessaging firebaseMessaging = FirebaseMessaging.getInstance();
++            firebaseMessaging.setAutoInitEnabled(true);
++            firebaseMessaging
++                .getToken()
++                .addOnCompleteListener((task) -> {
++                    if (!task.isSuccessful()) {
++                        String error = task.getException() != null ? task.getException().getLocalizedMessage() : "Unknown error";
++                        sendError(error);
++                        return;
++                    }
++                    sendToken(task.getResult());
++                });
++            call.resolve();
++        } catch (Exception ex) {
++            // Most common cause is missing Firebase config (google-services.json / google-services Gradle plugin).
++            String msg = "Push registration failed. Firebase may not be configured for this app (missing google-services.json).";
++            sendError(msg);
++            call.reject(msg);
++        }
+     }
+ 
+     @PluginMethod
+     public void unregister(PluginCall call) {
+-        FirebaseMessaging.getInstance().setAutoInitEnabled(false);
+-        FirebaseMessaging.getInstance().deleteToken();
+-        call.resolve();
++        try {
++            FirebaseMessaging firebaseMessaging = FirebaseMessaging.getInstance();
++            firebaseMessaging.setAutoInitEnabled(false);
++            firebaseMessaging.deleteToken();
++            call.resolve();
++        } catch (Exception ex) {
++            String msg = "Push unregistration failed. Firebase may not be configured for this app (missing google-services.json).";
++            sendError(msg);
++            call.reject(msg);
++        }
+     }

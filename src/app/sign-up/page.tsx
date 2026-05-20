@@ -56,6 +56,7 @@ export default function SignUp() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTermsAndPrivacy, setAcceptedTermsAndPrivacy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -206,6 +207,12 @@ export default function SignUp() {
       return;
     }
 
+    if (!acceptedTermsAndPrivacy) {
+      setError("Please accept the Terms of Service and Privacy Policy to continue.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/signup", {
         method: "POST",
@@ -221,6 +228,7 @@ export default function SignUp() {
           role: "propertyOwner",
           managementType,
           tier,
+          acceptedTermsAndPrivacy,
           csrfToken,
         }),
         credentials: "include",
@@ -245,6 +253,7 @@ export default function SignUp() {
       setPhone("");
       setPassword("");
       setConfirmPassword("");
+      setAcceptedTermsAndPrivacy(false);
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
     } finally {
@@ -941,6 +950,39 @@ export default function SignUp() {
                     <div className="rounded-xl border border-border bg-[linear-gradient(110deg,rgba(66,199,117,0.10),rgba(66,199,117,0.04))] px-3.5 xs:px-4 py-3 text-[11px] text-muted-foreground">
                       Everything looks good? Make quick edits right here, then create your account.
                     </div>
+
+                    <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4">
+                      <label className="flex items-start gap-2.5 text-[11px] sm:text-xs text-muted-foreground leading-snug cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={acceptedTermsAndPrivacy}
+                          onChange={(e) => setAcceptedTermsAndPrivacy(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-border bg-background/70 text-primary focus:ring-2 focus:ring-primary/30"
+                          required
+                        />
+                        <span>
+                          I agree to the{" "}
+                          <Link
+                            href="https://www.soranapropertymanagers.com/terms"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary font-semibold hover:underline"
+                          >
+                            Terms of Service
+                          </Link>{" "}
+                          and{" "}
+                          <Link
+                            href="https://www.soranapropertymanagers.com/privacy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary font-semibold hover:underline"
+                          >
+                            Privacy Policy
+                          </Link>
+                          .
+                        </span>
+                      </label>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -968,10 +1010,10 @@ export default function SignUp() {
                 ) : (
                   <motion.button
                     whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="submit"
-                    disabled={isLoading || !csrfToken || score < 5}
-                    className="w-1/2 bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
+                  whileTap={{ scale: 0.98 }}
+                  type="submit"
+                  disabled={isLoading || !csrfToken || score < 5 || !acceptedTermsAndPrivacy}
+                  className="w-1/2 bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
                   >
                     {isLoading ? "Creating Account…" : "Create Account"}
                   </motion.button>

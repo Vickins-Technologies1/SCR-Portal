@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# Firebase (native)
+android/app/google-services.json
+ios/App/App/GoogleService-Info.plist
+
 # debug
 npm-debug.log*
 yarn-debug.log*
