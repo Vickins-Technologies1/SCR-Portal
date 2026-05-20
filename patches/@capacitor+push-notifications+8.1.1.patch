@@ -2,7 +2,7 @@ diff --git a/node_modules/@capacitor/push-notifications/android/src/main/java/co
 index f338f49..9469a13 100644
 --- a/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
 +++ b/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
-@@ -99,24 +99,40 @@ public class PushNotificationsPlugin extends Plugin {
+@@ -99,22 +99,38 @@
  
      @PluginMethod
      public void register(PluginCall call) {
