@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Cookies from "js-cookie";
-import { normalizeAdminPermissions, type AdminPermission } from "@/lib/admin-permissions";
+import { adminPermissionsCover, normalizeAdminPermissions, type AdminPermission } from "@/lib/admin-permissions";
 
 export function useAdminPermissions() {
   return useMemo(() => {
@@ -28,7 +28,7 @@ export function useAdminPermissions() {
       }
     }
 
-    const hasPermission = (perm: AdminPermission) => isAdminOwner || permissions.includes(perm);
+    const hasPermission = (perm: AdminPermission) => isAdminOwner || adminPermissionsCover(perm, permissions);
 
     return { role, isAdminOwner, permissions, hasPermission };
   }, []);

@@ -20,7 +20,6 @@ import {
   Activity,
   Shield,
   Star,
-  FileText,
   Store,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -159,7 +158,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       icon: <CreditCard size={20} />,
       requiredPermission: "admin:payments:view",
     },
-    { key: "quotations", href: "/admin/quotations", label: "Quotations", icon: <FileText size={20} /> },
     {
       key: "reviews",
       href: "/admin/reviews",

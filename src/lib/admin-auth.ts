@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { normalizeAdminPermissions, type AdminPermission } from "@/lib/admin-permissions";
+import { adminPermissionsCover, normalizeAdminPermissions, type AdminPermission } from "@/lib/admin-permissions";
 
 export type AdminRole = "admin" | "adminTeamMember";
 
@@ -52,7 +52,7 @@ export async function requireAdmin(
   const permissions = normalizeAdminPermissions(member.permissions);
   if (requiredList.length > 0) {
     for (const perm of requiredList) {
-      if (!permissions.includes(perm)) return jsonForbidden();
+      if (!adminPermissionsCover(perm, permissions)) return jsonForbidden();
     }
   }
 
@@ -63,4 +63,3 @@ export async function requireAdmin(
     teamRole: typeof member.teamRole === "string" ? member.teamRole : null,
   };
 }
-

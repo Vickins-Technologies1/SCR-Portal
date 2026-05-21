@@ -1,8 +1,8 @@
 // cron/generate-monthly-invoices.ts
 import { connectToDatabase } from "@/lib/mongodb";
 import { computeExpectedMonthlyIncome, getBillingMonth, getGracePeriodEndDate, resolveBillingPlan, SOFTWARE_LEASING_PERCENT, upsertPercentageInvoice } from "@/lib/billing";
-import { AIRBNB_SOFTWARE_LEASING_PERCENT, computeAirbnbListingRevenue, fetchAirbnbRevenueSources } from "@/lib/airbnb-billing";
-import { parseDate } from "@/lib/airbnb-utils";
+import { AIRBNB_BOOKING_INVOICE_PERCENT } from "@/lib/airbnb-billing";
+import { parseDate, startOfDay } from "@/lib/airbnb-utils";
 import { Property } from "@/types/property";
 import { Db, ObjectId } from "mongodb";
 
@@ -10,7 +10,7 @@ interface Invoice {
   _id: ObjectId;
   userId: string;
   propertyId: string;
-  status: "pending" | "completed" | "failed";
+  status: string;
   createdAt?: Date;
   billingMonth?: string;
   billingPlan?: string;
@@ -33,6 +33,34 @@ const toMonthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(
 
 const addMonths = (date: Date, months: number) => new Date(date.getFullYear(), date.getMonth() + months, 15);
 
+const addMonthlyAnniversary = (base: Date, monthsToAdd: number): Date => {
+  const desiredDay = base.getDate();
+  const desiredHour = base.getHours();
+  const desiredMinute = base.getMinutes();
+  const desiredSecond = base.getSeconds();
+  const desiredMs = base.getMilliseconds();
+
+  const nextMonth = new Date(base.getFullYear(), base.getMonth() + monthsToAdd, 1);
+  const lastDay = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+  const day = Math.min(desiredDay, lastDay);
+
+  return new Date(
+    nextMonth.getFullYear(),
+    nextMonth.getMonth(),
+    day,
+    desiredHour,
+    desiredMinute,
+    desiredSecond,
+    desiredMs
+  );
+};
+
+const fmtRange = (start: Date, end: Date) => {
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-KE", { year: "numeric", month: "short", day: "numeric" });
+  return `${fmt(start)} – ${fmt(end)}`;
+};
+
 export async function generateAirbnbInvoicesForOwner(params: {
   db: Db;
   ownerId: string;
@@ -48,99 +76,110 @@ export async function generateAirbnbInvoicesForOwner(params: {
   let skipped = 0;
   let skippedExisting = 0;
 
-  const lastInvoice = await invoicesCollection
-    .find({ userId: ownerId, billingPlan: "Airbnb" })
-    .sort({ createdAt: -1 })
-    .limit(1)
-    .next();
-
-  const sources = await fetchAirbnbRevenueSources(db, ownerId);
-
-  const earliestPaymentDate = sources.directPayments.reduce<Date | null>((earliest, payment) => {
-    const parsed = parseDate(payment.paymentDate || payment.createdAt || null);
-    if (!parsed) return earliest;
-    if (!earliest || parsed < earliest) return parsed;
-    return earliest;
-  }, null);
-
-  const earliestPayoutDate = sources.payouts.reduce<Date | null>((earliest, payout) => {
-    const parsed = parseDate(payout.createdAt || payout.period || null);
-    if (!parsed) return earliest;
-    if (!earliest || parsed < earliest) return parsed;
-    return earliest;
-  }, null);
-
-  const earliestBooking = await db
-    .collection("airbnbBookings")
+  const listings = await db
+    .collection("airbnbListings")
     .find({ ownerId })
-    .sort({ checkIn: 1 })
-    .limit(1)
-    .next();
+    .project({ externalId: 1, name: 1, createdAt: 1, updatedAt: 1 })
+    .toArray();
 
-  const earliestBookingDate = parseDate(earliestBooking?.checkIn || earliestBooking?.createdAt || null);
-
-  const fallbackDate = [earliestPaymentDate, earliestPayoutDate, earliestBookingDate]
-    .filter((value): value is Date => !!value)
-    .sort((a, b) => a.getTime() - b.getTime())[0];
-
-  const lastGeneratedAt =
-    parseBillingMonth(lastInvoice?.billingMonth) ||
-    (lastInvoice?.createdAt ? new Date(lastInvoice.createdAt) : null) ||
-    fallbackDate;
-
-  if (!lastGeneratedAt) {
+  if (listings.length === 0) {
     return { monthsConsidered, created, updated, skipped, skippedExisting };
   }
 
-  const monthsBehind = monthDiff(toMonthStart(lastGeneratedAt), toMonthStart(now));
-  if (monthsBehind <= 0) {
-    return { monthsConsidered, created, updated, skipped, skippedExisting };
-  }
+  for (const listing of listings as any[]) {
+    const listingId = String(listing.externalId || listing._id?.toString?.() || "").trim();
+    if (!listingId) continue;
 
-  for (let i = 1; i <= monthsBehind; i++) {
-    const targetDate = addMonths(lastGeneratedAt, i);
-    const billingMonth = getBillingMonth(targetDate);
-    const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
-    const monthEnd = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 1);
+    const listingName = String(listing.name || "Airbnb Listing");
+    const listingCreatedAt =
+      parseDate(listing.createdAt || null) ||
+      parseDate(listing.updatedAt || null);
 
-    const listingRevenues = await computeAirbnbListingRevenue(db, ownerId, monthStart, new Date(monthEnd.getTime() - 1));
+    if (!listingCreatedAt) continue;
+    const listingAnchor = startOfDay(listingCreatedAt);
 
-    if (listingRevenues.length === 0) {
-      skipped += 1;
-      continue;
-    }
+    const lastInvoice = await invoicesCollection
+      .find({ userId: ownerId, propertyId: listingId, billingPlan: "Airbnb", status: { $ne: "failed" } })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .next();
 
-    for (const listingRevenue of listingRevenues) {
-      const existingForMonth = await invoicesCollection.findOne({
+    const lastGeneratedAt =
+      parseBillingMonth(lastInvoice?.billingMonth) ||
+      (lastInvoice?.createdAt ? new Date(lastInvoice.createdAt) : null);
+
+    const maxCycles = Math.max(0, monthDiff(toMonthStart(listingAnchor), toMonthStart(now)) + 2);
+    const startCycleIndex = lastGeneratedAt
+      ? Math.max(0, monthDiff(toMonthStart(listingAnchor), toMonthStart(lastGeneratedAt)) - 1)
+      : 0;
+
+    for (let cycleIndex = startCycleIndex; cycleIndex < maxCycles; cycleIndex++) {
+      const cycleStart = addMonthlyAnniversary(listingAnchor, cycleIndex);
+      const cycleEnd = addMonthlyAnniversary(listingAnchor, cycleIndex + 1);
+
+      if (cycleEnd > now) break;
+
+      const billingMonth = getBillingMonth(cycleEnd);
+
+      const existing = await invoicesCollection.findOne({
         userId: ownerId,
-        propertyId: listingRevenue.listingId,
+        propertyId: listingId,
         billingPlan: "Airbnb",
-        $or: [
-          { billingMonth },
-          { createdAt: { $gte: monthStart, $lt: monthEnd } },
-        ],
+        billingMonth,
+        status: { $ne: "failed" },
       });
 
-      if (existingForMonth) {
+      if (existing && !["pending", "unpaid", "overdue"].includes(String(existing.status || ""))) {
         skippedExisting += 1;
         continue;
       }
 
       monthsConsidered += 1;
 
-      const dueDate = getGracePeriodEndDate(targetDate, targetDate);
-      const description = `Airbnb software leasing fee (${AIRBNB_SOFTWARE_LEASING_PERCENT}% of monthly revenue Ksh ${listingRevenue.revenue.toFixed(2)}) for ${listingRevenue.listingName} • ${targetDate.toLocaleString("default", { month: "long", year: "numeric" })}`;
+      const cycleStartIso = cycleStart.toISOString();
+      const cycleEndIso = cycleEnd.toISOString();
+
+      const [bookingAgg] = await db
+        .collection("airbnbBookings")
+        .aggregate<{ total: number }>([
+          {
+            $match: {
+              ownerId,
+              status: { $ne: "cancelled" },
+              $or: [{ listingId }, { listingExternalId: listingId }],
+              checkIn: { $gte: cycleStartIso, $lt: cycleEndIso },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $toDouble: "$total" } },
+            },
+          },
+        ])
+        .toArray();
+
+      const bookingTotal = Number(bookingAgg?.total || 0);
+      const dueDate = getGracePeriodEndDate(listingAnchor, cycleEnd);
+      const description = `Airbnb management fee (${AIRBNB_BOOKING_INVOICE_PERCENT}% of bookings Ksh ${bookingTotal.toFixed(2)}) for ${listingName} • ${fmtRange(cycleStart, cycleEnd)}`;
 
       const result = await upsertPercentageInvoice({
         db,
         userId: ownerId,
-        propertyId: listingRevenue.listingId,
+        propertyId: listingId,
         billingPlan: "Airbnb",
-        percentage: AIRBNB_SOFTWARE_LEASING_PERCENT,
-        expectedIncome: listingRevenue.revenue,
+        percentage: AIRBNB_BOOKING_INVOICE_PERCENT,
+        expectedIncome: bookingTotal,
         description,
         expiresAt: dueDate,
-        now: targetDate,
+        now: cycleEnd,
+        metadata: {
+          billingPeriodStart: cycleStart.toISOString(),
+          billingPeriodEnd: cycleEnd.toISOString(),
+          bookingTotal,
+          listingName,
+          invoiceKind: "airbnb_booking_commission",
+        },
       });
 
       if (result.action === "created") created += 1;

@@ -24,7 +24,11 @@ export type AirbnbRevenueBreakdown = {
   total: number;
 };
 
-export const AIRBNB_SOFTWARE_LEASING_PERCENT = 1;
+// Airbnb management invoicing: 10% of booking totals per invoice period.
+export const AIRBNB_BOOKING_INVOICE_PERCENT = 10;
+
+// Backwards-compatible alias (older code used this constant name).
+export const AIRBNB_SOFTWARE_LEASING_PERCENT = AIRBNB_BOOKING_INVOICE_PERCENT;
 
 export async function fetchAirbnbRevenueSources(db: Db, ownerId: string): Promise<AirbnbRevenueSources> {
   const directPaymentsRaw = await db

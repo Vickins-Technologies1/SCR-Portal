@@ -173,6 +173,7 @@ export async function upsertPercentageInvoice(params: {
   description: string;
   expiresAt: Date;
   now?: Date;
+  metadata?: Record<string, unknown>;
 }) {
   const {
     db,
@@ -185,6 +186,7 @@ export async function upsertPercentageInvoice(params: {
     expiresAt,
   } = params;
   const now = params.now ?? new Date();
+  const metadata = params.metadata ?? {};
   const billingMonth = getBillingMonth(now);
   const amount = roundCurrency((expectedIncome * percentage) / 100);
 
@@ -196,7 +198,7 @@ export async function upsertPercentageInvoice(params: {
     userId,
     propertyId,
     billingMonth,
-    status: "pending",
+    status: { $in: ["pending", "unpaid", "overdue"] },
   });
 
   if (existingPending) {
@@ -211,6 +213,7 @@ export async function upsertPercentageInvoice(params: {
           percentage,
           billingPlan,
           expiresAt,
+          ...metadata,
         },
       }
     );
@@ -240,6 +243,7 @@ export async function upsertPercentageInvoice(params: {
     billingPlan,
     percentage,
     expectedIncome,
+    ...metadata,
   } as any);
 
   return { action: "created" as const, amount, billingMonth, invoiceId: result.insertedId.toString() };

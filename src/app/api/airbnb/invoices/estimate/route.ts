@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
-import { AIRBNB_SOFTWARE_LEASING_PERCENT, computeAirbnbListingRevenue } from "@/lib/airbnb-billing";
+import { AIRBNB_BOOKING_INVOICE_PERCENT } from "@/lib/airbnb-billing";
 import { getBillingMonth, roundCurrency } from "@/lib/billing";
-import { getMonthRange } from "@/lib/airbnb-utils";
+import { parseDate, startOfDay } from "@/lib/airbnb-utils";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,25 +15,117 @@ export async function GET(request: NextRequest) {
 
   const { db } = await connectToDatabase();
 
-  const targetDate = new Date();
-  const { start, end } = getMonthRange(targetDate);
-  const periodLabel = targetDate.toLocaleString("default", { month: "long", year: "numeric" });
-  const billingMonth = getBillingMonth(targetDate);
+  const now = new Date();
+  const billingMonth = getBillingMonth(now);
 
-  const listingRevenues = await computeAirbnbListingRevenue(db, ownerId, start, end);
-  const items = listingRevenues.map((listing) => ({
-    propertyId: listing.listingId,
-    propertyName: listing.listingName,
-    billingPlan: "Airbnb",
-    percentage: AIRBNB_SOFTWARE_LEASING_PERCENT,
-    expectedIncome: roundCurrency(listing.revenue),
-    estimatedAmount: roundCurrency((listing.revenue * AIRBNB_SOFTWARE_LEASING_PERCENT) / 100),
-  }));
-  const total = roundCurrency(items.reduce((sum, item) => sum + (item.estimatedAmount || 0), 0));
+  const addMonthlyAnniversary = (base: Date, monthsToAdd: number): Date => {
+    const desiredDay = base.getDate();
+    const desiredHour = base.getHours();
+    const desiredMinute = base.getMinutes();
+    const desiredSecond = base.getSeconds();
+    const desiredMs = base.getMilliseconds();
+
+    const nextMonth = new Date(base.getFullYear(), base.getMonth() + monthsToAdd, 1);
+    const lastDay = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+    const day = Math.min(desiredDay, lastDay);
+
+    return new Date(
+      nextMonth.getFullYear(),
+      nextMonth.getMonth(),
+      day,
+      desiredHour,
+      desiredMinute,
+      desiredSecond,
+      desiredMs
+    );
+  };
+
+  const monthDiff = (from: Date, to: Date) =>
+    (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+
+  const toMonthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+  const fmtRange = (start: Date, end: Date) => {
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("en-KE", { year: "numeric", month: "short", day: "numeric" });
+    return `${fmt(start)} – ${fmt(end)}`;
+  };
+
+  const listings = await db
+    .collection("airbnbListings")
+    .find({ ownerId })
+    .project({ externalId: 1, name: 1, createdAt: 1, updatedAt: 1 })
+    .toArray();
+
+  const items = [];
+
+  for (const listing of listings as any[]) {
+    const listingId = String(listing.externalId || listing._id?.toString?.() || "").trim();
+    if (!listingId) continue;
+
+    const listingName = String(listing.name || "Airbnb Listing");
+    const listingCreatedAt =
+      parseDate(listing.createdAt || null) ||
+      parseDate(listing.updatedAt || null);
+    if (!listingCreatedAt) continue;
+    const listingAnchor = startOfDay(listingCreatedAt);
+
+    let idx = monthDiff(toMonthStart(listingAnchor), toMonthStart(now));
+    if (idx < 0) idx = 0;
+
+    let cycleStart = addMonthlyAnniversary(listingAnchor, idx);
+    if (cycleStart > now && idx > 0) {
+      idx -= 1;
+      cycleStart = addMonthlyAnniversary(listingAnchor, idx);
+    }
+    const cycleEnd = addMonthlyAnniversary(listingAnchor, idx + 1);
+
+    const cycleStartIso = cycleStart.toISOString();
+    const cycleNowIso = now.toISOString();
+
+    const [bookingAgg] = await db
+      .collection("airbnbBookings")
+      .aggregate<{ total: number }>([
+        {
+          $match: {
+            ownerId,
+            status: { $ne: "cancelled" },
+            $or: [{ listingId }, { listingExternalId: listingId }],
+            checkIn: { $gte: cycleStartIso, $lt: cycleNowIso },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $toDouble: "$total" } },
+          },
+        },
+      ])
+      .toArray();
+
+    const bookingTotal = roundCurrency(Number(bookingAgg?.total || 0));
+    const estimatedAmount = roundCurrency((bookingTotal * AIRBNB_BOOKING_INVOICE_PERCENT) / 100);
+
+    items.push({
+      propertyId: listingId,
+      propertyName: listingName,
+      billingPlan: "Airbnb",
+      percentage: AIRBNB_BOOKING_INVOICE_PERCENT,
+      expectedIncome: bookingTotal,
+      estimatedAmount,
+      period: {
+        start: cycleStart.toISOString(),
+        end: cycleEnd.toISOString(),
+        label: fmtRange(cycleStart, cycleEnd),
+      },
+    });
+  }
+
+  const total = roundCurrency(items.reduce((sum: number, item: any) => sum + Number(item.estimatedAmount || 0), 0));
 
   return NextResponse.json({
     success: true,
-    period: { billingMonth, label: periodLabel },
+    period: { billingMonth, label: "Upcoming billing periods (varies by listing)" },
     total,
     items,
   });

@@ -51,6 +51,7 @@ type AirbnbInvoiceEstimate = {
     percentage: number;
     expectedIncome: number;
     estimatedAmount: number;
+    period?: { start: string; end: string; label: string };
   }>;
 };
 
@@ -635,7 +636,8 @@ export default function AirbnbReportsPage() {
                           <div>
                             <p className="font-semibold text-foreground">{item.propertyName}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {item.billingPlan} • {item.percentage.toFixed(2)}% • Revenue Ksh {item.expectedIncome.toFixed(2)}
+                              {item.billingPlan} • {item.percentage.toFixed(2)}% • Bookings Ksh {item.expectedIncome.toFixed(2)}
+                              {item.period?.label ? ` • ${item.period.label}` : ""}
                             </p>
                           </div>
                           <div className="text-right font-semibold text-foreground">

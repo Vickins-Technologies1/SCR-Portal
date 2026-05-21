@@ -235,3 +235,14 @@ export function getAdminRolePreset(roleName: string): AdminPermission[] {
   return ADMIN_ROLE_PRESETS[roleName] ?? ADMIN_ROLE_PRESETS["Custom"] ?? [];
 }
 
+export function getAdminPermissionFeatureKey(permission: AdminPermission): string {
+  const parts = permission.split(":");
+  return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : permission;
+}
+
+// Feature-level matching: any permission under the same feature key (e.g. "admin:support:*")
+// grants full access to that feature.
+export function adminPermissionsCover(required: AdminPermission, granted: AdminPermission[]): boolean {
+  const requiredKey = getAdminPermissionFeatureKey(required);
+  return granted.some((perm) => getAdminPermissionFeatureKey(perm) === requiredKey);
+}
