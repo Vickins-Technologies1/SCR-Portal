@@ -162,6 +162,41 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+interface ContactLeadEmailOptions {
+  to: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  subject?: string;
+  message: string;
+  meta?: {
+    id?: string;
+    createdAt?: string;
+    ip?: string;
+    origin?: string;
+    referer?: string;
+    userAgent?: string;
+  };
+}
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return char;
+    }
+  });
+
 
 export async function sendWelcomeEmail({
   to,
@@ -354,6 +389,57 @@ export async function sendReminderEmail({
     console.error(`Error sending reminder email to ${to}:`, error);
     throw new Error("Failed to send reminder email");
   }
+}
+
+export async function sendContactLeadEmail({
+  to,
+  name,
+  email,
+  phone,
+  subject,
+  message,
+  meta,
+}: ContactLeadEmailOptions): Promise<void> {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    throw new Error("SMTP authentication missing (SMTP_USER/SMTP_PASS)");
+  }
+
+  const safeMessage = escapeHtml(message).replace(/\r?\n/g, "<br/>");
+  const safeName = escapeHtml(name);
+  const safeSubject = subject ? escapeHtml(subject) : undefined;
+  const safeEmail = email ? escapeHtml(email) : undefined;
+  const safePhone = phone ? escapeHtml(phone) : undefined;
+
+  const html = generateStyledTemplate({
+    name,
+    title: "New Contact Message",
+    intro: `A new message was submitted via the contact form by <strong>${safeName}</strong>.`,
+    details: `
+      <ul>
+        ${safeSubject ? `<li><strong>Subject:</strong> ${safeSubject}</li>` : ""}
+        ${safeEmail ? `<li><strong>Email:</strong> ${safeEmail}</li>` : ""}
+        ${safePhone ? `<li><strong>Phone:</strong> ${safePhone}</li>` : ""}
+        ${meta?.id ? `<li><strong>Lead ID:</strong> ${escapeHtml(meta.id)}</li>` : ""}
+        ${meta?.createdAt ? `<li><strong>Submitted:</strong> ${escapeHtml(meta.createdAt)}</li>` : ""}
+        ${meta?.ip ? `<li><strong>IP:</strong> ${escapeHtml(meta.ip)}</li>` : ""}
+        ${meta?.origin ? `<li><strong>Origin:</strong> ${escapeHtml(meta.origin)}</li>` : ""}
+        ${meta?.referer ? `<li><strong>Referer:</strong> ${escapeHtml(meta.referer)}</li>` : ""}
+      </ul>
+      <div style="margin-top: 18px; padding-top: 18px; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0 0 10px; font-weight: 600; color: #1e3a8a;">Message</p>
+        <div style="font-size: 15px; line-height: 1.7; color: #0f172a;">${safeMessage}</div>
+      </div>
+    `,
+  });
+
+  await transporter.sendMail({
+    from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+    to,
+    subject: safeSubject ? `Contact: ${safeSubject}` : "New contact form submission",
+    replyTo: email ? `${name} <${email}>` : undefined,
+    html,
+    headers: meta?.userAgent ? { "X-Contact-User-Agent": meta.userAgent } : undefined,
+  });
 }
 
 export async function sendInvoiceEmail({
