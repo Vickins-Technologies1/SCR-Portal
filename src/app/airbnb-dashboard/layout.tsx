@@ -19,6 +19,7 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
   useIdleLogout({
     timeoutMs: IDLE_TIMEOUT_MS,
     onIdle: () => {
+      fetch("/api/signout", { method: "POST", credentials: "include" }).catch(() => {});
       Cookies.remove("userId");
       Cookies.remove("role");
       Cookies.remove("permissions");

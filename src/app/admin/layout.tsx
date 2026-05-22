@@ -18,6 +18,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   useIdleLogout({
     timeoutMs: IDLE_TIMEOUT_MS,
     onIdle: () => {
+      fetch("/api/signout", { method: "POST", credentials: "include" }).catch(() => {});
       Cookies.remove("userId");
       Cookies.remove("role");
       Cookies.remove("permissions");

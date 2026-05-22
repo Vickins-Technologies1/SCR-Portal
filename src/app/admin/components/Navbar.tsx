@@ -16,11 +16,31 @@ type NavbarProps = {
 export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) {
   const router = useRouter();
 
-  const handleSignOut = () => {
-    Cookies.remove("userId");
-    Cookies.remove("role");
-    // Add other cookies if needed: permissions, ownerId, etc.
-    router.push("/admin/login");
+  const handleSignOut = async () => {
+    try {
+      await fetch("/api/signout", { method: "POST", credentials: "include" });
+    } catch {
+      // Ignore network failures; we still clear client-visible state.
+    } finally {
+      Cookies.remove("userId", { path: "/" });
+      Cookies.remove("role", { path: "/" });
+      Cookies.remove("permissions", { path: "/" });
+      Cookies.remove("ownerId", { path: "/" });
+      Cookies.remove("managementType", { path: "/" });
+      Cookies.remove("tier", { path: "/" });
+      Cookies.remove("adminName", { path: "/" });
+      Cookies.remove("csrf-token", { path: "/" });
+      Cookies.remove("impersonatingTenantId", { path: "/" });
+      Cookies.remove("isImpersonating", { path: "/" });
+      Cookies.remove("adminOriginalUserId", { path: "/" });
+      Cookies.remove("adminOriginalRole", { path: "/" });
+      Cookies.remove("adminImpersonating", { path: "/" });
+      Cookies.remove("adminImpersonatingOwnerId", { path: "/" });
+      Cookies.remove("adminImpersonatingOwnerName", { path: "/" });
+      localStorage.removeItem("userId");
+      localStorage.removeItem("role");
+      router.replace("/admin/login");
+    }
   };
 
   return (

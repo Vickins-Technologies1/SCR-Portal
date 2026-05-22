@@ -58,6 +58,7 @@ export default function AdminLogin() {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
   const autoVerifyRef = useRef<string>("");
+  const otpVerifyInFlightRef = useRef(false);
 
   // Redirect if already logged in as admin
   useEffect(() => {
@@ -280,10 +281,16 @@ export default function AdminLogin() {
   };
 
   const verifyOtp = async () => {
+    if (otpVerifyInFlightRef.current) return;
+    otpVerifyInFlightRef.current = true;
     setError(null);
     setIsLoading(true);
 
     try {
+      // Prevent the auto-verify effect from re-submitting the same code
+      // when `isLoading` toggles back to false after an error.
+      autoVerifyRef.current = otpCode;
+
       if (!otpId) {
         throw new Error("OTP session expired. Please log in again.");
       }
@@ -334,8 +341,8 @@ export default function AdminLogin() {
       router.push(data.redirect || "/admin/dashboard");
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
-      autoVerifyRef.current = "";
     } finally {
+      otpVerifyInFlightRef.current = false;
       setIsLoading(false);
     }
   };
