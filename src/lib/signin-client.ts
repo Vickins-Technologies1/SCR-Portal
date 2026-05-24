@@ -26,18 +26,28 @@ async function postJson(url: string, body: unknown): Promise<{ ok: boolean; data
 }
 
 function persistClientCookies(params: { userId: string; role: string; permissions?: unknown; adminName?: unknown }) {
-  Cookies.set("userId", params.userId, { secure: true, sameSite: "Strict", expires: 7 });
-  Cookies.set("role", params.role, { secure: true, sameSite: "Strict", expires: 7 });
+  const isSecure =
+    typeof window !== "undefined" ? window.location.protocol === "https:" : process.env.NODE_ENV === "production";
+
+  const base = {
+    path: "/",
+    secure: isSecure,
+    sameSite: "Lax" as const,
+    expires: 7,
+  };
+
+  Cookies.set("userId", params.userId, base);
+  Cookies.set("role", params.role, base);
   if (params.permissions) {
     try {
-      Cookies.set("permissions", JSON.stringify(params.permissions), { secure: true, sameSite: "Strict", expires: 7 });
+      Cookies.set("permissions", JSON.stringify(params.permissions), base);
     } catch {
       // ignore
     }
   }
   if (params.adminName) {
     try {
-      Cookies.set("adminName", String(params.adminName || "Admin"), { secure: true, sameSite: "Strict", expires: 7 });
+      Cookies.set("adminName", String(params.adminName || "Admin"), base);
     } catch {
       // ignore
     }

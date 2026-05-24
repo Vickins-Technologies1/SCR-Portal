@@ -19,12 +19,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     timeoutMs: IDLE_TIMEOUT_MS,
     onIdle: () => {
       fetch("/api/signout", { method: "POST", credentials: "include" }).catch(() => {});
-      Cookies.remove("userId");
-      Cookies.remove("role");
-      Cookies.remove("permissions");
-      Cookies.remove("ownerId");
-      Cookies.remove("managementType");
-      Cookies.remove("csrf-token");
+      Cookies.remove("userId", { path: "/" });
+      Cookies.remove("role", { path: "/" });
+      Cookies.remove("permissions", { path: "/" });
+      Cookies.remove("ownerId", { path: "/" });
+      Cookies.remove("managementType", { path: "/" });
+      Cookies.remove("csrf-token", { path: "/" });
       router.replace("/admin/login");
     },
   });

@@ -29,13 +29,25 @@ export async function POST(request: NextRequest) {
 
     const { db }: { db: Db } = await connectToDatabase();
 
-    const admin = await db.collection("propertyOwners").findOne({
-      _id: new ObjectId(adminUserId),
-      role: "admin",
-    });
+    if (auth.role === "admin") {
+      const admin = await db.collection("propertyOwners").findOne({
+        _id: new ObjectId(adminUserId),
+        role: "admin",
+      });
 
-    if (!admin) {
-      return NextResponse.json({ success: false, message: "Unauthorized admin" }, { status: 401 });
+      if (!admin) {
+        return NextResponse.json({ success: false, message: "Unauthorized admin" }, { status: 401 });
+      }
+    } else {
+      const member = await db.collection("adminTeamMembers").findOne({
+        _id: new ObjectId(adminUserId),
+        role: "adminTeamMember",
+        active: true,
+      });
+
+      if (!member) {
+        return NextResponse.json({ success: false, message: "Unauthorized admin" }, { status: 401 });
+      }
     }
 
     const owner = await db.collection("propertyOwners").findOne({

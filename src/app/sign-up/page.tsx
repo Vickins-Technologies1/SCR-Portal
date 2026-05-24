@@ -62,8 +62,8 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
-  const [managementType, setManagementType] = useState<"rentals" | "airbnb">("rentals");
-  const [tier, setTier] = useState<"free" | "premium">("free");
+  const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
+  const [tier, setTier] = useState<"free" | "premium" | null>(null);
 
   const [criteria, setCriteria] = useState({
     length: false,
@@ -103,7 +103,7 @@ export default function SignUp() {
 
   const canProceed =
     step === 0
-      ? isNameValid && isEmailValid
+      ? isNameValid && isEmailValid && !!managementType && !!tier
       : step === 1
         ? isPhoneValid
         : step === 2
@@ -139,7 +139,7 @@ export default function SignUp() {
 
   useEffect(() => {
     if (success) {
-      const t = setTimeout(() => router.push("/"), 6000);
+      const t = setTimeout(() => router.push("/portals/owner"), 6000);
       return () => clearTimeout(t);
     }
   }, [success, router]);
@@ -156,7 +156,7 @@ export default function SignUp() {
     }
 
     if (step === 0) {
-      setError("Please enter your full name and a valid email address.");
+      setError("Please enter your full name, a valid email address, and select a management type + tier.");
       return;
     }
     if (step === 1) {
@@ -213,6 +213,12 @@ export default function SignUp() {
       return;
     }
 
+    if (!managementType || !tier) {
+      setError("Please select a management type and tier to continue.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/signup", {
         method: "POST",
@@ -242,9 +248,8 @@ export default function SignUp() {
 
       setSuccess(
         "Account created successfully!\n\n" +
-        "Your account is pending admin approval.\n" +
-        "You will receive an email once it is activated.\n\n" +
-        "Redirecting to home page..."
+        "You can sign in now.\n\n" +
+        "Redirecting to login..."
       );
 
       // Clear form
@@ -254,6 +259,8 @@ export default function SignUp() {
       setPassword("");
       setConfirmPassword("");
       setAcceptedTermsAndPrivacy(false);
+      setManagementType(null);
+      setTier(null);
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
     } finally {
@@ -916,16 +923,24 @@ export default function SignUp() {
                         <p className="text-[10px] text-muted-foreground">Management Type</p>
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold text-sm">
-                            {managementType === "airbnb" ? "Airbnb / Short-Term" : "Rentals / Long-Term"}
+                            {!managementType
+                              ? "Not selected"
+                              : managementType === "airbnb"
+                                ? "Airbnb / Short-Term"
+                                : "Rentals / Long-Term"}
                           </p>
                           <button
                             type="button"
-                            onClick={() =>
-                              setManagementType((prev) => (prev === "airbnb" ? "rentals" : "airbnb"))
-                            }
+                            onClick={() => {
+                              if (!managementType) {
+                                setManagementType("rentals");
+                                return;
+                              }
+                              setManagementType((prev) => (prev === "airbnb" ? "rentals" : "airbnb"));
+                            }}
                             className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition"
                           >
-                            Switch
+                            {!managementType ? "Select" : "Switch"}
                           </button>
                         </div>
                       </div>
@@ -934,14 +949,20 @@ export default function SignUp() {
                         <p className="text-[10px] text-muted-foreground">Tier</p>
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold text-sm">
-                            {tier === "premium" ? "Premium" : "Free (Forever)"}
+                            {!tier ? "Not selected" : tier === "premium" ? "Premium" : "Free (Forever)"}
                           </p>
                           <button
                             type="button"
-                            onClick={() => setTier((prev) => (prev === "premium" ? "free" : "premium"))}
+                            onClick={() => {
+                              if (!tier) {
+                                setTier("free");
+                                return;
+                              }
+                              setTier((prev) => (prev === "premium" ? "free" : "premium"));
+                            }}
                             className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition"
                           >
-                            Switch
+                            {!tier ? "Select" : "Switch"}
                           </button>
                         </div>
                       </div>

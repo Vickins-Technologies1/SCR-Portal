@@ -240,34 +240,6 @@ export default function AdminLogin() {
       }
 
       if (data.success && data.userId && data.role) {
-        Cookies.set("userId", data.userId, {
-          expires: 7,
-          secure: true,
-          sameSite: "Strict",
-        });
-        Cookies.set("role", data.role, {
-          expires: 7,
-          secure: true,
-          sameSite: "Strict",
-        });
-        if (data.permissions) {
-          try {
-            Cookies.set("permissions", JSON.stringify(data.permissions), {
-              expires: 7,
-              secure: true,
-              sameSite: "Strict",
-            });
-          } catch {
-            // ignore
-          }
-        }
-        if (data.adminName) {
-          Cookies.set("adminName", String(data.adminName || "Admin"), {
-            expires: 7,
-            secure: true,
-            sameSite: "Strict",
-          });
-        }
         await maybeOfferQuickLoginSetup({ email: email.trim(), password });
         router.push(data.redirect || "/admin/dashboard");
       } else {
@@ -306,35 +278,6 @@ export default function AdminLogin() {
 
       if (!res.ok || !data.success || !data.userId || !data.role) {
         throw new Error(data.message || "OTP verification failed.");
-      }
-
-      Cookies.set("userId", data.userId, {
-        expires: 7,
-        secure: true,
-        sameSite: "Strict",
-      });
-      Cookies.set("role", data.role, {
-        expires: 7,
-        secure: true,
-        sameSite: "Strict",
-      });
-      if (data.permissions) {
-        try {
-          Cookies.set("permissions", JSON.stringify(data.permissions), {
-            expires: 7,
-            secure: true,
-            sameSite: "Strict",
-          });
-        } catch {
-          // ignore
-        }
-      }
-      if (data.adminName) {
-        Cookies.set("adminName", String(data.adminName || "Admin"), {
-          expires: 7,
-          secure: true,
-          sameSite: "Strict",
-        });
       }
 
       await maybeOfferQuickLoginSetup({ email: email.trim(), password });

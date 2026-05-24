@@ -104,8 +104,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedManagementType =
-      typeof managementType === "string" ? managementType.trim().toLowerCase() : "rentals";
+    if (typeof managementType !== "string" || managementType.trim().length === 0) {
+      logger.warn("Missing management type", { email: email ?? "unknown", ip });
+      return NextResponse.json(
+        { success: false, message: "Management type is required." },
+        { status: 400 }
+      );
+    }
+
+    const normalizedManagementType = managementType.trim().toLowerCase();
 
     if (!["rentals", "airbnb"].includes(normalizedManagementType)) {
       logger.warn("Invalid management type", { managementType });
@@ -115,7 +122,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedTier = typeof tier === "string" ? tier.trim().toLowerCase() : "free";
+    if (typeof tier !== "string" || tier.trim().length === 0) {
+      logger.warn("Missing tier", { email: email ?? "unknown", ip });
+      return NextResponse.json(
+        { success: false, message: "Tier is required." },
+        { status: 400 }
+      );
+    }
+
+    const normalizedTier = tier.trim().toLowerCase();
 
     if (!["free", "premium"].includes(normalizedTier)) {
       logger.warn("Invalid tier", { tier });
@@ -221,7 +236,7 @@ export async function POST(request: NextRequest) {
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // 13. Create new property owner (pending approval)
+    // 13. Create new property owner (auto-approved)
     const newUser = {
       name: sanitizedName.trim(),
       email: sanitizedEmail.toLowerCase().trim(),
@@ -230,7 +245,7 @@ export async function POST(request: NextRequest) {
       role: "propertyOwner",
       managementType: normalizedManagementType,
       tier: normalizedTier,
-      isApproved: false,
+      isApproved: true,
       legalAcceptedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
@@ -239,28 +254,26 @@ export async function POST(request: NextRequest) {
     const userId = result.insertedId.toString();
 
     // 14. Audit log
-    await db.collection("auditLogs").insertOne({
-      action: "signup",
-      userId,
-      email: sanitizedEmail,
-      ip,
-      timestamp: new Date().toISOString(),
-      status: "success",
-      pendingApproval: true,
-    });
+      await db.collection("auditLogs").insertOne({
+        action: "signup",
+        userId,
+        email: sanitizedEmail,
+        ip,
+        timestamp: new Date().toISOString(),
+        status: "success",
+        pendingApproval: false,
+      });
 
-    logger.info("Property owner created (pending approval)", { userId, email: sanitizedEmail });
+    logger.info("Property owner created", { userId, email: sanitizedEmail });
 
     // 15. Success response
-    const response = NextResponse.json(
-      {
-        success: true,
-        message:
-          "Account created successfully. It is pending admin approval.\n" +
-          "You will be notified by email once your account is activated.",
-      },
-      { status: 201 }
-    );
+      const response = NextResponse.json(
+        {
+          success: true,
+          message: "Account created successfully. You can sign in now.",
+        },
+        { status: 201 }
+      );
 
     // Security headers
     response.headers.set("X-Content-Type-Options", "nosniff");

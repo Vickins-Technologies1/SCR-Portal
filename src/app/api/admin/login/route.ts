@@ -162,16 +162,18 @@ export async function POST(request: Request) {
     });
     response.cookies.set("session", sessionToken, getSessionCookieOptions());
 
-    const cookieOptions = {
-      httpOnly: true,
+    const clientCookieOptions = {
+      httpOnly: false,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax" as const,          // better UX than 'strict'
-      maxAge: 7 * 24 * 60 * 60,          // 7 days
+      sameSite: "lax" as const, // better UX than 'strict'
+      maxAge: 7 * 24 * 60 * 60, // 7 days
       path: "/",
     };
 
-    response.cookies.set("userId", user._id.toString(), cookieOptions);
-    response.cookies.set("role", finalRole, cookieOptions);
+    response.cookies.set("userId", user._id.toString(), clientCookieOptions);
+    response.cookies.set("role", finalRole, clientCookieOptions);
+    response.cookies.set("permissions", JSON.stringify(finalPermissions), clientCookieOptions);
+    response.cookies.set("adminName", user?.name?.toString?.() || "Admin", clientCookieOptions);
 
     await db.collection(userCollection).updateOne({ _id: user._id }, { $set: { lastLoginAt: now } });
 

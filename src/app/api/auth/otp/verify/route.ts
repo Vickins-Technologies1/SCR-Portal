@@ -109,15 +109,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (otp.collection === "propertyOwners" && user.isApproved === false) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Your account is still pending admin approval. Please try again later or contact support.",
-        },
-        { status: 403 }
-      );
-    }
+    // Note: Property owners are no longer gated behind admin approval.
 
     const isTeamMember = otp.collection === "teamMembers" || otp.isTeamMember;
     const isOwner = otp.collection === "propertyOwners" && otp.role === "propertyOwner";

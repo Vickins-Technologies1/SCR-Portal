@@ -138,17 +138,7 @@ export async function POST(request: NextRequest) {
           isOwner = true;
           userCollection = "propertyOwners";
 
-          // ──── ADMIN APPROVAL CHECK ────
-          if (user.isApproved === false) {
-            return NextResponse.json(
-              {
-                success: false,
-                message: "Your account is still pending admin approval. Please try again later or contact support.",
-              },
-              { status: 403 }
-            );
-          }
-          // ─────────────────────────────────
+          // Note: Property owners are no longer gated behind admin approval.
         } else {
           // Try team member
           user = await db.collection("teamMembers").findOne({ _id: new ObjectId(userId) });
@@ -436,17 +426,7 @@ export async function POST(request: NextRequest) {
         isOwner = true;
         userCollection = "propertyOwners";
 
-        // ──── ADMIN APPROVAL CHECK ────
-        if (user.isApproved === false) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: "Your account is still pending admin approval. Please try again later or contact support.",
-            },
-            { status: 403 }
-          );
-        }
-        // ─────────────────────────────────
+        // Note: Property owners are no longer gated behind admin approval.
       }
     }
 
