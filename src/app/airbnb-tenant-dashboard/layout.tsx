@@ -125,11 +125,11 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
         <div className="pointer-events-none absolute -top-24 right-[-12%] h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 left-[-10%] h-80 w-80 rounded-full bg-[#1e3a8a]/10 blur-3xl" />
 
-        <header className="fixed top-0 left-0 right-0 z-50 bg-white/75 backdrop-blur-xl border-b border-border">
+        <header className="fixed top-0 left-0 right-0 z-50 bg-card backdrop-blur-xl border-b border-border">
           <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3">
             <div className="flex items-center gap-3">
               <button
-                className="lg:hidden rounded-xl border border-border bg-white/70 p-2 text-muted-foreground hover:text-foreground"
+                className="lg:hidden rounded-xl border border-border bg-card p-2 text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
                 onClick={() => setIsSidebarOpen((v) => !v)}
                 aria-label="Toggle menu"
               >
@@ -147,7 +147,7 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
 
             <button
               onClick={handleLogout}
-              className="group flex shrink-0 items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+              className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
             >
               <LogOut size={16} className="transition-transform group-hover:rotate-6" />
               <span className="hidden sm:inline">{isImpersonating ? "Exit preview" : "Sign out"}</span>

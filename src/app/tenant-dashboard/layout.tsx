@@ -298,7 +298,7 @@ export default function TenantDashboardLayout({
       {isImpersonating && (
         <div className="fixed top-0 inset-x-0 z-50 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg">
           <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between text-sm">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
               <Shield className="w-5 h-5" />
               <div>
                 <p className="font-medium">Impersonating tenant</p>
@@ -308,7 +308,7 @@ export default function TenantDashboardLayout({
             <button
               onClick={handleRevertImpersonation}
               disabled={isReverting}
-              className="flex items-center gap-2 bg-white/95 text-red-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-white disabled:opacity-60 transition"
+              className="flex items-center gap-2 bg-card text-red-400 px-4 py-1.5 rounded-lg text-sm font-medium border border-border hover:bg-muted disabled:opacity-60 transition"
             >
               {isReverting ? (
                 <>
@@ -328,7 +328,7 @@ export default function TenantDashboardLayout({
       {/* ─── Navbar ─── */}
       <header
         data-tour="tenant-navbar"
-        className={`fixed left-0 right-0 z-20 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] ${
+        className={`fixed left-0 right-0 z-20 h-16 w-full max-w-[100vw] border-b border-border bg-card backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] ${
           isImpersonating ? "top-10" : "top-0"
         }`}
       >
@@ -336,7 +336,7 @@ export default function TenantDashboardLayout({
           {/* Left side – logo + mobile toggle */}
           <div className="flex min-w-0 items-center gap-3">
             <button
-              className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-gray-200 bg-white/90 text-gray-700 shadow-sm transition hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#42c775]/30"
+              className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               aria-label="Toggle menu"
               title="Menu"
@@ -357,7 +357,7 @@ export default function TenantDashboardLayout({
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => window.dispatchEvent(new Event("start-tenant-tour"))}
-              className="group flex shrink-0 items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+              className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
               title="Start tour"
             >
               <Sparkles size={16} className="transition-transform group-hover:rotate-6" />
@@ -365,7 +365,7 @@ export default function TenantDashboardLayout({
             </button>
             <button
               onClick={handleLogout}
-              className="group flex shrink-0 items-center gap-2 rounded-full border border-gray-300 px-3.5 py-1.5 text-xs sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+              className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
             >
               <LogOut size={16} className="transition-transform group-hover:rotate-6" />
               <span className="hidden sm:inline">Sign out</span>

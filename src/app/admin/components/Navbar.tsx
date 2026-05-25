@@ -44,7 +44,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72">
+    <header className="fixed top-0 left-0 right-0 z-40 h-16 w-full max-w-[100vw] border-b border-border bg-card backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72">
       <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-3 sm:px-6 lg:px-10">
         {/* Left: Menu + Logo */}
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -52,7 +52,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
             onClick={onToggleSidebar}
             aria-label="Toggle sidebar"
             title="Menu"
-            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-border bg-white/90 text-muted-foreground shadow-sm transition hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
@@ -72,7 +72,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
         {/* Right: Logout */}
         <button
           onClick={handleSignOut}
-          className="group flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 active:scale-95"
+          className="group flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
           title="Sign out"
         >
           <LogOut size={18} className="transition-transform group-hover:rotate-6" />

@@ -236,6 +236,63 @@ body {
     border-color: var(--color-border);
   }
 }
+
+@layer utilities {
+  /* Dark-mode compatibility shims for hard-coded light Tailwind colors used across older pages. */
+  :root[data-theme="dark"] .sorana-theme .bg-white,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/50,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/60,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/70,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/75,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/80,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/85,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/90,
+  :root[data-theme="dark"] .sorana-theme .bg-white\/95 {
+    background-color: var(--surface-2) !important;
+  }
+
+  :root[data-theme="dark"] .sorana-theme .border-white\/20,
+  :root[data-theme="dark"] .sorana-theme .border-white\/30,
+  :root[data-theme="dark"] .sorana-theme .border-white\/40,
+  :root[data-theme="dark"] .sorana-theme .border-white\/50,
+  :root[data-theme="dark"] .sorana-theme .border-white\/60,
+  :root[data-theme="dark"] .sorana-theme .border-white\/70 {
+    border-color: var(--color-border) !important;
+  }
+
+  :root[data-theme="dark"] .sorana-theme .border-gray-100,
+  :root[data-theme="dark"] .sorana-theme .border-gray-200,
+  :root[data-theme="dark"] .sorana-theme .border-gray-300,
+  :root[data-theme="dark"] .sorana-theme .border-slate-100,
+  :root[data-theme="dark"] .sorana-theme .border-slate-200,
+  :root[data-theme="dark"] .sorana-theme .border-slate-300 {
+    border-color: var(--color-border) !important;
+  }
+
+  :root[data-theme="dark"] .sorana-theme .bg-gray-50,
+  :root[data-theme="dark"] .sorana-theme .bg-gray-100,
+  :root[data-theme="dark"] .sorana-theme .bg-slate-50,
+  :root[data-theme="dark"] .sorana-theme .bg-slate-100 {
+    background-color: var(--color-muted) !important;
+  }
+
+  :root[data-theme="dark"] .sorana-theme .text-gray-900,
+  :root[data-theme="dark"] .sorana-theme .text-slate-900,
+  :root[data-theme="dark"] .sorana-theme .text-gray-800,
+  :root[data-theme="dark"] .sorana-theme .text-slate-800,
+  :root[data-theme="dark"] .sorana-theme .text-gray-700,
+  :root[data-theme="dark"] .sorana-theme .text-slate-700,
+  :root[data-theme="dark"] .sorana-theme .text-slate-600 {
+    color: var(--color-foreground) !important;
+  }
+
+  :root[data-theme="dark"] .sorana-theme .text-gray-600,
+  :root[data-theme="dark"] .sorana-theme .text-gray-500,
+  :root[data-theme="dark"] .sorana-theme .text-slate-500,
+  :root[data-theme="dark"] .sorana-theme .text-slate-400 {
+    color: var(--color-muted-foreground) !important;
+  }
+}
 @layer utilities {
   .animate-fade-in {
     animation: fadeIn 0.5s ease-in-out;

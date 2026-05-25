@@ -75,7 +75,7 @@ export default function Navbar() {
   return (
     <header
       data-tour="owner-navbar"
-      className="fixed top-0 left-0 right-0 z-40 h-16 w-full max-w-[100vw] border-b border-white/40 bg-white/70 backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72"
+      className="fixed top-0 left-0 right-0 z-40 h-16 w-full max-w-[100vw] border-b border-border bg-card backdrop-blur-xl shadow-[0_6px_20px_rgba(15,23,42,0.08)] md:pl-72"
     >
       {/* md:pl-72 = exact width of sidebar (w-72) */}
       <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-3 sm:px-6 lg:px-10">
@@ -86,7 +86,7 @@ export default function Navbar() {
             onClick={toggle}
             aria-label="Toggle sidebar"
             title="Menu"
-            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-gray-200 bg-white/90 text-gray-700 shadow-sm transition hover:bg-white hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#42c775]/30"
+            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             {isOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
@@ -109,7 +109,7 @@ export default function Navbar() {
             <button
               onClick={handleRevertImpersonation}
               disabled={isReverting}
-              className="group flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-red-700 transition-all hover:border-red-300 hover:text-red-800 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-300/60 focus:ring-offset-1 active:scale-95 disabled:opacity-60"
+              className="group flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-red-400 transition-all hover:border-red-500/40 hover:bg-red-500/15 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:ring-offset-0 active:scale-95 disabled:opacity-60"
               title="Return to admin"
             >
               <Shield size={16} className="transition-transform group-hover:rotate-6 sm:size-[18px]" />
@@ -119,7 +119,7 @@ export default function Navbar() {
           )}
           <button
             onClick={() => window.dispatchEvent(new Event("start-owner-tour"))}
-            className="group flex shrink-0 items-center gap-1.5 rounded-full border border-gray-300 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+            className="group flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
             title="Start tour"
           >
             <Sparkles size={16} className="transition-transform group-hover:rotate-6 sm:size-[18px]" />
@@ -127,7 +127,7 @@ export default function Navbar() {
           </button>
           <button
             onClick={handleSignOut}
-            className="group flex shrink-0 items-center gap-1.5 rounded-full border border-gray-300 px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-gray-700 transition-all hover:border-[#42c775]/70 hover:text-[#42c775] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#42c775]/30 focus:ring-offset-1 active:scale-95"
+            className="group flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
             title="Sign out"
           >
             <LogOut size={16} className="transition-transform group-hover:rotate-6 sm:size-[18px]" />

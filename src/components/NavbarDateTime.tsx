@@ -42,14 +42,14 @@ export default function NavbarDateTime({ className }: NavbarDateTimeProps) {
 
   return (
     <div
-      className={`min-w-0 shrink-0 rounded-full border border-border/60 bg-white/70 px-2.5 py-1 text-[10px] font-medium text-muted-foreground shadow-sm sm:px-3 sm:text-xs ${
+      className={`min-w-0 shrink-0 rounded-full border border-border bg-card px-2.5 py-1 text-[10px] font-medium text-muted-foreground shadow-sm backdrop-blur sm:px-3 sm:text-xs ${
         className || ""
       }`}
       aria-live="polite"
     >
       <div className="flex min-w-0 flex-col items-start leading-tight sm:flex-row sm:items-center">
         <span className="max-w-[180px] truncate">{labels.date}</span>
-        <span className="hidden px-2 text-muted-foreground/60 sm:inline">•</span>
+        <span className="hidden px-2 text-muted-foreground opacity-60 sm:inline">•</span>
         <span className="max-w-[120px] truncate">{labels.time}</span>
       </div>
     </div>

@@ -5,10 +5,10 @@ import React from "react";
 export default function AdminLoading() {
   return (
     <div className="min-h-[100svh] bg-transparent text-foreground">
-      <header className="fixed top-0 left-0 right-0 z-40 h-16 w-full border-b border-white/40 bg-white/70 backdrop-blur-xl">
+      <header className="fixed top-0 left-0 right-0 z-40 h-16 w-full border-b border-border bg-card backdrop-blur-xl">
         <div className="flex h-full items-center justify-between px-3 sm:px-6 lg:px-10">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-[10px] border border-border bg-white/80" />
+            <div className="h-9 w-9 rounded-[10px] border border-border bg-card" />
             <div className="h-6 w-28 rounded-full bg-muted/30" />
           </div>
           <div className="h-8 w-20 rounded-full bg-muted/30" />
@@ -26,7 +26,7 @@ export default function AdminLoading() {
           </div>
           <div className="px-4 py-5 space-y-3">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-10 rounded-xl bg-white/70 border border-border" />
+              <div key={i} className="h-10 rounded-xl bg-card border border-border" />
             ))}
           </div>
         </div>
@@ -74,7 +74,7 @@ export default function AdminLoading() {
                 ))}
               </div>
               <div className="border-t border-border px-5 py-4">
-                <div className="h-10 rounded-2xl bg-white/70 border border-border" />
+                <div className="h-10 rounded-2xl bg-card border border-border" />
                 <div className="mt-3 h-8 w-32 rounded-xl bg-primary/20" />
               </div>
             </div>
