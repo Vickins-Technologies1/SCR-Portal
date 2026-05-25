@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
-import { SidebarProvider } from "./components/SidebarContext";
+import { SidebarProvider, useSidebar } from "./components/SidebarContext";
 import TourGuide, { TourStep } from "@/components/tour/TourGuide";
 import { usePathname, useRouter } from "next/navigation";
 import SupportWidget from "./components/SupportWidget";
@@ -10,6 +10,11 @@ import Cookies from "js-cookie";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import InvoiceRestrictionGate from "./components/InvoiceRestrictionGate";
 import BottomTabs from "@/components/mobile/BottomTabs";
+
+function OwnerBottomTabs() {
+  const { isOpen } = useSidebar();
+  return <BottomTabs variant="owner" hidden={isOpen} />;
+}
 
 export default function PropertyOwnerDashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -190,7 +195,7 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
             {children}
           </div>
           <SupportWidget />
-          <BottomTabs variant="owner" />
+          <OwnerBottomTabs />
           <TourGuide
             steps={steps}
             storageKey="owner-tour-v1"

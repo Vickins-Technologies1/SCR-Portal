@@ -452,7 +452,7 @@ export default function TenantDashboardLayout({
         <div className="max-w-7xl mx-auto">{children}</div>
       </main>
 
-      <BottomTabs variant="tenant" />
+      <BottomTabs variant="tenant" hidden={isSidebarOpen} />
 
       {isSidebarOpen && (
         <div

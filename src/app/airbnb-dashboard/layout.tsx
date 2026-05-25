@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
-import { SidebarProvider } from "./components/SidebarContext";
+import { SidebarProvider, useSidebar } from "./components/SidebarContext";
 import TourGuide, { TourStep } from "@/components/tour/TourGuide";
 import { usePathname, useRouter } from "next/navigation";
 import SupportWidget from "../property-owner-dashboard/components/SupportWidget";
@@ -10,6 +10,11 @@ import Cookies from "js-cookie";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import InvoiceRestrictionGate from "../property-owner-dashboard/components/InvoiceRestrictionGate";
 import BottomTabs from "@/components/mobile/BottomTabs";
+
+function AirbnbBottomTabs() {
+  const { isOpen } = useSidebar();
+  return <BottomTabs variant="airbnb-owner" hidden={isOpen} />;
+}
 
 export default function AirbnbDashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -135,7 +140,7 @@ export default function AirbnbDashboardLayout({ children }: { children: ReactNod
             {children}
           </div>
           <SupportWidget />
-          <BottomTabs variant="airbnb-owner" />
+          <AirbnbBottomTabs />
           <TourGuide
             steps={steps}
             storageKey="airbnb-tour-v1"

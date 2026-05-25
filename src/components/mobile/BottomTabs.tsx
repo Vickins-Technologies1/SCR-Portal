@@ -27,7 +27,7 @@ function isActive(pathname: string, tab: Tab) {
   return pathname === tab.href || pathname.startsWith(tab.href + "/");
 }
 
-export default function BottomTabs({ variant }: { variant: Variant }) {
+export default function BottomTabs({ variant, hidden = false }: { variant: Variant; hidden?: boolean }) {
   const pathname = usePathname();
 
   const tabs = useMemo<Tab[]>(() => {
@@ -59,10 +59,12 @@ export default function BottomTabs({ variant }: { variant: Variant }) {
     ];
   }, [variant]);
 
+  if (hidden) return null;
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-20 md:hidden">
       <div className="mx-auto max-w-3xl px-3 pb-[max(env(safe-area-inset-bottom),10px)]">
-        <nav className="flex items-stretch justify-between rounded-2xl border border-white/40 bg-white/80 backdrop-blur-xl shadow-[0_10px_40px_rgba(15,23,42,0.22)]">
+        <nav className="flex items-stretch justify-between rounded-2xl border border-border bg-card backdrop-blur-xl shadow-[0_10px_40px_rgba(15,23,42,0.22)]">
           {tabs.map((tab) => {
             const active = isActive(pathname, tab);
             return (
