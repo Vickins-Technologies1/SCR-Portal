@@ -799,7 +799,7 @@ export default function SupportWidget() {
         </div>
       </motion.div>
 
-      <div className="fixed bottom-6 right-6 z-40">
+      <div className="fixed bottom-24 right-6 z-40 md:bottom-6">
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.96 }}

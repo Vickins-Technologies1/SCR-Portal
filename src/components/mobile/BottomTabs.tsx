@@ -60,7 +60,7 @@ export default function BottomTabs({ variant }: { variant: Variant }) {
   }, [variant]);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[60] md:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-20 md:hidden">
       <div className="mx-auto max-w-3xl px-3 pb-[max(env(safe-area-inset-bottom),10px)]">
         <nav className="flex items-stretch justify-between rounded-2xl border border-white/40 bg-white/80 backdrop-blur-xl shadow-[0_10px_40px_rgba(15,23,42,0.22)]">
           {tabs.map((tab) => {
