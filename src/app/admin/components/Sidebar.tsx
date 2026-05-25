@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/cn";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import type { AdminPermission } from "@/lib/admin-permissions";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 type NavLink = {
   key: string;
@@ -357,7 +358,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           </nav>
 
           {/* Footer */}
-          <div className="mt-auto border-t border-border bg-gradient-to-t from-white/70 to-transparent px-6 py-4 text-center text-[10px] text-muted-foreground">
+          <div className="mt-auto border-t border-border footer-fade px-6 py-4 text-center text-[10px] text-muted-foreground">
+            <div className="flex justify-center pb-3">
+              <ThemeToggle className="max-w-[260px]" />
+            </div>
             <p>© {new Date().getFullYear()} Sorana Property Managers Limited</p>
             {!isCollapsed && (
               <p className="mt-2">

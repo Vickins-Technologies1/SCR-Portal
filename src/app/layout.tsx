@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css"; 
 import NativeBootstrap from "@/components/native/NativeBootstrap";
+import ThemeInitScript from "@/components/theme/ThemeInitScript";
 
 const siteUrl = "https://app.soranapropertymanagers.com";
 const siteName = "Sorana";
@@ -79,7 +80,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <ThemeInitScript />
+      </head>
       <body className="antialiased">
         <NativeBootstrap />
         {children}

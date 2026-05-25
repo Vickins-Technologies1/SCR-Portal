@@ -21,6 +21,7 @@ import {
 import Cookies from "js-cookie";
 import { useSidebar } from "./SidebarContext";
 import type { AirbnbConversation } from "@/types/airbnb";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 const useAuth = () => {
   if (typeof window === "undefined") {
@@ -264,8 +265,11 @@ export default function Sidebar() {
             )}
           </nav>
 
-          <div className="mt-auto border-t border-border px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
+          <div className="mt-auto border-t border-border px-6 py-4 footer-fade">
             <div className="text-center space-y-1">
+              <div className="flex justify-center pb-3">
+                <ThemeToggle className="max-w-[260px]" />
+              </div>
               {isFreeTier && (
                 <div className="flex justify-center pb-2">
                   <Link

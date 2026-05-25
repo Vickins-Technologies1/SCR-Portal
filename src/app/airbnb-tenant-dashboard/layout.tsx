@@ -18,6 +18,7 @@ import {
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 export default function AirbnbGuestPortalLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -194,7 +195,10 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
               })}
             </nav>
 
-            <div className="mt-auto border-t border-border px-6 py-4 bg-gradient-to-t from-white/70 to-transparent">
+            <div className="mt-auto border-t border-border px-6 py-4 footer-fade">
+              <div className="flex justify-center pb-3">
+                <ThemeToggle className="max-w-[260px]" />
+              </div>
               <p className="text-center text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
                 © {new Date().getFullYear()} Sorana Property Managers Limited
               </p>
