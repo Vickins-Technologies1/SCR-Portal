@@ -249,7 +249,9 @@ export async function PUT(request: NextRequest) {
       { returnDocument: "after" }
     );
 
-    const updated = result?.value;
+    // MongoDB Node driver v6 defaults `includeResultMetadata` to false, so the findOneAnd* family
+    // returns the matched document (or null) instead of a ModifyResult with a `.value` property.
+    const updated = (result as any)?.value ?? result;
 
     if (!updated) {
       return NextResponse.json({ success: false, message: "Listing not found" }, { status: 404 });
@@ -314,9 +316,9 @@ export async function DELETE(request: NextRequest) {
       let deletedPayments = 0;
       let deletedTenants = 0;
 
-      await session.withTransaction(async () => {
+       await session.withTransaction(async () => {
         const listingRes = await db.collection("airbnbListings").findOneAndDelete(filter, { session });
-        deletedListing = listingRes?.value;
+        deletedListing = (listingRes as any)?.value ?? listingRes;
         if (!deletedListing) {
           return;
         }
