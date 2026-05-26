@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { MapPin, DollarSign, Phone, Mail, ArrowLeft, Star, ShieldCheck } from "lucide-react";
+import { MapPin, DollarSign, ArrowLeft, Star } from "lucide-react";
 import { PublicListing, AirbnbPublicListing, SalePublicListing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
 import ImageGallery from "./ImageGallery";
@@ -157,9 +157,7 @@ export default async function PropertyDetailPage({
   const contactLink = `mailto:${contactEmail}`;
 
   return (
-    <main className="relative isolate min-h-screen bg-[#f7f6f3] text-slate-900">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[length:22px_22px] opacity-40" />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(255,255,255,0.7),rgba(255,255,255,0))] opacity-60" />
+    <main className="relative isolate min-h-screen bg-background text-foreground">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-16">
         <Link
           href="/market-place"
@@ -477,7 +475,7 @@ export default async function PropertyDetailPage({
 
                 <a
                   href={contactLink}
-                  className="mt-4 block w-full rounded-full bg-slate-900 px-5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.24em] text-white transition hover:bg-slate-800"
+                  className="mt-4 block w-full rounded-full bg-primary px-5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.24em] text-primary-foreground transition hover:bg-primary-hover"
                 >
                   {isSale ? "Request viewing" : "Schedule viewing"}
                 </a>
@@ -486,42 +484,6 @@ export default async function PropertyDetailPage({
               </div>
             )}
 
-            <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
-              <h3 className="text-base font-semibold text-slate-900 mb-4">Contact details</h3>
-
-              {owner ? (
-                <div className="space-y-4 text-xs text-slate-600">
-                  {owner.email && (
-                    <a
-                      href={`mailto:${owner.email}`}
-                      className="flex min-w-0 items-center gap-3 hover:text-emerald-600 transition-colors"
-                    >
-                      <Mail size={14} className="text-slate-500" />
-                      <span className="min-w-0 break-all">{owner.email}</span>
-                    </a>
-                  )}
-                  {owner.phone && (
-                    <a
-                      href={`tel:${owner.phone}`}
-                      className="flex min-w-0 items-center gap-3 hover:text-emerald-600 transition-colors"
-                    >
-                      <Phone size={14} className="text-slate-500" />
-                      <span className="min-w-0 break-words">{owner.phone}</span>
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500">Contact details unavailable.</p>
-              )}
-
-              <div className="mt-6 rounded-2xl border border-white/70 bg-white/70 px-4 py-4 text-[11px] text-slate-500 backdrop-blur">
-                <div className="flex items-center gap-2 font-semibold text-slate-700">
-                  <ShieldCheck size={12} />
-                  Verified listing
-                </div>
-                <p className="mt-2">Professionally managed and verified for readiness.</p>
-              </div>
-            </div>
           </aside>
         </section>
       </div>

@@ -19,6 +19,21 @@ import { useAirbnbAccess } from "../components/useAirbnbAccess";
 import type { AirbnbListing } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
 
+async function safeJson(response: Response): Promise<any | null> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function getApiErrorMessage(payload: any, fallback: string) {
+  if (payload && typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message.trim();
+  }
+  return fallback;
+}
+
 export default function AirbnbListingsPage() {
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("properties:view");
   const [listings, setListings] = useState<AirbnbListing[]>([]);
@@ -29,6 +44,8 @@ export default function AirbnbListingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [listMessage, setListMessage] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -64,12 +81,23 @@ export default function AirbnbListingsPage() {
   const fetchListings = useCallback(async () => {
     if (!ownerId) return;
     setIsLoading(true);
-    const res = await fetch(`/api/airbnb/listings?ownerId=${ownerId}`, { credentials: "include" });
-    const data = await res.json();
-    if (data.success) {
-      setListings(data.listings || []);
+    setListError(null);
+    try {
+      const res = await fetch(`/api/airbnb/listings?ownerId=${encodeURIComponent(ownerId)}`, {
+        credentials: "include",
+      });
+      const data = await safeJson(res);
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          getApiErrorMessage(data, `Failed to load listings (HTTP ${res.status})`)
+        );
+      }
+      setListings(Array.isArray(data.listings) ? data.listings : []);
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : "Failed to load listings");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [ownerId]);
 
   useEffect(() => {
@@ -182,11 +210,19 @@ export default function AirbnbListingsPage() {
       headers: { "X-CSRF-Token": csrfToken },
       credentials: "include",
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.message || "Failed to upload images");
+    const data = await safeJson(res);
+    if (!res.ok || !data?.success) {
+      throw new Error(getApiErrorMessage(data, `Failed to upload images (HTTP ${res.status})`));
     }
-    return data.urls || [];
+
+    const urls = Array.isArray(data.urls)
+      ? (data.urls.filter((url: unknown) => typeof url === "string" && url.trim()) as string[])
+      : [];
+    if (urls.length !== files.length) {
+      throw new Error("Some images failed to upload. Please try again.");
+    }
+
+    return urls;
   };
 
   const openCreateModal = () => {
@@ -245,6 +281,24 @@ export default function AirbnbListingsPage() {
       return;
     }
 
+    const units = Number(form.units);
+    if (!Number.isFinite(units) || units < 1) {
+      setFormMessage("Units must be a number greater than 0.");
+      return;
+    }
+
+    const baseRate = Number(form.baseRate);
+    if (!Number.isFinite(baseRate) || baseRate < 0) {
+      setFormMessage("Base rate must be a valid, non-negative number.");
+      return;
+    }
+
+    const weekendRate = Number(form.weekendRate);
+    if (!Number.isFinite(weekendRate) || weekendRate < 0) {
+      setFormMessage("Weekend rate must be a valid, non-negative number.");
+      return;
+    }
+
     if (imageItems.length > maxImages) {
       setFormMessage(`Only ${maxImages} images are allowed.`);
       return;
@@ -271,15 +325,19 @@ export default function AirbnbListingsPage() {
         return item.url;
       });
 
+      if (finalImages.some((url) => typeof url === "string" && url.startsWith("blob:"))) {
+        throw new Error("Image upload did not complete. Please try again.");
+      }
+
       const payload = {
         id: form.id || undefined,
         name: form.name.trim(),
         location: form.location.trim(),
         contactPhone: form.contactPhone.trim() || undefined,
         status: form.status,
-        units: Number(form.units || 1),
-        baseRate: Number(form.baseRate || 0),
-        weekendRate: Number(form.weekendRate || 0),
+        units,
+        baseRate,
+        weekendRate,
         amenities: form.amenities
           ? form.amenities.split(",").map((item) => item.trim()).filter(Boolean)
           : [],
@@ -300,12 +358,13 @@ export default function AirbnbListingsPage() {
         credentials: "include",
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Failed to save listing");
+      const data = await safeJson(res);
+      if (!res.ok || !data?.success) {
+        throw new Error(getApiErrorMessage(data, `Failed to save listing (HTTP ${res.status})`));
       }
 
       setFormMessage("Listing saved successfully.");
+      setListError(null);
       resetImageItems([]);
       setShowModal(false);
       await fetchListings();
@@ -320,13 +379,15 @@ export default function AirbnbListingsPage() {
   const handleDeleteListing = async (listingId: string) => {
     if (!listingId) return;
     if (!csrfToken) {
-      setFormMessage("Missing session token. Refresh the page and try again.");
+      setDeleteMessage("Missing session token. Refresh the page and try again.");
       return;
     }
 
     setIsDeleting(true);
     setFormMessage(null);
     setListMessage(null);
+    setListError(null);
+    setDeleteMessage(null);
     try {
       const res = await fetch(
         `/api/airbnb/listings?listingId=${encodeURIComponent(listingId)}`,
@@ -336,18 +397,19 @@ export default function AirbnbListingsPage() {
           credentials: "include",
         }
       );
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Failed to delete listing");
+      const data = await safeJson(res);
+      if (!res.ok || !data?.success) {
+        throw new Error(getApiErrorMessage(data, `Failed to delete listing (HTTP ${res.status})`));
       }
 
       setListings((prev) => prev.filter((listing) => listing.id !== listingId));
       setListMessage("Listing deleted.");
+      setListError(null);
       resetImageItems([]);
       setShowModal(false);
       setDeleteTarget(null);
     } catch (err) {
-      setFormMessage(err instanceof Error ? err.message : "Failed to delete listing");
+      setDeleteMessage(err instanceof Error ? err.message : "Failed to delete listing");
     } finally {
       setIsDeleting(false);
     }
@@ -397,6 +459,12 @@ export default function AirbnbListingsPage() {
           {listMessage && (
             <div className="surface-card rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
               {listMessage}
+            </div>
+          )}
+
+          {listError && (
+            <div className="surface-card rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+              {listError}
             </div>
           )}
 
@@ -811,6 +879,11 @@ export default function AirbnbListingsPage() {
                   <p className="text-muted-foreground">
                     Confirm delete{deleteTarget.name ? ` “${deleteTarget.name}”` : ""}? This action cannot be undone.
                   </p>
+                  {deleteMessage && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+                      {deleteMessage}
+                    </div>
+                  )}
                   <div className="flex justify-end gap-3">
                     <button
                       type="button"

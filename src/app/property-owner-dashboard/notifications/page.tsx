@@ -552,7 +552,7 @@ export default function NotificationsPage() {
 
               {isLoading && paginatedItems.length === 0 ? (
                 <div className="flex flex-col items-center py-20">
-                  <Bell className="mb-4 h-16 w-16 animate-pulse text-[#42c775]" />
+                  <Bell className="mb-4 h-16 w-16 animate-pulse text-primary" />
                   <p className="text-xs sm:text-sm text-muted-foreground">Loading notifications...</p>
                 </div>
               ) : paginatedItems.length === 0 ? (
@@ -655,7 +655,7 @@ export default function NotificationsPage() {
                 <div><p className="font-medium text-gray-600">Rent Due</p><p>Ksh. {selectedReminder.rentDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Utilities Due</p><p>Ksh. {selectedReminder.utilityDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Deposit Due</p><p>Ksh. {selectedReminder.depositDue.toFixed(2)}</p></div>
-                <div><p className="font-medium text-gray-600">Total Due</p><p className="font-bold text-[#42c775]">Ksh. {selectedReminder.totalDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Total Due</p><p className="font-bold text-primary">Ksh. {selectedReminder.totalDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Due Date</p><p>{selectedReminder.dueDate}</p></div>
               </div>
             )}

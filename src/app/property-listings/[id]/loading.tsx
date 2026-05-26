@@ -1,8 +1,6 @@
 export default function PropertyDetailLoading() {
   return (
-    <main className="relative isolate min-h-screen bg-[#f7f6f3] text-slate-900">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[length:22px_22px] opacity-40" />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(255,255,255,0.7),rgba(255,255,255,0))] opacity-60" />
+    <main className="relative isolate min-h-screen bg-background text-foreground">
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-28 pb-16">
         <div className="h-8 w-40 rounded-full bg-slate-200/80 animate-pulse" />

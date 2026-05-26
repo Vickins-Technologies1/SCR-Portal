@@ -33,6 +33,7 @@ export default function PropertyListings() {
   const [listings, setListings] = useState<PublicListing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const PAGE_SIZE = 12;
   const [filters, setFilters] = useState<FilterState>({
     listingType: "all",
     unitType: "",
@@ -44,6 +45,11 @@ export default function PropertyListings() {
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("featured");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sortBy]);
 
   useEffect(() => {
     const fetchListings = async () => {
@@ -194,6 +200,44 @@ export default function PropertyListings() {
     });
   }, [filteredListings, sortBy]);
 
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(sortedListings.length / PAGE_SIZE)),
+    [sortedListings.length, PAGE_SIZE]
+  );
+
+  const currentPage = Math.min(page, totalPages);
+
+  useEffect(() => {
+    if (page !== currentPage) setPage(currentPage);
+  }, [page, currentPage]);
+
+  const paginatedListings = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return sortedListings.slice(start, start + PAGE_SIZE);
+  }, [sortedListings, currentPage, PAGE_SIZE]);
+
+  const pageNumbers = useMemo(() => {
+    const windowSize = 5;
+    const half = Math.floor(windowSize / 2);
+
+    let start = Math.max(1, currentPage - half);
+    let end = Math.min(totalPages, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+
+    return Array.from({ length: end - start + 1 }, (_, idx) => start + idx);
+  }, [currentPage, totalPages]);
+
+  const goToPage = (nextPage: number) => {
+    const safePage = Math.min(totalPages, Math.max(1, nextPage));
+    setPage(safePage);
+
+    if (typeof document !== "undefined") {
+      requestAnimationFrame(() => {
+        document.getElementById("listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  };
+
   const hasActiveFilters =
     filters.listingType !== "all" ||
     filters.unitType ||
@@ -216,9 +260,7 @@ export default function PropertyListings() {
   };
 
   return (
-    <main className="relative isolate min-h-screen bg-[#f7f6f3] text-slate-900">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[length:22px_22px] opacity-40" />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(255,255,255,0.7),rgba(255,255,255,0))] opacity-60" />
+    <main className="relative isolate min-h-screen bg-background text-foreground">
       <section className="relative overflow-hidden pt-28 pb-14">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.14),_transparent_60%)]" />
         <div className="absolute -right-24 top-12 h-56 w-56 rounded-full bg-emerald-200/35 blur-[110px]" />
@@ -473,12 +515,12 @@ export default function PropertyListings() {
             </p>
             <p className="text-[11px] text-slate-400">Rates reflect monthly, nightly, or sale prices.</p>
             {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  resetFilters();
-                  setIsFilterOpen(false);
-                }}
-                className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.6)] hover:bg-slate-800 transition-all"
+                <button
+                  onClick={() => {
+                    resetFilters();
+                    setIsFilterOpen(false);
+                  }}
+                className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-foreground shadow-[0_16px_30px_-18px_rgba(66,199,117,0.55)] hover:bg-primary-hover transition-all"
               >
                 <X size={14} />
                 Clear Filters
@@ -486,10 +528,68 @@ export default function PropertyListings() {
             )}
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {sortedListings.map((property, index) => (
-              <PropertyCard key={property._id} property={property} index={index} />
-            ))}
+          <div className="space-y-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-xs text-slate-600 shadow-[0_16px_40px_-30px_rgba(15,23,42,0.3)] backdrop-blur">
+              <p className="font-medium">
+                Showing{" "}
+                <span className="font-semibold text-slate-900">
+                  {(currentPage - 1) * PAGE_SIZE + 1}
+                </span>
+                {" "}to{" "}
+                <span className="font-semibold text-slate-900">
+                  {Math.min(currentPage * PAGE_SIZE, sortedListings.length)}
+                </span>
+                {" "}of{" "}
+                <span className="font-semibold text-slate-900">{sortedListings.length}</span>
+              </p>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                Page {currentPage} of {totalPages}
+              </p>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {paginatedListings.map((property, index) => (
+                <PropertyCard key={property._id} property={property} index={index} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <nav className="flex flex-wrap items-center justify-center gap-2 pt-2" aria-label="Pagination">
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="rounded-full border border-slate-200 bg-white/85 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700 transition hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Prev
+                </button>
+
+                {pageNumbers.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => goToPage(p)}
+                    aria-current={p === currentPage ? "page" : undefined}
+                    className={`h-10 w-10 rounded-full border text-xs font-semibold transition ${
+                      p === currentPage
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-slate-200 bg-white/85 text-slate-700 hover:bg-white"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="rounded-full border border-slate-200 bg-white/85 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700 transition hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </nav>
+            )}
           </div>
         )}
       </section>
@@ -647,7 +747,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
 
         <Link
           href={`/market-place/${property._id}`}
-          className="mt-3 inline-flex w-full items-center justify-between rounded-full bg-slate-900 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-white transition hover:bg-slate-800"
+          className="mt-3 inline-flex w-full items-center justify-between rounded-full bg-primary px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary-foreground transition hover:bg-primary-hover"
         >
           {isAirbnb ? "Reserve stay" : isSale ? "Request details" : "View details"}
           <ArrowUpRight size={12} />

@@ -245,7 +245,7 @@ export default function AirbnbDashboard() {
                     <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                       {overview.stats.upcomingBookings} upcoming stays
                     </span>
-                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-foreground text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                       Occupancy {overview.stats.occupancyRate}%
                     </span>
                     <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-100/70 text-amber-700 text-[11px] sm:text-xs font-semibold uppercase tracking-wide">

@@ -1,6 +1,6 @@
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-[#f7f6f3] pt-28">
+    <div className="min-h-screen bg-background text-foreground pt-28">
       <div className="max-w-7xl mx-auto px-6">
         <div className="h-10 w-2/3 rounded-2xl bg-white/70 shadow-sm animate-pulse" />
         <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -28,4 +28,3 @@ export default function Loading() {
     </div>
   );
 }
-

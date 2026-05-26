@@ -531,8 +531,8 @@ export default function TenantDashboardPage() {
     },
     blue: {
       ring: "ring-[#1e3a8a]/15",
-      icon: "text-[#1e3a8a]",
-      bg: "bg-[#1e3a8a]/10",
+      icon: "text-foreground",
+      bg: "bg-muted",
       glow: "shadow-[0_18px_40px_-28px_rgba(30,58,138,0.55)]",
     },
     amber: {
@@ -607,7 +607,7 @@ export default function TenantDashboardPage() {
                   <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                     {property?.name || "Your Property"}
                   </span>
-                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-foreground text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                     {unitBadgeText}
                   </span>
                   <Badge status={paymentStatusLabel}>{paymentStatusLabel}</Badge>
@@ -668,7 +668,7 @@ export default function TenantDashboardPage() {
             <div className="relative space-y-4">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-2xl bg-[#1e3a8a]/10 flex items-center justify-center">
-                  <Home className="h-5 w-5 text-[#1e3a8a]" />
+                  <Home className="h-5 w-5 text-foreground" />
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Residency</p>
@@ -792,7 +792,7 @@ export default function TenantDashboardPage() {
             <div className="surface-card rounded-3xl p-6 sm:p-7">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-10 w-10 rounded-2xl bg-[#1e3a8a]/10 flex items-center justify-center">
-                  <Bell className="h-5 w-5 text-[#1e3a8a]" />
+                  <Bell className="h-5 w-5 text-foreground" />
                 </div>
                 <div className="flex-1">
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">In-app Inbox</p>
@@ -845,7 +845,7 @@ export default function TenantDashboardPage() {
             <div className="surface-card rounded-3xl p-6 sm:p-7">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-10 w-10 rounded-2xl bg-[#1e3a8a]/10 flex items-center justify-center">
-                  <User className="h-5 w-5 text-[#1e3a8a]" />
+                  <User className="h-5 w-5 text-foreground" />
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Tenant Profile</p>

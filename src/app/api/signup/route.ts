@@ -52,6 +52,7 @@ interface SignupRequestBody {
   role: string;
   managementType?: string;
   tier?: string;
+  packageTier?: string;
   acceptedTermsAndPrivacy?: boolean;
   csrfToken: string;
 }
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, phone, role, csrfToken, managementType, tier, acceptedTermsAndPrivacy } = body;
+    const { name, email, password, phone, role, csrfToken, managementType, tier, packageTier, acceptedTermsAndPrivacy } = body;
 
     // 3. Required fields
     if (!name || !email || !password || !phone || !role || !csrfToken) {
@@ -136,6 +137,33 @@ export async function POST(request: NextRequest) {
       logger.warn("Invalid tier", { tier });
       return NextResponse.json(
         { success: false, message: "Invalid tier. Must be free or premium." },
+        { status: 400 }
+      );
+    }
+
+    if (typeof packageTier !== "string" || packageTier.trim().length === 0) {
+      logger.warn("Missing package tier", { email: email ?? "unknown", ip });
+      return NextResponse.json(
+        { success: false, message: "Package is required." },
+        { status: 400 }
+      );
+    }
+
+    const normalizedPackageTier = packageTier.trim().toLowerCase();
+
+    if (!["free", "one_percent", "full_management"].includes(normalizedPackageTier)) {
+      logger.warn("Invalid package tier", { packageTier });
+      return NextResponse.json(
+        { success: false, message: "Invalid package." },
+        { status: 400 }
+      );
+    }
+
+    const expectedTier = normalizedPackageTier === "free" ? "free" : "premium";
+    if (normalizedTier !== expectedTier) {
+      logger.warn("Tier/package mismatch", { normalizedTier, normalizedPackageTier });
+      return NextResponse.json(
+        { success: false, message: "Tier does not match selected package." },
         { status: 400 }
       );
     }
@@ -245,6 +273,7 @@ export async function POST(request: NextRequest) {
       role: "propertyOwner",
       managementType: normalizedManagementType,
       tier: normalizedTier,
+      packageTier: normalizedPackageTier,
       isApproved: true,
       legalAcceptedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),

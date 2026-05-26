@@ -351,6 +351,7 @@ body {
   }
   .modal-body {
     padding: 1.25rem;
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
   }
   .modal-close {
     color: var(--color-muted-foreground);

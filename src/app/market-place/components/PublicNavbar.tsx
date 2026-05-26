@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Menu, X, LogIn, UserPlus, Info, Building2, Compass, Wallet, Mail } from "lucide-react";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 const MAIN_SITE = "https://www.soranapropertymanagers.com";
 
@@ -58,6 +59,9 @@ export default function PublicNavbar() {
                 <LogIn size={14} />
                 Sign In
               </Link>
+              <div className="w-[140px]">
+                <ThemeToggle className="w-full rounded-full px-4 py-2 text-[10px] uppercase tracking-[0.2em] bg-white/60 border-slate-200/80" />
+              </div>
               <Link
                 href="/sign-up"
                 className="flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] transition-all bg-primary text-primary-foreground shadow-[0_16px_30px_-18px_rgba(66,199,117,0.6)] hover:bg-primary-hover"
@@ -146,6 +150,7 @@ export default function PublicNavbar() {
               <span>Sign In</span>
               <LogIn size={16} />
             </Link>
+            <ThemeToggle className="rounded-2xl border-slate-200 bg-white/90" />
             <Link
               href="/sign-up"
               className="flex w-full items-center justify-between rounded-2xl bg-primary px-5 py-3 text-xs font-semibold tracking-wide text-primary-foreground shadow-[0_14px_30px_-18px_rgba(66,199,117,0.6)]"

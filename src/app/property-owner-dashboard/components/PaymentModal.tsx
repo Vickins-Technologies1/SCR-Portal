@@ -418,7 +418,7 @@ export default function PaymentModal({
                   onClose();
                   resetPaymentForm();
                 }}
-                className="px-4 py-2 bg-gray-200 rounded-full hover:bg-gray-300 transition text-sm text-[#1E3A8A]"
+                className="px-4 py-2 bg-gray-200 rounded-full hover:bg-gray-300 transition text-sm text-foreground"
                 aria-label="Cancel payment prompt"
               >
                 Cancel
@@ -435,7 +435,7 @@ export default function PaymentModal({
         ) : (
           <form onSubmit={handlePayment} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-[#1E3A8A]">Property</label>
+              <label className="block text-sm font-medium text-foreground">Property</label>
               <select
                 value={paymentPropertyId}
                 onChange={(e) => {
@@ -448,7 +448,7 @@ export default function PaymentModal({
                   }));
                 }}
                 required
-                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition text-sm bg-gray-50 text-[#1E3A8A] ${
+                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition text-sm bg-gray-50 text-foreground ${
                   paymentFormErrors.paymentPropertyId ? "border-red-500" : "border-gray-200"
                 }`}
               >
@@ -464,7 +464,7 @@ export default function PaymentModal({
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#1E3A8A]">Phone Number</label>
+              <label className="block text-sm font-medium text-foreground">Phone Number</label>
               <input
                 placeholder="Enter phone number (e.g., +254123456789)"
                 value={paymentPhone}
@@ -480,7 +480,7 @@ export default function PaymentModal({
                   }));
                 }}
                 required
-                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-[#6EE7B7] focus:border-[#1E3A8A] transition text-sm bg-gray-50 text-[#1E3A8A] ${
+                className={`w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary transition text-sm bg-gray-50 text-foreground ${
                   paymentFormErrors.paymentPhone ? "border-red-500" : "border-gray-200"
                 }`}
               />
@@ -489,12 +489,12 @@ export default function PaymentModal({
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#1E3A8A]">Amount (KES)</label>
+              <label className="block text-sm font-medium text-foreground">Amount (KES)</label>
               <input
                 placeholder="Amount (auto-filled)"
                 value={isFetchingAmount ? "Fetching amount..." : paymentAmount}
                 readOnly
-                className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm text-[#1E3A8A] ${
+                className={`w-full border px-3 py-2 rounded-lg bg-gray-100 cursor-not-allowed text-sm text-foreground ${
                   paymentFormErrors.paymentInvoice ? "border-red-500" : "border-gray-200"
                 }`}
               />
@@ -509,7 +509,7 @@ export default function PaymentModal({
                   onClose();
                   resetPaymentForm();
                 }}
-                className="px-4 py-2 bg-gray-200 rounded-full hover:bg-gray-300 transition text-sm text-[#1E3A8A]"
+                className="px-4 py-2 bg-gray-200 rounded-full hover:bg-gray-300 transition text-sm text-foreground"
                 aria-label="Cancel payment"
               >
                 Cancel
@@ -550,8 +550,8 @@ export default function PaymentModal({
         disableClose={true}
       >
         <div className="flex flex-col items-center justify-center py-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#1E3A8A] mb-4"></div>
-          <p className="text-[#1E3A8A] text-sm">{statusMessage}</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary mb-4"></div>
+          <p className="text-foreground text-sm">{statusMessage}</p>
         </div>
       </Modal>
     </>

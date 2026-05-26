@@ -406,7 +406,7 @@ export default function PropertyOwnerDashboard() {
                         {stats.activeProperties} properties
                       </span>
                       {!isFree ? (
-                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-foreground text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
                           Occupancy {occupancyRate}%
                         </span>
                       ) : (

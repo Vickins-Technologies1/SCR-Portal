@@ -215,8 +215,8 @@ export default function BookingRequest({ listingId, propertyName, nightlyRate }:
 
         <button
           type="submit"
-          disabled={!isValid}
-          className="mt-2 w-full rounded-full bg-slate-900 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+          disabled={!isValid || isSubmitting}
+          className="mt-2 w-full rounded-full bg-primary px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? "Submitting..." : "Submit request"}
         </button>

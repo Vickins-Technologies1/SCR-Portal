@@ -406,7 +406,7 @@ export default function PaymentsPage() {
                       animate={{ opacity: 1 }}
                       className="hover:bg-primary/5 transition-colors text-xs sm:text-sm"
                     >
-                      <td className="px-4 py-4 font-semibold text-[#1E3A8A] capitalize">{p.type || "Other"}</td>
+                      <td className="px-4 py-4 font-semibold text-foreground capitalize">{p.type || "Other"}</td>
                       <td className="px-4 py-4">KES {p.amount.toLocaleString()}</td>
                       <td className="px-4 py-4">
                         <span
@@ -463,7 +463,7 @@ export default function PaymentsPage() {
                 <button
                   onClick={() => handlePageChange(page - 1)}
                   disabled={page === 1 || loading}
-                  className="flex items-center gap-1 px-4 py-2.5 text-xs font-medium rounded-lg bg-white border border-gray-300 text-[#1E3A8A] hover:bg-primary/10 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  className="flex items-center gap-1 px-4 py-2.5 text-xs font-medium rounded-lg bg-white border border-gray-300 text-foreground hover:bg-primary/10 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   <ChevronLeft size={16} /> Prev
                 </button>
@@ -483,7 +483,7 @@ export default function PaymentsPage() {
                         className={`w-9 h-9 rounded-lg text-xs font-medium transition ${
                           num === page
                             ? "bg-[#1E3A8A] text-white"
-                            : "bg-white border border-gray-300 text-[#1E3A8A] hover:bg-primary/10"
+                            : "bg-white border border-gray-300 text-foreground hover:bg-primary/10"
                         }`}
                       >
                         {num}
@@ -495,7 +495,7 @@ export default function PaymentsPage() {
                       <span className="px-2 text-gray-400">...</span>
                       <button
                         onClick={() => handlePageChange(totalPages)}
-                      className="w-9 h-9 rounded-lg text-xs font-medium bg-white border border-gray-300 text-[#1E3A8A] hover:bg-primary/10"
+                      className="w-9 h-9 rounded-lg text-xs font-medium bg-white border border-gray-300 text-foreground hover:bg-primary/10"
                     >
                       {totalPages}
                     </button>
@@ -506,7 +506,7 @@ export default function PaymentsPage() {
                 <button
                   onClick={() => handlePageChange(page + 1)}
                   disabled={page === totalPages || loading}
-                  className="flex items-center gap-1 px-4 py-2.5 text-xs font-medium rounded-lg bg-white border border-gray-300 text-[#1E3A8A] hover:bg-primary/10 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  className="flex items-center gap-1 px-4 py-2.5 text-xs font-medium rounded-lg bg-white border border-gray-300 text-foreground hover:bg-primary/10 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   Next <ChevronRight size={16} />
                 </button>
@@ -534,7 +534,7 @@ export default function PaymentsPage() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="modal-header flex items-center justify-between px-6 sm:px-8 py-5">
-                  <h2 className="text-xl sm:text-2xl font-bold text-[#1E3A8A]">Make a Payment</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold text-foreground">Make a Payment</h2>
                   <button onClick={() => setIsModalOpen(false)} className="modal-close rounded-full p-1">
                     <X size={22} />
                   </button>
@@ -543,9 +543,9 @@ export default function PaymentsPage() {
                 <div className="modal-body modal-stagger">
                   <div className="space-y-5">
                     <label className="block">
-                      <span className="text-sm font-semibold text-[#1E3A8A]">Payment Type</span>
+                      <span className="text-sm font-semibold text-foreground">Payment Type</span>
                       <select
-                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] bg-gray-50 text-sm"
+                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-primary bg-gray-50 text-sm"
                         value={paymentType}
                         onChange={(e) => setPaymentType(e.target.value as any)}
                       >
@@ -557,11 +557,11 @@ export default function PaymentsPage() {
                     </label>
 
                     <label className="block">
-                      <span className="text-sm font-semibold text-[#1E3A8A]">Amount (KES)</span>
+                      <span className="text-sm font-semibold text-foreground">Amount (KES)</span>
                       <input
                         type="number"
                         min="1"
-                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] bg-gray-50 text-sm"
+                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-primary bg-gray-50 text-sm"
                         value={amount || ""}
                         onChange={(e) => setAmount(Number(e.target.value))}
                         placeholder="Minimum 1"
@@ -569,10 +569,10 @@ export default function PaymentsPage() {
                     </label>
 
                     <label className="block">
-                      <span className="text-sm font-semibold text-[#1E3A8A]">Phone Number</span>
+                      <span className="text-sm font-semibold text-foreground">Phone Number</span>
                       <input
                         type="text"
-                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] bg-gray-50 text-sm"
+                        className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-primary bg-gray-50 text-sm"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         placeholder="+2547xxxxxxxx or 07xxxxxxxx"
@@ -583,7 +583,7 @@ export default function PaymentsPage() {
                   <div className="flex gap-3 mt-7">
                     <button
                       onClick={() => setIsModalOpen(false)}
-                      className="flex-1 py-3 px-6 bg-gray-100 text-[#1E3A8A] font-semibold rounded-xl hover:bg-gray-200 transition text-sm"
+                      className="flex-1 py-3 px-6 bg-gray-100 text-foreground font-semibold rounded-xl hover:bg-gray-200 transition text-sm"
                     >
                       Cancel
                     </button>
@@ -666,7 +666,7 @@ export default function PaymentsPage() {
                     </div>
                   )}
 
-                  <h3 className="text-xl font-bold text-[#1E3A8A] mb-3">
+                  <h3 className="text-xl font-bold text-foreground mb-3">
                     {isProcessing ? "Processing Payment..." : "Payment Update"}
                   </h3>
 

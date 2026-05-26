@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { createPortal } from "react-dom";
 import {
   FaEye,
   FaEyeSlash,
@@ -12,6 +13,7 @@ import {
   FaChevronDown,
   FaBuilding,
   FaHotel,
+  FaRegStar,
 } from "react-icons/fa";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -49,6 +51,10 @@ const countryList: Country[] = Object.entries(
 export default function SignUp() {
   const router = useRouter();
 
+  const [packageTier, setPackageTier] = useState<"free" | "one_percent" | "full_management" | null>(null);
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -63,7 +69,8 @@ export default function SignUp() {
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
-  const [tier, setTier] = useState<"free" | "premium" | null>(null);
+  const derivedTier: "free" | "premium" | null =
+    packageTier === "free" ? "free" : packageTier ? "premium" : null;
 
   const [criteria, setCriteria] = useState({
     length: false,
@@ -79,6 +86,24 @@ export default function SignUp() {
     { title: "Security", subtitle: "Keep your account safe" },
     { title: "Review", subtitle: "Confirm and finish" },
   ];
+
+  useEffect(() => {
+    setIsPackageModalOpen(!packageTier && !success);
+  }, [packageTier, success]);
+
+  useEffect(() => {
+    setIsMounted(true);
+    setPortalTarget((document.querySelector(".sorana-theme") as HTMLElement | null) ?? document.body);
+  }, []);
+
+  useEffect(() => {
+    if (!isPackageModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev || "auto";
+    };
+  }, [isPackageModalOpen]);
 
   useEffect(() => {
     const length = password.length >= 8;
@@ -103,7 +128,7 @@ export default function SignUp() {
 
   const canProceed =
     step === 0
-      ? isNameValid && isEmailValid && !!managementType && !!tier
+      ? isNameValid && isEmailValid && !!managementType
       : step === 1
         ? isPhoneValid
         : step === 2
@@ -156,7 +181,7 @@ export default function SignUp() {
     }
 
     if (step === 0) {
-      setError("Please enter your full name, a valid email address, and select a management type + tier.");
+      setError("Please enter your full name, a valid email address, and select a management type.");
       return;
     }
     if (step === 1) {
@@ -213,8 +238,15 @@ export default function SignUp() {
       return;
     }
 
-    if (!managementType || !tier) {
-      setError("Please select a management type and tier to continue.");
+    if (!packageTier) {
+      setError("Please select a package to continue.");
+      setIsPackageModalOpen(true);
+      setIsLoading(false);
+      return;
+    }
+
+    if (!managementType) {
+      setError("Please select a management type to continue.");
       setIsLoading(false);
       return;
     }
@@ -233,7 +265,8 @@ export default function SignUp() {
           phone: fullPhone,
           role: "propertyOwner",
           managementType,
-          tier,
+          tier: derivedTier,
+          packageTier,
           acceptedTermsAndPrivacy,
           csrfToken,
         }),
@@ -260,7 +293,7 @@ export default function SignUp() {
       setConfirmPassword("");
       setAcceptedTermsAndPrivacy(false);
       setManagementType(null);
-      setTier(null);
+      setPackageTier(null);
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
     } finally {
@@ -485,12 +518,253 @@ export default function SignUp() {
               </div>
             )}
 
+            {isMounted && portalTarget && createPortal(
+              <AnimatePresence>
+                {isPackageModalOpen && (
+                  <motion.div
+                    className="fixed inset-0 z-[9999] bg-background text-foreground overflow-y-auto"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Choose your package"
+                  >
+                    <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(66,199,117,0.16),_transparent_58%)]" />
+                    <div className="pointer-events-none absolute inset-0 -z-10 opacity-30 bg-[radial-gradient(rgba(148,163,184,0.24)_1px,transparent_1px)] bg-[length:22px_22px]" />
+
+                    <motion.div
+                      className="mx-auto max-w-7xl px-4 sm:px-6 pt-10 sm:pt-14 pb-[max(env(safe-area-inset-bottom),28px)] min-h-[100svh]"
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 14 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                    >
+                      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-2 pb-5 bg-background/80 backdrop-blur-xl border-b border-border">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.32em] text-muted-foreground">
+                              Choose your package
+                            </p>
+                            <h2 className="mt-2 text-2xl sm:text-3xl font-semibold text-foreground text-display text-balance">
+                              Pick the plan that fits you
+                            </h2>
+                            <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
+                              Select a package to continue signing up. You can change this later in your account.
+                            </p>
+                          </div>
+
+                          {packageTier && (
+                            <button
+                              type="button"
+                              onClick={() => setIsPackageModalOpen(false)}
+                              className="shrink-0 rounded-full border border-border bg-card px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground hover:text-foreground transition"
+                            >
+                              Close
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-8 grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        {/* Free */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPackageTier("free");
+                            setIsPackageModalOpen(false);
+                          }}
+                          className={`text-left rounded-[32px] border p-6 sm:p-7 transition shadow-[0_22px_55px_-45px_rgba(15,23,42,0.35)] backdrop-blur ${
+                            packageTier === "free"
+                              ? "border-primary/35 ring-1 ring-primary/25 bg-card"
+                              : "border-border bg-card hover:border-primary/25"
+                          }`}
+                          aria-pressed={packageTier === "free"}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-lg font-semibold text-foreground">Free</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">For getting started</p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                              $0
+                            </span>
+                          </div>
+
+                          <div className="mt-5 flex items-end gap-2">
+                            <span className="text-muted-foreground text-sm">$</span>
+                            <span className="text-4xl font-semibold text-foreground leading-none">0</span>
+                            <span className="pb-1 text-[11px] text-muted-foreground">Forever</span>
+                          </div>
+
+                          <p className="mt-2 text-[11px] text-muted-foreground">
+                            Includes 1 property and basic tracking. Upgrade anytime.
+                          </p>
+
+                          <p className="mt-4 text-sm font-semibold text-foreground">
+                            Track your property basics
+                          </p>
+
+                          <ul className="mt-6 space-y-3 text-xs text-muted-foreground">
+                            {[
+                              "1 property free",
+                              "Tenants & property details",
+                              "Basic reports and reminders",
+                              "Maintenance request logging",
+                              "Email support",
+                            ].map((item) => (
+                              <li key={item} className="flex items-start gap-3">
+                                <span className="mt-0.5 grid h-6 w-6 place-items-center rounded-xl bg-muted">
+                                  <FaCheck className="text-primary" size={12} />
+                                </span>
+                                <span className="text-foreground/90">{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </button>
+
+                        {/* Standard / Airbnb */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPackageTier("one_percent");
+                            setIsPackageModalOpen(false);
+                          }}
+                          className={`text-left rounded-[32px] border p-6 sm:p-7 transition shadow-[0_22px_55px_-45px_rgba(15,23,42,0.35)] backdrop-blur ${
+                            packageTier === "one_percent"
+                              ? "border-primary/35 ring-1 ring-primary/25 bg-card"
+                              : "border-border bg-card hover:border-primary/25"
+                          }`}
+                          aria-pressed={packageTier === "one_percent"}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-lg font-semibold text-foreground">Standard Management</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">Great for hands-on owners</p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">
+                              1% / 10%
+                            </span>
+                          </div>
+
+                          <div className="mt-5 space-y-3">
+                            <div className="flex items-end justify-between gap-3">
+                              <span className="text-muted-foreground text-xs uppercase tracking-[0.22em]">Rentals</span>
+                              <span className="text-4xl font-semibold text-foreground leading-none">1%</span>
+                            </div>
+                            <div className="flex items-end justify-between gap-3">
+                              <span className="text-muted-foreground text-xs uppercase tracking-[0.22em]">Airbnb</span>
+                              <span className="text-4xl font-semibold text-foreground leading-none">10%</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">
+                              Fees apply on collections/bookings. Cancel anytime.
+                            </p>
+                          </div>
+
+                          <p className="mt-4 text-sm font-semibold text-foreground">
+                            Simple, transparent management
+                          </p>
+
+                          <ul className="mt-6 space-y-3 text-xs text-muted-foreground">
+                            {[
+                              "Rent collection (rentals)",
+                              "10% fee on Airbnb bookings",
+                              "Tenant/guest notifications",
+                              "Owner payouts & reconciliation",
+                              "Monthly statements",
+                            ].map((item) => (
+                              <li key={item} className="flex items-start gap-3">
+                                <span className="mt-0.5 grid h-6 w-6 place-items-center rounded-xl bg-muted">
+                                  <FaCheck className="text-primary" size={12} />
+                                </span>
+                                <span className="text-foreground/90">{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </button>
+
+                        {/* Full management */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPackageTier("full_management");
+                            setIsPackageModalOpen(false);
+                          }}
+                          className={`relative overflow-hidden text-left rounded-[32px] border p-6 sm:p-7 transition shadow-[0_28px_70px_-55px_rgba(66,199,117,0.45)] backdrop-blur ${
+                            packageTier === "full_management"
+                              ? "border-primary/45 ring-1 ring-primary/30 bg-card"
+                              : "border-border bg-card hover:border-primary/30"
+                          }`}
+                          aria-pressed={packageTier === "full_management"}
+                        >
+                          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(66,199,117,0.22),_transparent_58%)]" />
+                          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/15 blur-3xl" />
+
+                          <div className="relative flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-lg font-semibold text-foreground">Full Management</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">Done-for-you operations</p>
+                            </div>
+                            <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">
+                              <FaRegStar size={12} />
+                              Popular
+                            </span>
+                          </div>
+
+                          <div className="relative mt-5 flex items-end gap-2">
+                            <span className="text-muted-foreground text-sm">From</span>
+                            <span className="text-4xl font-semibold text-foreground leading-none">5–15%</span>
+                            <span className="pb-1 text-[11px] text-muted-foreground">management fee</span>
+                          </div>
+
+                          <p className="relative mt-2 text-[11px] text-muted-foreground">
+                            Custom rate depends on property type and scope. Includes onboarding & setup.
+                          </p>
+
+                          <p className="relative mt-4 text-sm font-semibold text-foreground">
+                            Maximise performance and peace of mind
+                          </p>
+
+                          <ul className="relative mt-6 space-y-3 text-xs text-muted-foreground">
+                            {[
+                              "Tenant sourcing & vetting",
+                              "Maintenance coordination",
+                              "Rent enforcement and reporting",
+                              "Airbnb setup & guest turnovers",
+                              "Dedicated support team",
+                            ].map((item) => (
+                              <li key={item} className="flex items-start gap-3">
+                                <span className="mt-0.5 grid h-6 w-6 place-items-center rounded-xl bg-primary/10">
+                                  <FaCheck className="text-primary" size={12} />
+                                </span>
+                                <span className="text-foreground/90">{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </button>
+                      </div>
+
+                      <div className="mt-6 rounded-2xl border border-border bg-muted/30 px-5 py-4 text-xs text-muted-foreground">
+                        Account access level:{" "}
+                        <span className="font-semibold text-foreground">
+                          {packageTier ? (derivedTier === "premium" ? "Premium" : "Free") : "—"}
+                        </span>
+                        .
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>,
+              portalTarget
+            )}
+
             {step === 0 && (
               <>
                 <motion.button
                   whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
+                      whileTap={{ scale: 0.98 }}
+                      type="button"
                   onClick={() => (window.location.href = "/api/auth/google")}
                   disabled={isLoading}
                   className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
@@ -512,6 +786,229 @@ export default function SignUp() {
 
             <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
               <AnimatePresence mode="wait">
+                {false && (
+                  <motion.div
+                    key="step-0"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-4 sm:space-y-5"
+                  >
+                    <div className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground text-center">
+                        Choose your package
+                      </p>
+                      <p className="text-sm text-muted-foreground text-center">
+                        Pick a plan that matches how hands-on you want to be. You can change later.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
+                      {/* Free */}
+                      <div
+                        className={`relative rounded-3xl border p-5 sm:p-6 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.35)] backdrop-blur transition ${
+                          packageTier === "free"
+                            ? "border-primary/35 ring-1 ring-primary/25 bg-card"
+                            : "border-border bg-card hover:border-primary/25"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-foreground">Free</h3>
+                            <p className="mt-1 text-xs text-muted-foreground">For getting started</p>
+                          </div>
+                          {packageTier === "free" && (
+                            <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">
+                              Selected
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-5 flex items-end gap-2">
+                          <span className="text-muted-foreground text-sm">$</span>
+                          <span className="text-4xl font-semibold text-foreground leading-none">0</span>
+                          <span className="pb-1 text-[11px] text-muted-foreground">Forever</span>
+                        </div>
+
+                        <p className="mt-2 text-[11px] text-muted-foreground">
+                          Includes 1 property and basic tracking. Upgrade anytime.
+                        </p>
+
+                        <p className="mt-4 text-sm font-semibold text-foreground">
+                          Track your property basics
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => setPackageTier("free")}
+                          className={`mt-5 w-full rounded-full px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] transition ${
+                            packageTier === "free"
+                              ? "bg-muted text-muted-foreground cursor-default"
+                              : "bg-foreground text-background hover:bg-foreground/90"
+                          }`}
+                          aria-pressed={packageTier === "free"}
+                        >
+                          {packageTier === "free" ? "Your package" : "Select Free"}
+                        </button>
+
+                        <ul className="mt-6 space-y-3 text-xs text-muted-foreground">
+                          {[
+                            "1 property free",
+                            "Tenants & property details",
+                            "Basic reports and reminders",
+                            "Maintenance request logging",
+                            "Email support",
+                          ].map((item) => (
+                            <li key={item} className="flex items-start gap-3">
+                              <span className="mt-0.5 grid h-6 w-6 place-items-center rounded-xl bg-muted">
+                                <FaCheck className="text-primary" size={12} />
+                              </span>
+                              <span className="text-foreground/90">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* 1% */}
+                      <div
+                        className={`relative rounded-3xl border p-5 sm:p-6 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.35)] backdrop-blur transition ${
+                          packageTier === "one_percent"
+                            ? "border-primary/35 ring-1 ring-primary/25 bg-card"
+                            : "border-border bg-card hover:border-primary/25"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-foreground">Standard Management</h3>
+                            <p className="mt-1 text-xs text-muted-foreground">Great for hands-on owners</p>
+                          </div>
+                          {packageTier === "one_percent" && (
+                            <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">
+                              Selected
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-5 space-y-3">
+                          <div className="flex items-end justify-between gap-3">
+                            <span className="text-muted-foreground text-xs uppercase tracking-[0.22em]">Rentals</span>
+                            <span className="text-4xl font-semibold text-foreground leading-none">1%</span>
+                          </div>
+                          <div className="flex items-end justify-between gap-3">
+                            <span className="text-muted-foreground text-xs uppercase tracking-[0.22em]">Airbnb</span>
+                            <span className="text-4xl font-semibold text-foreground leading-none">10%</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Fees apply on collections/bookings. Cancel anytime.
+                          </p>
+                        </div>
+
+                        <p className="mt-4 text-sm font-semibold text-foreground">
+                          Simple, transparent management
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => setPackageTier("one_percent")}
+                          className={`mt-5 w-full rounded-full px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] transition ${
+                            packageTier === "one_percent"
+                              ? "bg-muted text-muted-foreground cursor-default"
+                              : "bg-foreground text-background hover:bg-foreground/90"
+                          }`}
+                          aria-pressed={packageTier === "one_percent"}
+                        >
+                          {packageTier === "one_percent" ? "Your package" : "Select 1% Tier"}
+                        </button>
+
+                        <ul className="mt-6 space-y-3 text-xs text-muted-foreground">
+                          {[
+                            "Rent collection (rentals)",
+                            "10% fee on Airbnb bookings",
+                            "Tenant/guest notifications",
+                            "Owner payouts & reconciliation",
+                            "Monthly statements",
+                          ].map((item) => (
+                            <li key={item} className="flex items-start gap-3">
+                              <span className="mt-0.5 grid h-6 w-6 place-items-center rounded-xl bg-muted">
+                                <FaCheck className="text-primary" size={12} />
+                              </span>
+                              <span className="text-foreground/90">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Full management */}
+                      <div
+                        className={`relative overflow-hidden rounded-3xl border p-5 sm:p-6 shadow-[0_18px_55px_-35px_rgba(66,199,117,0.35)] backdrop-blur transition ${
+                          packageTier === "full_management"
+                            ? "border-primary/45 ring-1 ring-primary/30 bg-card"
+                            : "border-border bg-card hover:border-primary/30"
+                        }`}
+                      >
+                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(66,199,117,0.22),_transparent_58%)]" />
+                        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/15 blur-3xl" />
+
+                        <div className="relative flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-foreground">Full Management</h3>
+                            <p className="mt-1 text-xs text-muted-foreground">Done-for-you operations</p>
+                          </div>
+                          <span className="inline-flex items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">
+                            <FaRegStar size={12} />
+                            Popular
+                          </span>
+                        </div>
+
+                        <div className="relative mt-5 flex items-end gap-2">
+                          <span className="text-muted-foreground text-sm">From</span>
+                          <span className="text-4xl font-semibold text-foreground leading-none">5–15%</span>
+                          <span className="pb-1 text-[11px] text-muted-foreground">management fee</span>
+                        </div>
+
+                        <p className="relative mt-2 text-[11px] text-muted-foreground">
+                          Custom rate depends on property type and scope. Includes onboarding & setup.
+                        </p>
+
+                        <p className="relative mt-4 text-sm font-semibold text-foreground">
+                          Maximise performance and peace of mind
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => setPackageTier("full_management")}
+                          className={`relative mt-5 w-full rounded-full px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] transition ${
+                            packageTier === "full_management"
+                              ? "bg-primary/20 text-primary cursor-default"
+                              : "bg-primary text-primary-foreground hover:bg-primary-hover"
+                          }`}
+                          aria-pressed={packageTier === "full_management"}
+                        >
+                          {packageTier === "full_management" ? "Your package" : "Select Full Management"}
+                        </button>
+
+                        <ul className="relative mt-6 space-y-3 text-xs text-muted-foreground">
+                          {[
+                            "Tenant sourcing & vetting",
+                            "Maintenance coordination",
+                            "Rent enforcement and reporting",
+                            "Airbnb setup & guest turnovers",
+                            "Dedicated support team",
+                          ].map((item) => (
+                            <li key={item} className="flex items-start gap-3">
+                              <span className="mt-0.5 grid h-6 w-6 place-items-center rounded-xl bg-primary/10">
+                                <FaCheck className="text-primary" size={12} />
+                              </span>
+                              <span className="text-foreground/90">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 {step === 0 && (
                   <motion.div
                     key="step-0"
@@ -559,9 +1056,7 @@ export default function SignUp() {
                             <FaBuilding className="text-primary text-lg" />
                           </span>
                           <span>
-                            <span className="block text-xs font-semibold text-foreground">
-                              Rentals
-                            </span>
+                            <span className="block text-xs font-semibold text-foreground">Rentals</span>
                             <span className="block text-[10px] text-muted-foreground">
                               Long-term property management
                             </span>
@@ -582,72 +1077,11 @@ export default function SignUp() {
                             <FaHotel className="text-primary text-lg" />
                           </span>
                           <span>
-                            <span className="block text-xs font-semibold text-foreground">
-                              Airbnb
-                            </span>
+                            <span className="block text-xs font-semibold text-foreground">Airbnb</span>
                             <span className="block text-[10px] text-muted-foreground">
                               Short-term stays & STR ops
                             </span>
                           </span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                        Choose Your Tier
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setTier("free")}
-                          className={`rounded-xl border px-3.5 py-3 text-left transition-all ${
-                            tier === "free"
-                              ? "border-primary/40 bg-primary/10 ring-1 ring-primary/30"
-                              : "border-border bg-muted/30 hover:bg-muted/50"
-                          }`}
-                          aria-pressed={tier === "free"}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <span className="block text-xs font-semibold text-foreground">Free (Forever)</span>
-                              <span className="block text-[10px] text-muted-foreground mt-0.5">
-                                1 property free for life + full Tenants & Property details.
-                              </span>
-                            </div>
-                            <span className="shrink-0 rounded-full bg-foreground/5 px-2.5 py-1 text-[10px] font-semibold text-foreground">
-                              Free
-                            </span>
-                          </div>
-                          <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground">
-                            <li>• Dashboard access (with limited insights)</li>
-                            <li>• Locked premium operations & automation</li>
-                          </ul>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setTier("premium")}
-                          className={`rounded-xl border px-3.5 py-3 text-left transition-all ${
-                            tier === "premium"
-                              ? "border-primary/40 bg-primary/10 ring-1 ring-primary/30"
-                              : "border-border bg-muted/30 hover:bg-muted/50"
-                          }`}
-                          aria-pressed={tier === "premium"}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <span className="block text-xs font-semibold text-foreground">Premium</span>
-                              <span className="block text-[10px] text-muted-foreground mt-0.5">
-                                Unlock automated tenant payments + full operations suite.
-                              </span>
-                            </div>
-                            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold text-primary">Premium</span>
-                          </div>
-                          <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground">
-                            <li>• Automated payments & integrations</li>
-                            <li>• Advanced reports, users, expenses</li>
-                          </ul>
                         </button>
                       </div>
                     </div>
@@ -946,25 +1380,28 @@ export default function SignUp() {
                       </div>
 
                       <div className="rounded-xl border border-border bg-muted/30 p-3.5 xs:p-4 space-y-2 sm:col-span-2">
-                        <p className="text-[10px] text-muted-foreground">Tier</p>
+                        <p className="text-[10px] text-muted-foreground">Package</p>
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold text-sm">
-                            {!tier ? "Not selected" : tier === "premium" ? "Premium" : "Free (Forever)"}
+                            {!packageTier
+                              ? "Not selected"
+                              : packageTier === "free"
+                                ? "Free Tier"
+                                : packageTier === "one_percent"
+                                  ? "Standard Management"
+                                  : "Full Management 5–15% Tier"}
                           </p>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!tier) {
-                                setTier("free");
-                                return;
-                              }
-                              setTier((prev) => (prev === "premium" ? "free" : "premium"));
-                            }}
+                            onClick={() => setIsPackageModalOpen(true)}
                             className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold text-primary hover:bg-primary/20 transition"
                           >
-                            {!tier ? "Select" : "Switch"}
+                            Change
                           </button>
                         </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Access level: {derivedTier === "premium" ? "Premium" : "Free"}.
+                        </p>
                       </div>
                     </div>
 
@@ -1033,7 +1470,18 @@ export default function SignUp() {
                     whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"
-                  disabled={isLoading || !csrfToken || score < 5 || !acceptedTermsAndPrivacy}
+                  disabled={
+                    isLoading ||
+                    !csrfToken ||
+                    !packageTier ||
+                    !managementType ||
+                    !isNameValid ||
+                    !isEmailValid ||
+                    !isPhoneValid ||
+                    score < 5 ||
+                    !isPasswordMatch ||
+                    !acceptedTermsAndPrivacy
+                  }
                   className="w-1/2 bg-[linear-gradient(110deg,#42c775,#34b46d)] hover:bg-[linear-gradient(110deg,#34b46d,#42c775)] text-primary-foreground font-semibold py-2.5 rounded-xl transition-all duration-300 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed text-xs xs:text-sm sm:text-base tracking-wide"
                   >
                     {isLoading ? "Creating Account…" : "Create Account"}

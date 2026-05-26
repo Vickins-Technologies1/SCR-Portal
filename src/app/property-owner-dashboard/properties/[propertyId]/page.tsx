@@ -312,7 +312,7 @@ export default function PropertyDetailsPage() {
                       <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
                         {property.status}
                       </span>
-                      <span className="inline-flex items-center gap-2 rounded-full bg-[#1e3a8a]/10 text-[#1e3a8a] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
+                      <span className="inline-flex items-center gap-2 rounded-full bg-muted text-foreground px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide">
                         {property.billingType || "RentCollection"}
                       </span>
                       {property.rentPaymentDate && (

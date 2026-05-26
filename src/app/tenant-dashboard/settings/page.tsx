@@ -244,21 +244,21 @@ export default function SettingsPage() {
                 placeholder="Full Name"
                 value={tenant.name}
                 onChange={(e) => setTenant({ ...tenant, name: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] transition text-sm bg-white/70"
+                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-primary transition text-sm bg-white/70"
               />
               <input
                 type="email"
                 placeholder="Email"
                 value={tenant.email}
                 onChange={(e) => setTenant({ ...tenant, email: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] transition text-sm bg-white/70"
+                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-primary transition text-sm bg-white/70"
               />
               <input
                 type="tel"
                 placeholder="Phone (+254...)"
                 value={tenant.phone}
                 onChange={(e) => setTenant({ ...tenant, phone: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-[#1E3A8A] transition text-sm bg-white/70"
+                className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-4 focus:ring-primary/30 focus:border-primary transition text-sm bg-white/70"
               />
             </div>
 
