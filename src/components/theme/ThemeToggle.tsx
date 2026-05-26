@@ -24,7 +24,14 @@ function applyTheme(theme: Theme) {
   window.dispatchEvent(new Event("sorana-theme-change"));
 }
 
-export default function ThemeToggle({ className = "" }: { className?: string }) {
+type ThemeToggleVariant = "full" | "icon";
+
+type ThemeToggleProps = {
+  className?: string;
+  variant?: ThemeToggleVariant;
+};
+
+export default function ThemeToggle({ className = "", variant = "full" }: ThemeToggleProps) {
   const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
@@ -47,13 +54,30 @@ export default function ThemeToggle({ className = "" }: { className?: string }) 
   if (!theme) return null;
 
   const isDark = theme === "dark";
+  const nextTheme = isDark ? "light" : "dark";
+
+  const baseClassName =
+    "group inline-flex items-center gap-2 rounded-xl border border-border bg-card text-[11px] font-semibold text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
+  if (variant === "icon") {
+    return (
+      <button
+        type="button"
+        onClick={() => applyTheme(nextTheme)}
+        className={`${baseClassName} h-10 w-10 justify-center rounded-full p-0 ${className}`}
+        aria-label={`Switch to ${nextTheme} theme`}
+      >
+        {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+      </button>
+    );
+  }
 
   return (
     <button
       type="button"
-      onClick={() => applyTheme(isDark ? "light" : "dark")}
-      className={`group inline-flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 text-[11px] font-semibold text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground hover:shadow ${className}`}
-      aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
+      onClick={() => applyTheme(nextTheme)}
+      className={`${baseClassName} w-full justify-between px-3 py-2 ${className}`}
+      aria-label={`Switch to ${nextTheme} theme`}
     >
       <span className="inline-flex items-center gap-2">
         {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
