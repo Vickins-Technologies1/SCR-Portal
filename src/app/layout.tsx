@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css"; 
 import NativeBootstrap from "@/components/native/NativeBootstrap";
 import ThemeInitScript from "@/components/theme/ThemeInitScript";
+import OfflineFallback from "@/components/network/OfflineFallback";
 
 const siteUrl = "https://app.soranapropertymanagers.com";
 const siteName = "Sorana";
@@ -86,7 +87,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <NativeBootstrap />
-        {children}
+        <OfflineFallback>{children}</OfflineFallback>
       </body>
     </html>
   );

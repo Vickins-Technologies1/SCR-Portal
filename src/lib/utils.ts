@@ -62,7 +62,8 @@ export const resolveTenantRequiredDeposit = ({
 }): number => {
   const safeNumber = (value: unknown): number => Math.max(0, Number(value) || 0);
 
-  const normalizedUnitTypes = Array.isArray(unitTypes) ? normalizeUnitTypes(unitTypes) : null;
+  const hasPropertyUnitTypes = Array.isArray(unitTypes);
+  const normalizedUnitTypes = hasPropertyUnitTypes ? normalizeUnitTypes(unitTypes) : null;
   const unitTypeByUniqueId = normalizedUnitTypes
     ? new Map<string, UnitType>(
         normalizedUnitTypes
@@ -98,6 +99,10 @@ export const resolveTenantRequiredDeposit = ({
       if (candidates && candidates.length > 0) {
         return safeNumber(candidates[0]?.deposit);
       }
+    }
+
+    if (normalizedUnitTypes) {
+      return 0;
     }
 
     return safeNumber(fallbackDeposit);

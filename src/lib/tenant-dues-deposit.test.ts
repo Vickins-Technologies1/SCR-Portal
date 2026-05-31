@@ -42,6 +42,34 @@ describe("resolveTenantRequiredDeposit", () => {
 
     expect(resolveTenantRequiredDeposit({ tenant, unitTypes: null })).toBe(350);
   });
+
+  it("does not reuse tenant legacy deposit when property config exists but has no deposit", () => {
+    const tenant = {
+      deposit: 5000,
+      unitType: "Studio",
+      unitIdentifier: "Studio-0",
+      leasedUnits: undefined,
+    } as any;
+
+    const unitTypes = [{ type: "Studio", price: 18000, deposit: 0, quantity: 1 }] as any;
+
+    expect(resolveTenantRequiredDeposit({ tenant, unitTypes })).toBe(0);
+  });
+
+  it("keeps zero deposit when leased unit data is stale but property config says none", () => {
+    const tenant = {
+      deposit: 9000,
+      unitType: "1B",
+      unitIdentifier: "1B-0",
+      leasedUnits: [
+        { unitIdentifier: "1B-0", unitType: "1B", deposit: 9000 },
+      ],
+    } as any;
+
+    const unitTypes = [{ type: "1B", price: 22000, deposit: 0, quantity: 1 }] as any;
+
+    expect(resolveTenantRequiredDeposit({ tenant, unitTypes })).toBe(0);
+  });
 });
 
 describe("calculateTenantDues (deposit)", () => {
@@ -79,4 +107,3 @@ describe("calculateTenantDues (deposit)", () => {
     expect(dues.depositDues).toBe(1500);
   });
 });
-

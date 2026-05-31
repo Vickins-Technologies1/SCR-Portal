@@ -116,6 +116,9 @@ function Write-IcoFromPngSquareIcon {
 }
 
 $bg = New-Color $Background
+$launcherContentScale = 0.72
+$androidRoundContentScale = 0.70
+$androidAdaptiveContentScale = 0.64
 
 if (-not (Test-Path $Source)) {
   throw "Icon source not found: $Source"
@@ -127,20 +130,20 @@ if ((Test-Path "assets\\app-icon-source.png") -and -not (Test-Path $fullSourceBa
   Move-Item "assets\\app-icon-source.png" $fullSourceBackup
 }
 
-Write-PngSquareIcon -InPath $Source -OutPath "assets\\app-icon-source.png" -Size 1024 -ContentScale 0.78 -Bg $bg
+Write-PngSquareIcon -InPath $Source -OutPath "assets\\app-icon-source.png" -Size 1024 -ContentScale $launcherContentScale -Bg $bg
 
 # Web/PWA
-Write-PngSquareIcon -InPath $Source -OutPath "public\\icon.png" -Size 512 -ContentScale 0.78 -Bg $bg
-Write-PngSquareIcon -InPath $Source -OutPath "public\\apple-touch-icon.png" -Size 180 -ContentScale 0.78 -Bg $bg
+Write-PngSquareIcon -InPath $Source -OutPath "public\\icon.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg
+Write-PngSquareIcon -InPath $Source -OutPath "public\\apple-touch-icon.png" -Size 180 -ContentScale $launcherContentScale -Bg $bg
 Write-IcoFromPngSquareIcon -InPath $Source -OutPath "public\\favicon.ico" -Size 32 -ContentScale 0.82 -Bg $bg
 
 $pwaSizes = @(48, 72, 96, 128, 192, 256, 512)
 foreach ($s in $pwaSizes) {
-  Write-PngSquareIcon -InPath $Source -OutPath ("public\\icons\\icon-{0}.png" -f $s) -Size $s -ContentScale 0.78 -Bg $bg
+  Write-PngSquareIcon -InPath $Source -OutPath ("public\\icons\\icon-{0}.png" -f $s) -Size $s -ContentScale $launcherContentScale -Bg $bg
 }
 
 # iOS (marketing icon is 1024x1024)
-Write-PngSquareIcon -InPath $Source -OutPath "ios\\App\\App\\Assets.xcassets\\AppIcon.appiconset\\AppIcon-512@2x.png" -Size 1024 -ContentScale 0.78 -Bg $bg
+Write-PngSquareIcon -InPath $Source -OutPath "ios\\App\\App\\Assets.xcassets\\AppIcon.appiconset\\AppIcon-512@2x.png" -Size 1024 -ContentScale $launcherContentScale -Bg $bg
 
 # Android legacy launcher icons
 $androidLegacy = @(
@@ -156,8 +159,8 @@ foreach ($entry in $androidLegacy) {
   $dir = $entry.Dir
   $size = [int]$entry.Size
   $base = "android\\app\\src\\main\\res\\$dir"
-  Write-PngSquareIcon -InPath $Source -OutPath "$base\\ic_launcher.png" -Size $size -ContentScale 0.82 -Bg $bg
-  Write-PngSquareIcon -InPath $Source -OutPath "$base\\ic_launcher_round.png" -Size $size -ContentScale 0.76 -Bg $bg
+  Write-PngSquareIcon -InPath $Source -OutPath "$base\\ic_launcher.png" -Size $size -ContentScale $launcherContentScale -Bg $bg
+  Write-PngSquareIcon -InPath $Source -OutPath "$base\\ic_launcher_round.png" -Size $size -ContentScale $androidRoundContentScale -Bg $bg
 }
 
 # Android adaptive foreground (keep content inside safe area)
@@ -174,7 +177,7 @@ foreach ($entry in $androidFg) {
   $dir = $entry.Dir
   $size = [int]$entry.Size
   $base = "android\\app\\src\\main\\res\\$dir"
-  Write-PngSquareIcon -InPath $Source -OutPath "$base\\ic_launcher_foreground.png" -Size $size -ContentScale 0.67 -Bg $bg -TransparentBackground
+  Write-PngSquareIcon -InPath $Source -OutPath "$base\\ic_launcher_foreground.png" -Size $size -ContentScale $androidAdaptiveContentScale -Bg $bg -TransparentBackground
 }
 
 Write-Host "Done. Updated web, iOS, and Android icon assets from $Source"
