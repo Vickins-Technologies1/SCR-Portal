@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "REPLACE_ME",
         "android_client_info": {
-          "package_name": "com.soranapropertymanagers.portal"
+          "package_name": "com.soranapropertymanagers.app"
         }
       },
       "api_key": [

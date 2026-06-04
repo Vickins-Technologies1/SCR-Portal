@@ -7,7 +7,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.soranapropertymanagers.portal"
+    namespace = "com.soranapropertymanagers.app"
     compileSdk = rootProject.ext.compileSdkVersion
 
     signingConfigs {
@@ -22,7 +22,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.soranapropertymanagers.portal"
+        applicationId "com.soranapropertymanagers.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -43,6 +43,9 @@ android {
             // Enable R8 shrinking for production builds.
             minifyEnabled true
             shrinkResources true
+            ndk {
+                debugSymbolLevel = 'FULL'
+            }
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
 
             if (keystorePropertiesFile.exists()) {

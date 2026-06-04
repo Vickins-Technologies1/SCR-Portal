@@ -6,10 +6,3 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  @layer base {
-    body {
-      @apply bg-dark-blue text-light-green;
-    }
-  }
-}

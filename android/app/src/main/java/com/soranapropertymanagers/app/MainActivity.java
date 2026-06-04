@@ -1,4 +1,4 @@
-package com.soranapropertymanagers.portal;
+package com.soranapropertymanagers.app;
 
 import com.getcapacitor.BridgeActivity;
 

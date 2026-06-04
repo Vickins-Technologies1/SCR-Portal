@@ -4,7 +4,7 @@ const serverUrl = (process.env.CAP_SERVER_URL || "https://app.soranapropertymana
 const allowCleartext = serverUrl.startsWith("http://");
 
 const config: CapacitorConfig = {
-  appId: "com.soranapropertymanagers.portal",
+  appId: "com.soranapropertymanagers.app",
   appName: "Sorana",
   webDir: "www",
   server: {
