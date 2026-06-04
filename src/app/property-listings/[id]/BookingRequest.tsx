@@ -6,7 +6,6 @@ import toast, { Toaster } from "react-hot-toast";
 
 interface BookingRequestProps {
   listingId: string;
-  propertyName: string;
   nightlyRate: number;
 }
 
@@ -20,7 +19,7 @@ const diffNights = (checkIn: string, checkOut: string) => {
   return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
 };
 
-export default function BookingRequest({ listingId, propertyName, nightlyRate }: BookingRequestProps) {
+export default function BookingRequest({ listingId, nightlyRate }: BookingRequestProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");

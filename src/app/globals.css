@@ -4,10 +4,33 @@
   --background: #ffffff;
   --foreground: #1E3A8A;
   --accent: #42c775;
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --primary-hover: #34b46d;
+  --muted: #1e3a8a0f;
+  --muted-foreground: #1e3a8ab3;
+  --muted-hover: #1e3a8a1f;
+  --card: #ffffffdb;
+  --border: #1e3a8a1f;
+  --ring: #42c77559;
+  --accent-hover: #34b46d;
+  --surface-1: #ffffffb3;
+  --surface-2: #ffffff8c;
+  --shadow-soft: 0 30px 80px -55px #1e3a8a8c;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-hover: var(--muted-hover);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -17,10 +40,33 @@
   --background: #0b1220;
   --foreground: #e2e8f0;
   --accent: #42c775;
+  --primary: var(--accent);
+  --primary-foreground: #0b1220;
+  --primary-hover: #34b46d;
+  --muted: rgba(148, 163, 184, 0.12);
+  --muted-foreground: rgba(226, 232, 240, 0.72);
+  --muted-hover: rgba(148, 163, 184, 0.18);
+  --card: rgba(15, 23, 42, 0.72);
+  --border: rgba(148, 163, 184, 0.22);
+  --ring: rgba(66, 199, 117, 0.55);
+  --accent-hover: #34b46d;
+  --surface-1: rgba(15, 23, 42, 0.86);
+  --surface-2: rgba(15, 23, 42, 0.68);
+  --shadow-soft: 0 30px 80px -55px rgba(0, 0, 0, 0.78);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-hover: var(--muted-hover);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
 }
 
 html {
@@ -239,58 +285,159 @@ body {
 
 @layer utilities {
   /* Dark-mode compatibility shims for hard-coded light Tailwind colors used across older pages. */
-  :root[data-theme="dark"] .sorana-theme .bg-white,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/50,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/60,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/70,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/75,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/80,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/85,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/90,
-  :root[data-theme="dark"] .sorana-theme .bg-white\/95 {
+  :root[data-theme="dark"] .bg-white,
+  :root[data-theme="dark"] .bg-white\/50,
+  :root[data-theme="dark"] .bg-white\/60,
+  :root[data-theme="dark"] .bg-white\/70,
+  :root[data-theme="dark"] .bg-white\/75,
+  :root[data-theme="dark"] .bg-white\/80,
+  :root[data-theme="dark"] .bg-white\/85,
+  :root[data-theme="dark"] .bg-white\/90,
+  :root[data-theme="dark"] .bg-white\/95,
+  :root[data-theme="dark"] .hover\:bg-white:hover,
+  :root[data-theme="dark"] .hover\:bg-white\/70:hover,
+  :root[data-theme="dark"] .hover\:bg-white\/80:hover {
     background-color: var(--surface-2) !important;
   }
 
-  :root[data-theme="dark"] .sorana-theme .border-white\/20,
-  :root[data-theme="dark"] .sorana-theme .border-white\/30,
-  :root[data-theme="dark"] .sorana-theme .border-white\/40,
-  :root[data-theme="dark"] .sorana-theme .border-white\/50,
-  :root[data-theme="dark"] .sorana-theme .border-white\/60,
-  :root[data-theme="dark"] .sorana-theme .border-white\/70 {
-    border-color: var(--color-border) !important;
-  }
-
-  :root[data-theme="dark"] .sorana-theme .border-gray-100,
-  :root[data-theme="dark"] .sorana-theme .border-gray-200,
-  :root[data-theme="dark"] .sorana-theme .border-gray-300,
-  :root[data-theme="dark"] .sorana-theme .border-slate-100,
-  :root[data-theme="dark"] .sorana-theme .border-slate-200,
-  :root[data-theme="dark"] .sorana-theme .border-slate-300 {
-    border-color: var(--color-border) !important;
-  }
-
-  :root[data-theme="dark"] .sorana-theme .bg-gray-50,
-  :root[data-theme="dark"] .sorana-theme .bg-gray-100,
-  :root[data-theme="dark"] .sorana-theme .bg-slate-50,
-  :root[data-theme="dark"] .sorana-theme .bg-slate-100 {
+  :root[data-theme="dark"] .bg-slate-50,
+  :root[data-theme="dark"] .bg-slate-100,
+  :root[data-theme="dark"] .bg-slate-200,
+  :root[data-theme="dark"] .bg-slate-200\/70,
+  :root[data-theme="dark"] .bg-slate-200\/80,
+  :root[data-theme="dark"] .bg-slate-300,
+  :root[data-theme="dark"] .bg-slate-400,
+  :root[data-theme="dark"] .bg-gray-50,
+  :root[data-theme="dark"] .bg-gray-100,
+  :root[data-theme="dark"] .bg-gray-200,
+  :root[data-theme="dark"] .bg-gray-300,
+  :root[data-theme="dark"] .hover\:bg-slate-100:hover,
+  :root[data-theme="dark"] .hover\:bg-gray-100:hover,
+  :root[data-theme="dark"] .hover\:bg-gray-200:hover,
+  :root[data-theme="dark"] .disabled\:bg-gray-400:disabled {
     background-color: var(--color-muted) !important;
   }
 
-  :root[data-theme="dark"] .sorana-theme .text-gray-900,
-  :root[data-theme="dark"] .sorana-theme .text-slate-900,
-  :root[data-theme="dark"] .sorana-theme .text-gray-800,
-  :root[data-theme="dark"] .sorana-theme .text-slate-800,
-  :root[data-theme="dark"] .sorana-theme .text-gray-700,
-  :root[data-theme="dark"] .sorana-theme .text-slate-700,
-  :root[data-theme="dark"] .sorana-theme .text-slate-600 {
+  :root[data-theme="dark"] .border-white\/20,
+  :root[data-theme="dark"] .border-white\/30,
+  :root[data-theme="dark"] .border-white\/40,
+  :root[data-theme="dark"] .border-white\/50,
+  :root[data-theme="dark"] .border-white\/60,
+  :root[data-theme="dark"] .border-white\/70,
+  :root[data-theme="dark"] .border-white\/80 {
+    border-color: var(--color-border) !important;
+  }
+
+  :root[data-theme="dark"] .border-gray-100,
+  :root[data-theme="dark"] .border-gray-200,
+  :root[data-theme="dark"] .border-gray-300,
+  :root[data-theme="dark"] .border-slate-100,
+  :root[data-theme="dark"] .border-slate-200,
+  :root[data-theme="dark"] .border-slate-200\/60,
+  :root[data-theme="dark"] .border-slate-200\/70,
+  :root[data-theme="dark"] .border-slate-300 {
+    border-color: var(--color-border) !important;
+  }
+
+  :root[data-theme="dark"] .ring-slate-200,
+  :root[data-theme="dark"] .ring-gray-200 {
+    --tw-ring-color: var(--color-border) !important;
+  }
+
+  :root[data-theme="dark"] .focus\:ring-emerald-100:focus,
+  :root[data-theme="dark"] .focus\:ring-primary\/10:focus,
+  :root[data-theme="dark"] .focus\:ring-primary\/30:focus {
+    --tw-ring-color: var(--color-ring) !important;
+  }
+
+  :root[data-theme="dark"] .text-gray-900,
+  :root[data-theme="dark"] .text-slate-900,
+  :root[data-theme="dark"] .text-gray-800,
+  :root[data-theme="dark"] .text-slate-800,
+  :root[data-theme="dark"] .text-gray-700,
+  :root[data-theme="dark"] .text-slate-700,
+  :root[data-theme="dark"] .text-slate-600,
+  :root[data-theme="dark"] .hover\:text-slate-900:hover,
+  :root[data-theme="dark"] .hover\:text-gray-900:hover,
+  :root[data-theme="dark"] .hover\:text-slate-800:hover,
+  :root[data-theme="dark"] .hover\:text-gray-800:hover {
     color: var(--color-foreground) !important;
   }
 
-  :root[data-theme="dark"] .sorana-theme .text-gray-600,
-  :root[data-theme="dark"] .sorana-theme .text-gray-500,
-  :root[data-theme="dark"] .sorana-theme .text-slate-500,
-  :root[data-theme="dark"] .sorana-theme .text-slate-400 {
+  :root[data-theme="dark"] .text-gray-600,
+  :root[data-theme="dark"] .text-gray-500,
+  :root[data-theme="dark"] .text-gray-400,
+  :root[data-theme="dark"] .text-gray-300,
+  :root[data-theme="dark"] .text-slate-500,
+  :root[data-theme="dark"] .text-slate-400,
+  :root[data-theme="dark"] .text-slate-300,
+  :root[data-theme="dark"] .hover\:text-slate-500:hover,
+  :root[data-theme="dark"] .hover\:text-gray-500:hover {
     color: var(--color-muted-foreground) !important;
+  }
+
+  :root[data-theme="dark"] .placeholder\:text-slate-400::placeholder,
+  :root[data-theme="dark"] .placeholder\:text-gray-400::placeholder {
+    color: rgba(226, 232, 240, 0.5) !important;
+  }
+
+  :root[data-theme="dark"] .bg-emerald-50,
+  :root[data-theme="dark"] .bg-emerald-50\/70,
+  :root[data-theme="dark"] .bg-emerald-100,
+  :root[data-theme="dark"] .bg-emerald-500\/10 {
+    background-color: rgba(16, 185, 129, 0.16) !important;
+  }
+
+  :root[data-theme="dark"] .text-emerald-700,
+  :root[data-theme="dark"] .text-emerald-600 {
+    color: #86efac !important;
+  }
+
+  :root[data-theme="dark"] .border-emerald-200,
+  :root[data-theme="dark"] .ring-emerald-200 {
+    border-color: rgba(16, 185, 129, 0.32) !important;
+    --tw-ring-color: rgba(16, 185, 129, 0.32) !important;
+  }
+
+  :root[data-theme="dark"] .bg-amber-50,
+  :root[data-theme="dark"] .bg-amber-100,
+  :root[data-theme="dark"] .bg-amber-500\/10 {
+    background-color: rgba(245, 158, 11, 0.16) !important;
+  }
+
+  :root[data-theme="dark"] .text-amber-700 {
+    color: #fcd34d !important;
+  }
+
+  :root[data-theme="dark"] .border-amber-200,
+  :root[data-theme="dark"] .ring-amber-200 {
+    border-color: rgba(245, 158, 11, 0.32) !important;
+    --tw-ring-color: rgba(245, 158, 11, 0.32) !important;
+  }
+
+  :root[data-theme="dark"] .bg-rose-50,
+  :root[data-theme="dark"] .bg-rose-50\/70,
+  :root[data-theme="dark"] .bg-rose-100,
+  :root[data-theme="dark"] .bg-red-50,
+  :root[data-theme="dark"] .bg-red-100,
+  :root[data-theme="dark"] .hover\:bg-rose-100:hover {
+    background-color: rgba(244, 63, 94, 0.16) !important;
+  }
+
+  :root[data-theme="dark"] .text-rose-900,
+  :root[data-theme="dark"] .text-rose-800,
+  :root[data-theme="dark"] .text-rose-700,
+  :root[data-theme="dark"] .text-red-800,
+  :root[data-theme="dark"] .text-red-700,
+  :root[data-theme="dark"] .text-red-600 {
+    color: #fda4af !important;
+  }
+
+  :root[data-theme="dark"] .border-rose-200,
+  :root[data-theme="dark"] .border-red-200,
+  :root[data-theme="dark"] .ring-rose-200 {
+    border-color: rgba(244, 63, 94, 0.32) !important;
+    --tw-ring-color: rgba(244, 63, 94, 0.32) !important;
   }
 }
 @layer utilities {

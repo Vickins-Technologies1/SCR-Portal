@@ -445,7 +445,6 @@ export default async function PropertyDetailPage({
             {isAirbnb ? (
               <BookingRequest
                 listingId={property._id}
-                propertyName={property.name}
                 nightlyRate={nightlyRate}
               />
             ) : (

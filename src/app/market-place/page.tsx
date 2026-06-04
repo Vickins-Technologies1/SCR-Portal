@@ -221,7 +221,7 @@ export default function PropertyListings() {
     const half = Math.floor(windowSize / 2);
 
     let start = Math.max(1, currentPage - half);
-    let end = Math.min(totalPages, start + windowSize - 1);
+    const end = Math.min(totalPages, start + windowSize - 1);
     start = Math.max(1, end - windowSize + 1);
 
     return Array.from({ length: end - start + 1 }, (_, idx) => start + idx);

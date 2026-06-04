@@ -23,12 +23,10 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
   }, [activeIndex, safeImages.length]);
 
   const goTo = useCallback((index: number) => {
-    setActiveIndex((prev) => {
-      let next = index;
-      if (next < 0) next = safeImages.length - 1;
-      if (next >= safeImages.length) next = 0;
-      return next;
-    });
+    let next = index;
+    if (next < 0) next = safeImages.length - 1;
+    if (next >= safeImages.length) next = 0;
+    setActiveIndex(next);
   }, [safeImages.length]);
 
   const goNext = useCallback(() => goTo(activeIndex + 1), [activeIndex, goTo]);
