@@ -3,6 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { buildInvalidCsrfResponse, validateCsrfToken } from '@/lib/csrf';
 import { ObjectId } from 'mongodb';
 import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
+import { sanitizePropertyUtilities } from '@/lib/property-utilities';
 
 // ===============================================
 // INTERFACES
@@ -17,6 +18,16 @@ export interface UnitType {
   managementFee?: number;
 }
 
+export interface PropertyUtility {
+  id: string;
+  name: string;
+  billingMode: "fixed" | "metered";
+  amount: number;
+  unitLabel?: string;
+  startsAt?: string;
+  active?: boolean;
+}
+
 export interface Property {
   _id: ObjectId | string;
   ownerId: string;
@@ -29,6 +40,7 @@ export interface Property {
   rentPaymentDate?: number;
   penaltyAmount?: number;
   penaltyFrequency?: "daily" | "weekly";
+  utilities?: PropertyUtility[];
   createdAt: Date | string;
   updatedAt?: Date | string;
 }
@@ -61,6 +73,7 @@ interface PropertyRequest {
   billingType?: "RentCollection" | "FullManagement";
   penaltyAmount?: number | string | null;
   penaltyFrequency?: "daily" | "weekly" | null;
+  utilities?: PropertyUtility[];
 }
 
 // ===============================================
@@ -299,6 +312,25 @@ export async function PUT(
       } else {
         unset.penaltyAmount = "";
         unset.penaltyFrequency = "";
+      }
+    }
+
+    if (payload.utilities !== undefined) {
+      try {
+        const existingById = new Map((existing.utilities || []).map((utility) => [utility.id, utility]));
+        const utilitiesWithPreservedStarts = (Array.isArray(payload.utilities) ? payload.utilities : []).map((utility) => {
+          const existingUtility = utility?.id ? existingById.get(utility.id) : undefined;
+          return {
+            ...utility,
+            startsAt: utility?.startsAt || existingUtility?.startsAt,
+          };
+        });
+        update.utilities = sanitizePropertyUtilities(utilitiesWithPreservedStarts);
+      } catch (error) {
+        return NextResponse.json(
+          { success: false, message: error instanceof Error ? error.message : 'Invalid property utilities.' },
+          { status: 400 }
+        );
       }
     }
 

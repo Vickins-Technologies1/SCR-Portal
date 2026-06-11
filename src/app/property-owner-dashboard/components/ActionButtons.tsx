@@ -2,7 +2,7 @@
 "use client"; // ← add this (needed because we're using hooks if you ever add them, but mainly for clarity)
 
 import React from "react";
-import { DollarSign, FileText, LogIn, Trash2 } from "lucide-react";
+import { DollarSign, FileText, LogIn, Trash2, Zap } from "lucide-react";
 
 interface ActionButtonsProps {
   onRecordPayment: () => void;
@@ -10,9 +10,11 @@ interface ActionButtonsProps {
   onImpersonate: () => void;
   onDelete: () => void;
   onGenerateReport: () => void;
+  onRecordUtility?: () => void;
   // Add the permission props we need for conditional rendering
   canRecordPayment: boolean;
   canGenerateReport: boolean;
+  canRecordUtility?: boolean;
   canImpersonate: boolean;
   canDelete: boolean;
 }
@@ -23,8 +25,10 @@ export default function ActionButtons({
   onImpersonate,
   onDelete,
   onGenerateReport,
+  onRecordUtility,
   canRecordPayment,
   canGenerateReport,
+  canRecordUtility = false,
   canImpersonate,
   canDelete,
 }: ActionButtonsProps) {
@@ -37,6 +41,16 @@ export default function ActionButtons({
         >
           <DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />
           Record Payment
+        </button>
+      )}
+
+      {canRecordUtility && onRecordUtility && (
+        <button
+          onClick={onRecordUtility}
+          className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 sm:px-5 sm:py-3 bg-white/80 text-foreground border border-sky-200 rounded-xl text-xs sm:text-sm font-semibold shadow-sm hover:bg-sky-50 transition"
+        >
+          <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-sky-600" />
+          Record Utility Usage
         </button>
       )}
 

@@ -4,6 +4,7 @@ import logger from "@/lib/logger";
 import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "@/lib/payment-totals";
+import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
@@ -223,14 +224,16 @@ export async function applyTumaPaymentUpdate(params: {
       : (tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0);
   const rentDueAfter = Math.max(0, totalRentDue - paymentTotals.rentPaid);
   const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
-  const utilityDueAfter = 0;
+  const utilityDueAfter =
+    calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenant as any, today: new Date() }) +
+    (await getPostedMeteredUtilityTotal(db, updatedPayment.tenantId));
   const walletBalance = calculateWalletBalanceFromPayments({
     rentPaid: paymentTotals.rentPaid,
     depositPaid: paymentTotals.depositPaid,
     utilityPaid: paymentTotals.utilityPaid,
     rentDue: totalRentDue,
     depositDue: depositTotal,
-    utilityDue: 0,
+    utilityDue: utilityDueAfter,
   });
   const totalRemainingDues = rentDueAfter + depositDueAfter + utilityDueAfter;
 

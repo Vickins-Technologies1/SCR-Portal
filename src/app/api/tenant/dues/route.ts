@@ -7,6 +7,7 @@ import { WithId, ObjectId } from "mongodb";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateTenantDues, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
+import { calculateFixedUtilityDue } from "@/lib/property-utilities";
 
 interface Property {
   _id: ObjectId;
@@ -19,6 +20,7 @@ interface Property {
   rentPaymentDate?: number;
   penaltyAmount?: number;
   penaltyFrequency?: "daily" | "weekly";
+  utilities?: any[];
 }
 
 interface Stats {
@@ -242,6 +244,17 @@ export async function GET(request: NextRequest) {
       db,
       activeTenants.map((tenant) => tenant._id)
     );
+    const activeTenantIds = activeTenants.map((tenant) => tenant._id.toString());
+    const utilityChargeRows = await db
+      .collection("utilityCharges")
+      .aggregate<{ _id: string; total: number }>([
+        { $match: { tenantId: { $in: activeTenantIds }, status: "posted" } },
+        { $group: { _id: "$tenantId", total: { $sum: "$amount" } } },
+      ])
+      .toArray();
+    const meteredUtilityDueByTenant = new Map(
+      utilityChargeRows.map((row) => [row._id, Math.round(row.total || 0)])
+    );
 
     const bulkOps = activeTenants.map((tenant) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
@@ -264,7 +277,10 @@ export async function GET(request: NextRequest) {
         tenant: tenant as any,
         unitTypes: property?.unitTypes as any,
       });
-      const totalDue = rentDue + totalDeposit + penaltyDues;
+      const totalUtilityDue =
+        calculateFixedUtilityDue({ utilities: property?.utilities as any, tenant: tenant as any, today }) +
+        (meteredUtilityDueByTenant.get(tenantObjectId.toString()) || 0);
+      const totalDue = rentDue + totalDeposit + penaltyDues + totalUtilityDue;
       const tenantTotals = paymentTotalsByTenant.get(tenantObjectId.toString()) || {
         rentPaid: 0,
         depositPaid: 0,
@@ -388,6 +404,7 @@ export async function POST(request: NextRequest) {
       penaltyFrequency: property?.penaltyFrequency,
       rentPaymentDate: property?.rentPaymentDate,
       propertyUnitTypes: (property as any)?.unitTypes,
+      propertyUtilities: (property as any)?.utilities,
     });
 
     await db.collection("tenants").updateOne(

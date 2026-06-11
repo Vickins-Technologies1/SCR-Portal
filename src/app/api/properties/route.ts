@@ -4,12 +4,13 @@ import { connectToDatabase } from '../../../lib/mongodb';
 import { cookies } from 'next/headers';
 import { Db, ObjectId } from 'mongodb';
 import { UNIT_TYPES } from '../../../lib/unitTypes';
-import { Property, UnitType } from '../../../types/property';
+import { Property, PropertyUtility, UnitType } from '../../../types/property';
 import { Tenant } from '../../../types/tenant';
 import { buildInvalidCsrfResponse } from '../../../lib/csrf';
 import { fetchTenantsActiveOnDay } from '@/lib/tenant-occupancy';
 import { resolveAccountTier } from '@/lib/tier';
 import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
+import { sanitizePropertyUtilities } from '@/lib/property-utilities';
 
 const buildOccupiedByUnitIdentifier = async (
   db: Db,
@@ -381,7 +382,7 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    const { name, address, unitTypes, status, rentPaymentDate, billingType, penaltyAmount, penaltyFrequency } = body;
+    const { name, address, unitTypes, status, rentPaymentDate, billingType, penaltyAmount, penaltyFrequency, utilities } = body;
 
     if (
       !name ||
@@ -457,6 +458,15 @@ export async function POST(request: NextRequest) {
     });
 
     const managementFee = 0;
+    let validatedUtilities: PropertyUtility[] = [];
+    try {
+      validatedUtilities = sanitizePropertyUtilities(utilities);
+    } catch (error) {
+      return NextResponse.json(
+        { success: false, message: error instanceof Error ? error.message : 'Invalid property utilities.' },
+        { status: 400 }
+      );
+    }
 
     const newProperty: Property = {
       _id: new ObjectId(),
@@ -469,6 +479,7 @@ export async function POST(request: NextRequest) {
       ...(parsedPenaltyAmount > 0 && penaltyFrequency
         ? { penaltyAmount: parsedPenaltyAmount, penaltyFrequency }
         : {}),
+      utilities: validatedUtilities,
       billingType: billingPlan,
       managementFee,
       createdAt: new Date(),
@@ -481,7 +492,7 @@ export async function POST(request: NextRequest) {
       action: 'properties.create',
       summary: `Created property: ${name}.`,
       entity: { type: 'property', id: result.insertedId.toString(), label: name },
-      metadata: { status, billingType: billingPlan, rentPaymentDate },
+      metadata: { status, billingType: billingPlan, rentPaymentDate, utilityCount: validatedUtilities.length },
     });
 
     return NextResponse.json(

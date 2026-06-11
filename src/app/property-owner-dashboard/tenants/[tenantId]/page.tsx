@@ -19,10 +19,19 @@ import ActionButtons from "../../components/ActionButtons";
 import RecordPaymentModal from "../../components/RecordPaymentModal";
 import ImpersonateModal from "../../components/ImpersonateModal";
 import TenantRentOverrideModal from "../../components/TenantRentOverrideModal";
+import UtilityUsageModal from "../../components/UtilityUsageModal";
 
 interface Property {
   _id: string;
   name: string;
+  utilities?: Array<{
+    id: string;
+    name: string;
+    billingMode: "fixed" | "metered";
+    amount: number;
+    unitLabel?: string;
+    active?: boolean;
+  }>;
 }
 
 interface PaymentFormData {
@@ -84,6 +93,7 @@ export default function TenantDetailsPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showImpersonateModal, setShowImpersonateModal] = useState(false);
   const [showRentOverrideModal, setShowRentOverrideModal] = useState(false);
+  const [showUtilityUsageModal, setShowUtilityUsageModal] = useState(false);
 
   const [paymentData, setPaymentData] = useState<PaymentFormData>({
     amount: "",
@@ -906,6 +916,10 @@ export default function TenantDetailsPage() {
                     if (!canRecordPayments) return;
                     setShowPaymentModal(true);
                   }}
+                  onRecordUtility={() => {
+                    if (!canRecordPayments) return;
+                    setShowUtilityUsageModal(true);
+                  }}
                   onEdit={() => alert("Coming soon")}
                   onImpersonate={() => {
                     if (!canImpersonate) return;
@@ -917,6 +931,7 @@ export default function TenantDetailsPage() {
                   }}
                   onGenerateReport={handleGenerateReport}
                   canRecordPayment={canRecordPayments}
+                  canRecordUtility={canRecordPayments}
                   canGenerateReport={canViewReports}
                   canImpersonate={canImpersonate}
                   canDelete={canManageTenants}
@@ -965,6 +980,21 @@ export default function TenantDetailsPage() {
             if (!token) return;
             await fetchTenantData(token);
             await fetchDues(token);
+          }}
+        />
+
+        <UtilityUsageModal
+          isOpen={showUtilityUsageModal}
+          onClose={() => setShowUtilityUsageModal(false)}
+          tenant={tenant}
+          property={property}
+          csrfToken={csrfToken}
+          onSaved={async () => {
+            const token = csrfToken || (await fetchCsrfToken());
+            if (!token) return;
+            await fetchTenantData(token);
+            await fetchDues(token);
+            await fetchPaymentStatements();
           }}
         />
 

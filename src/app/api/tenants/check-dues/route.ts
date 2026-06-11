@@ -8,6 +8,7 @@ import logger from "@/lib/logger";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
+import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 
 interface Tenant {
   _id: ObjectId;
@@ -146,13 +147,14 @@ export async function GET(request: NextRequest) {
             _id: "$tenantId",
             rentPaid: { $sum: { $cond: [{ $eq: ["$type", "Rent"] }, "$amount", 0] } },
             depositPaid: { $sum: { $cond: [{ $eq: ["$type", "Deposit"] }, "$amount", 0] } },
+            utilityPaid: { $sum: { $cond: [{ $eq: ["$type", "Utility"] }, "$amount", 0] } },
           },
         },
       ])
       .toArray();
 
     const paidMap = Object.fromEntries(
-      paymentsByTenant.map((p: any) => [p._id.toString(), { rentPaid: p.rentPaid, depositPaid: p.depositPaid }])
+      paymentsByTenant.map((p: any) => [p._id.toString(), { rentPaid: p.rentPaid, depositPaid: p.depositPaid, utilityPaid: p.utilityPaid }])
     );
 
     let overdueCount = 0;
@@ -163,7 +165,7 @@ export async function GET(request: NextRequest) {
     for (const tenant of activeTenants) {
       const tenantIdStr = tenant._id.toString();
       const property = propertyMap.get(tenant.propertyId);
-      const paid = paidMap[tenantIdStr] || { rentPaid: 0, depositPaid: 0 };
+      const paid = paidMap[tenantIdStr] || { rentPaid: 0, depositPaid: 0, utilityPaid: 0 };
       const { rentDue, monthsStayed } = calculateTenantRentDueToDate({
         tenant: tenant as any,
         today,
@@ -182,8 +184,11 @@ export async function GET(request: NextRequest) {
         tenant: tenant as any,
         unitTypes: property?.unitTypes,
       });
-      const totalDue = rentDue + totalDeposit + penaltyDues;
-      const totalPaid = paid.rentPaid + paid.depositPaid;
+      const totalUtilityDue =
+        calculateFixedUtilityDue({ utilities: property?.utilities, tenant: tenant as any, today }) +
+        (await getPostedMeteredUtilityTotal(db, tenantIdStr));
+      const totalDue = rentDue + totalDeposit + penaltyDues + totalUtilityDue;
+      const totalPaid = paid.rentPaid + paid.depositPaid + paid.utilityPaid;
       const remaining = Math.max(0, totalDue - totalPaid);
 
       if (remaining > 0) {
@@ -296,13 +301,16 @@ export async function POST(request: NextRequest) {
       tenant: tenant as any,
       unitTypes: (property as any)?.unitTypes,
     });
+    const totalUtilityDue =
+      calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenant as any, today }) +
+      (await getPostedMeteredUtilityTotal(db, tenantIdStr));
     const updatedWalletBalance = calculateWalletBalanceFromPayments({
       rentPaid,
       depositPaid,
       utilityPaid,
       rentDue,
       depositDue: totalDeposit,
-      utilityDue: 0,
+      utilityDue: totalUtilityDue,
     });
 
     const baseRentDues = Math.max(0, rentDue - updatedTotalRentPaid);
@@ -316,7 +324,7 @@ export async function POST(request: NextRequest) {
     });
     const rentDues = Math.max(0, baseRentDues + penaltyDues);
     const depositDues = Math.max(0, totalDeposit - depositPaid);
-    const utilityDues = 0;
+    const utilityDues = Math.max(0, totalUtilityDue - utilityPaid);
     const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
 
     const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";

@@ -5,6 +5,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { appendOwnerActivity, resolveOwnerActivityActor } from "@/lib/owner-activity";
+import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 
 type Role = "propertyOwner" | "teamMember" | "admin";
 
@@ -52,6 +53,7 @@ type PropertyDoc = {
   penaltyAmount?: number;
   penaltyFrequency?: "daily" | "weekly";
   unitTypes?: any[];
+  utilities?: any[];
 };
 
 async function resolveEffectiveOwnerId(db: Db, userId: string, role: Role): Promise<string | null> {
@@ -114,13 +116,19 @@ async function syncTenantTotals(db: Db, tenantId: string) {
     unitTypes: (property as any)?.unitTypes,
   });
 
+  const utilityDue = calculateFixedUtilityDue({
+    utilities: property?.utilities,
+    tenant: tenant as any,
+    today,
+  }) + (await getPostedMeteredUtilityTotal(db, tenantId));
+
   const updatedWalletBalance = calculateWalletBalanceFromPayments({
     rentPaid,
     depositPaid,
     utilityPaid,
     rentDue,
     depositDue: totalDeposit,
-    utilityDue: 0,
+    utilityDue,
   });
 
   const baseRentDues = Math.max(0, rentDue - rentPaid);
@@ -134,7 +142,7 @@ async function syncTenantTotals(db: Db, tenantId: string) {
   });
   const rentDues = Math.max(0, baseRentDues + penaltyDues);
   const depositDues = Math.max(0, totalDeposit - depositPaid);
-  const utilityDues = 0;
+  const utilityDues = Math.max(0, utilityDue - utilityPaid);
   const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
   const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
 

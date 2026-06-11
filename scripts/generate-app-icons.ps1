@@ -130,7 +130,8 @@ if ((Test-Path "assets\\app-icon-source.png") -and -not (Test-Path $fullSourceBa
   Move-Item "assets\\app-icon-source.png" $fullSourceBackup
 }
 
-Write-PngSquareIcon -InPath $Source -OutPath "assets\\app-icon-source.png" -Size 1024 -ContentScale $launcherContentScale -Bg $bg
+Write-PngSquareIcon -InPath $Source -OutPath "assets\\app-icon-source.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg
+Write-PngSquareIcon -InPath $Source -OutPath "assets\\icon.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg
 
 # Web/PWA
 Write-PngSquareIcon -InPath $Source -OutPath "public\\icon.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg

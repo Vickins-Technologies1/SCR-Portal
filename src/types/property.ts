@@ -12,6 +12,16 @@ export interface UnitType {
   vacant?: number; // Optional field to track vacancies in real-time
 }
 
+export interface PropertyUtility {
+  id: string;
+  name: string;
+  billingMode: "fixed" | "metered";
+  amount: number;
+  unitLabel?: string;
+  startsAt?: string;
+  active?: boolean;
+}
+
 export interface AvailabilitySummary {
   totalUnits: number;
   totalVacant: number;
@@ -42,6 +52,7 @@ export interface Property {
   rentPaymentDate?: number;
   penaltyAmount?: number;
   penaltyFrequency?: "daily" | "weekly";
+  utilities?: PropertyUtility[];
   createdAt: Date;
   updatedAt?: Date;
 

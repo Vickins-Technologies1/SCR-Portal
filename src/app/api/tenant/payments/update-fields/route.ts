@@ -7,6 +7,7 @@ import logger from "../../../../../lib/logger";
 import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantRequiredDeposit } from "../../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "../../../../../lib/payment-totals";
+import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 
 interface Tenant {
   _id: ObjectId;
@@ -42,6 +43,15 @@ interface Property {
   _id: ObjectId;
   ownerId: string;
   name: string;
+  utilities?: Array<{
+    id: string;
+    name: string;
+    billingMode: "fixed" | "metered";
+    amount: number;
+    unitLabel?: string;
+    startsAt?: string;
+    active?: boolean;
+  }>;
 }
 
 interface Payment {
@@ -156,7 +166,9 @@ export async function POST(request: NextRequest) {
       unitTypes: (property as any)?.unitTypes,
     });
     const depositDueBefore = Math.max(0, totalDeposit - depositPaidBefore);
-    const utilityDueBefore = 0;
+    const utilityDueBefore =
+      calculateFixedUtilityDue({ utilities: property.utilities, tenant: tenant as any, today }) +
+      (await getPostedMeteredUtilityTotal(db, tenant._id));
 
     let remainingAmount = payment.amount;
     if (payment.type === "Rent") {
@@ -177,7 +189,7 @@ export async function POST(request: NextRequest) {
       utilityPaid: paymentTotals.utilityPaid,
       rentDue: totalRentDue,
       depositDue: depositTotal,
-      utilityDue: 0,
+      utilityDue: utilityDueBefore,
     });
     const updateFields: Partial<Tenant> = {
       totalRentPaid: paymentTotals.rentPaid,

@@ -1,5 +1,5 @@
 // src/lib/reminders.ts
-import { ObjectId } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import { connectToDatabase } from "./mongodb";
 import { sendWelcomeSms } from "./sms";
 import { sendWhatsAppMessage } from "./whatsapp";
@@ -10,6 +10,7 @@ import { Tenant } from "../types/tenant";
 import { calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "./utils";
 import { calculateReminderDueAmounts } from "./reminder-calculations";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
+import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "./property-utilities";
 
 type ReminderType = "fiveDaysBefore" | "paymentDate";
 
@@ -43,6 +44,21 @@ interface ReminderNotification {
     totalDue: number;
   };
 }
+
+const resolveReminderUtilityAmount = async (
+  db: Db,
+  tenant: Tenant,
+  property: Property,
+  referenceDate: Date
+): Promise<number> => {
+  return (
+    calculateFixedUtilityDue({
+      utilities: (property as any).utilities,
+      tenant: tenant as any,
+      today: referenceDate,
+    }) + (await getPostedMeteredUtilityTotal(db, tenant._id))
+  );
+};
 
 interface ReminderResult {
   sent: number;
@@ -316,12 +332,13 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     });
     const depositAmount = resolveTenantRequiredDeposit({ tenant, unitTypes: property.unitTypes });
 
+    const utilityAmount = await resolveReminderUtilityAmount(db, tenant, property, dueDate);
     const { rentDue, utilityDue, depositDue, totalDue } = calculateReminderDueAmounts({
       rentAmount: rentAmountDueToDueDate,
       rentPaid,
       depositAmount,
       depositPaid,
-      utilityAmount: 0,
+      utilityAmount,
       utilityPaid,
     });
 
@@ -571,12 +588,13 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     });
     const depositAmount = resolveTenantRequiredDeposit({ tenant, unitTypes: property.unitTypes });
 
+    const utilityAmount = await resolveReminderUtilityAmount(db, tenant, property, dueDate);
     const { rentDue, utilityDue, depositDue, totalDue } = calculateReminderDueAmounts({
       rentAmount: rentAmountDueToDueDate,
       rentPaid,
       depositAmount,
       depositPaid,
-      utilityAmount: 0,
+      utilityAmount,
       utilityPaid,
     });
 

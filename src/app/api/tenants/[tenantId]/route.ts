@@ -141,6 +141,7 @@ export async function GET(
       property: {
         _id: property._id.toString(),
         name: property.name,
+        utilities: property.utilities || [],
       },
     });
   } catch (error: any) {

@@ -16,12 +16,23 @@ interface Property {
   name: string;
   address: string;
   unitTypes: { type: string; price: number; deposit: number; quantity: number; managementType: "RentCollection" | "FullManagement"; managementFee: number }[];
+  utilities?: PropertyUtilityForm[];
   billingType?: "RentCollection" | "FullManagement";
   status: "Active" | "Inactive";
   rentPaymentDate: number;
   penaltyAmount?: number;
   penaltyFrequency?: "daily" | "weekly";
   createdAt: string;
+}
+
+interface PropertyUtilityForm {
+  id?: string;
+  name: string;
+  billingMode: "fixed" | "metered";
+  amount: string;
+  unitLabel: string;
+  startsAt?: string;
+  active?: boolean;
 }
 
 const UNIT_TYPES = [
@@ -140,6 +151,7 @@ export default function PropertiesPage() {
   const [unitTypes, setUnitTypes] = useState<
     { type: string; price: string; deposit: string; quantity: string }[]
   >([{ type: "", price: "", deposit: "", quantity: "" }]);
+  const [utilities, setUtilities] = useState<PropertyUtilityForm[]>([]);
   const [billingType, setBillingType] = useState<"RentCollection" | "FullManagement">("RentCollection");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -250,6 +262,7 @@ export default function PropertiesPage() {
     setPenaltyAmount("");
     setPenaltyFrequency("");
     setUnitTypes([{ type: "", price: "", deposit: "", quantity: "" }]);
+    setUtilities([]);
     setBillingType("RentCollection");
     setFormErrors({});
     setEditingPropertyId(null);
@@ -279,6 +292,17 @@ export default function PropertiesPage() {
           price: u.price.toString(),
           deposit: u.deposit.toString(),
           quantity: u.quantity.toString(),
+        }))
+      );
+      setUtilities(
+        (property.utilities || []).map((utility) => ({
+          id: utility.id,
+          name: utility.name,
+          billingMode: utility.billingMode,
+          amount: String(utility.amount ?? ""),
+          unitLabel: utility.unitLabel || "unit",
+          startsAt: utility.startsAt,
+          active: utility.active !== false,
         }))
       );
       setBillingType(property.billingType || property.unitTypes?.[0]?.managementType || "RentCollection");
@@ -365,9 +389,24 @@ export default function PropertiesPage() {
       if (!unit.quantity || isNaN(parseInt(unit.quantity)) || parseInt(unit.quantity) < 0)
         errors[`unitQuantity_${index}`] = `Quantity for unit ${index + 1} must be a non-negative integer`;
     });
+    utilities.forEach((utility, index) => {
+      if (!utility.name.trim()) {
+        errors[`utilityName_${index}`] = `Utility ${index + 1} needs a name`;
+      }
+      const amount = parseFloat(utility.amount);
+      if (!utility.amount || Number.isNaN(amount) || amount <= 0) {
+        errors[`utilityAmount_${index}`] =
+          utility.billingMode === "fixed"
+            ? `Monthly amount for ${utility.name || `utility ${index + 1}`} must be greater than 0`
+            : `Rate per unit for ${utility.name || `utility ${index + 1}`} must be greater than 0`;
+      }
+      if (utility.billingMode === "metered" && !utility.unitLabel.trim()) {
+        errors[`utilityUnit_${index}`] = `Unit label for ${utility.name || `utility ${index + 1}`} is required`;
+      }
+    });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [propertyName, address, rentPaymentDate, penaltyAmount, penaltyFrequency, unitTypes]);
+  }, [propertyName, address, rentPaymentDate, penaltyAmount, penaltyFrequency, unitTypes, utilities]);
   const calculateTotalUnits = useCallback(() => {
     return unitTypes.reduce((sum, unit) => sum + (parseInt(unit.quantity) || 0), 0);
   }, [unitTypes]);
@@ -407,6 +446,15 @@ export default function PropertiesPage() {
           quantity: parseInt(u.quantity) || 0,
           managementType: billingType,
         })),
+        utilities: utilities.map((utility, index) => ({
+          id: utility.id || `${utility.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || "utility"}-${index}`,
+          name: utility.name.trim(),
+          billingMode: utility.billingMode,
+          amount: parseFloat(utility.amount) || 0,
+          unitLabel: utility.billingMode === "metered" ? utility.unitLabel.trim() || "unit" : undefined,
+          startsAt: utility.startsAt,
+          active: utility.active !== false,
+        })),
         billingType,
         ownerId: effectiveOwnerId,
         csrfToken,
@@ -438,7 +486,7 @@ export default function PropertiesPage() {
         setIsLoading(false);
       }
     },
-    [userId, effectiveOwnerId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, penaltyAmount, penaltyFrequency, unitTypes, billingType, fetchProperties, resetForm, validateForm, csrfToken, canListProperties, canEditProperties]
+    [userId, effectiveOwnerId, modalMode, editingPropertyId, propertyName, address, status, rentPaymentDate, penaltyAmount, penaltyFrequency, unitTypes, utilities, billingType, fetchProperties, resetForm, validateForm, csrfToken, canListProperties, canEditProperties]
   );
 
   const sortedProperties = useMemo(() => {
@@ -492,6 +540,32 @@ export default function PropertiesPage() {
 
   const removeUnitType = useCallback((index: number) => {
     setUnitTypes((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addUtility = useCallback((preset?: Partial<PropertyUtilityForm>) => {
+    setUtilities((prev) => [
+      ...prev,
+      {
+        id: `utility-${Date.now()}-${prev.length}`,
+        name: preset?.name || "",
+        billingMode: preset?.billingMode || "fixed",
+        amount: preset?.amount || "",
+        unitLabel: preset?.unitLabel || "unit",
+        active: true,
+      },
+    ]);
+  }, []);
+
+  const updateUtility = useCallback((index: number, field: keyof PropertyUtilityForm, value: string | boolean) => {
+    setUtilities((prev) =>
+      prev.map((utility, i) =>
+        i === index ? { ...utility, [field]: value } : utility
+      )
+    );
+  }, []);
+
+  const removeUtility = useCallback((index: number) => {
+    setUtilities((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const fieldBase =
@@ -585,6 +659,7 @@ export default function PropertiesPage() {
                       </th>
                     ))}
                     <th>Unit Types</th>
+                    <th>Utilities</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -612,6 +687,13 @@ export default function PropertiesPage() {
                       <td className="px-4 py-3">{new Date(p.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3">
                         {p.unitTypes.map((u) => `${u.type} (x${u.quantity})`).join(", ") || "N/A"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {p.utilities && p.utilities.length > 0
+                          ? p.utilities.map((u) =>
+                              `${u.name} (${u.billingMode === "fixed" ? `Ksh ${Number(u.amount || 0).toLocaleString()}/mo` : `Ksh ${Number(u.amount || 0).toLocaleString()}/${u.unitLabel || "unit"}`})`
+                            ).join(", ")
+                          : "None"}
                       </td>
                       <td
                         className="px-4 py-3 flex gap-2"
@@ -849,6 +931,134 @@ export default function PropertiesPage() {
                           Optional: penalties only apply when rent is overdue.
                         </p>
                       </div>
+                    </div>
+                  </section>
+
+                  <section className={sectionBase}>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div>
+                          <p className={sectionTitle}>Utilities</p>
+                          <p className={sectionSubtitle}>
+                            Add fixed monthly charges or metered rates for usage billed at month end.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => addUtility({ name: "Water", billingMode: "metered", unitLabel: "unit" })}
+                            className="rounded-full border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100 transition"
+                          >
+                            Water
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addUtility({ name: "Electricity", billingMode: "metered", unitLabel: "kWh" })}
+                            className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition"
+                          >
+                            Electricity
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addUtility({ name: "Garbage", billingMode: "fixed", amount: "300" })}
+                            className="rounded-full border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10 transition"
+                          >
+                            Garbage
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addUtility()}
+                            className="rounded-full border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition"
+                          >
+                            + Custom
+                          </button>
+                        </div>
+                      </div>
+
+                      {utilities.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-border bg-muted/60 px-4 py-4 text-xs sm:text-sm text-muted-foreground">
+                          No utilities configured. Tenants will only owe rent and deposit until you add one.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="hidden lg:grid grid-cols-[1.4fr_1fr_1fr_0.8fr_auto] gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                            <span>Name</span>
+                            <span>Billing</span>
+                            <span>Amount / Rate</span>
+                            <span>Unit</span>
+                            <span></span>
+                          </div>
+                          {utilities.map((utility, index) => (
+                            <div key={utility.id || index} className="space-y-2">
+                              <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_1fr_0.8fr_auto] gap-2 items-end">
+                                <div>
+                                  <span className="lg:hidden text-xs font-semibold text-muted-foreground">Name</span>
+                                  <input
+                                    value={utility.name}
+                                    onChange={(e) => updateUtility(index, "name", e.target.value)}
+                                    placeholder="Water, security, garbage..."
+                                    className={`${fieldBase} ${formErrors[`utilityName_${index}`] ? fieldError : ""}`}
+                                  />
+                                </div>
+                                <div>
+                                  <span className="lg:hidden text-xs font-semibold text-muted-foreground">Billing</span>
+                                  <select
+                                    value={utility.billingMode}
+                                    onChange={(e) =>
+                                      updateUtility(index, "billingMode", e.target.value as "fixed" | "metered")
+                                    }
+                                    className={fieldBase}
+                                  >
+                                    <option value="fixed">Fixed monthly</option>
+                                    <option value="metered">Metered usage</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <span className="lg:hidden text-xs font-semibold text-muted-foreground">
+                                    {utility.billingMode === "fixed" ? "Monthly Amount" : "Rate Per Unit"}
+                                  </span>
+                                  <input
+                                    value={utility.amount}
+                                    onChange={(e) => updateUtility(index, "amount", e.target.value)}
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder={utility.billingMode === "fixed" ? "Ksh/month" : "Ksh/unit"}
+                                    className={`${fieldBase} ${formErrors[`utilityAmount_${index}`] ? fieldError : ""}`}
+                                  />
+                                </div>
+                                <div>
+                                  <span className="lg:hidden text-xs font-semibold text-muted-foreground">Unit</span>
+                                  <input
+                                    value={utility.billingMode === "metered" ? utility.unitLabel : "month"}
+                                    onChange={(e) => updateUtility(index, "unitLabel", e.target.value)}
+                                    disabled={utility.billingMode === "fixed"}
+                                    placeholder="unit"
+                                    className={`${fieldBase} ${utility.billingMode === "fixed" ? "bg-muted text-muted-foreground" : ""} ${formErrors[`utilityUnit_${index}`] ? fieldError : ""}`}
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeUtility(index)}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition"
+                                  aria-label={`Remove utility ${index + 1}`}
+                                >
+                                  <Trash2 className="h-5 w-5" />
+                                </button>
+                              </div>
+                              {(formErrors[`utilityName_${index}`] ||
+                                formErrors[`utilityAmount_${index}`] ||
+                                formErrors[`utilityUnit_${index}`]) && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-red-500">
+                                  <div>{formErrors[`utilityName_${index}`]}</div>
+                                  <div>{formErrors[`utilityAmount_${index}`]}</div>
+                                  <div>{formErrors[`utilityUnit_${index}`]}</div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </section>
 

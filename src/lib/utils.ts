@@ -1,9 +1,10 @@
 // src/lib/utils.ts
-import { UnitType } from '../types/property';
+import { PropertyUtility, UnitType } from '../types/property';
 import { Tenant, ResponseTenant, TenantLeaseUnit, TenantRentPaymentOverride } from '../types/tenant';
 import { RentPriceOverride } from '../types/rent-price-override';
 import { Db, ObjectId } from 'mongodb';
 import { buildOverrideKey, filterOverridesForUnit } from './rent-overrides';
+import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from './property-utilities';
 
 interface LogMeta {
   [key: string]: unknown;
@@ -738,34 +739,54 @@ export const calculateTenantDues = async (
     penaltyFrequency?: "daily" | "weekly";
     rentPaymentDate?: number;
     propertyUnitTypes?: UnitType[];
+    propertyUtilities?: PropertyUtility[];
+    meteredUtilityDue?: number;
   }
 ): Promise<TenantDues> => {
-  const fetchPropertyUnitTypes = async (): Promise<UnitType[] | null> => {
-    if (Array.isArray(penaltyConfig?.propertyUnitTypes)) return penaltyConfig?.propertyUnitTypes ?? null;
+  const fetchPropertyBillingConfig = async (): Promise<{
+    unitTypes: UnitType[] | null;
+    utilities: PropertyUtility[];
+  } | null> => {
+    if (Array.isArray(penaltyConfig?.propertyUnitTypes) || Array.isArray(penaltyConfig?.propertyUtilities)) {
+      return {
+        unitTypes: penaltyConfig?.propertyUnitTypes ?? null,
+        utilities: penaltyConfig?.propertyUtilities ?? [],
+      };
+    }
     if (!tenant.propertyId) return null;
 
     const queryByObjectId = async (id: string) => {
       if (!ObjectId.isValid(id)) return null;
-      return db.collection<{ _id: ObjectId; unitTypes?: UnitType[] }>('properties').findOne(
+      return db.collection<{ _id: ObjectId; unitTypes?: UnitType[]; utilities?: PropertyUtility[] }>('properties').findOne(
         { _id: new ObjectId(id) },
-        { projection: { unitTypes: 1 } }
+        { projection: { unitTypes: 1, utilities: 1 } }
       );
     };
 
     const queryByString = async (id: string) => {
-      return db.collection<{ _id: string; unitTypes?: UnitType[] }>('properties').findOne(
+      return db.collection<{ _id: string; unitTypes?: UnitType[]; utilities?: PropertyUtility[] }>('properties').findOne(
         { _id: id },
-        { projection: { unitTypes: 1 } }
+        { projection: { unitTypes: 1, utilities: 1 } }
       );
     };
 
     const propertyByObjectId = await queryByObjectId(tenant.propertyId);
-    if (propertyByObjectId?.unitTypes) return propertyByObjectId.unitTypes;
+    if (propertyByObjectId) {
+      return {
+        unitTypes: propertyByObjectId.unitTypes ?? null,
+        utilities: propertyByObjectId.utilities ?? [],
+      };
+    }
 
     const propertyByString = await queryByString(tenant.propertyId);
-    if (propertyByString?.unitTypes) return propertyByString.unitTypes;
+    if (propertyByString) {
+      return {
+        unitTypes: propertyByString.unitTypes ?? null,
+        utilities: propertyByString.utilities ?? [],
+      };
+    }
 
-    return null;
+    return { unitTypes: null, utilities: [] };
   };
 
   const rentOverrideMap = rentOverridesOrMap instanceof Map ? rentOverridesOrMap : undefined;
@@ -865,9 +886,20 @@ export const calculateTenantDues = async (
           });
         })();
 
-  const propertyUnitTypes = await fetchPropertyUnitTypes();
-  const totalDepositDue = resolveTenantRequiredDeposit({ tenant, unitTypes: propertyUnitTypes });
-  const totalUtilityDue = 0;
+  const propertyBillingConfig = await fetchPropertyBillingConfig();
+  const totalDepositDue = resolveTenantRequiredDeposit({ tenant, unitTypes: propertyBillingConfig?.unitTypes });
+  const fixedUtilityDue = calculateFixedUtilityDue({
+    utilities: propertyBillingConfig?.utilities,
+    tenant,
+    today,
+  });
+  const meteredUtilityDue =
+    typeof penaltyConfig?.meteredUtilityDue === "number"
+      ? Math.max(0, penaltyConfig.meteredUtilityDue)
+      : typeof (db as any)?.collection === "function"
+        ? await getPostedMeteredUtilityTotal(db, tenant._id)
+        : 0;
+  const totalUtilityDue = roundCurrency(fixedUtilityDue + meteredUtilityDue);
 
   const walletBalance = tenant.walletBalance || 0;
   const rentPaid = tenant.totalRentPaid || 0;

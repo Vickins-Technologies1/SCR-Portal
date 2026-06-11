@@ -4,6 +4,7 @@ import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 
 interface Tenant {
   _id: ObjectId;
@@ -241,6 +242,9 @@ export async function GET(request: NextRequest) {
         tenant: tenantDoc as any,
         unitTypes: (property as any)?.unitTypes,
       });
+      const totalUtilityDue =
+        calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenantDoc as any, today }) +
+        (await getPostedMeteredUtilityTotal(db, targetTenantId));
 
       const updatedTotalRentPaid = rentPaid;
       const updatedWalletBalance = calculateWalletBalanceFromPayments({
@@ -249,7 +253,7 @@ export async function GET(request: NextRequest) {
         utilityPaid,
         rentDue,
         depositDue,
-        utilityDue: 0,
+        utilityDue: totalUtilityDue,
       });
 
       const baseRentDues = Math.max(0, rentDue - updatedTotalRentPaid);
@@ -263,7 +267,7 @@ export async function GET(request: NextRequest) {
       });
       const rentDues = Math.max(0, baseRentDues + penaltyDues);
       const depositDues = Math.max(0, depositDue - depositPaid);
-      const utilityDues = 0;
+      const utilityDues = Math.max(0, totalUtilityDue - utilityPaid);
       const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
 
       const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
