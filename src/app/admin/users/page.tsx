@@ -21,6 +21,8 @@ import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
+const PAGE_SIZE = 10;
+
 interface PropertyOwner {
   _id: string;
   email: string;
@@ -45,10 +47,13 @@ export default function PropertyOwnersPage() {
   const router = useRouter();
 
   const [propertyOwners, setPropertyOwners] = useState<PropertyOwner[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "name",
     direction: "asc",
   });
+  const [refreshKey, setRefreshKey] = useState(0);
   const [expanded, setExpanded] = useState<string[]>([]);
   const [editUser, setEditUser] = useState<PropertyOwner | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -109,23 +114,39 @@ export default function PropertyOwnersPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/admin/property-owners", {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(PAGE_SIZE),
+        sortKey: sortConfig.key,
+        sortDirection: sortConfig.direction,
+      });
+
+      const response = await fetch(`/api/admin/property-owners?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (response.status === 401 || response.status === 403) {
         router.replace("/admin/login?session=expired");
         throw new Error("Session expired");
       }
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const data = await res.json();
+      const data = await response.json();
 
       if (data.success) {
+        const nextTotalCount = Number(data.count || 0);
+        const nextTotalPages = Math.max(1, Math.ceil(nextTotalCount / PAGE_SIZE));
+
+        if (currentPage > nextTotalPages) {
+          setCurrentPage(nextTotalPages);
+          return;
+        }
+
         setPropertyOwners(data.propertyOwners || []);
+        setTotalCount(nextTotalCount);
       } else {
         setError(data.message || "Failed to fetch owners.");
       }
@@ -138,7 +159,7 @@ export default function PropertyOwnersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [status, router]);
+  }, [status, router, currentPage, refreshKey]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -167,14 +188,10 @@ export default function PropertyOwnersPage() {
   const handleSort = (key: keyof PropertyOwner) => {
     setSortConfig((prev) => {
       const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
-      const sorted = [...propertyOwners].sort((a, b) => {
-        const A = String(a[key] ?? "").toLowerCase();
-        const B = String(b[key] ?? "").toLowerCase();
-        return direction === "asc" ? A.localeCompare(B) : B.localeCompare(A);
-      });
-      setPropertyOwners(sorted);
       return { key, direction };
     });
+    setCurrentPage(1);
+    setRefreshKey((value) => value + 1);
   };
 
   const getSortIcon = (key: keyof PropertyOwner) => {
@@ -186,10 +203,28 @@ export default function PropertyOwnersPage() {
     );
   };
 
-  const formatOwnerType = (value?: string) =>
-    value?.toLowerCase() === "airbnb" ? "Airbnb / Short-term" : "Rentals / Long-term";
+  const getOwnerTypeStyles = (value?: string) =>
+    value?.toLowerCase() === "airbnb"
+      ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200"
+      : "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
   const isOwnerApproved = (owner: PropertyOwner) =>
     owner.isApproved === true || owner.isApproved === "true";
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const startCount = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const endCount = Math.min(currentPage * PAGE_SIZE, totalCount);
+
+  const getPaginationRange = () => {
+    const windowSize = 5;
+    const halfWindow = Math.floor(windowSize / 2);
+    let start = Math.max(1, currentPage - halfWindow);
+    let end = Math.min(totalPages, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+
+    const pages: number[] = [];
+    for (let page = start; page <= end; page += 1) pages.push(page);
+    return pages;
+  };
 
   // ── Expand / Collapse ──────────────────────────────────────────────────────
   const toggleExpand = (id: string) => {
@@ -231,10 +266,10 @@ export default function PropertyOwnersPage() {
       const data = await res.json();
 
       if (data.success) {
-        setPropertyOwners((prev) => prev.filter((o) => o._id !== deleteTarget._id));
         setShowDeleteModal(false);
         setDeleteTarget(null);
         setError(null);
+        setRefreshKey((value) => value + 1);
       } else {
         setDeleteError(data.message || "Delete failed");
       }
@@ -328,11 +363,9 @@ export default function PropertyOwnersPage() {
       const data = await res.json();
 
       if (data.success) {
-        setPropertyOwners(
-          propertyOwners.map((o) => (o._id === editUser._id ? { ...o, ...editUser } : o))
-        );
         setShowEditModal(false);
         setEditUser(null);
+        setRefreshKey((value) => value + 1);
       } else {
         setError(data.message || "Update failed");
       }
@@ -357,9 +390,10 @@ export default function PropertyOwnersPage() {
       const data = await res.json();
 
       if (data.success) {
-        setPropertyOwners([data.propertyOwner, ...propertyOwners]);
         setShowCreateModal(false);
         setNewOwner({ name: "", email: "", phone: "", password: "" });
+        setCurrentPage(1);
+        setRefreshKey((value) => value + 1);
       } else {
         setCreateError(data.message || "Could not create owner");
       }
@@ -419,6 +453,14 @@ export default function PropertyOwnersPage() {
                 Add New Owner
               </button>
             </div>
+            <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span className="inline-flex items-center rounded-full border border-border bg-white/70 px-3 py-1.5 font-medium text-foreground">
+                {totalCount.toLocaleString()} total owners
+              </span>
+              <span>
+                Showing {startCount.toLocaleString()}-{endCount.toLocaleString()} of {totalCount.toLocaleString()}
+              </span>
+            </div>
           </motion.section>
 
           {/* Error Message */}
@@ -447,13 +489,14 @@ export default function PropertyOwnersPage() {
               <div className="surface-card rounded-2xl h-20 animate-pulse" />
             </div>
           ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="table-shell"
-            >
-              <div className="table-scroll">
-                <table className="w-full">
+            <>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="table-shell"
+              >
+                <div className="table-scroll">
+                  <table className="w-full">
                   <thead>
                     <tr>
                       <th
@@ -505,8 +548,19 @@ export default function PropertyOwnersPage() {
                             <td className="py-3 px-4 text-xs font-medium text-foreground">{owner.name}</td>
                             <td className="py-3 px-4 text-xs text-muted-foreground">{owner.email}</td>
                             <td className="py-3 px-4 text-xs text-muted-foreground">{owner.phone}</td>
-                            <td className="py-3 px-4 text-xs text-muted-foreground">
-                              {formatOwnerType(owner.managementType)}
+                            <td className="py-3 px-4 text-xs">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${getOwnerTypeStyles(
+                                  owner.managementType
+                                )}`}
+                              >
+                                {owner.managementType?.toLowerCase() === "airbnb" ? "Airbnb" : "Rentals"}
+                              </span>
+                              <span className="ml-2 text-[10px] text-muted-foreground">
+                                {owner.managementType?.toLowerCase() === "airbnb"
+                                  ? "Short-term"
+                                  : "Long-term"}
+                              </span>
                             </td>
                             <td className="py-3 px-4 text-xs text-muted-foreground">
                               {owner.createdAt}
@@ -591,9 +645,50 @@ export default function PropertyOwnersPage() {
                       ))
                     )}
                   </tbody>
-                </table>
+                  </table>
+                </div>
+              </motion.div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-border bg-card/80 px-4 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Page {currentPage.toLocaleString()} of {totalPages.toLocaleString()}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    className="rounded-lg border border-border bg-white/70 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+
+                  {getPaginationRange().map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className={`min-w-9 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        page === currentPage
+                          ? "bg-primary text-white shadow-md"
+                          : "border border-border bg-white/70 text-foreground hover:bg-white"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                    className="rounded-lg border border-border bg-white/70 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
-            </motion.div>
+            </>
           )}
 
           {/* Create Modal */}

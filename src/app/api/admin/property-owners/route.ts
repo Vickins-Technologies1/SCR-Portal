@@ -13,6 +13,10 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
+    const page = Math.max(1, Number(searchParams.get("page") || "1"));
+    const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || "10")));
+    const sortKey = searchParams.get("sortKey") || "createdAt";
+    const sortDirection = searchParams.get("sortDirection") === "asc" ? 1 : -1;
 
     const matchStage: any = { role: "propertyOwner" };
 
@@ -22,10 +26,27 @@ export async function GET(request: NextRequest) {
       matchStage.isApproved = true;
     }
 
+    const sortFieldMap: Record<string, string> = {
+      name: "name",
+      email: "email",
+      phone: "phone",
+      managementType: "managementType",
+      createdAt: "createdAt",
+      isApproved: "isApproved",
+    };
+
+    const sortField = sortFieldMap[sortKey] || "createdAt";
+    const sortStage = { [sortField]: sortDirection as 1 | -1 };
+
+    const skip = (page - 1) * limit;
+
     const propertyOwners = await db
       .collection("propertyOwners")
       .aggregate([
         { $match: matchStage },
+        { $sort: sortStage },
+        { $skip: skip },
+        { $limit: limit },
 
         // Lookup for properties count
         {
@@ -120,8 +141,6 @@ export async function GET(request: NextRequest) {
             invoicesCount: { $size: "$invoicesArray" },
           }
         },
-
-        { $sort: { createdAt: -1 } },
       ])
       .toArray();
 
@@ -131,6 +150,8 @@ export async function GET(request: NextRequest) {
       success: true,
       propertyOwners,
       count,
+      page,
+      limit,
     });
   } catch (error: unknown) {
     console.error("Fetch property owners error:", error);
