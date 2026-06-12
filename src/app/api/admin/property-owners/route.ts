@@ -4,6 +4,10 @@ import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { requireAdmin } from "../../../../lib/admin-auth";
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request, "admin:owners:view");
   if (auth instanceof NextResponse) return auth;
@@ -12,13 +16,25 @@ export async function GET(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
 
     const { searchParams } = new URL(request.url);
-    const statusFilter = searchParams.get("status");
+    const statusFilter = searchParams.get("status") || "all";
+    const search = (searchParams.get("search") || "").trim();
     const page = Math.max(1, Number(searchParams.get("page") || "1"));
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || "10")));
     const sortKey = searchParams.get("sortKey") || "createdAt";
     const sortDirection = searchParams.get("sortDirection") === "asc" ? 1 : -1;
 
-    const matchStage: any = { role: "propertyOwner" };
+    const baseMatch: any = { role: "propertyOwner" };
+
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), "i");
+      baseMatch.$or = [
+        { name: regex },
+        { email: regex },
+        { phone: regex },
+      ];
+    }
+
+    const matchStage = { ...baseMatch };
 
     if (statusFilter === "pending") {
       matchStage.isApproved = false;
@@ -144,12 +160,22 @@ export async function GET(request: NextRequest) {
       ])
       .toArray();
 
-    const count = await db.collection("propertyOwners").countDocuments(matchStage);
+    const [count, totalCount, approvedCount, pendingCount] = await Promise.all([
+      db.collection("propertyOwners").countDocuments(matchStage),
+      db.collection("propertyOwners").countDocuments(baseMatch),
+      db.collection("propertyOwners").countDocuments({ ...baseMatch, isApproved: true }),
+      db.collection("propertyOwners").countDocuments({ ...baseMatch, isApproved: false }),
+    ]);
 
     return NextResponse.json({
       success: true,
       propertyOwners,
       count,
+      statusCounts: {
+        all: totalCount,
+        approved: approvedCount,
+        pending: pendingCount,
+      },
       page,
       limit,
     });

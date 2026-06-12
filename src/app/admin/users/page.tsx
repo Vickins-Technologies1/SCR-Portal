@@ -16,12 +16,14 @@ import {
   RefreshCw,
   LogIn,
   Shield,
+  Search,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
 const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 interface PropertyOwner {
   _id: string;
@@ -49,6 +51,15 @@ export default function PropertyOwnersPage() {
   const [propertyOwners, setPropertyOwners] = useState<PropertyOwner[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "pending">("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusCounts, setStatusCounts] = useState({
+    all: 0,
+    approved: 0,
+    pending: 0,
+  });
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "name",
     direction: "asc",
@@ -106,6 +117,18 @@ export default function PropertyOwnersPage() {
     checkSession();
   }, [checkSession]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, statusFilter]);
+
   // ── Fetch property owners ───────────────────────────────────────────────────
   const fetchPropertyOwners = useCallback(async () => {
     if (status !== "authenticated") return;
@@ -116,10 +139,18 @@ export default function PropertyOwnersPage() {
     try {
       const params = new URLSearchParams({
         page: String(currentPage),
-        limit: String(PAGE_SIZE),
+        limit: String(pageSize),
         sortKey: sortConfig.key,
         sortDirection: sortConfig.direction,
       });
+
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter);
+      }
+
+      if (debouncedSearch) {
+        params.set("search", debouncedSearch);
+      }
 
       const response = await fetch(`/api/admin/property-owners?${params.toString()}`, {
         method: "GET",
@@ -138,7 +169,7 @@ export default function PropertyOwnersPage() {
 
       if (data.success) {
         const nextTotalCount = Number(data.count || 0);
-        const nextTotalPages = Math.max(1, Math.ceil(nextTotalCount / PAGE_SIZE));
+        const nextTotalPages = Math.max(1, Math.ceil(nextTotalCount / pageSize));
 
         if (currentPage > nextTotalPages) {
           setCurrentPage(nextTotalPages);
@@ -147,6 +178,11 @@ export default function PropertyOwnersPage() {
 
         setPropertyOwners(data.propertyOwners || []);
         setTotalCount(nextTotalCount);
+        setStatusCounts({
+          all: Number(data.statusCounts?.all || 0),
+          approved: Number(data.statusCounts?.approved || 0),
+          pending: Number(data.statusCounts?.pending || 0),
+        });
       } else {
         setError(data.message || "Failed to fetch owners.");
       }
@@ -159,7 +195,7 @@ export default function PropertyOwnersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [status, router, currentPage, refreshKey]);
+  }, [status, router, currentPage, pageSize, statusFilter, debouncedSearch, sortConfig, refreshKey]);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -210,9 +246,9 @@ export default function PropertyOwnersPage() {
   const isOwnerApproved = (owner: PropertyOwner) =>
     owner.isApproved === true || owner.isApproved === "true";
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const startCount = totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-  const endCount = Math.min(currentPage * PAGE_SIZE, totalCount);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const startCount = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endCount = Math.min(currentPage * pageSize, totalCount);
 
   const getPaginationRange = () => {
     const windowSize = 5;
@@ -460,6 +496,69 @@ export default function PropertyOwnersPage() {
               <span>
                 Showing {startCount.toLocaleString()}-{endCount.toLocaleString()} of {totalCount.toLocaleString()}
               </span>
+            </div>
+
+            <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="flex items-center gap-2 rounded-2xl border border-border bg-white/70 px-4 py-3 shadow-sm">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                  }}
+                  placeholder="Search by name, email, or phone"
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </label>
+
+              <label className="flex items-center gap-3 rounded-2xl border border-border bg-white/70 px-4 py-3 shadow-sm">
+                <span className="text-xs font-medium text-muted-foreground">Rows</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                >
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option} per page
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[
+                { key: "all", label: "All", count: statusCounts.all },
+                { key: "approved", label: "Approved", count: statusCounts.approved },
+                { key: "pending", label: "Pending", count: statusCounts.pending },
+              ].map((item) => {
+                const active = statusFilter === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(item.key as "all" | "approved" | "pending");
+                      setCurrentPage(1);
+                    }}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                      active
+                        ? "border-primary bg-primary text-white shadow-md"
+                        : "border-border bg-white/70 text-foreground hover:border-primary/40 hover:bg-white"
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] ${active ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
+                      {item.count.toLocaleString()}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </motion.section>
 
