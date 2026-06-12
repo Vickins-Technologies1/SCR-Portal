@@ -2,6 +2,7 @@
 export interface OwnerStats {
   activeProperties: number;
   totalTenants: number;
+  activeTenants: number;
   totalUnits: number;
   occupiedUnits: number;
   expectedMonthlyRent: number;

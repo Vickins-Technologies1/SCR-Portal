@@ -43,6 +43,7 @@ interface TenantDoc {
 interface Stats {
   activeProperties: number;
   totalTenants: number;
+  activeTenants: number;
   totalUnits: number;
   occupiedUnits: number;
   expectedMonthlyRent: number;
@@ -172,6 +173,7 @@ export async function GET(request: NextRequest) {
       const stats: Stats = {
         activeProperties: 0,
         totalTenants: 0,
+        activeTenants: 0,
         totalUnits: 0,
         occupiedUnits: 0,
         expectedMonthlyRent: 0,
@@ -213,11 +215,11 @@ export async function GET(request: NextRequest) {
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
     const tenantCollection = db.collection<TenantDoc>("tenants");
-
+    const totalTenants = await tenantCollection.countDocuments({ propertyId: { $in: propertyIds } });
     const activeTenantsForOccupancy = await fetchTenantsActiveOnDay<TenantDoc>(db, propertyIds, today);
     const activeTenantsForMonth = await fetchTenantsOverlappingRange<TenantDoc>(db, propertyIds, startOfMonth, endOfMonth);
 
-    const totalTenants = activeTenantsForOccupancy.length;
+    const activeTenants = activeTenantsForOccupancy.length;
     const occupiedUnits = activeTenantsForOccupancy.reduce(
       (sum, tenant) => sum + countOccupiedUnitsForTenant(tenant),
       0
@@ -415,6 +417,7 @@ export async function GET(request: NextRequest) {
     const stats: Stats = {
       activeProperties: properties.length,
       totalTenants,
+      activeTenants,
       totalUnits,
       occupiedUnits,
       expectedMonthlyRent,

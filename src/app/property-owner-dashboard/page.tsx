@@ -77,6 +77,7 @@ export default function PropertyOwnerDashboard() {
   const [stats, setStats] = useState<OwnerStats>({
     activeProperties: 0,
     totalTenants: 0,
+    activeTenants: 0,
     totalUnits: 0,
     occupiedUnits: 0,
     expectedMonthlyRent: 0,
@@ -262,7 +263,7 @@ export default function PropertyOwnerDashboard() {
     datasets: [
       {
         data: [
-          Math.max(0, stats.totalTenants - stats.overduePayments),
+          Math.max(0, stats.activeTenants - stats.overduePayments),
           stats.overduePayments,
           0,
         ],
@@ -414,9 +415,9 @@ export default function PropertyOwnerDashboard() {
                           Limited insights
                         </span>
                       )}
-                      <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-100/70 text-amber-700 text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
-                        {stats.totalTenants} tenants
-                      </span>
+                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-100/70 text-amber-700 text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+                        {stats.totalTenants} added tenants
+                        </span>
                     </div>
                   </div>
 
@@ -584,7 +585,7 @@ export default function PropertyOwnerDashboard() {
                             "Total Rent Paid",
                             "Overdue Amount",
                             "Late Payment Penalties",
-                            "Active Tenants",
+                            "Total Tenants",
                             "Vacant Units",
                             "Properties",
                             "Deposits",
@@ -606,8 +607,8 @@ export default function PropertyOwnerDashboard() {
                           value: formatCurrency(stats.expectedMonthlyRent),
                           icon: DollarSign,
                           color: "green",
-                          subtitle: `${stats.totalTenants} active tenants`,
-                          explanation: "Projected rent for this month based on active tenants and their current rent.",
+                          subtitle: `${stats.activeTenants} current leases`,
+                          explanation: "Projected rent for this month based on tenants who currently have active leases.",
                         },
                         {
                           title: "Monthly Rent",
@@ -639,12 +640,12 @@ export default function PropertyOwnerDashboard() {
                           explanation: "Total penalties accrued from overdue rent based on property penalty rules.",
                         },
                         {
-                          title: "Active Tenants",
+                          title: "Total Tenants",
                           value: stats.totalTenants,
                           icon: Users,
                           color: "green",
-                          subtitle: `${stats.occupiedUnits} units occupied`,
-                          explanation: "Total number of tenants with active leases across all your properties.",
+                          subtitle: `${stats.activeTenants} current leases`,
+                          explanation: "Total number of tenant records added across all your properties.",
                         },
                         {
                           title: "Vacant Units",

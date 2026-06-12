@@ -265,7 +265,7 @@ export default function AdminDashboard() {
       title: "Tenants",
       value: counts.tenants.toLocaleString(),
       icon: Users,
-      explanation: "Total active tenants across all properties.",
+      explanation: "Total tenants recorded across all properties.",
     },
     {
       title: "Properties",

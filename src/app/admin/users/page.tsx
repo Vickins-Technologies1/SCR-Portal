@@ -1,8 +1,8 @@
 // app/admin/property-owners/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Cookies from "js-cookie";
 import {
   Users,
@@ -45,24 +45,60 @@ interface SortConfig {
   direction: "asc" | "desc";
 }
 
+const DEFAULT_SORT: SortConfig = {
+  key: "name",
+  direction: "asc",
+};
+
+const SORTABLE_KEYS = new Set<keyof PropertyOwner>([
+  "name",
+  "email",
+  "phone",
+  "managementType",
+  "createdAt",
+  "isApproved",
+]);
+
+const parsePageSize = (value: string | null) => {
+  const parsed = Number(value);
+  return PAGE_SIZE_OPTIONS.includes(parsed) ? parsed : PAGE_SIZE;
+};
+
+const parseSortKey = (value: string | null) =>
+  value && SORTABLE_KEYS.has(value as keyof PropertyOwner)
+    ? (value as keyof PropertyOwner)
+    : DEFAULT_SORT.key;
+
 export default function PropertyOwnersPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const initialPage = Math.max(1, Number(searchParams.get("page") || "1"));
+  const initialPageSize = parsePageSize(searchParams.get("limit"));
+  const initialStatusFilter =
+    searchParams.get("status") === "approved" || searchParams.get("status") === "pending"
+      ? (searchParams.get("status") as "approved" | "pending")
+      : "all";
+  const initialSearch = searchParams.get("search") || "";
+  const initialSortKey = parseSortKey(searchParams.get("sortKey"));
+  const initialSortDirection = searchParams.get("sortDirection") === "desc" ? "desc" : "asc";
 
   const [propertyOwners, setPropertyOwners] = useState<PropertyOwner[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "pending">("all");
-  const [searchInput, setSearchInput] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "pending">(initialStatusFilter);
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch.trim());
   const [statusCounts, setStatusCounts] = useState({
     all: 0,
     approved: 0,
     pending: 0,
   });
   const [sortConfig, setSortConfig] = useState<SortConfig>({
-    key: "name",
-    direction: "asc",
+    key: initialSortKey,
+    direction: initialSortDirection,
   });
   const [refreshKey, setRefreshKey] = useState(0);
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -90,6 +126,7 @@ export default function PropertyOwnersPage() {
   const [deleteTarget, setDeleteTarget] = useState<PropertyOwner | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const hasHydratedFiltersRef = useRef(false);
 
   // ── Session check ───────────────────────────────────────────────────────────
   const checkSession = useCallback(async () => {
@@ -126,8 +163,66 @@ export default function PropertyOwnersPage() {
   }, [searchInput]);
 
   useEffect(() => {
+    if (!hasHydratedFiltersRef.current) {
+      hasHydratedFiltersRef.current = true;
+      return;
+    }
+
     setCurrentPage(1);
   }, [debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    const nextPage = Math.max(1, Number(searchParams.get("page") || "1"));
+    const nextPageSize = parsePageSize(searchParams.get("limit"));
+    const nextStatusFilter =
+      searchParams.get("status") === "approved" || searchParams.get("status") === "pending"
+        ? (searchParams.get("status") as "approved" | "pending")
+        : "all";
+    const nextSearch = searchParams.get("search") || "";
+    const nextSortKey = parseSortKey(searchParams.get("sortKey"));
+    const nextSortDirection = searchParams.get("sortDirection") === "desc" ? "desc" : "asc";
+
+    setCurrentPage((prev) => (prev === nextPage ? prev : nextPage));
+    setPageSize((prev) => (prev === nextPageSize ? prev : nextPageSize));
+    setStatusFilter((prev) => (prev === nextStatusFilter ? prev : nextStatusFilter));
+    setSearchInput((prev) => (prev === nextSearch ? prev : nextSearch));
+    setDebouncedSearch((prev) => (prev === nextSearch.trim() ? prev : nextSearch.trim()));
+    setSortConfig((prev) =>
+      prev.key === nextSortKey && prev.direction === nextSortDirection
+        ? prev
+        : { key: nextSortKey, direction: nextSortDirection }
+    );
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    const currentParams = searchParams.toString();
+    const nextParams = new URLSearchParams();
+
+    if (currentPage > 1) nextParams.set("page", String(currentPage));
+    if (pageSize !== PAGE_SIZE) nextParams.set("limit", String(pageSize));
+    if (statusFilter !== "all") nextParams.set("status", statusFilter);
+    if (debouncedSearch) nextParams.set("search", debouncedSearch);
+    if (sortConfig.key !== DEFAULT_SORT.key) nextParams.set("sortKey", String(sortConfig.key));
+    if (sortConfig.direction !== DEFAULT_SORT.direction) nextParams.set("sortDirection", sortConfig.direction);
+
+    const nextQuery = nextParams.toString();
+    if (nextQuery !== currentParams) {
+      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+      router.replace(nextUrl, { scroll: false });
+    }
+  }, [
+    status,
+    currentPage,
+    pageSize,
+    statusFilter,
+    debouncedSearch,
+    sortConfig,
+    pathname,
+    router,
+    searchParams,
+  ]);
 
   // ── Fetch property owners ───────────────────────────────────────────────────
   const fetchPropertyOwners = useCallback(async () => {
@@ -239,6 +334,11 @@ export default function PropertyOwnersPage() {
     );
   };
 
+  const getSortHeaderClass = (key: keyof PropertyOwner) =>
+    sortConfig.key === key
+      ? "text-primary bg-primary/5 ring-1 ring-primary/20"
+      : "text-muted-foreground hover:text-primary";
+
   const getOwnerTypeStyles = (value?: string) =>
     value?.toLowerCase() === "airbnb"
       ? "bg-sky-100 text-sky-800 ring-1 ring-sky-200"
@@ -260,6 +360,17 @@ export default function PropertyOwnersPage() {
     const pages: number[] = [];
     for (let page = start; page <= end; page += 1) pages.push(page);
     return pages;
+  };
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setPageSize(PAGE_SIZE);
+    setCurrentPage(1);
+    setSortConfig(DEFAULT_SORT);
+    setRefreshKey((value) => value + 1);
+    router.replace(pathname, { scroll: false });
   };
 
   // ── Expand / Collapse ──────────────────────────────────────────────────────
@@ -499,36 +610,53 @@ export default function PropertyOwnersPage() {
             </div>
 
             <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <label className="flex items-center gap-2 rounded-2xl border border-border bg-white/70 px-4 py-3 shadow-sm">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={(e) => {
-                    setSearchInput(e.target.value);
-                  }}
-                  placeholder="Search by name, email, or phone"
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-                />
-              </label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <label className="flex flex-1 items-center gap-2 rounded-2xl border border-border bg-white/70 px-4 py-3 shadow-sm">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="search"
+                    value={searchInput}
+                    onChange={(e) => {
+                      setSearchInput(e.target.value);
+                    }}
+                    placeholder="Search by name, email, or phone"
+                    className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  />
+                </label>
 
-              <label className="flex items-center gap-3 rounded-2xl border border-border bg-white/70 px-4 py-3 shadow-sm">
-                <span className="text-xs font-medium text-muted-foreground">Rows</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                <label className="flex items-center gap-3 rounded-2xl border border-border bg-white/70 px-4 py-3 shadow-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Rows</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option} per page
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center justify-center rounded-2xl border border-border bg-white/70 px-4 py-3 text-sm font-semibold text-foreground shadow-sm transition hover:border-primary/40 hover:bg-white disabled:opacity-50"
+                  disabled={
+                    searchInput.trim() === "" &&
+                    statusFilter === "all" &&
+                    pageSize === PAGE_SIZE &&
+                    sortConfig.key === DEFAULT_SORT.key &&
+                    sortConfig.direction === DEFAULT_SORT.direction
+                  }
                 >
-                  {PAGE_SIZE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option} per page
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  Clear Filters
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -599,19 +727,19 @@ export default function PropertyOwnersPage() {
                   <thead>
                     <tr>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
+                        className={`py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide cursor-pointer rounded-tl-xl transition ${getSortHeaderClass("name")}`}
                         onClick={() => handleSort("name")}
                       >
                         Name {getSortIcon("name")}
                       </th>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
+                        className={`py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide cursor-pointer transition ${getSortHeaderClass("email")}`}
                         onClick={() => handleSort("email")}
                       >
                         Email {getSortIcon("email")}
                       </th>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
+                        className={`py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide cursor-pointer transition ${getSortHeaderClass("phone")}`}
                         onClick={() => handleSort("phone")}
                       >
                         Phone {getSortIcon("phone")}
@@ -620,7 +748,7 @@ export default function PropertyOwnersPage() {
                         Type
                       </th>
                       <th
-                        className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-primary"
+                        className={`py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide cursor-pointer transition ${getSortHeaderClass("createdAt")}`}
                         onClick={() => handleSort("createdAt")}
                       >
                         Created {getSortIcon("createdAt")}
