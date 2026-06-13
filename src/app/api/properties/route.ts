@@ -12,35 +12,42 @@ import { resolveAccountTier } from '@/lib/tier';
 import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 import { sanitizePropertyUtilities } from '@/lib/property-utilities';
 
-const buildOccupiedByUnitIdentifier = async (
+const buildOccupiedByPropertyAndUnitIdentifier = async (
   db: Db,
-  propertyId: string,
+  propertyIds: string[],
   now: Date = new Date()
-): Promise<Map<string, number>> => {
+): Promise<Map<string, Map<string, number>>> => {
+  if (propertyIds.length === 0) return new Map();
+
   const tenants = await fetchTenantsActiveOnDay<Tenant>(
     db,
-    [propertyId],
+    propertyIds,
     now,
-    { leasedUnits: 1, unitIdentifier: 1, unitType: 1 }
+    { propertyId: 1, leasedUnits: 1, unitIdentifier: 1, unitType: 1 }
   );
 
-  const occupiedByUnit = new Map<string, number>();
-  const bump = (key?: string) => {
+  const occupiedByProperty = new Map<string, Map<string, number>>();
+  const bump = (propertyId: string, key?: string) => {
     if (!key) return;
-    occupiedByUnit.set(key, (occupiedByUnit.get(key) || 0) + 1);
+    const propertyMap = occupiedByProperty.get(propertyId) ?? new Map<string, number>();
+    propertyMap.set(key, (propertyMap.get(key) || 0) + 1);
+    occupiedByProperty.set(propertyId, propertyMap);
   };
 
   for (const tenant of tenants) {
+    const propertyId = tenant.propertyId?.toString?.() || String(tenant.propertyId || "");
+    if (!propertyId) continue;
+
     if (Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0) {
       for (const unit of tenant.leasedUnits) {
-        bump(unit?.unitIdentifier || unit?.unitType);
+        bump(propertyId, unit?.unitIdentifier || unit?.unitType);
       }
     } else {
-      bump(tenant.unitIdentifier || tenant.unitType);
+      bump(propertyId, tenant.unitIdentifier || tenant.unitType);
     }
   }
 
-  return occupiedByUnit;
+  return occupiedByProperty;
 };
 
 // Logger (aligned with tenant route handler)
@@ -66,6 +73,18 @@ const logger = {
     console.info(`[INFO] ${message}`, meta || '');
     return { message, meta, level: 'info' };
   },
+};
+
+const clampPageSize = (value: string | null, fallback = 100, max = 500) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), max);
+};
+
+const parsePage = (value: string | null) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.floor(parsed);
 };
 
 // Helper to convert potential Date or undefined to ISO string
@@ -127,6 +146,9 @@ export async function GET(request: NextRequest) {
     logger.debug('Handling GET request to /api/properties', { path: request.nextUrl.pathname });
     const { searchParams } = new URL(request.url);
     const requestedUserId = searchParams.get('userId') || searchParams.get('tenantId') || searchParams.get('ownerId');
+    const page = parsePage(searchParams.get('page'));
+    const limit = clampPageSize(searchParams.get('limit'), 250, 500);
+    const skip = (page - 1) * limit;
     const cookieStore = await cookies();
     const role = cookieStore.get('role')?.value;
     const loggedInUserId = cookieStore.get('userId')?.value;
@@ -135,7 +157,16 @@ export async function GET(request: NextRequest) {
     logger.debug('Connected to MongoDB database: rentaldb');
 
     if (role === 'admin') {
-      const properties = await db.collection<Property>('propertyListings').find().toArray();
+      const [properties, total] = await Promise.all([
+        db
+          .collection<Property>('propertyListings')
+          .find()
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .toArray(),
+        db.collection<Property>('propertyListings').countDocuments(),
+      ]);
       return NextResponse.json(
         {
           success: true,
@@ -145,6 +176,7 @@ export async function GET(request: NextRequest) {
             createdAt: toISOStringSafe(p.createdAt, 'property.createdAt'),
             updatedAt: toISOStringSafe(p.updatedAt, 'property.updatedAt'),
           })),
+          pagination: { page, limit, total, hasMore: skip + properties.length < total },
         },
         { status: 200 }
       );
@@ -228,39 +260,47 @@ export async function GET(request: NextRequest) {
         propertyQuery._id = { $in: teamMemberAssignedPropertyIds.map((id) => new ObjectId(id)) };
       }
 
-      const properties = await db
-        .collection<Property>('properties')
-        .find(propertyQuery)
-        .toArray();
+      const [properties, total] = await Promise.all([
+        db
+          .collection<Property>('properties')
+          .find(propertyQuery)
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .toArray(),
+        db.collection<Property>('properties').countDocuments(propertyQuery),
+      ]);
 
-      // Enrich each property with occupied units count
       const now = new Date();
-      const enrichedProperties = await Promise.all(
-        properties.map(async (prop) => {
-          const occupiedByUnit = await buildOccupiedByUnitIdentifier(db, prop._id.toString(), now);
-          const occupiedCount = Array.from(occupiedByUnit.values()).reduce((sum, count) => sum + count, 0);
-          const unitTypes = (prop.unitTypes || []).map((unit, index) => {
-            const uniqueType = unit.uniqueType || `${unit.type}-${index}`;
-            const occupied = occupiedByUnit.get(uniqueType) ?? occupiedByUnit.get(unit.type) ?? 0;
-            const totalQuantity = typeof unit.quantity === 'number' ? unit.quantity : 0;
-            const available = Math.max(0, totalQuantity - occupied);
-            return {
-              ...unit,
-              uniqueType,
-              available,
-            };
-          });
-
-          return {
-            ...prop,
-            _id: prop._id.toString(),
-            createdAt: toISOStringSafe(prop.createdAt, 'property.createdAt'),
-            updatedAt: toISOStringSafe(prop.updatedAt, 'property.updatedAt'),
-            occupiedUnits: occupiedCount,
-            unitTypes,
-          };
-        })
+      const occupiedByProperty = await buildOccupiedByPropertyAndUnitIdentifier(
+        db,
+        properties.map((prop) => prop._id.toString()),
+        now
       );
+      const enrichedProperties = properties.map((prop) => {
+        const occupiedByUnit = occupiedByProperty.get(prop._id.toString()) ?? new Map<string, number>();
+        const occupiedCount = Array.from(occupiedByUnit.values()).reduce((sum, count) => sum + count, 0);
+        const unitTypes = (prop.unitTypes || []).map((unit, index) => {
+          const uniqueType = unit.uniqueType || `${unit.type}-${index}`;
+          const occupied = occupiedByUnit.get(uniqueType) ?? occupiedByUnit.get(unit.type) ?? 0;
+          const totalQuantity = typeof unit.quantity === 'number' ? unit.quantity : 0;
+          const available = Math.max(0, totalQuantity - occupied);
+          return {
+            ...unit,
+            uniqueType,
+            available,
+          };
+        });
+
+        return {
+          ...prop,
+          _id: prop._id.toString(),
+          createdAt: toISOStringSafe(prop.createdAt, 'property.createdAt'),
+          updatedAt: toISOStringSafe(prop.updatedAt, 'property.updatedAt'),
+          occupiedUnits: occupiedCount,
+          unitTypes,
+        };
+      });
 
       logger.info(`Returning ${enrichedProperties.length} properties with occupancy info`, {
         ownerId: effectiveOwnerId,
@@ -272,6 +312,7 @@ export async function GET(request: NextRequest) {
         {
           success: true,
           properties: enrichedProperties,
+          pagination: { page, limit, total, hasMore: skip + properties.length < total },
         },
         { status: 200 }
       );
@@ -429,8 +470,7 @@ export async function POST(request: NextRequest) {
 
     const billingPlan = billingType === 'FullManagement' ? 'FullManagement' : 'RentCollection';
 
-    // Validate unit types and calculate total units
-    let totalUnits = 0;
+    // Validate unit types before persisting the property shape.
     const validatedUnitTypes: UnitType[] = unitTypes.map((unit: any, index: number) => {
       const validUnitType = UNIT_TYPES.find((ut) => ut.type === unit.type);
       if (
@@ -445,7 +485,6 @@ export async function POST(request: NextRequest) {
       ) {
         throw new Error(`Invalid unit type at index ${index}: ${JSON.stringify(unit)}`);
       }
-      totalUnits += unit.quantity;
       return {
         type: unit.type,
         uniqueType: `${unit.type}-${index}`,

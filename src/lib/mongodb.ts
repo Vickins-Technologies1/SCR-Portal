@@ -1,8 +1,8 @@
 // src/lib/mongodb.ts
 import { MongoClient, Db } from 'mongodb';
+import { ensureProductionIndexes } from './db-indexes';
 
 declare global {
-  // eslint-disable-next-line no-var
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
@@ -50,6 +50,10 @@ export async function connectToDatabase(): Promise<DBConnection> {
     }
 
     const db = connectedClient.db('rentaldb');
+    if (process.env.NODE_ENV === 'production') {
+      void ensureProductionIndexes(db);
+    }
+
     return { db, client: connectedClient };
   } catch (error) {
     console.error('MongoDB connection failed:', error);

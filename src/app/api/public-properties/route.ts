@@ -31,6 +31,18 @@ const toISO = (value?: Date | string | null): string | undefined => {
 
 const normalizeQuery = (value?: string | null) => value?.trim().toLowerCase() ?? "";
 
+const clampPageSize = (value: string | null, fallback = 60, max = 120) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), max);
+};
+
+const parsePage = (value: string | null) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.floor(parsed);
+};
+
 const coerceObjectId = (value: unknown): ObjectId | null => {
   if (!value) return null;
   if (value instanceof ObjectId) return value;
@@ -51,26 +63,41 @@ export async function GET(request: NextRequest) {
     const maxPrice = maxPriceParam && Number.isFinite(Number(maxPriceParam)) ? Number(maxPriceParam) : Infinity;
     const location = normalizeQuery(searchParams.get("location"));
     const featured = normalizeQuery(searchParams.get("featured"));
+    const page = parsePage(searchParams.get("page"));
+    const limit = clampPageSize(searchParams.get("limit"));
+    const skip = (page - 1) * limit;
 
     const { db } = await connectToDatabase();
+    const rentalQuery = { status: "Active" };
+    const airbnbQuery = { status: { $in: ["published", "active"] } };
+    const saleQuery = { status: { $in: ["published"] } };
 
-    // Fetch active long-term listings
-    const listings = await db
-      .collection("propertyListings")
-      .find({ status: "Active" })
-      .toArray();
-
-    // Fetch published Airbnb listings
-    const airbnbListings = await db
-      .collection("airbnbListings")
-      .find({ status: { $in: ["published", "active"] } })
-      .toArray();
-
-    // Fetch published for-sale listings (admin-managed)
-    const saleListings = await db
-      .collection("marketplaceSaleListings")
-      .find({ status: { $in: ["published"] } })
-      .toArray();
+    const [listings, airbnbListings, saleListings, rentalTotal, airbnbTotal, saleTotal] = await Promise.all([
+      db
+        .collection("propertyListings")
+        .find(rentalQuery)
+        .sort({ isAdvertised: -1, createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db
+        .collection("airbnbListings")
+        .find(airbnbQuery)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db
+        .collection("marketplaceSaleListings")
+        .find(saleQuery)
+        .sort({ isFeatured: -1, createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      db.collection("propertyListings").countDocuments(rentalQuery),
+      db.collection("airbnbListings").countDocuments(airbnbQuery),
+      db.collection("marketplaceSaleListings").countDocuments(saleQuery),
+    ]);
 
     if (listings.length === 0 && airbnbListings.length === 0 && saleListings.length === 0) {
       return NextResponse.json({ success: true, properties: [] });
@@ -356,10 +383,15 @@ const matchesPrice = hasPriceFilter ? minPriceInListing !== null && minPriceInLi
 
     const sorted = [...(enriched as any[]), ...(airbnbEnriched as any[]), ...(saleEnriched as any[])].sort(
       (a, b) => Number(isFeaturedListing(b)) - Number(isFeaturedListing(a))
-    );
+    ).slice(0, limit);
+    const total = rentalTotal + airbnbTotal + saleTotal;
 
     return NextResponse.json(
-      { success: true, properties: sorted },
+      {
+        success: true,
+        properties: sorted,
+        pagination: { page, limit, total, hasMore: skip + sorted.length < total },
+      },
       {
         status: 200,
         headers: { "Cache-Control": "no-store" },
