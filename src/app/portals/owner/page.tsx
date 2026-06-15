@@ -185,7 +185,7 @@ export default function LoginPage() {
 
       if (pinMode === "setup") {
         const trimmedEmail = email.trim();
-        if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+        if (!trimmedEmail || !password) throw new Error("Enter your email or phone number and password first.");
         await setPinCredentials({ pin: pinValue, credentials: { email: trimmedEmail, password, kind: "owner" } });
         setPinReady(true);
         closePinModal();
@@ -775,12 +775,12 @@ export default function LoginPage() {
                   </div>
                 )}
                 <input
-                  type="email"
-                  placeholder="Email address"
+                  type="text"
+                  placeholder="Email or phone number"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  autoComplete="email"
+                  autoComplete="username"
                   className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner"
                 />
 
@@ -830,7 +830,7 @@ export default function LoginPage() {
                       setError(null);
                       try {
                         const trimmedEmail = email.trim();
-                        if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+                        if (!trimmedEmail || !password) throw new Error("Enter your email or phone number and password first.");
                         await saveBiometricCredentials({ email: trimmedEmail, password, kind: "owner" });
                         setBiometricReady(true);
                       } catch (err: any) {

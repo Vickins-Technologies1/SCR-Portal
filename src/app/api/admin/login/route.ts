@@ -14,18 +14,19 @@ import {
   OTP_REQUIRE_AFTER_MS,
   shouldBypassOtp,
 } from "../../../../lib/otp";
+import { buildLoginIdentifierQuery, normalizeLoginIdentifier } from "../../../../lib/login-identifier";
 
 const OTP_COLLECTION = "otpChallenges";
 
 export async function POST(request: Request) {
-  let email: string | null = null;
+  let loginIdentifier: string | null = null;
 
   try {
     const body = await request.json();
-    email = body.email?.trim().toLowerCase();
+    loginIdentifier = normalizeLoginIdentifier(body.email);
     const { password, role } = body;
 
-    if (!email || !password || role !== "admin") {
+    if (!loginIdentifier || !password || role !== "admin") {
       return NextResponse.json(
         { success: false, message: "Invalid credentials" },
         { status: 400 }
@@ -33,10 +34,13 @@ export async function POST(request: Request) {
     }
 
     const { db }: { db: Db } = await connectToDatabase();
+    const loginQuery = buildLoginIdentifierQuery(loginIdentifier);
 
     let user: any | null = await db.collection("propertyOwners").findOne({
-      email,
       role: "admin",
+      ...(loginQuery?.phoneRegexes
+        ? { $or: loginQuery.phoneRegexes.map((phoneRegex) => ({ phone: phoneRegex })) }
+        : { email: loginQuery?.emailRegex }),
     });
 
     let userCollection: "propertyOwners" | "adminTeamMembers" = "propertyOwners";
@@ -44,9 +48,11 @@ export async function POST(request: Request) {
 
     if (!user) {
       user = await db.collection("adminTeamMembers").findOne({
-        email,
         role: "adminTeamMember",
         active: true,
+        ...(loginQuery?.phoneRegexes
+          ? { $or: loginQuery.phoneRegexes.map((phoneRegex) => ({ phone: phoneRegex })) }
+          : { email: loginQuery?.emailRegex }),
       });
       if (user) {
         userCollection = "adminTeamMembers";

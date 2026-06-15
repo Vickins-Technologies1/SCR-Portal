@@ -18,6 +18,7 @@ import {
   shouldBypassOtp,
 } from "../../../lib/otp";
 import { appendOwnerActivity } from "../../../lib/owner-activity";
+import { buildLoginIdentifierQuery, normalizeLoginIdentifier } from "../../../lib/login-identifier";
 
 const OTP_COLLECTION = "otpChallenges";
 
@@ -89,12 +90,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, password, role: providedRole, userId, portal } = body;
+    const loginIdentifier = normalizeLoginIdentifier(email);
 
     // Validate input
-    if (!body || (!email || !password) && !userId) {
+    if (!body || (!loginIdentifier || !password) && !userId) {
       console.log("Invalid or missing signin fields");
       return NextResponse.json(
-        { success: false, message: "Please provide email and password, or a valid user ID" },
+        { success: false, message: "Please provide email or phone and password, or a valid user ID" },
         { status: 400 }
       );
     }
@@ -382,15 +384,15 @@ export async function POST(request: NextRequest) {
     // ──────────────────────────────────────────────────────────────
     // Email + password login - auto-detect user type
     // ──────────────────────────────────────────────────────────────
-    if (!email || !password) {
-      console.log("Missing email or password");
+    if (!loginIdentifier || !password) {
+      console.log("Missing login identifier or password");
       return NextResponse.json(
-        { success: false, message: "Email and password are required" },
+        { success: false, message: "Email or phone number and password are required" },
         { status: 400 }
       );
     }
 
-    console.log("Querying user with email:", email);
+    console.log("Querying user with login identifier:", loginIdentifier);
 
     let user = null;
     let redirectPath = "";
@@ -400,26 +402,40 @@ export async function POST(request: NextRequest) {
     let ownerManagementType: OwnerManagementType | null = null;
     let userCollection: "tenants" | "propertyOwners" | "teamMembers" | null = null;
 
-    const emailRegex = new RegExp(`^${email}$`, "i");
     const normalizedPortal = typeof portal === "string" ? portal.trim().toLowerCase() : "";
+    const loginQuery = buildLoginIdentifierQuery(loginIdentifier);
 
     // When logging in via the Airbnb guest portal, prioritize guest tenant accounts
     // even if an owner/team member uses the same email address.
-    if (normalizedPortal === "airbnb") {
-      user = await db.collection("tenants").findOne(
-        { email: emailRegex, accountType: "airbnb_guest" },
-        { sort: { updatedAt: -1, createdAt: -1, _id: -1 } }
-      );
-      if (user) {
-        finalRole = "tenant";
-        redirectPath = "/airbnb-tenant-dashboard";
-        userCollection = "tenants";
+    if (normalizedPortal === "airbnb" && loginQuery) {
+      const tenantFilters = loginQuery.phoneRegexes
+        ? loginQuery.phoneRegexes.map((phoneRegex) => ({ phone: phoneRegex, accountType: "airbnb_guest" }))
+        : [{ email: loginQuery.emailRegex, accountType: "airbnb_guest" }];
+
+      for (const filter of tenantFilters) {
+        user = await db.collection("tenants").findOne(
+          filter,
+          { sort: { updatedAt: -1, createdAt: -1, _id: -1 } }
+        );
+        if (user) {
+          finalRole = "tenant";
+          redirectPath = "/airbnb-tenant-dashboard";
+          userCollection = "tenants";
+          break;
+        }
       }
     }
 
     // 1. Check propertyOwners (most privileged)
-    if (!user) {
-      user = await db.collection("propertyOwners").findOne({ email: emailRegex });
+    if (!user && loginQuery) {
+      const ownerFilters = loginQuery.phoneRegexes
+        ? loginQuery.phoneRegexes.map((phoneRegex) => ({ phone: phoneRegex }))
+        : [{ email: loginQuery.emailRegex }];
+
+      for (const filter of ownerFilters) {
+        user = await db.collection("propertyOwners").findOne(filter);
+        if (user) break;
+      }
       if (user) {
         finalRole = "propertyOwner";
         redirectPath = "/property-owner-dashboard";
@@ -431,8 +447,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Check teamMembers
-    if (!user) {
-      user = await db.collection("teamMembers").findOne({ email: emailRegex });
+    if (!user && loginQuery) {
+      const teamFilters = loginQuery.phoneRegexes
+        ? loginQuery.phoneRegexes.map((phoneRegex) => ({ phone: phoneRegex }))
+        : [{ email: loginQuery.emailRegex }];
+
+      for (const filter of teamFilters) {
+        user = await db.collection("teamMembers").findOne(filter);
+        if (user) break;
+      }
       if (user) {
         finalRole = user.role; // e.g. "Manager"
         redirectPath = "/property-owner-dashboard";
@@ -442,8 +465,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Check tenants (default)
-    if (!user) {
-      const tenantFilter: Record<string, unknown> = { email: emailRegex };
+    if (!user && loginQuery) {
+      const tenantFilter: Record<string, unknown> = loginQuery.phoneRegexes
+        ? { $or: loginQuery.phoneRegexes.map((phoneRegex) => ({ phone: phoneRegex })) }
+        : { email: loginQuery.emailRegex };
 
       if (normalizedPortal === "rental") {
         tenantFilter.accountType = { $ne: "airbnb_guest" };
@@ -463,11 +488,11 @@ export async function POST(request: NextRequest) {
       // Password verification
       let isPasswordValid = false;
 
-      // Use bcrypt.compare for hashed passwords (teamMembers + modern owners/tenants)
-      try {
-        isPasswordValid = await bcrypt.compare(password, user.password);
-      } catch (bcryptErr) {
-        console.log("bcrypt.compare failed - falling back to plain comparison for legacy owners");
+        // Use bcrypt.compare for hashed passwords (teamMembers + modern owners/tenants)
+        try {
+          isPasswordValid = await bcrypt.compare(password, user.password);
+        } catch (bcryptErr) {
+          console.log("bcrypt.compare failed - falling back to plain comparison for legacy owners");
         // Fallback for existing propertyOwners with plain-text passwords
         if (finalRole === "propertyOwner") {
           isPasswordValid = password === user.password;
@@ -695,14 +720,14 @@ export async function POST(request: NextRequest) {
         return response;
       }
 
-      console.log("Invalid password for email:", email);
+      console.log("Invalid password for login identifier:", loginIdentifier);
       return NextResponse.json(
-        { success: false, message: "Invalid email or password" },
+        { success: false, message: "Invalid email, phone number, or password" },
         { status: 401 }
       );
     }
 
-    console.log("No user found for email:", email);
+    console.log("No user found for login identifier:", loginIdentifier);
     return NextResponse.json(
       { success: false, message: "User not found" },
       { status: 401 }

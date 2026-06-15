@@ -193,7 +193,7 @@ export default function AdminLogin() {
 
       if (pinMode === "setup") {
         const trimmedEmail = email.trim();
-        if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+        if (!trimmedEmail || !password) throw new Error("Enter your email or phone number and password first.");
         await setPinCredentials({ pin: pinValue, credentials: { email: trimmedEmail, password, kind: "admin" } });
         setPinReady(true);
         closePinModal();
@@ -208,8 +208,7 @@ export default function AdminLogin() {
 
   const validateForm = () => {
     const errors: typeof formErrors = {};
-    if (!email.trim()) errors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Invalid email format";
+    if (!email.trim()) errors.email = "Email or phone number is required";
     if (!password.trim()) errors.password = "Password is required";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -613,20 +612,17 @@ export default function AdminLogin() {
                   )}
                   <div>
                     <input
-                      type="email"
-                      placeholder="Admin email address"
+                      type="text"
+                      placeholder="Admin email or phone number"
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
                         setFormErrors((prev) => ({
                           ...prev,
-                          email: e.target.value.trim()
-                            ? /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(e.target.value)
-                              ? undefined
-                              : "Invalid email format"
-                            : "Email is required",
+                          email: e.target.value.trim() ? undefined : "Email or phone number is required",
                         }));
                       }}
+                      autoComplete="username"
                       className={`w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner ${
                         formErrors.email ? "border-red-400" : "border-border"
                       }`}
@@ -692,7 +688,7 @@ export default function AdminLogin() {
                         setError(null);
                         try {
                           const trimmedEmail = email.trim();
-                          if (!trimmedEmail || !password) throw new Error("Enter your email and password first.");
+                          if (!trimmedEmail || !password) throw new Error("Enter your email or phone number and password first.");
                           await saveBiometricCredentials({ email: trimmedEmail, password, kind: "admin" });
                           setBiometricReady(true);
                         } catch (err: any) {
