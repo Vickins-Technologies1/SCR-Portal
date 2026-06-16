@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaTimes, FaGoogle } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
@@ -521,6 +521,31 @@ export default function AdminLogin() {
                 <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
                   {error}
                 </div>
+              )}
+
+              {!otpRequired && (
+                <>
+                  <div className="relative my-1 sm:my-2">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
+                    </div>
+                  </div>
+
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="button"
+                    onClick={() => (window.location.href = "/api/auth/google?portal=admin&action=login")}
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
+                  >
+                    <FaGoogle className="text-red-500 text-lg" />
+                    Continue with Google
+                  </motion.button>
+                </>
               )}
 
               {otpRequired ? (

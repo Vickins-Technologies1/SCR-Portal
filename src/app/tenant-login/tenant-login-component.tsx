@@ -214,9 +214,6 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
         password: creds.password,
         portal: isAirbnbGuestPortal ? "airbnb" : "rental",
       });
-      if (result.requiresOtp && result.otpId) {
-        throw new Error("OTP is required for this account. Please sign in with password once.");
-      }
       if (!result.success) throw new Error(result.message || "Login failed");
       router.push(result.redirect || defaultRedirectPath);
     } catch (err: any) {
@@ -529,30 +526,30 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
               </div>
             )}
 
-            {!isAirbnbGuestPortal ? (
-              <>
-                <div className="relative my-1 sm:my-2">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
-                  </div>
+            <>
+              <div className="relative my-1 sm:my-2">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
                 </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-background/80 px-3 xs:px-4 text-muted-foreground font-medium">or</span>
+                </div>
+              </div>
 
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  onClick={() => (window.location.href = "/api/auth/google?role=tenant")}
-                  disabled={isSubmitting}
-                  className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
-                >
-                  <FaGoogle className="text-red-500 text-lg" />
-                  Continue with Google
-                </motion.button>
-              </>
-            ) : null}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="button"
+                onClick={() =>
+                  (window.location.href = `/api/auth/google?portal=tenant&action=login&tenantPortal=${isAirbnbGuestPortal ? "airbnb" : "rental"}`)
+                }
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
+              >
+                <FaGoogle className="text-red-500 text-lg" />
+                Continue with Google
+              </motion.button>
+            </>
 
             <form id="tenant-login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
                 {(biometricReady || pinReady) && (
