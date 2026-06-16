@@ -1,0 +1,8 @@
+
+> scr-portal@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.2.3 (webpack)
+- Environments: .env.local
+
+  Creating an optimized production build ...

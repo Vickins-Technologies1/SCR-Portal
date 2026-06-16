@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
-export default function GoogleOtpPage() {
+function GoogleOtpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const otpId = useMemo(() => searchParams.get("otpId") || "", [searchParams]);
@@ -122,6 +122,14 @@ export default function GoogleOtpPage() {
         </motion.div>
       </div>
     </PublicThemeWrapper>
+  );
+}
+
+export default function GoogleOtpPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center">Loading...</div>}>
+      <GoogleOtpContent />
+    </Suspense>
   );
 }
 

@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 
-export default function CompletePhonePage() {
+function CompletePhoneContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = useMemo(() => searchParams.get("token") || "", [searchParams]);
@@ -103,6 +103,14 @@ export default function CompletePhonePage() {
         </motion.div>
       </div>
     </PublicThemeWrapper>
+  );
+}
+
+export default function CompletePhonePage() {
+  return (
+    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center">Loading...</div>}>
+      <CompletePhoneContent />
+    </Suspense>
   );
 }
 
