@@ -162,9 +162,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: delivery?.emailSent
-        ? "OTP resent to your email and phone."
-        : "OTP resent via SMS only. Email delivery failed.",
+      message: delivery.message,
       retryAfterMs: OTP_RESEND_COOLDOWN_MS,
     });
   } catch (error) {

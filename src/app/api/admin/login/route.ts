@@ -138,9 +138,7 @@ export async function POST(request: Request) {
           success: false,
           requiresOtp: true,
           otpId: otpRecordId.toString(),
-          message: delivery?.emailSent
-            ? "OTP sent to your email and phone."
-            : "OTP sent via SMS only. Email delivery failed.",
+          message: delivery.message,
         },
         { status: 200 }
       );

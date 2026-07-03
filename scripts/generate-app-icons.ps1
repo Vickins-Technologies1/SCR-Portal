@@ -118,7 +118,7 @@ function Write-IcoFromPngSquareIcon {
 $bg = New-Color $Background
 $launcherContentScale = 0.72
 $androidRoundContentScale = 0.70
-$androidAdaptiveContentScale = 0.64
+$androidAdaptiveContentScale = 0.58
 
 if (-not (Test-Path $Source)) {
   throw "Icon source not found: $Source"

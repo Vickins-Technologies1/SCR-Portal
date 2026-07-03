@@ -1,0 +1,17 @@
+
+> scr-portal@0.1.0 build
+> next build --webpack
+
+▲ Next.js 16.2.3 (webpack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 113s
+  Running TypeScript ...
+  Finished TypeScript in 3.4min ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/203) ...
+  Generating static pages using 7 workers (50/203) 
+  Generating static pages using 7 workers (101/203) 
+  Generating static pages using 7 workers (152/203) 
+✓ Generating static pages using 7 workers (203/203) in 68s

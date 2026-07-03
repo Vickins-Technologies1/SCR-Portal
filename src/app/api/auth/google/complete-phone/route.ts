@@ -84,9 +84,7 @@ async function createOtpChallenge(params: {
 
   return {
     otpId: otpRecordId.toString(),
-    message: delivery.emailSent
-      ? "OTP sent to your email and phone."
-      : "OTP sent via SMS only. Email delivery failed.",
+    message: delivery.message,
   };
 }
 
