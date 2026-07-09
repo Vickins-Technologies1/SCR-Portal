@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
@@ -18,14 +18,14 @@ function GoogleOtpContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const autoVerifyRef = useRef<string>("");
   useAndroidSmsRetriever({ enabled: true, onCode: setCode });
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitOtp = useCallback(async () => {
     setError(null);
     setMessage(null);
 
@@ -55,10 +55,27 @@ function GoogleOtpContent() {
       }
     } catch (err: any) {
       setError(err?.message || "OTP verification failed.");
+      autoVerifyRef.current = "";
     } finally {
       setLoading(false);
     }
-  };
+  }, [code, otpId, returnTo, router]);
+
+  const handleVerify = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      return void submitOtp();
+    },
+    [submitOtp]
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    if (code.length !== 6) return;
+    if (autoVerifyRef.current === code) return;
+    autoVerifyRef.current = code;
+    void submitOtp();
+  }, [code, loading, submitOtp]);
 
   return (
     <PublicThemeWrapper>

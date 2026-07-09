@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type OtpCodeFieldProps = {
   value: string;
@@ -38,6 +38,57 @@ export default function OtpCodeField({
   buttonClassName = "",
 }: OtpCodeFieldProps) {
   const [isReadingClipboard, setIsReadingClipboard] = useState(false);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (disabled) return;
+    if (typeof window === "undefined") return;
+    if (typeof navigator === "undefined") return;
+
+    const credentials = (navigator as Navigator & {
+      credentials?: { get?: (options: Record<string, unknown>) => Promise<unknown> };
+    }).credentials;
+
+    if (!credentials?.get) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const otpCredential = await credentials.get({
+          otp: { transport: ["sms"] },
+          signal: controller.signal,
+        });
+
+        if (cancelled) return;
+
+        const code = normalizeOtpInput(
+          String(
+            (otpCredential as { code?: unknown })?.code ||
+              (otpCredential as { password?: unknown })?.password ||
+              ""
+          )
+        );
+
+        if (code) {
+          onChangeRef.current(code);
+          inputRef?.current?.focus();
+        }
+      } catch {
+        // Web OTP is best-effort only. Manual entry and native Android retriever still work.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [disabled, inputRef]);
 
   const handlePaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedValue = normalizeOtpInput(event.clipboardData.getData("text"));
