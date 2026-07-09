@@ -293,7 +293,9 @@ export async function sendOtpSms({
   appHash?: string;
   senderId?: string;
 }): Promise<void> {
-  const retrieverSuffix = appHash?.trim() ? `\n${appHash.trim()}` : "";
-  const message = `<#> Your Sorana verification code is ${code}.${retrieverSuffix}`;
+  const trimmedHash = appHash?.trim();
+  const message = trimmedHash
+    ? `<#> Your Sorana verification code is ${code}\n${trimmedHash}`
+    : `Your Sorana verification code is ${code}`;
   await sendWelcomeSms({ phone, message, senderId });
 }

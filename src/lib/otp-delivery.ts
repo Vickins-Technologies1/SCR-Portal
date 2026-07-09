@@ -25,21 +25,30 @@ export async function deliverOtp({
   code,
   appHash,
 }: DeliverOtpInput): Promise<DeliverOtpResult> {
-  const smsTask = sendOtpSms({ phone, code, appHash }).then(() => "sms" as const);
-  const emailTask = sendOtpEmail({ to: email, name, code }).then(() => "email" as const);
+  const [smsResult, emailResult] = await Promise.allSettled([
+    sendOtpSms({ phone, code, appHash }),
+    sendOtpEmail({ to: email, name, code }),
+  ]);
 
-  try {
-    const channel = await Promise.any([smsTask, emailTask]);
-
+  if (smsResult.status === "fulfilled") {
     return {
-      channel,
-      smsSent: channel === "sms",
-      emailSent: channel === "email",
-      message: channel === "sms" ? "OTP sent to your phone." : "OTP sent to your email.",
+      channel: "sms",
+      smsSent: true,
+      emailSent: emailResult.status === "fulfilled",
+      message: "OTP sent to your phone.",
     };
-  } catch (error) {
-    const aggregate = error as AggregateError & { errors?: unknown[] };
-    const firstError = aggregate.errors?.find((item): item is Error => item instanceof Error);
-    throw new Error(firstError?.message || "OTP delivery failed. Please try again.");
   }
+
+  if (emailResult.status === "fulfilled") {
+    return {
+      channel: "email",
+      smsSent: false,
+      emailSent: true,
+      message: "OTP sent to your email.",
+    };
+  }
+
+  const smsError = smsResult.reason instanceof Error ? smsResult.reason : new Error(String(smsResult.reason));
+  const emailError = emailResult.reason instanceof Error ? emailResult.reason : new Error(String(emailResult.reason));
+  throw new Error(smsError.message || emailError.message || "OTP delivery failed. Please try again.");
 }
