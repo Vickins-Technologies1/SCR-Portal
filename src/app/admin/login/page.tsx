@@ -7,7 +7,9 @@ import Link from "next/link";
 import { FaEye, FaEyeSlash, FaTimes, FaGoogle } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
+import OtpCodeField from "@/components/auth/OtpCodeField";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
 import {
   getBiometricCredentials,
   getPinCredentials,
@@ -203,6 +205,18 @@ export default function AdminLogin() {
       setPinError(err?.message || "PIN failed.");
     } finally {
       setQuickLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    if (isLoading) return;
+    try {
+      window.location.href = await buildGoogleAuthStartUrl({
+        portal: "admin",
+        action: "login",
+      });
+    } catch {
+      setError("Unable to start Google sign-in.");
     }
   };
 
@@ -538,7 +552,7 @@ export default function AdminLogin() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     type="button"
-                    onClick={() => (window.location.href = "/api/auth/google?portal=admin&action=login")}
+                    onClick={handleGoogleLogin}
                     disabled={isLoading}
                     className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
                   >
@@ -555,16 +569,14 @@ export default function AdminLogin() {
                       {otpMessage}
                     </div>
                   )}
-                  <input
-                    ref={otpInputRef}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="Enter 6-digit OTP"
+                  <OtpCodeField
+                    inputRef={otpInputRef}
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    autoComplete="one-time-code"
-                    className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.35em] text-center"
+                    onChange={setOtpCode}
+                    placeholder="Enter 6-digit OTP"
+                    disabled={isLoading}
+                    helperText="Paste the code from SMS or email, or let your phone autofill it."
+                    inputClassName="bg-background/80 px-3.5 xs:px-4 py-2.5 text-xs xs:text-sm sm:text-base"
                   />
 
                   <motion.button

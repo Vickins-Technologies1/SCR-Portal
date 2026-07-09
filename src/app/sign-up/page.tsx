@@ -19,6 +19,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { countries } from "countries-list";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
 
 interface CountryData {
   name: string;
@@ -196,6 +197,21 @@ export default function SignUp() {
   const goBack = () => {
     setError(null);
     setStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const handleGoogleLogin = async () => {
+    if (isLoading) return;
+    try {
+      window.location.href = await buildGoogleAuthStartUrl({
+        portal: "owner",
+        action: "signup",
+        managementType: managementType || "rentals",
+        tier: derivedTier || "premium",
+        packageTier: packageTier || "one_percent",
+      });
+    } catch {
+      setError("Unable to start Google sign-in.");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -765,11 +781,7 @@ export default function SignUp() {
                   whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       type="button"
-                  onClick={() =>
-                    (window.location.href = `/api/auth/google?portal=owner&action=signup&managementType=${
-                      managementType || "rentals"
-                    }&tier=${derivedTier || "premium"}&packageTier=${packageTier || "one_percent"}`)
-                  }
+                  onClick={handleGoogleLogin}
                   disabled={isLoading}
                   className="w-full flex items-center justify-center gap-2 border border-border bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.08))] hover:bg-[linear-gradient(110deg,rgba(255,255,255,0.98),rgba(66,199,117,0.14))] text-foreground font-medium py-2.5 xs:py-3 rounded-xl transition-all shadow-sm disabled:opacity-60 text-xs xs:text-sm sm:text-base"
                 >

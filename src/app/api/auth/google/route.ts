@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   buildGoogleAuthorizeUrl,
   createGoogleStateToken,
+  getGoogleRedirectUri,
   type GoogleAuthAction,
   type GoogleAuthPortal,
+  type GoogleAuthPlatform,
 } from "@/lib/google-auth";
 
 function parsePortal(value: string | null): GoogleAuthPortal {
@@ -12,6 +14,10 @@ function parsePortal(value: string | null): GoogleAuthPortal {
 
 function parseAction(value: string | null): GoogleAuthAction {
   return value === "login" ? "login" : "signup";
+}
+
+function parsePlatform(value: string | null): GoogleAuthPlatform {
+  return value === "app" ? "app" : "web";
 }
 
 export async function GET(request: NextRequest) {
@@ -30,10 +36,12 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const portal = parsePortal(url.searchParams.get("portal"));
     const action = parseAction(url.searchParams.get("action"));
+    const platform = parsePlatform(url.searchParams.get("platform"));
 
     const state = await createGoogleStateToken({
       portal,
       action,
+      platform,
       returnTo: url.searchParams.get("returnTo") || undefined,
       managementType:
         url.searchParams.get("managementType") === "airbnb"
@@ -54,9 +62,7 @@ export async function GET(request: NextRequest) {
       nonce: crypto.randomUUID(),
     });
 
-    const redirectUri =
-      process.env.GOOGLE_REDIRECT_URI?.trim() ||
-      `${request.nextUrl.origin}/api/auth/google/callback`;
+    const redirectUri = getGoogleRedirectUri({ origin: request.nextUrl.origin, platform });
 
     const authorizeUrl = buildGoogleAuthorizeUrl({
       clientId,
@@ -73,4 +79,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

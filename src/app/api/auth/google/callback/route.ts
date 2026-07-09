@@ -8,6 +8,7 @@ import { normalizeAdminPermissions } from "@/lib/admin-permissions";
 import {
   createGooglePendingToken,
   exchangeGoogleCodeForProfile,
+  getGoogleRedirectUri,
   type GoogleAuthAction,
   type GoogleAuthPortal,
   type GoogleAuthState,
@@ -205,9 +206,7 @@ export async function GET(request: NextRequest) {
       return redirectWithError(request, "Google authorization expired. Please try again.", fallbackPath);
     }
 
-    const redirectUri =
-      process.env.GOOGLE_REDIRECT_URI?.trim() ||
-      `${request.nextUrl.origin}/api/auth/google/callback`;
+    const redirectUri = getGoogleRedirectUri({ origin: request.nextUrl.origin, platform: state.platform });
 
     const profile = await exchangeGoogleCodeForProfile({ code, redirectUri });
     const { db } = await connectToDatabase();

@@ -9,6 +9,10 @@ type StoredPushToken = {
   updatedAt: string;
 };
 
+const GOOGLE_AUTH_SCHEME = "com.soranapropertymanagers.app";
+const GOOGLE_AUTH_CALLBACK_HOST = "auth";
+const GOOGLE_AUTH_CALLBACK_PATH = "/google/callback";
+
 async function isNativeCapacitor(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   try {
@@ -60,6 +64,7 @@ export default function NativeBootstrap() {
     let cancelled = false;
     let interval: number | null = null;
     let registrationHandle: { remove: () => Promise<void> } | null = null;
+    let appUrlOpenHandle: { remove: () => Promise<void> } | null = null;
 
     (async () => {
       const native = await isNativeCapacitor();
@@ -70,8 +75,30 @@ export default function NativeBootstrap() {
         import("@capacitor/push-notifications"),
         import("@capacitor/preferences"),
       ]);
+      const { App } = await import("@capacitor/app");
 
       const platform = Capacitor.getPlatform();
+
+      appUrlOpenHandle = await App.addListener("appUrlOpen", async ({ url }) => {
+        if (cancelled) return;
+
+        try {
+          const openedUrl = new URL(url);
+          const isGoogleAuthCallback =
+            openedUrl.protocol === `${GOOGLE_AUTH_SCHEME}:` &&
+            openedUrl.host === GOOGLE_AUTH_CALLBACK_HOST &&
+            openedUrl.pathname === GOOGLE_AUTH_CALLBACK_PATH;
+
+          if (!isGoogleAuthCallback) return;
+
+          const webCallbackUrl = new URL("/api/auth/google/callback", window.location.origin);
+          webCallbackUrl.search = openedUrl.search;
+          webCallbackUrl.hash = openedUrl.hash;
+          window.location.assign(webCallbackUrl.toString());
+        } catch {
+          // Ignore malformed deep links and let the user keep using the app.
+        }
+      });
 
       const persistToken = async (token: string) => {
         const stored: StoredPushToken = { token, platform, updatedAt: new Date().toISOString() };
@@ -133,6 +160,8 @@ export default function NativeBootstrap() {
       interval = null;
       registrationHandle?.remove?.().catch(() => null);
       registrationHandle = null;
+      appUrlOpenHandle?.remove?.().catch(() => null);
+      appUrlOpenHandle = null;
     };
   }, []);
 

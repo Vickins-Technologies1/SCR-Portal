@@ -2,10 +2,14 @@ import { SignJWT, jwtVerify } from "jose";
 
 export type GoogleAuthPortal = "owner" | "tenant" | "admin";
 export type GoogleAuthAction = "login" | "signup";
+export type GoogleAuthPlatform = "app" | "web";
+
+export const GOOGLE_APP_REDIRECT_URI = "com.soranapropertymanagers.app://auth/google/callback";
 
 export type GoogleAuthState = {
   portal: GoogleAuthPortal;
   action: GoogleAuthAction;
+  platform?: GoogleAuthPlatform;
   returnTo?: string;
   managementType?: "rentals" | "airbnb";
   packageTier?: "free" | "one_percent" | "full_management";
@@ -84,6 +88,7 @@ export async function verifyGoogleStateToken(token: string): Promise<GoogleAuthS
   return {
     portal,
     action,
+    platform: payload.platform === "app" ? "app" : payload.platform === "web" ? "web" : undefined,
     returnTo: typeof payload.returnTo === "string" ? payload.returnTo : undefined,
     managementType:
       payload.managementType === "rentals" || payload.managementType === "airbnb"
@@ -99,6 +104,19 @@ export async function verifyGoogleStateToken(token: string): Promise<GoogleAuthS
     tenantPortal: payload.tenantPortal === "airbnb" ? "airbnb" : payload.tenantPortal === "rental" ? "rental" : undefined,
     nonce: typeof payload.nonce === "string" ? payload.nonce : undefined,
   };
+}
+
+export function getGoogleRedirectUri(params: { origin: string; platform?: GoogleAuthPlatform }): string {
+  const webRedirect =
+    process.env.GOOGLE_REDIRECT_URI_WEB?.trim() ||
+    process.env.GOOGLE_REDIRECT_URI?.trim() ||
+    `${params.origin}/api/auth/google/callback`;
+
+  if (params.platform === "app") {
+    return process.env.GOOGLE_REDIRECT_URI_APP?.trim() || GOOGLE_APP_REDIRECT_URI;
+  }
+
+  return webRedirect;
 }
 
 export async function createGooglePendingToken(profile: GooglePendingProfile): Promise<string> {
@@ -218,4 +236,3 @@ export async function exchangeGoogleCodeForProfile(params: {
     emailVerified: Boolean(profileJson.verified_email ?? profileJson.email_verified),
   };
 }
-

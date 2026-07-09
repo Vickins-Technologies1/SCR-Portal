@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import OtpCodeField from "@/components/auth/OtpCodeField";
 
 function GoogleOtpContent() {
   const router = useRouter();
@@ -86,20 +87,14 @@ function GoogleOtpContent() {
               </div>
             )}
 
-            <label className="block space-y-1">
-              <span className="text-sm font-semibold text-foreground">6-digit OTP</span>
-              <input
-                ref={inputRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="one-time-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="123456"
-                className="w-full rounded-xl border border-border bg-background px-4 py-3 text-center text-sm tracking-[0.35em] shadow-inner focus:border-primary focus:ring-2 focus:ring-primary/25"
-              />
-            </label>
+            <OtpCodeField
+              inputRef={inputRef}
+              value={code}
+              onChange={setCode}
+              placeholder="123456"
+              disabled={loading}
+              helperText="Paste the code from SMS or email, or let your phone autofill it automatically."
+            />
 
             <button
               type="submit"
@@ -132,4 +127,3 @@ export default function GoogleOtpPage() {
     </Suspense>
   );
 }
-
