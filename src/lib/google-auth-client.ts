@@ -12,6 +12,7 @@ export type GoogleAuthStartParams = {
   tier?: "free" | "premium";
   tenantPortal?: "rental" | "airbnb";
   platform?: GoogleAuthPlatform;
+  appHash?: string;
 };
 
 export async function buildGoogleAuthStartUrl(params: GoogleAuthStartParams): Promise<string> {
@@ -24,6 +25,7 @@ export async function buildGoogleAuthStartUrl(params: GoogleAuthStartParams): Pr
   if (params.packageTier) url.searchParams.set("packageTier", params.packageTier);
   if (params.tier) url.searchParams.set("tier", params.tier);
   if (params.tenantPortal) url.searchParams.set("tenantPortal", params.tenantPortal);
+  if (params.appHash) url.searchParams.set("appHash", params.appHash);
 
   const nativePlatform = params.platform || ((await isNativeCapacitor()) ? "app" : "web");
   url.searchParams.set("platform", nativePlatform);

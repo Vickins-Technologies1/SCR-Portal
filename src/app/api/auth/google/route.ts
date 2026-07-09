@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       portal,
       action,
       platform,
+      appHash: url.searchParams.get("appHash") || undefined,
       returnTo: url.searchParams.get("returnTo") || undefined,
       managementType:
         url.searchParams.get("managementType") === "airbnb"

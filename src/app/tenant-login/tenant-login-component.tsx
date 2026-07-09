@@ -8,6 +8,7 @@ import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle, FaT
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
 import {
   getBiometricCredentials,
@@ -59,6 +60,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
+  const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: () => undefined });
 
   const fetchCsrfToken = async () => {
     try {
@@ -214,6 +216,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
         email: creds.email,
         password: creds.password,
         portal: isAirbnbGuestPortal ? "airbnb" : "rental",
+        appHash,
       });
       if (!result.success) throw new Error(result.message || "Login failed");
       router.push(result.redirect || defaultRedirectPath);
@@ -231,11 +234,12 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     try {
       if (pinMode === "login") {
         const creds = await getPinCredentials({ pin: pinValue, kind: "tenant" });
-        const result = await signInTenant({
-          email: creds.email,
-          password: creds.password,
-          portal: isAirbnbGuestPortal ? "airbnb" : "rental",
-        });
+      const result = await signInTenant({
+        email: creds.email,
+        password: creds.password,
+        portal: isAirbnbGuestPortal ? "airbnb" : "rental",
+        appHash,
+      });
         if (!result.success) throw new Error(result.message || "Login failed");
         closePinModal();
         router.push(result.redirect || defaultRedirectPath);
@@ -264,6 +268,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
         portal: "tenant",
         action: "login",
         tenantPortal: isAirbnbGuestPortal ? "airbnb" : "rental",
+        appHash,
       });
     } catch {
       setError("Unable to start Google sign-in.");
@@ -295,7 +300,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     };
 
     try {
-      const result = await signInTenant({ email: payload.email, password: payload.password, portal: payload.portal });
+      const result = await signInTenant({ email: payload.email, password: payload.password, portal: payload.portal, appHash });
 
       if (!result.success) {
         throw new Error(result.message || "Login failed. Please check your credentials.");

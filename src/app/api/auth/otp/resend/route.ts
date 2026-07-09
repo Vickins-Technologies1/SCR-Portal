@@ -27,6 +27,7 @@ type OtpDoc = {
   collection: "tenants" | "propertyOwners" | "teamMembers";
   lastSentAt?: Date;
   resendCount?: number;
+  appHash?: string;
 };
 
 export async function POST(request: Request) {
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
         phone: otpPhone,
         name: user.name || "User",
         code: newCode,
+        appHash: otp.appHash,
       });
     } catch (sendErr) {
       await db.collection("otpChallenges").updateOne(

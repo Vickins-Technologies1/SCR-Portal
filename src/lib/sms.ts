@@ -285,15 +285,15 @@ export async function sendWelcomeSms({
 export async function sendOtpSms({
   phone,
   code,
+  appHash,
   senderId,
 }: {
   phone: string;
   code: string;
+  appHash?: string;
   senderId?: string;
 }): Promise<void> {
-  const message =
-    `Your login verification code:\n` +
-    `${code}\n` +
-    `It expires in 10 minutes.`;
+  const retrieverSuffix = appHash?.trim() ? `\n${appHash.trim()}` : "";
+  const message = `<#> Your Sorana verification code is ${code}.${retrieverSuffix}`;
   await sendWelcomeSms({ phone, message, senderId });
 }

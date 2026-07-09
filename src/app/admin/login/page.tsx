@@ -9,6 +9,7 @@ import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
 import OtpCodeField from "@/components/auth/OtpCodeField";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
 import {
   getBiometricCredentials,
@@ -61,6 +62,7 @@ export default function AdminLogin() {
   const [resendCountdown, setResendCountdown] = useState(0);
   const autoVerifyRef = useRef<string>("");
   const otpVerifyInFlightRef = useRef(false);
+  const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: setOtpCode });
 
   // Redirect if already logged in as admin
   useEffect(() => {
@@ -156,7 +158,7 @@ export default function AdminLogin() {
     setQuickLoading(true);
     try {
       const creds = await getBiometricCredentials("admin");
-      const result = await signInAdmin({ email: creds.email, password: creds.password });
+      const result = await signInAdmin({ email: creds.email, password: creds.password, appHash });
       if (result.requiresOtp && result.otpId) {
         setOtpRequired(true);
         setOtpId(result.otpId);
@@ -179,7 +181,7 @@ export default function AdminLogin() {
     try {
       if (pinMode === "login") {
         const creds = await getPinCredentials({ pin: pinValue, kind: "admin" });
-        const result = await signInAdmin({ email: creds.email, password: creds.password });
+        const result = await signInAdmin({ email: creds.email, password: creds.password, appHash });
         if (result.requiresOtp && result.otpId) {
           closePinModal();
           setOtpRequired(true);
@@ -214,6 +216,7 @@ export default function AdminLogin() {
       window.location.href = await buildGoogleAuthStartUrl({
         portal: "admin",
         action: "login",
+        appHash,
       });
     } catch {
       setError("Unable to start Google sign-in.");
@@ -240,7 +243,7 @@ export default function AdminLogin() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password, role: "admin" }),
+        body: JSON.stringify({ email, password, role: "admin", appHash }),
       });
 
       const data: LoginResponse = await response.json();

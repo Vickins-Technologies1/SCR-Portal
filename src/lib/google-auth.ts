@@ -10,6 +10,7 @@ export type GoogleAuthState = {
   portal: GoogleAuthPortal;
   action: GoogleAuthAction;
   platform?: GoogleAuthPlatform;
+  appHash?: string;
   returnTo?: string;
   managementType?: "rentals" | "airbnb";
   packageTier?: "free" | "one_percent" | "full_management";
@@ -23,6 +24,7 @@ export type GooglePendingProfile = {
   role: string;
   portal: GoogleAuthPortal;
   action: GoogleAuthAction;
+  appHash?: string;
   email: string;
   name: string;
   phoneMissing: boolean;
@@ -51,6 +53,12 @@ function getJwtSecret(): Uint8Array {
     throw new Error("JWT_SECRET is not set");
   }
   return new TextEncoder().encode(secret);
+}
+
+function normalizeAppHash(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const hash = value.trim();
+  return hash.length >= 8 && hash.length <= 32 ? hash : undefined;
 }
 
 async function signToken(payload: Record<string, unknown>, maxAgeSeconds: number): Promise<string> {
@@ -89,6 +97,7 @@ export async function verifyGoogleStateToken(token: string): Promise<GoogleAuthS
     portal,
     action,
     platform: payload.platform === "app" ? "app" : payload.platform === "web" ? "web" : undefined,
+    appHash: normalizeAppHash(payload.appHash),
     returnTo: typeof payload.returnTo === "string" ? payload.returnTo : undefined,
     managementType:
       payload.managementType === "rentals" || payload.managementType === "airbnb"
@@ -141,6 +150,7 @@ export async function verifyGooglePendingToken(token: string): Promise<GooglePen
     role: payload.role,
     portal,
     action,
+    appHash: normalizeAppHash(payload.appHash),
     email: payload.email,
     name: payload.name,
     phoneMissing: payload.phoneMissing !== false,

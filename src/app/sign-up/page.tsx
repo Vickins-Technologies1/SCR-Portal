@@ -19,6 +19,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { countries } from "countries-list";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
 
 interface CountryData {
@@ -70,6 +71,7 @@ export default function SignUp() {
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
+  const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: () => undefined });
   const derivedTier: "free" | "premium" | null =
     packageTier === "free" ? "free" : packageTier ? "premium" : null;
 
@@ -208,6 +210,7 @@ export default function SignUp() {
         managementType: managementType || "rentals",
         tier: derivedTier || "premium",
         packageTier: packageTier || "one_percent",
+        appHash,
       });
     } catch {
       setError("Unable to start Google sign-in.");

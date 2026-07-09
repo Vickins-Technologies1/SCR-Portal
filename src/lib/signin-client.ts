@@ -54,8 +54,8 @@ function persistClientCookies(params: { userId: string; role: string; permission
   }
 }
 
-export async function signInOwner(params: { email: string; password: string }): Promise<SignInResult> {
-  const { ok, data } = await postJson("/api/signin", { email: params.email, password: params.password });
+export async function signInOwner(params: { email: string; password: string; appHash?: string }): Promise<SignInResult> {
+  const { ok, data } = await postJson("/api/signin", { email: params.email, password: params.password, appHash: params.appHash });
   const result = data as SignInResult;
   if (result?.success && result.userId && result.role) {
     persistClientCookies({ userId: result.userId, role: result.role, permissions: result.permissions, adminName: result.adminName });
@@ -65,10 +65,11 @@ export async function signInOwner(params: { email: string; password: string }): 
   return result;
 }
 
-export async function signInTenant(params: { email: string; password: string; portal?: "rental" | "airbnb" }): Promise<SignInResult> {
+export async function signInTenant(params: { email: string; password: string; portal?: "rental" | "airbnb"; appHash?: string }): Promise<SignInResult> {
   const { ok, data } = await postJson("/api/signin", {
     email: params.email,
     password: params.password,
+    appHash: params.appHash,
     role: "tenant",
     portal: params.portal || "rental",
   });
@@ -80,8 +81,8 @@ export async function signInTenant(params: { email: string; password: string; po
   return result;
 }
 
-export async function signInAdmin(params: { email: string; password: string }): Promise<SignInResult> {
-  const { ok, data } = await postJson("/api/admin/login", { email: params.email, password: params.password, role: "admin" });
+export async function signInAdmin(params: { email: string; password: string; appHash?: string }): Promise<SignInResult> {
+  const { ok, data } = await postJson("/api/admin/login", { email: params.email, password: params.password, appHash: params.appHash, role: "admin" });
   const result = data as SignInResult;
   if (result?.success && result.userId && result.role) {
     persistClientCookies({ userId: result.userId, role: result.role, permissions: result.permissions, adminName: result.adminName });

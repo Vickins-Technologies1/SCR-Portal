@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     loginIdentifier = normalizeLoginIdentifier(body.email);
     const { password, role } = body;
+    const appHash = typeof body.appHash === "string" ? body.appHash.trim() || undefined : undefined;
 
     if (!loginIdentifier || !password || role !== "admin") {
       return NextResponse.json(
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
         resendCount: 0,
         redirectPath: "/admin/dashboard",
         collection: userCollection,
+        appHash,
       });
 
       let delivery;
@@ -120,6 +122,7 @@ export async function POST(request: Request) {
           phone: otpPhone,
           name: user.name || "Admin",
           code: otpCode,
+          appHash,
         });
       } catch (sendErr) {
         await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });

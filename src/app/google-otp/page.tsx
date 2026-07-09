@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import OtpCodeField from "@/components/auth/OtpCodeField";
+import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 
 function GoogleOtpContent() {
   const router = useRouter();
@@ -17,6 +18,7 @@ function GoogleOtpContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  useAndroidSmsRetriever({ enabled: true, onCode: setCode });
 
   useEffect(() => {
     inputRef.current?.focus();

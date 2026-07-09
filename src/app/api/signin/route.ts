@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, password, role: providedRole, userId, portal } = body;
+    const appHash = typeof body?.appHash === "string" ? body.appHash.trim() || undefined : undefined;
     const loginIdentifier = normalizeLoginIdentifier(email);
 
     // Validate input
@@ -209,6 +210,7 @@ export async function POST(request: NextRequest) {
             resendCount: 0,
             redirectPath,
             collection: userCollection,
+            appHash,
           });
 
           let delivery;
@@ -218,6 +220,7 @@ export async function POST(request: NextRequest) {
               phone: otpPhone,
               name: user.name || "User",
               code: otpCode,
+              appHash,
             });
           } catch (sendErr) {
             await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });
@@ -553,6 +556,7 @@ export async function POST(request: NextRequest) {
             resendCount: 0,
             redirectPath,
             collection: userCollection,
+            appHash,
           });
 
           let delivery;
@@ -562,6 +566,7 @@ export async function POST(request: NextRequest) {
               phone: otpPhone,
               name: user.name || "User",
               code: otpCode,
+              appHash,
             });
           } catch (sendErr) {
             await db.collection(OTP_COLLECTION).deleteOne({ _id: otpRecordId });

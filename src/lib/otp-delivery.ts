@@ -7,6 +7,7 @@ interface DeliverOtpInput {
   phone: string;
   name: string;
   code: string;
+  appHash?: string;
 }
 
 interface DeliverOtpResult {
@@ -22,8 +23,9 @@ export async function deliverOtp({
   phone,
   name,
   code,
+  appHash,
 }: DeliverOtpInput): Promise<DeliverOtpResult> {
-  const smsTask = sendOtpSms({ phone, code }).then(() => "sms" as const);
+  const smsTask = sendOtpSms({ phone, code, appHash }).then(() => "sms" as const);
   const emailTask = sendOtpEmail({ to: email, name, code }).then(() => "email" as const);
 
   try {

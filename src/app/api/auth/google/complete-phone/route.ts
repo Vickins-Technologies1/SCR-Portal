@@ -37,6 +37,7 @@ async function createOtpChallenge(params: {
   role: string;
   collection: "tenants" | "propertyOwners" | "adminTeamMembers";
   redirectPath: string;
+  appHash?: string;
 }) {
   const now = new Date();
   const otpEmail = params.user.email?.toString();
@@ -73,6 +74,7 @@ async function createOtpChallenge(params: {
     resendCount: 0,
     redirectPath: params.redirectPath,
     collection: params.collection,
+    appHash: params.appHash,
   });
 
   const delivery = await deliverOtp({
@@ -80,6 +82,7 @@ async function createOtpChallenge(params: {
     phone: otpPhone,
     name: params.user.name || "User",
     code: otpCode,
+    appHash: params.appHash,
   });
 
   return {
@@ -192,6 +195,7 @@ export async function POST(request: Request) {
         role: pending.role,
         collection: collectionName as "tenants" | "propertyOwners" | "adminTeamMembers",
         redirectPath: otpRedirect,
+        appHash: pending.appHash,
       });
 
       if ("requiresPhone" in challenge) {

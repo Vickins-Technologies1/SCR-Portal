@@ -127,6 +127,7 @@ async function createOtpChallenge(params: {
   redirectPath: string;
   isOwner?: boolean;
   isTeamMember?: boolean;
+  appHash?: string;
 }) {
   const now = new Date();
   const otpEmail = params.user.email?.toString();
@@ -163,6 +164,7 @@ async function createOtpChallenge(params: {
     resendCount: 0,
     redirectPath: params.redirectPath,
     collection: params.collection,
+    appHash: params.appHash,
   });
 
   const delivery = await deliverOtp({
@@ -170,6 +172,7 @@ async function createOtpChallenge(params: {
     phone: otpPhone,
     name: params.user.name || "User",
     code: otpCode,
+    appHash: params.appHash,
   });
 
   return {
@@ -224,6 +227,7 @@ export async function GET(request: NextRequest) {
           role: "propertyOwner",
           portal: "owner",
           action: state.action,
+          appHash: state.appHash,
           email: profile.email,
           name: profile.name,
           phoneMissing: true,
@@ -249,6 +253,7 @@ export async function GET(request: NextRequest) {
               ? "/airbnb-dashboard"
               : "/property-owner-dashboard",
             isOwner: true,
+            appHash: state.appHash,
           });
 
           if ("requiresPhone" in challenge) {
@@ -257,6 +262,7 @@ export async function GET(request: NextRequest) {
               role: "propertyOwner",
               portal: "owner",
               action: "login",
+              appHash: state.appHash,
               email: profile.email,
               name: profile.name,
               phoneMissing: true,
@@ -345,6 +351,7 @@ export async function GET(request: NextRequest) {
           role: "tenant",
           portal: "tenant",
           action: state.action,
+          appHash: state.appHash,
           email: profile.email,
           name: profile.name,
           phoneMissing: true,
@@ -402,6 +409,7 @@ export async function GET(request: NextRequest) {
         role,
         portal: "admin",
         action: state.action,
+        appHash: state.appHash,
         email: profile.email,
         name: profile.name,
         phoneMissing: true,
@@ -419,6 +427,7 @@ export async function GET(request: NextRequest) {
       role,
       collection,
       redirectPath: "/admin/dashboard",
+      appHash: state.appHash,
     });
 
     if ("requiresPhone" in challenge) {
@@ -427,6 +436,7 @@ export async function GET(request: NextRequest) {
         role,
         portal: "admin",
         action: state.action,
+        appHash: state.appHash,
         email: profile.email,
         name: profile.name,
         phoneMissing: true,

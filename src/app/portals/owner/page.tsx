@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import OtpCodeField from "@/components/auth/OtpCodeField";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
 import {
   getBiometricCredentials,
@@ -53,6 +54,7 @@ export default function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const router = useRouter();
+  const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: setOtpCode });
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +145,7 @@ export default function LoginPage() {
     setQuickLoading(true);
     try {
       const creds = await getBiometricCredentials("owner");
-      const result = await signInOwner({ email: creds.email, password: creds.password });
+      const result = await signInOwner({ email: creds.email, password: creds.password, appHash });
       if (result.requiresOtp && result.otpId) {
         setOtpRequired(true);
         setOtpId(result.otpId);
@@ -169,7 +171,7 @@ export default function LoginPage() {
     try {
       if (pinMode === "login") {
         const creds = await getPinCredentials({ pin: pinValue, kind: "owner" });
-        const result = await signInOwner({ email: creds.email, password: creds.password });
+        const result = await signInOwner({ email: creds.email, password: creds.password, appHash });
         if (result.requiresOtp && result.otpId) {
           closePinModal();
           setOtpRequired(true);
@@ -206,6 +208,7 @@ export default function LoginPage() {
       window.location.href = await buildGoogleAuthStartUrl({
         portal: "owner",
         action: "login",
+        appHash,
       });
     } catch {
       setError("Unable to start Google sign-in.");
@@ -226,7 +229,7 @@ export default function LoginPage() {
       const res = await fetch("/api/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }), // Removed role from payload
+        body: JSON.stringify({ email, password, appHash }), // Removed role from payload
         credentials: "include",
       });
 
