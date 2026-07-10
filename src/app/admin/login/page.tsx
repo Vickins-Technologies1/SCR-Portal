@@ -578,7 +578,7 @@ export default function AdminLogin() {
                     onChange={setOtpCode}
                     placeholder="Enter 6-digit OTP"
                     disabled={isLoading}
-                    helperText="Paste the code from SMS or email, or let your phone autofill it."
+                    helperText="Your phone can autofill the code automatically."
                     inputClassName="bg-background/80 px-3.5 xs:px-4 py-2.5 text-xs xs:text-sm sm:text-base"
                   />
 

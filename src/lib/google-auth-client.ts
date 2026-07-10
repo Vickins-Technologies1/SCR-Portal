@@ -1,5 +1,6 @@
 "use client";
 
+import { getAndroidAppHash } from "@/lib/android-sms-retriever";
 import { isNativeCapacitor } from "@/lib/quick-login";
 import type { GoogleAuthAction, GoogleAuthPortal, GoogleAuthPlatform } from "@/lib/google-auth";
 
@@ -17,6 +18,8 @@ export type GoogleAuthStartParams = {
 
 export async function buildGoogleAuthStartUrl(params: GoogleAuthStartParams): Promise<string> {
   const url = new URL("/api/auth/google", window.location.origin);
+  const nativePlatform = params.platform || ((await isNativeCapacitor()) ? "app" : "web");
+  const appHash = params.appHash?.trim() || (nativePlatform === "app" ? (await getAndroidAppHash()).trim() : "");
 
   url.searchParams.set("portal", params.portal);
   url.searchParams.set("action", params.action);
@@ -25,9 +28,8 @@ export async function buildGoogleAuthStartUrl(params: GoogleAuthStartParams): Pr
   if (params.packageTier) url.searchParams.set("packageTier", params.packageTier);
   if (params.tier) url.searchParams.set("tier", params.tier);
   if (params.tenantPortal) url.searchParams.set("tenantPortal", params.tenantPortal);
-  if (params.appHash) url.searchParams.set("appHash", params.appHash);
+  if (appHash) url.searchParams.set("appHash", appHash);
 
-  const nativePlatform = params.platform || ((await isNativeCapacitor()) ? "app" : "web");
   url.searchParams.set("platform", nativePlatform);
 
   return url.toString();

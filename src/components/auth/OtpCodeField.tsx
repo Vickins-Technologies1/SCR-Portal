@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 type OtpCodeFieldProps = {
   value: string;
@@ -14,7 +14,6 @@ type OtpCodeFieldProps = {
   inputClassName?: string;
   labelClassName?: string;
   helperTextClassName?: string;
-  buttonClassName?: string;
 };
 
 const OTP_LENGTH = 6;
@@ -28,16 +27,14 @@ export default function OtpCodeField({
   onChange,
   inputRef,
   label = "6-digit OTP",
-  helperText = "You can paste the code from SMS or email, or let your phone autofill it automatically.",
+  helperText = "Your phone can autofill the code automatically.",
   placeholder = "123456",
   disabled = false,
   className = "",
   inputClassName = "",
   labelClassName = "",
   helperTextClassName = "",
-  buttonClassName = "",
 }: OtpCodeFieldProps) {
-  const [isReadingClipboard, setIsReadingClipboard] = useState(false);
   const onChangeRef = useRef(onChange);
 
   useEffect(() => {
@@ -97,23 +94,6 @@ export default function OtpCodeField({
     onChange(pastedValue);
   };
 
-  const handlePasteClick = async () => {
-    if (disabled || typeof navigator === "undefined" || !navigator.clipboard?.readText) return;
-    setIsReadingClipboard(true);
-    try {
-      const text = await navigator.clipboard.readText();
-      const pastedValue = normalizeOtpInput(text);
-      if (pastedValue) {
-        onChange(pastedValue);
-        inputRef?.current?.focus();
-      }
-    } catch {
-      // Ignore clipboard errors and leave the manual input path available.
-    } finally {
-      setIsReadingClipboard(false);
-    }
-  };
-
   return (
     <div className={`space-y-2 ${className}`.trim()}>
       <label className={`block space-y-1 ${labelClassName}`.trim()}>
@@ -124,9 +104,11 @@ export default function OtpCodeField({
           inputMode="numeric"
           pattern="[0-9]*"
           autoComplete="one-time-code"
+          name="one-time-code"
           enterKeyHint="done"
           spellCheck={false}
           autoCorrect="off"
+          autoCapitalize="off"
           value={value}
           onChange={(event) => onChange(normalizeOtpInput(event.target.value))}
           onPaste={handlePaste}
@@ -136,15 +118,7 @@ export default function OtpCodeField({
         />
       </label>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={handlePasteClick}
-          disabled={disabled || isReadingClipboard}
-          className={`inline-flex items-center justify-center rounded-lg border border-border bg-background/80 px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 ${buttonClassName}`.trim()}
-        >
-          {isReadingClipboard ? "Reading clipboard..." : "Paste code"}
-        </button>
+      <div className="flex items-center justify-between gap-2">
         {helperText && <p className={`text-xs text-muted-foreground ${helperTextClassName}`.trim()}>{helperText}</p>}
       </div>
     </div>

@@ -112,7 +112,7 @@ function GoogleOtpContent() {
               onChange={setCode}
               placeholder="123456"
               disabled={loading}
-              helperText="Paste the code from SMS or email, or let your phone autofill it automatically."
+              helperText="Your phone can autofill the code automatically."
             />
 
             <button

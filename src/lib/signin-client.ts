@@ -1,6 +1,7 @@
 "use client";
 
 import Cookies from "js-cookie";
+import { getAndroidAppHash } from "@/lib/android-sms-retriever";
 
 type SignInResult = {
   success: boolean;
@@ -23,6 +24,14 @@ async function postJson(url: string, body: unknown): Promise<{ ok: boolean; data
   });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, data };
+}
+
+async function resolveAppHash(appHash?: string): Promise<string | undefined> {
+  const trimmed = appHash?.trim();
+  if (trimmed) return trimmed;
+
+  const androidHash = (await getAndroidAppHash()).trim();
+  return androidHash || undefined;
 }
 
 function persistClientCookies(params: { userId: string; role: string; permissions?: unknown; adminName?: unknown }) {
@@ -55,7 +64,8 @@ function persistClientCookies(params: { userId: string; role: string; permission
 }
 
 export async function signInOwner(params: { email: string; password: string; appHash?: string }): Promise<SignInResult> {
-  const { ok, data } = await postJson("/api/signin", { email: params.email, password: params.password, appHash: params.appHash });
+  const appHash = await resolveAppHash(params.appHash);
+  const { ok, data } = await postJson("/api/signin", { email: params.email, password: params.password, appHash });
   const result = data as SignInResult;
   if (result?.success && result.userId && result.role) {
     persistClientCookies({ userId: result.userId, role: result.role, permissions: result.permissions, adminName: result.adminName });
@@ -66,10 +76,11 @@ export async function signInOwner(params: { email: string; password: string; app
 }
 
 export async function signInTenant(params: { email: string; password: string; portal?: "rental" | "airbnb"; appHash?: string }): Promise<SignInResult> {
+  const appHash = await resolveAppHash(params.appHash);
   const { ok, data } = await postJson("/api/signin", {
     email: params.email,
     password: params.password,
-    appHash: params.appHash,
+    appHash,
     role: "tenant",
     portal: params.portal || "rental",
   });
@@ -82,7 +93,8 @@ export async function signInTenant(params: { email: string; password: string; po
 }
 
 export async function signInAdmin(params: { email: string; password: string; appHash?: string }): Promise<SignInResult> {
-  const { ok, data } = await postJson("/api/admin/login", { email: params.email, password: params.password, appHash: params.appHash, role: "admin" });
+  const appHash = await resolveAppHash(params.appHash);
+  const { ok, data } = await postJson("/api/admin/login", { email: params.email, password: params.password, appHash, role: "admin" });
   const result = data as SignInResult;
   if (result?.success && result.userId && result.role) {
     persistClientCookies({ userId: result.userId, role: result.role, permissions: result.permissions, adminName: result.adminName });
