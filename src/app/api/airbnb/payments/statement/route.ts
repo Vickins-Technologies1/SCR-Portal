@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
       amount: Number(payout.amount || 0),
       status: payout.status || "scheduled",
       method: payout.method || "M-Pesa",
+      mpesaCode: payout.mpesaCode || payout.mpesaReceiptNumber || payout.reference || "",
     })),
     ...directPayments.map((payment) => ({
       propertyName: payment.propertyName || payment.listingName || "Direct Booking",
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
       amount: Number(payment.amount || 0),
       status: payment.status === "completed" ? "paid" : payment.status === "failed" ? "failed" : "processing",
       method: "M-Pesa",
+      mpesaCode: payment.mpesaCode || payment.mpesaReceiptNumber || payment.reference || "",
     })),
   ];
 
@@ -105,7 +107,14 @@ export async function GET(request: NextRequest) {
 
   let y = contentTopY - 90;
   const tableX = 50;
-  const col = { property: tableX, period: tableX + 200, amount: tableX + 320, status: tableX + 400, method: tableX + 480 };
+  const col = {
+    property: tableX,
+    period: tableX + 145,
+    amount: tableX + 225,
+    status: tableX + 295,
+    method: tableX + 355,
+    mpesaCode: tableX + 410,
+  };
 
   const drawTableHeader = (currentPage: any) => {
     currentPage.drawRectangle({ x: tableX, y: y - 6, width: 495, height: 20, color: rgb(0.01, 0.16, 0.29) });
@@ -114,6 +123,7 @@ export async function GET(request: NextRequest) {
     currentPage.drawText("Amount", { x: col.amount + 4, y: y, size: 9, font: bold, color: rgb(1, 1, 1) });
     currentPage.drawText("Status", { x: col.status + 4, y: y, size: 9, font: bold, color: rgb(1, 1, 1) });
     currentPage.drawText("Method", { x: col.method + 4, y: y, size: 9, font: bold, color: rgb(1, 1, 1) });
+    currentPage.drawText("M-Pesa Code", { x: col.mpesaCode + 4, y: y, size: 9, font: bold, color: rgb(1, 1, 1) });
     y -= 26;
   };
 
@@ -135,10 +145,11 @@ export async function GET(request: NextRequest) {
     }
 
     currentPage.drawText(row.propertyName.slice(0, 28), { x: col.property + 4, y, size: 9, font });
-    currentPage.drawText(row.period.toString().slice(0, 16), { x: col.period + 4, y, size: 9, font });
+    currentPage.drawText(row.period.toString().slice(0, 14), { x: col.period + 4, y, size: 9, font });
     currentPage.drawText(`Ksh ${row.amount.toLocaleString("en-KE")}`, { x: col.amount + 4, y, size: 9, font });
     currentPage.drawText(String(row.status).slice(0, 10), { x: col.status + 4, y, size: 9, font });
-    currentPage.drawText(String(row.method).slice(0, 10), { x: col.method + 4, y, size: 9, font });
+    currentPage.drawText(String(row.method).slice(0, 9), { x: col.method + 4, y, size: 9, font });
+    currentPage.drawText(String(row.mpesaCode || "—").slice(0, 14), { x: col.mpesaCode + 4, y, size: 9, font });
     y -= 18;
   }
 

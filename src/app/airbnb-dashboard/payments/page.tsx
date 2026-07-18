@@ -204,18 +204,19 @@ export default function AirbnbPaymentsPage() {
                       <th>Amount</th>
                       <th>Status</th>
                       <th>Method</th>
+                      <th>M-Pesa Code</th>
                     </tr>
                   </thead>
                   <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted-foreground py-6">
+                      <td colSpan={6} className="text-center text-muted-foreground py-6">
                         Loading payouts...
                       </td>
                     </tr>
                   ) : payouts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted-foreground py-6">
+                      <td colSpan={6} className="text-center text-muted-foreground py-6">
                         No payouts yet.
                       </td>
                     </tr>
@@ -241,6 +242,7 @@ export default function AirbnbPaymentsPage() {
                           </span>
                           </td>
                           <td>{payout.method}</td>
+                          <td className="table-muted">{payout.mpesaCode || "—"}</td>
                         </tr>
                       ))
                     )}

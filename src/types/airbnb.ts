@@ -136,6 +136,7 @@ export interface AirbnbPayout {
   period: string;
   status: "scheduled" | "processing" | "paid" | "failed";
   method: "M-Pesa" | "Bank";
+  mpesaCode?: string;
 }
 
 export interface AirbnbIntegration {

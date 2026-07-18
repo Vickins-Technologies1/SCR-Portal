@@ -35,9 +35,10 @@ export async function GET(request: NextRequest) {
       payment.status === "completed"
         ? "paid"
         : payment.status === "failed" || payment.status === "cancelled"
-          ? "failed"
-          : "processing",
+        ? "failed"
+        : "processing",
     method: payment.provider === "cash" ? "Cash" : "M-Pesa",
+    mpesaCode: payment.mpesaCode || payment.mpesaReceiptNumber || payment.reference || "",
   }));
 
   return NextResponse.json({
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
         period: payout.period,
         status: payout.status,
         method: payout.method,
+        mpesaCode: payout.mpesaCode || payout.mpesaReceiptNumber || payout.reference || "",
       })),
       ...directMapped,
     ],

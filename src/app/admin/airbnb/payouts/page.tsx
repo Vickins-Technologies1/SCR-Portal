@@ -19,6 +19,7 @@ interface Payout {
   period: string;
   status: string;
   method: string;
+  mpesaCode?: string;
   createdAt?: string;
 }
 
@@ -173,6 +174,7 @@ export default function AdminAirbnbPayoutsPage() {
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Method</th>
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">M-Pesa Code</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Created</th>
                     </tr>
                   </thead>
@@ -198,6 +200,7 @@ export default function AdminAirbnbPayoutsPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-xs text-muted-foreground">{payout.method}</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">{payout.mpesaCode || "—"}</td>
                         <td className="py-3 px-4 text-xs text-muted-foreground">
                           {payout.createdAt ? new Date(payout.createdAt).toLocaleDateString("en-KE") : "—"}
                         </td>

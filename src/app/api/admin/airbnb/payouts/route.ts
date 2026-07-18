@@ -44,6 +44,9 @@ export async function GET(request: NextRequest) {
             period: 1,
             status: 1,
             method: 1,
+            mpesaCode: {
+              $ifNull: ["$mpesaCode", { $ifNull: ["$mpesaReceiptNumber", "$reference"] }],
+            },
             createdAt: 1,
           },
         },
