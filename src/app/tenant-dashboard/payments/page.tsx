@@ -28,6 +28,12 @@ interface Tenant {
   walletBalance: number;
   phone: string;
   ownerId?: string;
+  dues?: {
+    rentDues: number;
+    utilityDues: number;
+    depositDues: number;
+    totalRemainingDues: number;
+  };
 }
 
 interface Message {
@@ -242,6 +248,24 @@ export default function PaymentsPage() {
     return normalized;
   };
 
+  const getSuggestedAmount = useCallback(
+    (type: "Rent" | "Utility" | "Deposit" | "Other", dues?: Tenant["dues"]): number => {
+      if (!dues) return 0;
+      if (type === "Rent") return Number(dues.rentDues || 0);
+      if (type === "Utility") return Number(dues.utilityDues || 0);
+      if (type === "Deposit") return Number(dues.depositDues || 0);
+      return Number(dues.totalRemainingDues || 0);
+    },
+    []
+  );
+
+  const suggestedAmount = paymentType === "Other" ? 0 : getSuggestedAmount(paymentType, tenant?.dues);
+
+  useEffect(() => {
+    if (!isModalOpen || paymentType === "Other") return;
+    setAmount(getSuggestedAmount(paymentType, tenant?.dues));
+  }, [isModalOpen, paymentType, tenant?.dues, getSuggestedAmount]);
+
   const handleOpenModal = () => {
     if (tenantFeatures?.canPay === false) {
       setMessages((prev) => [
@@ -255,6 +279,7 @@ export default function PaymentsPage() {
       return;
     }
     setInvoiceId(`${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+    setAmount(getSuggestedAmount(paymentType, tenant?.dues));
     setIsModalOpen(true);
   };
 
@@ -566,6 +591,11 @@ export default function PaymentsPage() {
                         onChange={(e) => setAmount(Number(e.target.value))}
                         placeholder="Minimum 1"
                       />
+                      {paymentType !== "Other" && (
+                        <p className="mt-2 text-[11px] text-primary">
+                          Suggested: KES {suggestedAmount.toLocaleString()}
+                        </p>
+                      )}
                     </label>
 
                     <label className="block">

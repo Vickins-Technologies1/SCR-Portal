@@ -514,6 +514,7 @@ export default function TenantDashboardPage() {
   const depositLabel = leaseUnits.length > 1 ? "Total Deposit" : "Deposit";
 
   const walletBalance = tenant?.walletBalance ?? tenant?.wallet ?? 0;
+  const utilityDue = tenant?.dues?.utilityDues ?? 0;
   const totalPaid =
     (tenant?.totalRentPaid ?? 0) +
     (tenant?.totalUtilityPaid ?? 0) +
@@ -776,6 +777,9 @@ export default function TenantDashboardPage() {
                   </p>
                   <p>
                     Deposit paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalDepositPaid)}</span>
+                  </p>
+                  <p>
+                    Utility due: <span className="font-semibold text-foreground">{formatCurrency(utilityDue)}</span>
                   </p>
                   <div className="pt-3 mt-3 border-t border-border text-sm font-semibold text-foreground flex items-center justify-between">
                     <span>Total due</span>
