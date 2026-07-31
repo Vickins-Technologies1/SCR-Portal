@@ -20,6 +20,7 @@ export type TumaIncomingUpdate = {
   amount?: number;
   phoneNumber?: string;
   timestamp?: string;
+  gatewayTimestamp?: string;
 };
 
 export function isLikelyMpesaReceipt(reference?: string): boolean {
@@ -53,12 +54,20 @@ export function normalizeTumaStatus(params: {
 
 function parseTimestamp(timestamp?: string): string | null {
   if (!timestamp) return null;
-  const trimmed = timestamp.trim();
+  const trimmed = String(timestamp).trim();
   if (!trimmed) return null;
 
   const direct = new Date(trimmed);
   if (!Number.isNaN(direct.getTime())) {
     return direct.toISOString();
+  }
+
+  // Handle Unix timestamps in seconds or milliseconds.
+  if (/^\d{10,13}$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    const millis = trimmed.length === 10 ? numeric * 1000 : numeric;
+    const parsed = new Date(millis);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
   }
 
   // Handle YYYYMMDDHHmmss
@@ -97,7 +106,7 @@ export async function applyTumaPaymentUpdate(params: {
     patch.mpesaCode = reference;
   }
 
-  const parsedTimestamp = parseTimestamp(update.timestamp);
+  const parsedTimestamp = parseTimestamp(update.timestamp || update.gatewayTimestamp);
   if (parsedTimestamp) {
     patch.paymentDate = parsedTimestamp;
   }

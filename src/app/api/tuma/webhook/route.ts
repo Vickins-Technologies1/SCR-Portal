@@ -40,7 +40,26 @@ function normalizeWebhookPayload(payload: any) {
   const paymentId = payload?.payment_id || payload?.paymentId || payload?.id || payload?.data?.payment_id || "";
   const mpesaReceiptNumber =
     payload?.mpesa_receipt_number || payload?.mpesaReceiptNumber || payload?.receipt_number || "";
-  const timestamp = payload?.timestamp || payload?.transaction_date || payload?.transactionDate || "";
+  const timestamp =
+    payload?.timestamp ||
+    payload?.transaction_timestamp ||
+    payload?.transaction_date ||
+    payload?.transactionDate ||
+    payload?.paid_at ||
+    payload?.paidAt ||
+    payload?.payment_time ||
+    payload?.data?.timestamp ||
+    payload?.data?.transaction_timestamp ||
+    payload?.data?.transaction_date ||
+    payload?.data?.transactionDate ||
+    payload?.data?.paid_at ||
+    payload?.data?.paidAt ||
+    payload?.data?.payment_time ||
+    payload?.result?.timestamp ||
+    payload?.result?.transaction_timestamp ||
+    payload?.result?.transaction_date ||
+    payload?.result?.transactionDate ||
+    "";
   const phoneNumber =
     payload?.phone ||
     payload?.phone_number ||

@@ -52,6 +52,37 @@ type TumaBank = {
   country?: string;
 };
 
+type DarajaMode = "shared_daraja" | "user_paybill";
+
+type DarajaPaymentType = "till" | "paybill";
+
+type DarajaSharedState = {
+  enabled: boolean;
+  paymentType: DarajaPaymentType;
+  destinationNumber: string;
+  accountReference: string;
+};
+
+type DarajaUserPaybillState = {
+  enabled: boolean;
+  environment: "sandbox" | "production";
+  shortcode: string;
+  consumerKey: string;
+  consumerSecret: string;
+  passkey: string;
+};
+
+type DarajaSharedView = DarajaSharedState & {
+  maskedDestinationNumber: string;
+  hasDestinationNumber: boolean;
+};
+
+type DarajaUserPaybillView = DarajaUserPaybillState & {
+  maskedShortcode: string;
+  maskedConsumerKey: string;
+  hasCredentials: boolean;
+};
+
 const comingSoonIntegrations: IntegrationCard[] = [
   {
     id: "stripe",
@@ -117,6 +148,39 @@ export default function OwnerIntegrationsPage() {
   });
   const [banks, setBanks] = useState<TumaBank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
+  const [darajaShared, setDarajaShared] = useState<DarajaSharedView>({
+    enabled: true,
+    paymentType: "paybill",
+    destinationNumber: "",
+    maskedDestinationNumber: "",
+    accountReference: "",
+    hasDestinationNumber: false,
+  });
+  const [darajaSharedInitial, setDarajaSharedInitial] = useState<DarajaSharedState>({
+    enabled: true,
+    paymentType: "paybill",
+    destinationNumber: "",
+    accountReference: "",
+  });
+  const [darajaUserPaybill, setDarajaUserPaybill] = useState<DarajaUserPaybillView>({
+    enabled: true,
+    environment: "sandbox",
+    shortcode: "",
+    consumerKey: "",
+    consumerSecret: "",
+    passkey: "",
+    maskedShortcode: "",
+    maskedConsumerKey: "",
+    hasCredentials: false,
+  });
+  const [darajaUserPaybillInitial, setDarajaUserPaybillInitial] = useState<DarajaUserPaybillState>({
+    enabled: true,
+    environment: "sandbox",
+    shortcode: "",
+    consumerKey: "",
+    consumerSecret: "",
+    passkey: "",
+  });
   const [tumaForm, setTumaForm] = useState<TumaBusinessForm>({
     name: "",
     email: "",
@@ -132,7 +196,15 @@ export default function OwnerIntegrationsPage() {
   const [showModal, setShowModal] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationCard | null>(null);
   const [tumaErrors, setTumaErrors] = useState<{ email?: string; apiKey?: string }>({});
+  const [darajaSharedErrors, setDarajaSharedErrors] = useState<Partial<Record<keyof DarajaSharedState, string>>>(
+    {}
+  );
+  const [darajaUserPaybillErrors, setDarajaUserPaybillErrors] = useState<
+    Partial<Record<keyof DarajaUserPaybillState, string>>
+  >({});
+  const [darajaSavingMode, setDarajaSavingMode] = useState<DarajaMode | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showDarajaSecrets, setShowDarajaSecrets] = useState(false);
 
   useEffect(() => {
     const id = Cookies.get("userId");
@@ -161,10 +233,13 @@ export default function OwnerIntegrationsPage() {
     const fetchIntegrations = async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/owner/integrations", { credentials: "include" });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          const nextTuma = data.integrations?.tuma || {};
+        const [tumaRes, darajaRes] = await Promise.all([
+          fetch("/api/owner/integrations", { credentials: "include" }),
+          fetch("/api/owner/daraja", { credentials: "include" }),
+        ]);
+        const [tumaData, darajaData] = await Promise.all([tumaRes.json(), darajaRes.json()]);
+        if (tumaRes.ok && tumaData.success) {
+          const nextTuma = tumaData.integrations?.tuma || {};
           setTuma({
             enabled: nextTuma.enabled !== false,
             email: nextTuma.email || "",
@@ -183,7 +258,50 @@ export default function OwnerIntegrationsPage() {
             email: nextTuma.email || prev.email,
           }));
         } else {
-          toast.error(data.message || "Failed to load integrations.");
+          toast.error(tumaData.message || "Failed to load integrations.");
+        }
+
+        if (darajaRes.ok && darajaData.success) {
+          const nextDaraja = darajaData.integrations?.daraja || {};
+          const nextShared = nextDaraja.shared || {};
+          const nextUserPaybill = nextDaraja.userPaybill || {};
+
+          setDarajaShared({
+            enabled: nextShared.enabled !== false,
+            paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
+            destinationNumber: nextShared.destinationNumber || "",
+            maskedDestinationNumber: nextShared.maskedDestinationNumber || "",
+            accountReference: nextShared.accountReference || "",
+            hasDestinationNumber: !!nextShared.hasDestinationNumber,
+          });
+          setDarajaSharedInitial({
+            enabled: nextShared.enabled !== false,
+            paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
+            destinationNumber: nextShared.destinationNumber || "",
+            accountReference: nextShared.accountReference || "",
+          });
+
+          setDarajaUserPaybill({
+            enabled: nextUserPaybill.enabled !== false,
+            environment: nextUserPaybill.environment === "production" ? "production" : "sandbox",
+            shortcode: nextUserPaybill.shortcode || "",
+            consumerKey: "",
+            consumerSecret: "",
+            passkey: "",
+            maskedShortcode: nextUserPaybill.maskedShortcode || "",
+            maskedConsumerKey: nextUserPaybill.maskedConsumerKey || "",
+            hasCredentials: !!nextUserPaybill.hasCredentials,
+          });
+          setDarajaUserPaybillInitial({
+            enabled: nextUserPaybill.enabled !== false,
+            environment: nextUserPaybill.environment === "production" ? "production" : "sandbox",
+            shortcode: nextUserPaybill.shortcode || "",
+            consumerKey: "",
+            consumerSecret: "",
+            passkey: "",
+          });
+        } else {
+          toast.error(darajaData.message || "Failed to load Daraja integrations.");
         }
       } catch (error) {
         toast.error("Failed to load integrations.");
@@ -234,6 +352,22 @@ export default function OwnerIntegrationsPage() {
 
   const isProvisioned = tuma.email.trim() && tuma.hasApiKey;
   const isConfigured = tuma.enabled && isProvisioned;
+  const sharedProvisioned = darajaShared.hasDestinationNumber && !!darajaShared.destinationNumber.trim();
+  const sharedConfigured = darajaShared.enabled && sharedProvisioned;
+  const sharedDirty =
+    darajaShared.enabled !== darajaSharedInitial.enabled ||
+    darajaShared.paymentType !== darajaSharedInitial.paymentType ||
+    darajaShared.destinationNumber.trim() !== darajaSharedInitial.destinationNumber.trim() ||
+    darajaShared.accountReference.trim() !== darajaSharedInitial.accountReference.trim();
+  const userPaybillProvisioned = darajaUserPaybill.hasCredentials;
+  const userPaybillConfigured = darajaUserPaybill.enabled && userPaybillProvisioned;
+  const userPaybillDirty =
+    darajaUserPaybill.enabled !== darajaUserPaybillInitial.enabled ||
+    darajaUserPaybill.environment !== darajaUserPaybillInitial.environment ||
+    darajaUserPaybill.shortcode.trim() !== darajaUserPaybillInitial.shortcode.trim() ||
+    darajaUserPaybill.consumerKey.trim().length > 0 ||
+    darajaUserPaybill.consumerSecret.trim().length > 0 ||
+    darajaUserPaybill.passkey.trim().length > 0;
 
   const statusLabel = loading
     ? "Checking connection..."
@@ -249,9 +383,27 @@ export default function OwnerIntegrationsPage() {
     ? "Manage Tuma settings and tenant payment routing."
     : "Create a Tuma profile to start collecting tenant payments.";
   const tumaCta = isConfigured ? "Manage Tuma" : isProvisioned ? "Finish setup" : "Create profile";
+  const sharedCardDescription = sharedConfigured
+    ? "Route payments through the shared Daraja setup and your connected Till or Paybill."
+    : "Connect a Till or Paybill for the shared Daraja mode.";
+  const sharedCta = sharedConfigured ? "Manage Shared Daraja" : sharedProvisioned ? "Finish setup" : "Connect shared mode";
+  const userPaybillCardDescription = userPaybillConfigured
+    ? "Store your own Daraja credentials per tenant and use them for STK Push."
+    : "Save your own Safaricom Paybill credentials with encrypted tenant storage.";
+  const userPaybillCta = userPaybillConfigured
+    ? "Manage Paybill"
+    : userPaybillProvisioned
+      ? "Finish setup"
+      : "Connect paybill";
 
   const integrationCards = useMemo<IntegrationCard[]>(() => {
     const tumaBadgeLabel = isConfigured ? "Connected" : isProvisioned ? "Available" : "Setup required";
+    const sharedBadgeLabel = sharedConfigured ? "Connected" : sharedProvisioned ? "Available" : "Setup required";
+    const userPaybillBadgeLabel = userPaybillConfigured
+      ? "Connected"
+      : userPaybillProvisioned
+        ? "Available"
+        : "Setup required";
     return [
       {
         id: "tuma",
@@ -265,18 +417,54 @@ export default function OwnerIntegrationsPage() {
         logoAlt: "Tuma",
         logoClassName: "h-7",
       },
+      {
+        id: "daraja-shared",
+        name: "Shared Daraja",
+        description: sharedCardDescription,
+        status: sharedConfigured ? "connected" : "available",
+        badgeLabel: sharedBadgeLabel,
+        cta: sharedCta,
+        icon: Landmark,
+      },
+      {
+        id: "daraja-user-paybill",
+        name: "User-owned Paybill",
+        description: userPaybillCardDescription,
+        status: userPaybillConfigured ? "connected" : "available",
+        badgeLabel: userPaybillBadgeLabel,
+        cta: userPaybillCta,
+        icon: Wallet,
+      },
       ...comingSoonIntegrations,
     ];
-  }, [isConfigured, isProvisioned, tumaCardDescription]);
+  }, [
+    isConfigured,
+    isProvisioned,
+    sharedConfigured,
+    sharedProvisioned,
+    userPaybillConfigured,
+    userPaybillProvisioned,
+    tumaCardDescription,
+    sharedCardDescription,
+    userPaybillCardDescription,
+  ]);
 
   const openIntegrationModal = (integration: IntegrationCard) => {
     setSelectedIntegration(integration);
+    if (integration.id === "daraja-shared") {
+      setDarajaSharedErrors({});
+    } else if (integration.id === "daraja-user-paybill") {
+      setDarajaUserPaybillErrors({});
+    }
     setShowModal(true);
   };
 
   const closeIntegrationModal = () => {
     setShowModal(false);
     setSelectedIntegration(null);
+    setDarajaSharedErrors({});
+    setDarajaUserPaybillErrors({});
+    setShowDarajaSecrets(false);
   };
 
   const handleSave = async (event: React.FormEvent) => {
@@ -514,6 +702,237 @@ export default function OwnerIntegrationsPage() {
     }
   };
 
+  const applyDarajaSharedResponse = (updated: any) => {
+    setDarajaShared({
+      enabled: updated.enabled !== false,
+      paymentType: updated.paymentType === "till" ? "till" : "paybill",
+      destinationNumber: updated.destinationNumber || "",
+      maskedDestinationNumber: updated.maskedDestinationNumber || "",
+      accountReference: updated.accountReference || "",
+      hasDestinationNumber: !!updated.hasDestinationNumber,
+    });
+    setDarajaSharedInitial({
+      enabled: updated.enabled !== false,
+      paymentType: updated.paymentType === "till" ? "till" : "paybill",
+      destinationNumber: updated.destinationNumber || "",
+      accountReference: updated.accountReference || "",
+    });
+  };
+
+  const applyDarajaUserPaybillResponse = (updated: any) => {
+    setDarajaUserPaybill({
+      enabled: updated.enabled !== false,
+      environment: updated.environment === "production" ? "production" : "sandbox",
+      shortcode: updated.shortcode || "",
+      consumerKey: "",
+      consumerSecret: "",
+      passkey: "",
+      maskedShortcode: updated.maskedShortcode || "",
+      maskedConsumerKey: updated.maskedConsumerKey || "",
+      hasCredentials: !!updated.hasCredentials,
+    });
+    setDarajaUserPaybillInitial({
+      enabled: updated.enabled !== false,
+      environment: updated.environment === "production" ? "production" : "sandbox",
+      shortcode: updated.shortcode || "",
+      consumerKey: "",
+      consumerSecret: "",
+      passkey: "",
+    });
+  };
+
+  const handleSaveDarajaShared = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isReadOnly) {
+      toast.error("You do not have permission to edit integrations.");
+      return;
+    }
+    if (!csrfToken) {
+      toast.error("Missing CSRF token. Please refresh and try again.");
+      return;
+    }
+
+    const destinationNumber = darajaShared.destinationNumber.trim();
+    const accountReference = darajaShared.accountReference.trim();
+    const nextErrors: Partial<Record<keyof DarajaSharedState, string>> = {};
+
+    if (darajaShared.enabled) {
+      if (!destinationNumber) {
+        nextErrors.destinationNumber = "Till or Paybill number is required.";
+      }
+      if (!accountReference) {
+        nextErrors.accountReference = "Account reference is required.";
+      }
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setDarajaSharedErrors(nextErrors);
+      toast.error("Please fix the highlighted fields.");
+      return;
+    }
+
+    setDarajaSavingMode("shared_daraja");
+    try {
+      const res = await fetch("/api/owner/daraja", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          mode: "shared_daraja",
+          enabled: darajaShared.enabled,
+          paymentType: darajaShared.paymentType,
+          destinationNumber,
+          accountReference,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.message || "Failed to update shared Daraja.");
+        return;
+      }
+
+      applyDarajaSharedResponse(data.integrations?.daraja?.shared || {});
+      setDarajaSharedErrors({});
+      toast.success(data.message || "Shared Daraja saved successfully.");
+    } catch {
+      toast.error("Failed to update shared Daraja.");
+    } finally {
+      setDarajaSavingMode(null);
+    }
+  };
+
+  const handleSaveDarajaUserPaybill = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isReadOnly) {
+      toast.error("You do not have permission to edit integrations.");
+      return;
+    }
+    if (!csrfToken) {
+      toast.error("Missing CSRF token. Please refresh and try again.");
+      return;
+    }
+
+    const shortcode = darajaUserPaybill.shortcode.trim();
+    const consumerKey = darajaUserPaybill.consumerKey.trim();
+    const consumerSecret = darajaUserPaybill.consumerSecret.trim();
+    const passkey = darajaUserPaybill.passkey.trim();
+    const nextErrors: Partial<Record<keyof DarajaUserPaybillState, string>> = {};
+
+    if (darajaUserPaybill.enabled) {
+      if (!darajaUserPaybill.hasCredentials && !shortcode) {
+        nextErrors.shortcode = "Paybill shortcode is required.";
+      }
+      if (!darajaUserPaybill.hasCredentials && !consumerKey) {
+        nextErrors.consumerKey = "Consumer Key is required.";
+      }
+      if (!darajaUserPaybill.hasCredentials && !consumerSecret) {
+        nextErrors.consumerSecret = "Consumer Secret is required.";
+      }
+      if (!darajaUserPaybill.hasCredentials && !passkey) {
+        nextErrors.passkey = "Passkey is required.";
+      }
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setDarajaUserPaybillErrors(nextErrors);
+      toast.error("Please fix the highlighted fields.");
+      return;
+    }
+
+    setDarajaSavingMode("user_paybill");
+    try {
+      const res = await fetch("/api/owner/daraja", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          mode: "user_paybill",
+          enabled: darajaUserPaybill.enabled,
+          environment: darajaUserPaybill.environment,
+          shortcode,
+          consumerKey,
+          consumerSecret,
+          passkey,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.message || "Failed to update Paybill credentials.");
+        return;
+      }
+
+      applyDarajaUserPaybillResponse(data.integrations?.daraja?.userPaybill || {});
+      setDarajaUserPaybillErrors({});
+      setShowDarajaSecrets(false);
+      toast.success(data.message || "Paybill credentials saved successfully.");
+    } catch {
+      toast.error("Failed to update Paybill credentials.");
+    } finally {
+      setDarajaSavingMode(null);
+    }
+  };
+
+  const handleDeleteDaraja = async (mode: DarajaMode) => {
+    if (isReadOnly) {
+      toast.error("You do not have permission to delete integrations.");
+      return;
+    }
+
+    if (!csrfToken) {
+      toast.error("Missing CSRF token. Please refresh and try again.");
+      return;
+    }
+
+    const message =
+      mode === "shared_daraja"
+        ? "This will remove your shared Daraja connection. Continue?"
+        : "This will remove your saved Paybill credentials. Continue?";
+    const confirmed = window.confirm(message);
+    if (!confirmed) return;
+
+    setDarajaSavingMode(mode);
+    try {
+      const res = await fetch("/api/owner/daraja", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({ mode }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.message || "Failed to delete Daraja integration.");
+        return;
+      }
+
+      const updated = data.integrations?.daraja || {};
+      if (mode === "shared_daraja") {
+        applyDarajaSharedResponse(updated.shared || {});
+      } else {
+        applyDarajaUserPaybillResponse(updated.userPaybill || {});
+      }
+      setDarajaSharedErrors({});
+      setDarajaUserPaybillErrors({});
+      setShowDarajaSecrets(false);
+      toast.success(data.message || "Daraja integration removed.");
+    } catch {
+      toast.error("Failed to delete Daraja integration.");
+    } finally {
+      setDarajaSavingMode(null);
+    }
+  };
+
   const renderStatusBadge = (status: IntegrationStatus, labelOverride?: string) => {
     if (status === "connected") {
       return (
@@ -642,7 +1061,380 @@ export default function OwnerIntegrationsPage() {
             onClose={closeIntegrationModal}
             className="max-w-3xl"
           >
-            {selectedIntegration?.id === "tuma" ? (
+            {selectedIntegration?.id === "daraja-shared" ? (
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Integration status</p>
+                    <p className="text-sm font-semibold text-foreground mt-2">
+                      {sharedConfigured
+                        ? sharedDirty
+                          ? "Configured - Unsaved changes"
+                          : "Configured"
+                        : sharedProvisioned
+                          ? "Configured (Disabled)"
+                          : "Not configured"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Shared Daraja uses the SaaS-owned Daraja app credentials and stores the tenant&apos;s receiving
+                      Till or Paybill securely.
+                    </p>
+                  </div>
+                  {renderStatusBadge(
+                    sharedConfigured ? "connected" : "available",
+                    sharedConfigured ? "Connected" : sharedProvisioned ? "Available" : "Setup required"
+                  )}
+                </div>
+
+                {isReadOnly && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    You have read-only access. Contact an owner admin to update integrations.
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 text-xs text-sky-800">
+                  <p className="font-semibold">Shared mode</p>
+                  <p className="mt-1">
+                    Configure the tenant&apos;s destination number and account reference here. The app will keep the
+                    record tenant-scoped for payment initiation and callback reconciliation.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSaveDarajaShared} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border bg-white/80 p-4">
+                      <label className="text-xs font-medium text-muted-foreground">Enable Shared Daraja</label>
+                      <select
+                        value={darajaShared.enabled ? "yes" : "no"}
+                        onChange={(e) =>
+                          setDarajaShared((prev) => ({ ...prev, enabled: e.target.value === "yes" }))
+                        }
+                        disabled={isReadOnly}
+                        className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                      >
+                        <option value="yes">Enabled</option>
+                        <option value="no">Disabled</option>
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-border bg-white/80 p-4">
+                      <label className="text-xs font-medium text-muted-foreground">Payment Type</label>
+                      <select
+                        value={darajaShared.paymentType}
+                        onChange={(e) =>
+                          setDarajaShared((prev) => ({ ...prev, paymentType: e.target.value as DarajaPaymentType }))
+                        }
+                        disabled={isReadOnly}
+                        className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                      >
+                        <option value="paybill">Paybill</option>
+                        <option value="till">Till</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Connected Till / Paybill Number
+                      </label>
+                      <input
+                        type="text"
+                        value={darajaShared.destinationNumber}
+                        onChange={(e) => {
+                          setDarajaShared((prev) => ({ ...prev, destinationNumber: e.target.value }));
+                          if (darajaSharedErrors.destinationNumber) {
+                            setDarajaSharedErrors((prev) => ({ ...prev, destinationNumber: undefined }));
+                          }
+                        }}
+                        disabled={isReadOnly}
+                        className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                          darajaSharedErrors.destinationNumber ? "border-rose-300" : "border-border"
+                        }`}
+                        placeholder="2547XXXXXXX or Till number"
+                      />
+                      {darajaSharedErrors.destinationNumber ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.destinationNumber}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Stored securely and used to map payment callbacks back to the right tenant.
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Account Reference</label>
+                      <input
+                        type="text"
+                        value={darajaShared.accountReference}
+                        onChange={(e) => {
+                          setDarajaShared((prev) => ({ ...prev, accountReference: e.target.value }));
+                          if (darajaSharedErrors.accountReference) {
+                            setDarajaSharedErrors((prev) => ({ ...prev, accountReference: undefined }));
+                          }
+                        }}
+                        disabled={isReadOnly}
+                        className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                          darajaSharedErrors.accountReference ? "border-rose-300" : "border-border"
+                        }`}
+                        placeholder="Reference shown on STK prompt"
+                      />
+                      {darajaSharedErrors.accountReference ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountReference}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          This reference should identify the tenant, invoice, or booking clearly.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={isReadOnly || darajaSavingMode === "shared_daraja" || !sharedDirty}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                    >
+                      {darajaSavingMode === "shared_daraja" ? "Saving..." : "Save integration"}
+                    </button>
+                    {sharedProvisioned && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDaraja("shared_daraja")}
+                        disabled={isReadOnly || darajaSavingMode === "shared_daraja"}
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        Delete settings
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            ) : selectedIntegration?.id === "daraja-user-paybill" ? (
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Integration status</p>
+                    <p className="text-sm font-semibold text-foreground mt-2">
+                      {userPaybillConfigured
+                        ? userPaybillDirty
+                          ? "Configured - Unsaved changes"
+                          : "Configured"
+                        : userPaybillProvisioned
+                          ? "Configured (Disabled)"
+                          : "Not configured"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Save the tenant&apos;s own Safaricom Paybill credentials and use them for STK Push.
+                    </p>
+                  </div>
+                  {renderStatusBadge(
+                    userPaybillConfigured ? "connected" : "available",
+                    userPaybillConfigured ? "Connected" : userPaybillProvisioned ? "Available" : "Setup required"
+                  )}
+                </div>
+
+                {isReadOnly && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    You have read-only access. Contact an owner admin to update integrations.
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4 text-xs text-violet-800">
+                  <p className="font-semibold">Encrypted storage</p>
+                  <p className="mt-1">
+                    Tenant credentials are encrypted at rest. Use sandbox or production per tenant depending on the
+                    Daraja app configuration.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSaveDarajaUserPaybill} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border bg-white/80 p-4">
+                      <label className="text-xs font-medium text-muted-foreground">Enable Paybill Mode</label>
+                      <select
+                        value={darajaUserPaybill.enabled ? "yes" : "no"}
+                        onChange={(e) =>
+                          setDarajaUserPaybill((prev) => ({ ...prev, enabled: e.target.value === "yes" }))
+                        }
+                        disabled={isReadOnly}
+                        className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                      >
+                        <option value="yes">Enabled</option>
+                        <option value="no">Disabled</option>
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-border bg-white/80 p-4">
+                      <label className="text-xs font-medium text-muted-foreground">Environment</label>
+                      <select
+                        value={darajaUserPaybill.environment}
+                        onChange={(e) =>
+                          setDarajaUserPaybill((prev) => ({
+                            ...prev,
+                            environment: e.target.value === "production" ? "production" : "sandbox",
+                          }))
+                        }
+                        disabled={isReadOnly}
+                        className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+                      >
+                        <option value="sandbox">Sandbox</option>
+                        <option value="production">Production</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Shortcode / Paybill</label>
+                      <input
+                        type="text"
+                        value={darajaUserPaybill.shortcode}
+                        onChange={(e) => {
+                          setDarajaUserPaybill((prev) => ({ ...prev, shortcode: e.target.value }));
+                          if (darajaUserPaybillErrors.shortcode) {
+                            setDarajaUserPaybillErrors((prev) => ({ ...prev, shortcode: undefined }));
+                          }
+                        }}
+                        disabled={isReadOnly}
+                        className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                          darajaUserPaybillErrors.shortcode ? "border-rose-300" : "border-border"
+                        }`}
+                        placeholder={darajaUserPaybill.hasCredentials ? darajaUserPaybill.maskedShortcode || "Stored" : "Enter shortcode"}
+                      />
+                      {darajaUserPaybillErrors.shortcode ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{darajaUserPaybillErrors.shortcode}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {darajaUserPaybill.hasCredentials
+                            ? `Stored securely as ${darajaUserPaybill.maskedShortcode || "configured"}`
+                            : "This is usually the Paybill number assigned by Safaricom."}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Consumer Key</label>
+                      <input
+                        type="text"
+                        value={darajaUserPaybill.consumerKey}
+                        onChange={(e) => {
+                          setDarajaUserPaybill((prev) => ({ ...prev, consumerKey: e.target.value }));
+                          if (darajaUserPaybillErrors.consumerKey) {
+                            setDarajaUserPaybillErrors((prev) => ({ ...prev, consumerKey: undefined }));
+                          }
+                        }}
+                        disabled={isReadOnly}
+                        className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                          darajaUserPaybillErrors.consumerKey ? "border-rose-300" : "border-border"
+                        }`}
+                        placeholder={darajaUserPaybill.hasCredentials ? "Leave blank to keep current key" : "Enter Consumer Key"}
+                      />
+                      {darajaUserPaybillErrors.consumerKey ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{darajaUserPaybillErrors.consumerKey}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {darajaUserPaybill.hasCredentials
+                            ? `Current key is masked as ${darajaUserPaybill.maskedConsumerKey || "configured"}`
+                            : "This is not the secret key."}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Consumer Secret</label>
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type={showDarajaSecrets ? "text" : "password"}
+                          value={darajaUserPaybill.consumerSecret}
+                          onChange={(e) => {
+                            setDarajaUserPaybill((prev) => ({ ...prev, consumerSecret: e.target.value }));
+                            if (darajaUserPaybillErrors.consumerSecret) {
+                              setDarajaUserPaybillErrors((prev) => ({ ...prev, consumerSecret: undefined }));
+                            }
+                          }}
+                          disabled={isReadOnly}
+                          className={`w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                            darajaUserPaybillErrors.consumerSecret ? "border-rose-300" : "border-border"
+                          }`}
+                          placeholder={darajaUserPaybill.hasCredentials ? "Leave blank to keep current secret" : "Enter Consumer Secret"}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowDarajaSecrets((prev) => !prev)}
+                          disabled={isReadOnly}
+                          className="whitespace-nowrap rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          {showDarajaSecrets ? "Hide" : "Reveal"}
+                        </button>
+                      </div>
+                      {darajaUserPaybillErrors.consumerSecret ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{darajaUserPaybillErrors.consumerSecret}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Stored encrypted at rest. Leave blank to preserve the current secret.
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Passkey</label>
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type={showDarajaSecrets ? "text" : "password"}
+                          value={darajaUserPaybill.passkey}
+                          onChange={(e) => {
+                            setDarajaUserPaybill((prev) => ({ ...prev, passkey: e.target.value }));
+                            if (darajaUserPaybillErrors.passkey) {
+                              setDarajaUserPaybillErrors((prev) => ({ ...prev, passkey: undefined }));
+                            }
+                          }}
+                          disabled={isReadOnly}
+                          className={`w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                            darajaUserPaybillErrors.passkey ? "border-rose-300" : "border-border"
+                          }`}
+                          placeholder={darajaUserPaybill.hasCredentials ? "Leave blank to keep current passkey" : "Enter Passkey"}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowDarajaSecrets((prev) => !prev)}
+                          disabled={isReadOnly}
+                          className="whitespace-nowrap rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          {showDarajaSecrets ? "Hide" : "Reveal"}
+                        </button>
+                      </div>
+                      {darajaUserPaybillErrors.passkey ? (
+                        <p className="text-[11px] text-rose-600 mt-1">{darajaUserPaybillErrors.passkey}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          The passkey is stored encrypted and used only on the server.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={isReadOnly || darajaSavingMode === "user_paybill" || !userPaybillDirty}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                    >
+                      {darajaSavingMode === "user_paybill" ? "Saving..." : "Save integration"}
+                    </button>
+                    {userPaybillProvisioned && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDaraja("user_paybill")}
+                        disabled={isReadOnly || darajaSavingMode === "user_paybill"}
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        Delete credentials
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            ) : selectedIntegration?.id === "tuma" ? (
               <div className="space-y-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
