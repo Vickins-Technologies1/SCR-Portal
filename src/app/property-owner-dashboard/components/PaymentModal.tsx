@@ -68,6 +68,7 @@ type OwnerDarajaIntegrationState = {
     enabled: boolean;
     paymentType: "till" | "paybill";
     destinationNumber: string;
+    accountNumber: string;
     hasDestinationNumber: boolean;
   };
   userPaybill: {
@@ -144,6 +145,7 @@ export default function PaymentModal({
               enabled: nextShared.enabled !== false,
               paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
               destinationNumber: nextShared.destinationNumber || "",
+              accountNumber: nextShared.accountNumber || "",
               hasDestinationNumber: !!nextShared.hasDestinationNumber,
             },
             userPaybill: {
@@ -512,15 +514,19 @@ export default function PaymentModal({
   };
   const darajaModeBadgeText =
     paymentRail === "shared_daraja"
-      ? `Shared Daraja · funds land in ${ownerDarajaConfig?.shared.paymentType === "till" ? "Till" : "Paybill"} ${
-          maskInline(ownerDarajaConfig?.shared.destinationNumber || "") || "destination"
+      ? `Mpesa · funds land in ${ownerDarajaConfig?.shared.paymentType === "till" ? "Till" : "Paybill"} ${
+          maskInline(
+            ownerDarajaConfig?.shared.paymentType === "paybill"
+              ? ownerDarajaConfig?.shared.accountNumber || ownerDarajaConfig?.shared.destinationNumber || ""
+              : ownerDarajaConfig?.shared.destinationNumber || ""
+          ) || "destination"
         }`
       : paymentRail === "user_paybill"
         ? `User Paybill · funds land in Paybill ${maskInline(ownerDarajaConfig?.userPaybill.shortcode || "") || "account"}`
         : "Legacy M-Pesa · platform shortcode";
   const selectedDarajaLabel =
     paymentRail === "shared_daraja"
-      ? "Shared Daraja"
+      ? "Mpesa"
       : paymentRail === "user_paybill"
         ? "User-owned Paybill"
         : "Legacy M-Pesa";
@@ -655,13 +661,13 @@ export default function PaymentModal({
                   className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                 >
                   <option value="legacy_mpesa">Legacy M-Pesa flow</option>
-                  {sharedDarajaAvailable && <option value="shared_daraja">Shared Daraja</option>}
+                  {sharedDarajaAvailable && <option value="shared_daraja">Mpesa</option>}
                   {userPaybillAvailable && <option value="user_paybill">User-owned Paybill</option>}
                 </select>
 
                 <div className="mt-3 grid gap-3 text-xs text-muted-foreground sm:grid-cols-3">
                   <div className="rounded-xl bg-white/80 px-3 py-2 border border-border">
-                    <p className="uppercase tracking-[0.2em] text-[10px]">Shared Daraja</p>
+                    <p className="uppercase tracking-[0.2em] text-[10px]">Mpesa</p>
                     <p className="mt-1 font-medium text-foreground">
                       {sharedDarajaAvailable
                         ? `${ownerDarajaConfig?.shared.paymentType === "till" ? "Till" : "Paybill"} connected`

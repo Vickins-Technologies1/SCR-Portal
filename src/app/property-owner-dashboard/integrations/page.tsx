@@ -60,6 +60,7 @@ type DarajaSharedState = {
   enabled: boolean;
   paymentType: DarajaPaymentType;
   destinationNumber: string;
+  accountNumber: string;
   accountReference: string;
 };
 
@@ -75,6 +76,7 @@ type DarajaUserPaybillState = {
 type DarajaSharedView = DarajaSharedState & {
   maskedDestinationNumber: string;
   hasDestinationNumber: boolean;
+  hasAccountNumber: boolean;
 };
 
 type DarajaUserPaybillView = DarajaUserPaybillState & {
@@ -152,14 +154,17 @@ export default function OwnerIntegrationsPage() {
     enabled: true,
     paymentType: "paybill",
     destinationNumber: "",
+    accountNumber: "",
     maskedDestinationNumber: "",
     accountReference: "",
     hasDestinationNumber: false,
+    hasAccountNumber: false,
   });
   const [darajaSharedInitial, setDarajaSharedInitial] = useState<DarajaSharedState>({
     enabled: true,
     paymentType: "paybill",
     destinationNumber: "",
+    accountNumber: "",
     accountReference: "",
   });
   const [darajaUserPaybill, setDarajaUserPaybill] = useState<DarajaUserPaybillView>({
@@ -271,13 +276,16 @@ export default function OwnerIntegrationsPage() {
             paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
             destinationNumber: nextShared.destinationNumber || "",
             maskedDestinationNumber: nextShared.maskedDestinationNumber || "",
+            accountNumber: nextShared.accountNumber || "",
             accountReference: nextShared.accountReference || "",
             hasDestinationNumber: !!nextShared.hasDestinationNumber,
+            hasAccountNumber: !!nextShared.hasAccountNumber,
           });
           setDarajaSharedInitial({
             enabled: nextShared.enabled !== false,
             paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
             destinationNumber: nextShared.destinationNumber || "",
+            accountNumber: nextShared.accountNumber || "",
             accountReference: nextShared.accountReference || "",
           });
 
@@ -358,6 +366,7 @@ export default function OwnerIntegrationsPage() {
     darajaShared.enabled !== darajaSharedInitial.enabled ||
     darajaShared.paymentType !== darajaSharedInitial.paymentType ||
     darajaShared.destinationNumber.trim() !== darajaSharedInitial.destinationNumber.trim() ||
+    darajaShared.accountNumber.trim() !== darajaSharedInitial.accountNumber.trim() ||
     darajaShared.accountReference.trim() !== darajaSharedInitial.accountReference.trim();
   const userPaybillProvisioned = darajaUserPaybill.hasCredentials;
   const userPaybillConfigured = darajaUserPaybill.enabled && userPaybillProvisioned;
@@ -384,9 +393,9 @@ export default function OwnerIntegrationsPage() {
     : "Create a Tuma profile to start collecting tenant payments.";
   const tumaCta = isConfigured ? "Manage Tuma" : isProvisioned ? "Finish setup" : "Create profile";
   const sharedCardDescription = sharedConfigured
-    ? "Route payments through the shared Daraja setup and your connected Till or Paybill."
-    : "Connect a Till or Paybill for the shared Daraja mode.";
-  const sharedCta = sharedConfigured ? "Manage Shared Daraja" : sharedProvisioned ? "Finish setup" : "Connect shared mode";
+    ? "Route payments through the Mpesa setup and your connected Till or Paybill."
+    : "Connect a Till or Paybill for the Mpesa mode.";
+  const sharedCta = sharedConfigured ? "Manage Mpesa" : sharedProvisioned ? "Finish setup" : "Connect Mpesa";
   const userPaybillCardDescription = userPaybillConfigured
     ? "Store your own Daraja credentials per tenant and use them for STK Push."
     : "Save your own Safaricom Paybill credentials with encrypted tenant storage.";
@@ -419,7 +428,7 @@ export default function OwnerIntegrationsPage() {
       },
       {
         id: "daraja-shared",
-        name: "Shared Daraja",
+        name: "Mpesa",
         description: sharedCardDescription,
         status: sharedConfigured ? "connected" : "available",
         badgeLabel: sharedBadgeLabel,
@@ -708,13 +717,16 @@ export default function OwnerIntegrationsPage() {
       paymentType: updated.paymentType === "till" ? "till" : "paybill",
       destinationNumber: updated.destinationNumber || "",
       maskedDestinationNumber: updated.maskedDestinationNumber || "",
+      accountNumber: updated.accountNumber || "",
       accountReference: updated.accountReference || "",
       hasDestinationNumber: !!updated.hasDestinationNumber,
+      hasAccountNumber: !!updated.hasAccountNumber,
     });
     setDarajaSharedInitial({
       enabled: updated.enabled !== false,
       paymentType: updated.paymentType === "till" ? "till" : "paybill",
       destinationNumber: updated.destinationNumber || "",
+      accountNumber: updated.accountNumber || "",
       accountReference: updated.accountReference || "",
     });
   };
@@ -753,12 +765,16 @@ export default function OwnerIntegrationsPage() {
     }
 
     const destinationNumber = darajaShared.destinationNumber.trim();
+    const accountNumber = darajaShared.accountNumber.trim();
     const accountReference = darajaShared.accountReference.trim();
     const nextErrors: Partial<Record<keyof DarajaSharedState, string>> = {};
 
     if (darajaShared.enabled) {
       if (!destinationNumber) {
         nextErrors.destinationNumber = "Till or Paybill number is required.";
+      }
+      if (darajaShared.paymentType === "paybill" && !accountNumber) {
+        nextErrors.accountNumber = "Account number is required for Paybill.";
       }
       if (!accountReference) {
         nextErrors.accountReference = "Account reference is required.";
@@ -785,21 +801,22 @@ export default function OwnerIntegrationsPage() {
           enabled: darajaShared.enabled,
           paymentType: darajaShared.paymentType,
           destinationNumber,
+          accountNumber,
           accountReference,
         }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        toast.error(data.message || "Failed to update shared Daraja.");
+      toast.error(data.message || "Failed to update Mpesa.");
         return;
       }
 
       applyDarajaSharedResponse(data.integrations?.daraja?.shared || {});
       setDarajaSharedErrors({});
-      toast.success(data.message || "Shared Daraja saved successfully.");
+      toast.success(data.message || "Mpesa settings saved successfully.");
     } catch {
-      toast.error("Failed to update shared Daraja.");
+      toast.error("Failed to update Mpesa.");
     } finally {
       setDarajaSavingMode(null);
     }
@@ -893,7 +910,7 @@ export default function OwnerIntegrationsPage() {
 
     const message =
       mode === "shared_daraja"
-        ? "This will remove your shared Daraja connection. Continue?"
+        ? "This will remove your Mpesa connection. Continue?"
         : "This will remove your saved Paybill credentials. Continue?";
     const confirmed = window.confirm(message);
     if (!confirmed) return;
@@ -1076,7 +1093,7 @@ export default function OwnerIntegrationsPage() {
                           : "Not configured"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Shared Daraja uses the SaaS-owned Daraja app credentials and stores the tenant&apos;s receiving
+                      Mpesa uses the SaaS-owned Daraja app credentials and stores the tenant&apos;s receiving
                       Till or Paybill securely.
                     </p>
                   </div>
@@ -1093,7 +1110,7 @@ export default function OwnerIntegrationsPage() {
                 )}
 
                 <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 text-xs text-sky-800">
-                  <p className="font-semibold">Shared mode</p>
+                  <p className="font-semibold">Mpesa mode</p>
                   <p className="mt-1">
                     Configure the tenant&apos;s destination number and account reference here. The app will keep the
                     record tenant-scoped for payment initiation and callback reconciliation.
@@ -1103,7 +1120,7 @@ export default function OwnerIntegrationsPage() {
                 <form onSubmit={handleSaveDarajaShared} className="space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="rounded-2xl border border-border bg-white/80 p-4">
-                      <label className="text-xs font-medium text-muted-foreground">Enable Shared Daraja</label>
+                      <label className="text-xs font-medium text-muted-foreground">Enable Mpesa</label>
                       <select
                         value={darajaShared.enabled ? "yes" : "no"}
                         onChange={(e) =>
@@ -1186,6 +1203,31 @@ export default function OwnerIntegrationsPage() {
                         </p>
                       )}
                     </div>
+                    {darajaShared.paymentType === "paybill" && (
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Account Number</label>
+                        <input
+                          type="text"
+                          value={darajaShared.accountNumber}
+                          onChange={(e) => {
+                            setDarajaShared((prev) => ({ ...prev, accountNumber: e.target.value }));
+                            if (darajaSharedErrors.accountNumber) {
+                              setDarajaSharedErrors((prev) => ({ ...prev, accountNumber: undefined }));
+                            }
+                          }}
+                          disabled={isReadOnly}
+                          className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                            darajaSharedErrors.accountNumber ? "border-rose-300" : "border-border"
+                          }`}
+                          placeholder="Account number"
+                        />
+                        {darajaSharedErrors.accountNumber ? (
+                          <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountNumber}</p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground mt-1">Required when Paybill is selected.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">

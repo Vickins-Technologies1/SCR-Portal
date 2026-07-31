@@ -52,6 +52,7 @@ const SharedPayloadSchema = z.object({
   enabled: z.boolean().optional().default(true),
   paymentType: z.enum(["till", "paybill"]),
   destinationNumber: z.string().trim().min(1),
+  accountNumber: z.string().trim().optional().default(""),
   accountReference: z.string().trim().min(1).max(100),
 });
 
@@ -129,6 +130,7 @@ export async function PUT(request: NextRequest) {
         enabled: parsed.data.enabled,
         paymentType: parsed.data.paymentType,
         destinationNumber: parsed.data.destinationNumber,
+        accountNumber: parsed.data.accountNumber,
         accountReference: parsed.data.accountReference,
       });
 
@@ -211,4 +213,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Failed to delete Daraja integrations" }, { status: 500 });
   }
 }
-

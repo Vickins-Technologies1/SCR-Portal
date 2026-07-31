@@ -15,6 +15,7 @@ type OwnerDarajaDoc = {
       enabled?: boolean;
       paymentType?: OwnerDarajaPaymentType;
       destinationNumber?: string;
+      accountNumber?: string;
       accountReference?: string;
       createdAt?: string;
       updatedAt?: string;
@@ -38,8 +39,10 @@ export type OwnerDarajaSharedView = {
   paymentType: OwnerDarajaPaymentType;
   destinationNumber: string;
   maskedDestinationNumber: string;
+  accountNumber: string;
   accountReference: string;
   hasDestinationNumber: boolean;
+  hasAccountNumber: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -69,6 +72,7 @@ export type OwnerDarajaResolvedCredentials = {
   consumerKey: string;
   consumerSecret: string;
   destinationNumber?: string;
+  accountNumber?: string;
   accountReference?: string;
   paymentType?: OwnerDarajaPaymentType;
 };
@@ -103,6 +107,7 @@ function getDocView(doc?: OwnerDarajaDoc | null): OwnerDarajaIntegrationView {
   const shared = doc?.daraja?.shared || {};
   const userPaybill = doc?.daraja?.userPaybill || {};
   const destinationNumber = decryptMaybe(shared.destinationNumber);
+  const accountNumber = String(shared.accountNumber || "").trim();
   const shortcode = decryptMaybe(userPaybill.shortcode);
   const consumerKey = decryptMaybe(userPaybill.consumerKey);
   const consumerSecret = decryptMaybe(userPaybill.consumerSecret);
@@ -115,8 +120,10 @@ function getDocView(doc?: OwnerDarajaDoc | null): OwnerDarajaIntegrationView {
       paymentType: normalizePaymentType(shared.paymentType),
       destinationNumber,
       maskedDestinationNumber: maskSecret(destinationNumber),
+      accountNumber,
       accountReference: String(shared.accountReference || "").trim(),
       hasDestinationNumber: !!destinationNumber,
+      hasAccountNumber: !!accountNumber,
       createdAt: shared.createdAt,
       updatedAt: shared.updatedAt,
     },
@@ -154,6 +161,7 @@ export async function saveOwnerDarajaSharedIntegration(
     enabled: boolean;
     paymentType: OwnerDarajaPaymentType;
     destinationNumber: string;
+    accountNumber: string;
     accountReference: string;
   }
 ): Promise<OwnerDarajaIntegrationView> {
@@ -169,6 +177,7 @@ export async function saveOwnerDarajaSharedIntegration(
 
   const existingShared = existing?.daraja?.shared || {};
   const destinationNumber = params.destinationNumber.trim() || decryptMaybe(existingShared.destinationNumber);
+  const accountNumber = params.accountNumber.trim() || String(existingShared.accountNumber || "").trim();
   const accountReference = params.accountReference.trim() || String(existingShared.accountReference || "").trim();
 
   const updateDoc = {
@@ -179,6 +188,7 @@ export async function saveOwnerDarajaSharedIntegration(
         enabled: params.enabled,
         paymentType: params.paymentType,
         destinationNumber: destinationNumber ? encryptIfPresent(destinationNumber) : "",
+        accountNumber,
         accountReference,
         createdAt: existingShared.createdAt || now,
         updatedAt: now,
@@ -291,6 +301,7 @@ export async function resolveOwnerDarajaStkConfig(
 
     const shared = doc?.daraja?.shared || {};
     const destinationNumber = decryptMaybe(shared.destinationNumber);
+    const accountNumber = String(shared.accountNumber || "").trim();
     if (!destinationNumber) {
       throw new Error("Shared Daraja destination number is not configured");
     }
@@ -306,7 +317,10 @@ export async function resolveOwnerDarajaStkConfig(
       consumerKey: process.env.MPESA_CONSUMER_KEY || "",
       consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
       destinationNumber,
-      accountReference: String(shared.accountReference || destinationNumber || "").trim() || destinationNumber,
+      accountReference:
+        (shared.paymentType === "paybill"
+          ? accountNumber || String(shared.accountReference || "").trim()
+          : String(shared.accountReference || "").trim()) || destinationNumber,
       paymentType: normalizePaymentType(shared.paymentType),
     };
   }
