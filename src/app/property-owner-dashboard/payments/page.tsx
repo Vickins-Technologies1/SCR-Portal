@@ -15,6 +15,7 @@ interface Payment {
   amount: number;
   propertyId: string;
   paymentDate: string;
+  date?: string;
   transactionId: string;
   status: "completed" | "pending" | "pending_stk" | "failed";
   tenantName: string;
@@ -420,6 +421,26 @@ export default function PaymentsPage() {
     return { identifier, isManual };
   };
 
+  const formatPaymentDate = (payment: Payment) => {
+    const rawDate = payment.paymentDate || payment.date || payment.createdAt;
+    if (!rawDate) return "—";
+
+    const parsedDate = new Date(rawDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return rawDate;
+    }
+
+    return new Intl.DateTimeFormat("en-KE", {
+      timeZone: "Africa/Nairobi",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(parsedDate);
+  };
+
   // Get unique unit types for filter (base types without index)
   const uniqueUnitTypes = [
     ...new Set(
@@ -645,14 +666,7 @@ export default function PaymentsPage() {
                         <td className="px-4 py-3">{payment.type}</td>
                         <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
                         <td className="px-4 py-3">
-                          {new Date(payment.paymentDate || payment.createdAt).toLocaleString("en-KE", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit"
-                          })}
+                          {formatPaymentDate(payment)}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${getStatusStyles(payment.status)}`}>
