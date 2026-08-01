@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AlertCircle } from "lucide-react";
 import {
