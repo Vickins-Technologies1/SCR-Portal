@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   AlertCircle,
   LayoutDashboard,
@@ -21,7 +22,7 @@ import {
 import Cookies from "js-cookie";
 import { useSidebar } from "./SidebarContext";
 import type { AirbnbConversation } from "@/types/airbnb";
-import ThemeToggle from "@/components/theme/ThemeToggle";
+import ShellFooterActions from "@/components/portal/ShellFooterActions";
 
 const useAuth = () => {
   if (typeof window === "undefined") {
@@ -176,6 +177,27 @@ export default function Sidebar() {
 
   const roleLabel = mounted ? (isOwner ? "Property Owner" : teamRole) : "Account";
 
+  const handleSignOut = async () => {
+    try {
+      await fetch("/api/signout", { method: "POST", credentials: "include" });
+    } catch {
+      // Ignore; client-side cleanup still logs the user out locally.
+    } finally {
+      Cookies.remove("userId");
+      Cookies.remove("role");
+      Cookies.remove("permissions");
+      Cookies.remove("ownerId");
+      Cookies.remove("managementType");
+      Cookies.remove("tier");
+      Cookies.remove("csrf-token");
+      Cookies.remove("impersonatingTenantId", { path: "/" });
+      Cookies.remove("isImpersonating", { path: "/" });
+      localStorage.removeItem("userId");
+      localStorage.removeItem("role");
+      router.replace("/");
+    }
+  };
+
   return (
     <>
       <aside
@@ -268,7 +290,7 @@ export default function Sidebar() {
           <div className="mt-auto border-t border-border px-6 py-4 footer-fade">
             <div className="text-center space-y-1">
               <div className="flex justify-center pb-3">
-                <ThemeToggle className="max-w-[260px]" />
+                <ShellFooterActions onSignOut={handleSignOut} />
               </div>
               {isFreeTier && (
                 <div className="flex justify-center pb-2">

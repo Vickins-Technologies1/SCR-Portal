@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import Cookies from "js-cookie";
 import {
@@ -21,6 +22,7 @@ import {
   Shield,
   Star,
   Store,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
@@ -41,9 +43,10 @@ type AdminSidebarProps = {
 };
 
 export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
+  const router = useRouter();
   const pathname = usePathname();
 
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed] = useState(false);
   const [name, setName] = useState("Admin");
   const [mounted, setMounted] = useState(false);
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
@@ -231,6 +234,33 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const filterLinks = (links: NavLink[]) =>
     links.filter((link) => !link.requiredPermission || hasPermission(link.requiredPermission));
 
+  const handleSignOut = async () => {
+    try {
+      await fetch("/api/signout", { method: "POST", credentials: "include" });
+    } catch {
+      // Ignore network failures; we still clear client-visible state.
+    } finally {
+      Cookies.remove("userId", { path: "/" });
+      Cookies.remove("role", { path: "/" });
+      Cookies.remove("permissions", { path: "/" });
+      Cookies.remove("ownerId", { path: "/" });
+      Cookies.remove("managementType", { path: "/" });
+      Cookies.remove("tier", { path: "/" });
+      Cookies.remove("adminName", { path: "/" });
+      Cookies.remove("csrf-token", { path: "/" });
+      Cookies.remove("impersonatingTenantId", { path: "/" });
+      Cookies.remove("isImpersonating", { path: "/" });
+      Cookies.remove("adminOriginalUserId", { path: "/" });
+      Cookies.remove("adminOriginalRole", { path: "/" });
+      Cookies.remove("adminImpersonating", { path: "/" });
+      Cookies.remove("adminImpersonatingOwnerId", { path: "/" });
+      Cookies.remove("adminImpersonatingOwnerName", { path: "/" });
+      localStorage.removeItem("userId");
+      localStorage.removeItem("role");
+      router.replace("/admin/login");
+    }
+  };
+
   return (
     <>
       {/* Sidebar */}
@@ -359,8 +389,18 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
           {/* Footer */}
           <div className="mt-auto border-t border-border footer-fade px-6 py-4 text-center text-[10px] text-muted-foreground">
-            <div className="flex justify-center pb-3">
-              <ThemeToggle className="max-w-[260px]" />
+            <div className="mb-3 flex justify-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/75 p-2 shadow-sm backdrop-blur">
+                <ThemeToggle variant="icon" />
+                <button
+                  onClick={handleSignOut}
+                  className="group inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95"
+                  title="Sign out"
+                  aria-label="Sign out"
+                >
+                  <LogOut size={16} className="transition-transform group-hover:translate-x-0.5" />
+                </button>
+              </div>
             </div>
             <p>© {new Date().getFullYear()} Sorana Property Managers Limited</p>
             {!isCollapsed && (

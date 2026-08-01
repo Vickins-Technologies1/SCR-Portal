@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -23,7 +24,7 @@ import TourGuide, { TourStep } from "@/components/tour/TourGuide";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import NavbarDateTime from "@/components/NavbarDateTime";
 import BottomTabs from "@/components/mobile/BottomTabs";
-import ThemeToggle from "@/components/theme/ThemeToggle";
+import ShellFooterActions from "@/components/portal/ShellFooterActions";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -201,13 +202,6 @@ export default function TenantDashboardLayout({
     }
   };
 
-  const initials = name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-
   const tenantSteps: TourStep[] = [
     {
       title: "Navigation Sidebar",
@@ -333,20 +327,14 @@ export default function TenantDashboardLayout({
         }`}
       >
         <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
-          {/* Left side – logo + mobile toggle */}
+          {/* Left side – logo */}
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              aria-label="Toggle menu"
-              title="Menu"
-            >
-              {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <img
+              <Image
                 src="/logo.png"
                 alt="Sorana Property Managers Logo"
+                width={180}
+                height={64}
                 className="h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm sm:h-9 sm:max-w-[140px]"
               />
               <NavbarDateTime />
@@ -354,7 +342,7 @@ export default function TenantDashboardLayout({
           </div>
 
           {/* Right side – actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => window.dispatchEvent(new Event("start-tenant-tour"))}
               className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
@@ -364,11 +352,13 @@ export default function TenantDashboardLayout({
               <span className="hidden sm:inline">Tour</span>
             </button>
             <button
-              onClick={handleLogout}
-              className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
+              onClick={() => setIsSidebarOpen((v) => !v)}
+              aria-label={isSidebarOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isSidebarOpen}
+              title="Menu"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-background/85 text-muted-foreground shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary hover:shadow-[0_12px_30px_rgba(15,23,42,0.12)] focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95 lg:hidden"
             >
-              <LogOut size={16} className="transition-transform group-hover:rotate-6" />
-              <span className="hidden sm:inline">Sign out</span>
+              {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
@@ -383,9 +373,11 @@ export default function TenantDashboardLayout({
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent">
             <div className="flex justify-center mb-5">
-              <img
+              <Image
                 src="/logo.png"
                 alt="Sorana Property Managers Logo"
+                width={180}
+                height={64}
                 className="h-12 w-auto drop-shadow-md"
               />
             </div>
@@ -424,7 +416,7 @@ export default function TenantDashboardLayout({
 
           <div className="mt-auto border-t border-border px-6 py-4 footer-fade">
             <div className="flex justify-center pb-3">
-              <ThemeToggle className="max-w-[260px]" />
+              <ShellFooterActions onSignOut={handleLogout} />
             </div>
             <p className="text-center text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
               © {new Date().getFullYear()} Sorana Property Managers Limited
