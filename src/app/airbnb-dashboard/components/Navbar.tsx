@@ -91,7 +91,7 @@ export default function Navbar() {
             aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
             aria-expanded={isOpen}
             title="Menu"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-background/85 text-muted-foreground shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary hover:shadow-[0_12px_30px_rgba(15,23,42,0.12)] focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95 lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-border/70 bg-background/85 text-muted-foreground shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary hover:shadow-[0_12px_30px_rgba(15,23,42,0.12)] focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95 lg:hidden"
           >
             {isOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
