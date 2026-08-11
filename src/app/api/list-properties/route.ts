@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { connectToDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { Db, ObjectId } from 'mongodb';
 import logger from '@/lib/logger';
 import { buildInvalidCsrfResponse } from '@/lib/csrf';
 import { getOccupancyByPropertyAndUnitType } from '@/lib/tenant-occupancy';
@@ -62,6 +62,54 @@ async function validateCsrf(req: NextRequest): Promise<boolean> {
   return token === cookieToken;
 }
 
+type ListingAccessContext = {
+  role: "propertyOwner" | "teamMember";
+  userId: string;
+  effectiveOwnerId: string;
+};
+
+async function resolveListingAccess(
+  db: Db,
+  requestedOwnerId?: string | null
+): Promise<ListingAccessContext | null> {
+  const cookieStore = await cookies();
+  const role = cookieStore.get('role')?.value;
+  const userId = cookieStore.get('userId')?.value;
+  const ownerIdCookie = cookieStore.get('ownerId')?.value;
+
+  if (!userId || !ObjectId.isValid(userId) || !["propertyOwner", "teamMember"].includes(role || "")) {
+    return null;
+  }
+
+  if (role === "propertyOwner") {
+    if (requestedOwnerId && requestedOwnerId !== userId) {
+      return null;
+    }
+    return { role: "propertyOwner", userId, effectiveOwnerId: userId };
+  }
+
+  const effectiveOwnerId = ownerIdCookie || "";
+  if (!effectiveOwnerId || !ObjectId.isValid(effectiveOwnerId)) {
+    return null;
+  }
+
+  if (requestedOwnerId && requestedOwnerId !== effectiveOwnerId) {
+    return null;
+  }
+
+  const teamMember = await db.collection("teamMembers").findOne({
+    _id: new ObjectId(userId),
+    ownerId: new ObjectId(effectiveOwnerId),
+    active: true,
+  });
+
+  if (!teamMember) {
+    return null;
+  }
+
+  return { role: "teamMember", userId, effectiveOwnerId };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -75,10 +123,17 @@ export async function GET(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
+    const access = await resolveListingAccess(db, userId);
+    if (!access) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 403 }
+      );
+    }
 
     const listings = await db
       .collection<PropertyListing>('propertyListings')
-      .find({ ownerId: userId })
+      .find({ ownerId: access.effectiveOwnerId })
       .sort({ createdAt: -1 })
       .toArray();
 
@@ -145,11 +200,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get('userId')?.value;
-    const role = cookieStore.get('role')?.value;
+    const { db } = await connectToDatabase();
+    const access = await resolveListingAccess(db);
 
-    if (role !== 'propertyOwner' || !ObjectId.isValid(userId!)) {
+    if (!access) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -198,8 +252,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { db } = await connectToDatabase();
-
     const contactPhoneValue =
       typeof contactPhone === "string" && contactPhone.trim()
         ? contactPhone.trim()
@@ -216,7 +268,7 @@ export async function POST(request: NextRequest) {
     }
 
     const ownerProfile = await db.collection("propertyOwners").findOne(
-      { _id: new ObjectId(userId as string) },
+      { _id: new ObjectId(access.effectiveOwnerId) },
       { projection: { phone: 1 } }
     );
     const ownerPhoneValue =
@@ -226,7 +278,7 @@ export async function POST(request: NextRequest) {
 
     const original = await db
       .collection('properties')
-      .findOne({ _id: new ObjectId(originalPropertyId), ownerId: userId });
+      .findOne({ _id: new ObjectId(originalPropertyId), ownerId: access.effectiveOwnerId });
 
     if (!original) {
       return NextResponse.json(
@@ -248,7 +300,7 @@ export async function POST(request: NextRequest) {
 
     const listing: Omit<PropertyListing, '_id'> = {
       originalPropertyId: new ObjectId(originalPropertyId),
-      ownerId: userId as string,
+      ownerId: access.effectiveOwnerId,
       name: original.name,
       address: original.address,
       description: description?.trim(),
@@ -301,11 +353,10 @@ export async function POST(request: NextRequest) {
 // PUT, DELETE — same pattern (types added)
 export async function PUT(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get('userId')?.value;
-    const role = cookieStore.get('role')?.value;
+    const { db } = await connectToDatabase();
+    const access = await resolveListingAccess(db);
 
-    if (role !== 'propertyOwner' || !ObjectId.isValid(userId!)) {
+    if (!access) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -317,7 +368,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { _id, description, facilities = [], images = [], isAdvertised, contactPhone } = body;
+    const { _id, description, facilities = [], isAdvertised, contactPhone } = body;
+    const hasImagesField = Object.prototype.hasOwnProperty.call(body, "images");
+    const images = hasImagesField
+      ? Array.isArray(body.images)
+        ? body.images
+        : null
+      : undefined;
 
     if (!_id || !ObjectId.isValid(_id)) {
       return NextResponse.json(
@@ -326,18 +383,23 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (images.length === 0 || images.length > 10) {
+    if (images === null) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid images payload' },
+        { status: 400 }
+      );
+    }
+
+    if (images && images.length > 10) {
       return NextResponse.json(
         { success: false, message: '1–10 images required' },
         { status: 400 }
       );
     }
 
-    const { db } = await connectToDatabase();
-
     const listing = await db
       .collection<PropertyListing>('propertyListings')
-      .findOne({ _id: new ObjectId(_id), ownerId: userId });
+      .findOne({ _id: new ObjectId(_id), ownerId: access.effectiveOwnerId });
 
     if (!listing) {
       return NextResponse.json(
@@ -366,7 +428,7 @@ export async function PUT(request: NextRequest) {
     const update: Partial<PropertyListing> = {
       description: description?.trim(),
       facilities: facilities.filter((f: string) => FACILITIES.includes(f)),
-      images,
+      images: images ?? listing.images,
       isAdvertised,
       adExpiration: isAdvertised
         ? listing.isAdvertised
@@ -388,7 +450,7 @@ export async function PUT(request: NextRequest) {
     await db
       .collection('propertyListings')
       .updateOne(
-        { _id: new ObjectId(_id) },
+        { _id: new ObjectId(_id), ownerId: access.effectiveOwnerId },
         updateDoc
       );
 
@@ -408,11 +470,10 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get('userId')?.value;
-    const role = cookieStore.get('role')?.value;
+    const { db } = await connectToDatabase();
+    const access = await resolveListingAccess(db);
 
-    if (role !== 'propertyOwner' || !ObjectId.isValid(userId!)) {
+    if (!access) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -433,13 +494,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const { db } = await connectToDatabase();
-
     const result = await db
       .collection('propertyListings')
       .deleteOne({
         _id: new ObjectId(id),
-        ownerId: userId,
+        ownerId: access.effectiveOwnerId,
       });
 
     if (result.deletedCount === 0) {

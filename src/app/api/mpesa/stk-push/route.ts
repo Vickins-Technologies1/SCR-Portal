@@ -127,10 +127,11 @@ export async function POST(request: NextRequest) {
   try {
     const { db }: { db: Db } = await connectToDatabase();
     const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
-
-    if (!isValidKenyanMsisdn(normalizedPhone)) {
-      return NextResponse.json({ success: false, message: "Invalid phone number format" }, { status: 400 });
-    }
+    let payerPhone = normalizedPhone;
+    let paymentAmount = parsed.data.amount;
+    let invoiceReference = parsed.data.invoiceId.startsWith("INV-")
+      ? parsed.data.invoiceId
+      : `INV-${parsed.data.invoiceId}`;
 
     let propertyId: string | null = null;
     let tenantId: string | null = null;
@@ -180,13 +181,88 @@ export async function POST(request: NextRequest) {
       if (invoice.userId?.toString?.() !== userId) {
         return NextResponse.json({ success: false, message: "Unauthorized invoice access" }, { status: 403 });
       }
+      const ownerProfile = await db.collection("propertyOwners").findOne(
+        { _id: new ObjectId(userId), role: "propertyOwner" },
+        { projection: { phone: 1 } }
+      );
+      const ownerPhone = typeof ownerProfile?.phone === "string" ? ownerProfile.phone.trim() : "";
+      if (!ownerPhone) {
+        return NextResponse.json(
+          { success: false, message: "Missing phone number on your account. Please update your profile before paying this invoice." },
+          { status: 400 }
+        );
+      }
+      const normalizedOwnerPhone = normalizePhoneNumber(ownerPhone);
+      if (!isValidKenyanMsisdn(normalizedOwnerPhone)) {
+        return NextResponse.json(
+          { success: false, message: "Invalid phone number format on your account. Please update your profile before paying this invoice." },
+          { status: 400 }
+        );
+      }
+      const trustedInvoiceAmount = Number(invoice.amount || 0);
+      if (!Number.isFinite(trustedInvoiceAmount) || trustedInvoiceAmount <= 0) {
+        return NextResponse.json(
+          { success: false, message: "Invoice amount is invalid. Please regenerate the invoice." },
+          { status: 400 }
+        );
+      }
+
+      paymentAmount = trustedInvoiceAmount;
+      payerPhone = normalizedOwnerPhone;
+      invoiceReference =
+        typeof invoice.reference === "string" && invoice.reference.trim()
+          ? invoice.reference.trim()
+          : `INV-${invoice._id.toString()}`;
       propertyId = invoice.propertyId || null;
       derivedLandlordId = userId;
       isPlatformInvoicePayment = true;
     }
 
+    if (!isPlatformInvoicePayment && !isValidKenyanMsisdn(payerPhone)) {
+      return NextResponse.json({ success: false, message: "Invalid phone number format" }, { status: 400 });
+    }
+
     if (!derivedLandlordId || derivedLandlordId !== parsed.data.landlordId) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
+    }
+
+    if (isPlatformInvoicePayment) {
+      const existingInvoicePayment = await db.collection("payments").findOne(
+        {
+          invoiceId: parsed.data.invoiceId,
+          landlordId: parsed.data.landlordId,
+          status: { $in: ["pending", "pending_stk", "completed"] },
+        },
+        { sort: { createdAt: -1, _id: -1 } }
+      );
+
+      if (existingInvoicePayment) {
+        const existingStatus = String(existingInvoicePayment.status || "").toLowerCase();
+        if (existingStatus === "completed") {
+          return NextResponse.json(
+            {
+              success: false,
+              message: "This invoice has already been paid.",
+              status: "completed",
+            },
+            { status: 409 }
+          );
+        }
+
+        const existingCheckoutRequestId =
+          existingInvoicePayment.checkoutRequestId || existingInvoicePayment.transactionId || "";
+        return NextResponse.json(
+          {
+            success: true,
+            message: "A payment request is already pending for this invoice.",
+            checkoutRequestId: existingCheckoutRequestId,
+            merchantRequestId: existingInvoicePayment.merchantRequestId || "",
+            customerMessage: "A payment request is already pending for this invoice.",
+            shortcode: safeGetKopokopoTillNumber(),
+          },
+          { status: 200 }
+        );
+      }
     }
 
     // Free tier: tenants cannot initiate payments (view-only).
@@ -267,9 +343,6 @@ export async function POST(request: NextRequest) {
     const connectedShortcode =
       paymentType === "till" ? tillNumber : paymentType === "paybill" ? paybillNumber : "";
     const preferredShortcode = connectedShortcode || storedShortcode;
-    const invoiceReference = parsed.data.invoiceId.startsWith("INV-")
-      ? parsed.data.invoiceId
-      : `INV-${parsed.data.invoiceId}`;
     const stkAccountReference =
       paymentType === "paybill" && paybillAccountNumber ? paybillAccountNumber : invoiceReference;
     const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
@@ -291,8 +364,8 @@ export async function POST(request: NextRequest) {
     if (tumaConfigured && !isPlatformInvoicePayment) {
       const description = `${parsed.data.type || "Rent"} payment ${invoiceReference}`;
       const incoming = await createTumaStkPush({
-        amount: parsed.data.amount,
-        phone: normalizedPhone,
+        amount: paymentAmount,
+        phone: payerPhone,
         description,
         callbackUrl: `${tumaCallbackBase}/api/tuma/webhook`,
         credentials: {
@@ -306,14 +379,14 @@ export async function POST(request: NextRequest) {
       const merchantRequestId = incoming.merchantRequestId || "";
       await db.collection("payments").insertOne({
         tenantId,
-        amount: parsed.data.amount,
+        amount: paymentAmount,
         propertyId,
         paymentDate: nowIso,
         transactionId: checkoutRequestId || merchantRequestId || invoiceReference,
         status: "pending_stk",
         createdAt: nowIso,
         type: parsed.data.type || "Rent",
-        phoneNumber: normalizedPhone,
+        phoneNumber: payerPhone,
         reference: invoiceReference,
         mpesaCode: null,
         checkoutRequestId,
@@ -392,8 +465,8 @@ export async function POST(request: NextRequest) {
     const stkResponse = await initiateStkPush({
       shortcode,
       passkey,
-      amount: parsed.data.amount,
-      phone: normalizedPhone,
+      amount: paymentAmount,
+      phone: payerPhone,
       accountReference: stkAccountReference,
       transactionDesc: `${parsed.data.type || "Rent"} Payment`,
       callbackUrl: `${callbackBase}/api/mpesa/stk-callback`,
@@ -409,23 +482,37 @@ export async function POST(request: NextRequest) {
 
     const nowIso = new Date().toISOString();
     // Store pending payment for callback reconciliation
-    await db.collection("payments").insertOne({
-      tenantId,
-      amount: parsed.data.amount,
-      propertyId,
-      paymentDate: nowIso,
-      transactionId: stkResponse.CheckoutRequestID,
-      status: "pending",
-      createdAt: nowIso,
-      type: parsed.data.type || "Rent",
-      phoneNumber: normalizedPhone,
-      reference: invoiceReference,
-      mpesaCode: null,
-      checkoutRequestId: stkResponse.CheckoutRequestID,
-      merchantRequestId: stkResponse.MerchantRequestID,
-      invoiceId: parsed.data.invoiceId,
-      landlordId: parsed.data.landlordId,
-    });
+    await db.collection("payments").findOneAndUpdate(
+      {
+        invoiceId: parsed.data.invoiceId,
+        landlordId: parsed.data.landlordId,
+        status: { $in: ["pending", "pending_stk"] },
+      },
+      {
+        $set: {
+          tenantId,
+          amount: paymentAmount,
+          propertyId,
+          paymentDate: nowIso,
+          transactionId: stkResponse.CheckoutRequestID,
+          status: "pending",
+          createdAt: nowIso,
+          type: parsed.data.type || "Rent",
+          phoneNumber: payerPhone,
+          reference: invoiceReference,
+          mpesaCode: null,
+          checkoutRequestId: stkResponse.CheckoutRequestID,
+          merchantRequestId: stkResponse.MerchantRequestID,
+          invoiceId: parsed.data.invoiceId,
+          landlordId: parsed.data.landlordId,
+          provider: "kopokopo",
+        },
+        $setOnInsert: {
+          createdAt: nowIso,
+        },
+      },
+      { upsert: true, returnDocument: "after" }
+    );
 
     return NextResponse.json(
       {

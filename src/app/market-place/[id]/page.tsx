@@ -7,6 +7,7 @@ import { PublicListing, AirbnbPublicListing, SalePublicListing } from "@/types/p
 import { ensureAvailability } from "@/lib/availability";
 import ImageGallery from "./ImageGallery";
 import BookingRequest from "./BookingRequest";
+import ViewingRequestWhatsApp from "./ViewingRequestWhatsApp";
 import ReviewsSection from "./ReviewsSection";
 
 export const dynamic = "force-dynamic";
@@ -142,6 +143,7 @@ export default async function PropertyDetailPage({
     : "Be the first to review";
 
   const isSale = property.listingType === "sale";
+  const isRental = property.listingType === "rentals";
   const availability = isAirbnb || isSale ? null : ensureAvailability(property);
   const images = property.images?.length ? property.images : ["/logo.png"];
 
@@ -449,7 +451,7 @@ export default async function PropertyDetailPage({
                 contactPhone={listingContactPhone}
                 nightlyRate={nightlyRate}
               />
-            ) : (
+            ) : isSale ? (
               <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-semibold text-slate-900">
@@ -482,6 +484,41 @@ export default async function PropertyDetailPage({
                 </a>
 
                 <p className="mt-4 text-[11px] text-slate-500">Response within 2 business hours.</p>
+              </div>
+            ) : isRental ? (
+              <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-slate-900">Request viewing</h3>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                    <Star size={12} /> Direct contact
+                  </span>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/70 bg-white/70 p-4 backdrop-blur">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">
+                    Monthly rent
+                  </p>
+                  <p className="mt-2 text-xl font-semibold text-slate-900">
+                    {minPrice ? `Ksh ${minPrice.toLocaleString()}` : "On request"}
+                  </p>
+                </div>
+
+                <ViewingRequestWhatsApp
+                  propertyName={property.name}
+                  contactPhone={listingContactPhone}
+                />
+              </div>
+            ) : (
+              <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-slate-900">Request details</h3>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                    <Star size={12} /> Direct contact
+                  </span>
+                </div>
+                <p className="mt-4 text-sm text-slate-600">
+                  This listing does not currently support a direct viewing request action.
+                </p>
               </div>
             )}
 

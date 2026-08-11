@@ -288,6 +288,7 @@ function ReportsAndInvoicesPageInner() {
       const data = await res.json();
       if (data.success) {
         setWalletBalance(data.user.walletBalance || 0);
+        setInvoicePaymentPhone(data.user.phone || "");
       } else {
         setError(data.message || "Failed to fetch user data.");
       }

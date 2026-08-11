@@ -269,7 +269,6 @@ export default function ListingFormModal({
       let method: "POST" | "PUT" = "POST";
 
       if (mode === "edit" && editingPropertyId) {
-        url += `/${editingPropertyId}`;
         method = "PUT";
         payload._id = editingPropertyId;
       } else {

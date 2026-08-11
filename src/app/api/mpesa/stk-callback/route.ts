@@ -126,11 +126,11 @@ export async function POST(request: NextRequest) {
 
     const payment = paymentResult?.value;
 
-    // If we have an invoice, mark it paid/failed for reporting
-    if (payment.invoiceId && ObjectId.isValid(payment.invoiceId)) {
+    // If we have an invoice, only mark it paid after the callback confirms success.
+    if (status === "completed" && payment.invoiceId && ObjectId.isValid(payment.invoiceId)) {
       await db.collection("invoices").updateOne(
         { _id: new ObjectId(payment.invoiceId) },
-        { $set: { status: status === "completed" ? "completed" : "failed", updatedAt: new Date().toISOString() } }
+        { $set: { status: "completed", updatedAt: new Date().toISOString() } }
       );
     }
 
