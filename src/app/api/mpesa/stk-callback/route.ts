@@ -86,15 +86,32 @@ export async function POST(request: NextRequest) {
   try {
     const { db }: { db: Db } = await connectToDatabase();
 
+    const paymentQuery = {
+      $or: [
+        { checkoutRequestId: callback.CheckoutRequestID },
+        { transactionId: callback.CheckoutRequestID },
+        { merchantRequestId: callback.MerchantRequestID },
+      ],
+    };
+
+    const existingPayment = await db.collection("payments").findOne(paymentQuery);
+    if (!existingPayment) {
+      logger.warn("STK callback received but payment not found", {
+        checkoutRequestId: callback.CheckoutRequestID,
+      });
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
+    const wasAlreadyCompleted = String(existingPayment.status || "").toLowerCase() === "completed";
+    const sameReceipt = !metadata.receipt || metadata.receipt === existingPayment.mpesaCode;
+
+    if (wasAlreadyCompleted && sameReceipt && status === "completed") {
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
     // Match payment by CheckoutRequestID/MerchantRequestID
     const paymentResult = await db.collection("payments").findOneAndUpdate(
-      {
-        $or: [
-          { checkoutRequestId: callback.CheckoutRequestID },
-          { transactionId: callback.CheckoutRequestID },
-          { merchantRequestId: callback.MerchantRequestID },
-        ],
-      },
+      paymentQuery,
       {
         $set: {
           status,
@@ -108,12 +125,6 @@ export async function POST(request: NextRequest) {
     );
 
     const payment = paymentResult?.value;
-    if (!payment) {
-      logger.warn("STK callback received but payment not found", {
-        checkoutRequestId: callback.CheckoutRequestID,
-      });
-      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
-    }
 
     // If we have an invoice, mark it paid/failed for reporting
     if (payment.invoiceId && ObjectId.isValid(payment.invoiceId)) {

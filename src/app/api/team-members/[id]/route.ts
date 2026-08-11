@@ -9,6 +9,7 @@ import sanitizeHtml from "sanitize-html";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { sendWelcomeSms } from "@/lib/sms";
 import { randomBytes } from "crypto";
+import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
 
 // ────────────────────────────────────────────────
 // Type Definitions
@@ -181,20 +182,15 @@ export async function PATCH(
 
     // Email uniqueness check (if email is being updated)
     if (email && typeof email === "string") {
-      const sanitizedEmail = sanitizeHtml(email.trim().toLowerCase(), { allowedTags: [] });
+      const sanitizedEmail = normalizeEmail(email);
       if (!validator.isEmail(sanitizedEmail)) {
         return NextResponse.json({ success: false, message: "Invalid email format" }, { status: 400 });
       }
 
-      const existing = await collection.findOne({
-        ownerId: new ObjectId(ownerId),
-        email: sanitizedEmail,
-        _id: { $ne: new ObjectId(memberId) },
-      });
-
+      const existing = await findAnyExistingEmail(db, sanitizedEmail, { excludeId: memberId });
       if (existing) {
         return NextResponse.json(
-          { success: false, message: "Email already in use by another team member" },
+          { success: false, message: "That email is already in use" },
           { status: 409 }
         );
       }
@@ -207,7 +203,7 @@ export async function PATCH(
     };
 
     if (name !== undefined) updateData.$set.name = sanitizeHtml(name.trim(), { allowedTags: [] });
-    if (email !== undefined) updateData.$set.email = email.trim().toLowerCase();
+    if (email !== undefined) updateData.$set.email = normalizeEmail(email);
     if (phone !== undefined) updateData.$set.phone = phone ? sanitizeHtml(phone.trim(), { allowedTags: [] }) : null;
     if (teamRole !== undefined) updateData.$set.teamRole = teamRole;
     if (permissions !== undefined && Array.isArray(permissions)) updateData.$set.permissions = permissions;
@@ -277,21 +273,31 @@ export async function PATCH(
       updateData.$set.password = hashedPassword;
     }
 
-    const result = await collection.findOneAndUpdate(
-      {
-        _id: new ObjectId(memberId),
-        ownerId: new ObjectId(ownerId),
-      },
-      updateData,
-      { returnDocument: "after" }
-    );
+    let result;
+    try {
+      result = await collection.findOneAndUpdate(
+        {
+          _id: new ObjectId(memberId),
+          ownerId: new ObjectId(ownerId),
+        },
+        updateData,
+        { returnDocument: "after" }
+      );
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json({ success: false, message: "That email is already in use" }, { status: 409 });
+      }
+      throw error;
+    }
 
-    if (!result) {
+    const updatedDoc = (result as any)?.value ?? result;
+
+    if (!updatedDoc) {
       logger.warn("Team member not found or unauthorized for PATCH", { memberId, ownerId, ip });
       return NextResponse.json({ success: false, message: "Member not found or unauthorized" }, { status: 404 });
     }
 
-    const updatedMember = toSafeTeamMember(result);
+    const updatedMember = toSafeTeamMember(updatedDoc);
 
     // Audit log
     await db.collection("auditLogs").insertOne({

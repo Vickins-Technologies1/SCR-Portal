@@ -155,6 +155,7 @@ export default async function PropertyDetailPage({
   const defaultContactEmail = isSale ? "sales@soranapropertymanagers.com" : "bookings@soranapropertymanagers.com";
   const contactEmail = owner?.email || defaultContactEmail;
   const contactLink = `mailto:${contactEmail}`;
+  const listingContactPhone = property.contactPhone || owner?.phone || null;
 
   return (
     <main className="relative isolate min-h-screen bg-background text-foreground">
@@ -444,7 +445,8 @@ export default async function PropertyDetailPage({
           <aside className="space-y-6 min-w-0 lg:sticky lg:top-24 lg:h-fit">
             {isAirbnb ? (
               <BookingRequest
-                listingId={property._id}
+                propertyName={property.name}
+                contactPhone={listingContactPhone}
                 nightlyRate={nightlyRate}
               />
             ) : (

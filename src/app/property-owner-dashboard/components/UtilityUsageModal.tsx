@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
+import { readJsonResponse } from "@/lib/api-client";
 
 interface PropertyUtility {
   id: string;
@@ -52,6 +53,7 @@ export default function UtilityUsageModal({
   const [charges, setCharges] = useState<UtilityCharge[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [deletingChargeId, setDeletingChargeId] = useState<string | null>(null);
 
   const selectedUtility = meteredUtilities.find((utility) => utility.id === utilityId);
   const calculatedUnits =
@@ -59,6 +61,23 @@ export default function UtilityUsageModal({
       ? Math.max(0, Number(currentReading) - Number(previousReading))
       : Number(unitsUsed || 0);
   const estimatedAmount = selectedUtility ? Math.round(calculatedUnits * Number(selectedUtility.amount || 0)) : 0;
+
+  const fetchCharges = useCallback(async () => {
+    if (!isOpen || !tenant?._id || !csrfToken) return;
+    try {
+      const res = await fetch(`/api/utility-charges?tenantId=${tenant._id}`, {
+        headers: { "x-csrf-token": csrfToken },
+        credentials: "include",
+      });
+      const data = await readJsonResponse<{ success?: boolean; charges?: UtilityCharge[]; message?: string }>(
+        res,
+        "Failed to load utility readings."
+      );
+      setCharges(data.success ? data.charges || [] : []);
+    } catch {
+      setCharges([]);
+    }
+  }, [isOpen, tenant?._id, csrfToken]);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,26 +87,13 @@ export default function UtilityUsageModal({
       setCurrentReading("");
       setUnitsUsed("");
       setError(null);
+      setDeletingChargeId(null);
     }
   }, [isOpen, meteredUtilities]);
 
   useEffect(() => {
-    const fetchCharges = async () => {
-      if (!isOpen || !tenant?._id || !csrfToken) return;
-      try {
-        const res = await fetch(`/api/utility-charges?tenantId=${tenant._id}`, {
-          headers: { "x-csrf-token": csrfToken },
-          credentials: "include",
-        });
-        const data = await res.json();
-        setCharges(data.success ? data.charges || [] : []);
-      } catch {
-        setCharges([]);
-      }
-    };
-
     fetchCharges();
-  }, [isOpen, tenant?._id, csrfToken]);
+  }, [fetchCharges]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,17 +120,53 @@ export default function UtilityUsageModal({
           csrfToken,
         }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse<{ success?: boolean; message?: string }>(
+        res,
+        "Failed to record utility usage."
+      );
       if (!data.success) {
         setError(data.message || "Failed to record utility usage.");
         return;
       }
       await onSaved();
+      await fetchCharges();
       onClose();
     } catch {
       setError("Network error while recording utility usage.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteCharge = async (chargeId: string) => {
+    if (!csrfToken || !tenant?._id) return;
+    const confirmed = window.confirm("Delete this utility reading? This will recalculate the tenant balance.");
+    if (!confirmed) return;
+
+    setDeletingChargeId(chargeId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/utility-charges/${chargeId}`, {
+        method: "DELETE",
+        headers: { "x-csrf-token": csrfToken },
+        credentials: "include",
+      });
+      const data = await readJsonResponse<{ success?: boolean; message?: string }>(
+        res,
+        "Failed to delete utility reading."
+      );
+
+      if (!res.ok || !data.success) {
+        setError(data.message || "Failed to delete utility reading.");
+        return;
+      }
+
+      await onSaved();
+      await fetchCharges();
+    } catch {
+      setError("Network error while deleting utility reading.");
+    } finally {
+      setDeletingChargeId(null);
     }
   };
 
@@ -231,8 +273,23 @@ export default function UtilityUsageModal({
             <div className="mt-3 space-y-2">
               {charges.slice(0, 4).map((charge) => (
                 <div key={charge._id} className="flex items-center justify-between gap-3 text-xs sm:text-sm">
-                  <span className="text-foreground">{charge.billingPeriod} - {charge.utilityName}</span>
-                  <span className="font-semibold text-primary">Ksh {charge.amount.toLocaleString()}</span>
+                  <div className="min-w-0">
+                    <p className="truncate text-foreground">{charge.billingPeriod} - {charge.utilityName}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {Number(charge.unitsUsed || 0).toLocaleString()} unit(s)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="font-semibold text-primary">Ksh {charge.amount.toLocaleString()}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCharge(charge._id)}
+                      disabled={deletingChargeId === charge._id}
+                      className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingChargeId === charge._id ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

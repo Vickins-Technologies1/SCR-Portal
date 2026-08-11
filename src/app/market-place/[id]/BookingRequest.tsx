@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarCheck } from "lucide-react";
+import { CalendarCheck, MessageCircle } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
+import { buildWhatsAppLink } from "@/lib/listing-contact";
 
 interface BookingRequestProps {
-  listingId: string;
-  nightlyRate: number;
+  propertyName: string;
+  contactPhone?: string | null;
+  nightlyRate?: number;
 }
 
 const diffNights = (checkIn: string, checkOut: string) => {
@@ -19,7 +21,7 @@ const diffNights = (checkIn: string, checkOut: string) => {
   return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
 };
 
-export default function BookingRequest({ listingId, nightlyRate }: BookingRequestProps) {
+export default function BookingRequest({ propertyName, contactPhone, nightlyRate }: BookingRequestProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,59 +36,84 @@ export default function BookingRequest({ listingId, nightlyRate }: BookingReques
     if (!checkIn || !checkOut) return 0;
     return diffNights(checkIn, checkOut);
   }, [checkIn, checkOut]);
+
   const totalEstimate = useMemo(() => {
     if (!nightlyRate || !nights) return 0;
     return nightlyRate * nights;
   }, [nightlyRate, nights]);
 
   const isValid = useMemo(() => {
-    if (!fullName.trim() || !email.trim() || !checkIn || !checkOut) return false;
+    if (!fullName.trim() || !checkIn || !checkOut) return false;
     const inDate = new Date(checkIn);
     const outDate = new Date(checkOut);
     if (Number.isNaN(inDate.getTime()) || Number.isNaN(outDate.getTime())) return false;
     return outDate.getTime() > inDate.getTime();
-  }, [fullName, email, checkIn, checkOut]);
+  }, [fullName, checkIn, checkOut]);
+
+  const buildInquiryMessage = () => {
+    const requestedGuests = Number(guests || 1);
+    const parts = [
+      `Hello, I am interested in booking ${propertyName}.`,
+      `I found the property on Sorana and would like to know its availability and booking requirements.`,
+      "",
+      `Name: ${fullName.trim()}`,
+      `Check-in: ${checkIn}`,
+      `Check-out: ${checkOut}`,
+      `Guests: ${Number.isFinite(requestedGuests) && requestedGuests > 0 ? requestedGuests : 1}`,
+    ];
+
+    if (email.trim()) {
+      parts.push(`Email: ${email.trim()}`);
+    }
+    if (phone.trim()) {
+      parts.push(`Phone: ${phone.trim()}`);
+    }
+    if (notes.trim()) {
+      parts.push("");
+      parts.push(`Notes: ${notes.trim()}`);
+    }
+
+    if (nights > 0 && nightlyRate) {
+      parts.push("");
+      parts.push(`Estimated stay: ${nights} night(s)`);
+      parts.push(`Estimated total: Ksh ${totalEstimate.toLocaleString()}`);
+    }
+
+    return parts.join("\n");
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!isValid || isSubmitting) return;
+
+    const inquiryPhone = contactPhone?.trim() || "";
+    if (!inquiryPhone) {
+      toast.error("This listing does not have a WhatsApp contact number.");
+      setFormMessage("This property does not have a WhatsApp contact number listed yet.");
+      return;
+    }
+
+    const message = buildInquiryMessage();
+    const preferWeb = typeof window !== "undefined" && !/Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+    const link = buildWhatsAppLink(inquiryPhone, message, preferWeb);
+
+    if (!link) {
+      toast.error("The listed WhatsApp number is invalid.");
+      setFormMessage("The listed WhatsApp number is invalid. Please try another property or contact support.");
+      return;
+    }
+
     setIsSubmitting(true);
     setFormMessage(null);
 
     try {
-      const res = await fetch("/api/public-bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          listingId,
-          guestName: fullName.trim(),
-          guestEmail: email.trim(),
-          guestPhone: phone.trim(),
-          checkIn,
-          checkOut,
-          guests: guests ? Number(guests) : undefined,
-          notes: notes.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Unable to submit the request.");
-      }
-
-      toast.success("Request sent to the owner.");
-      setFormMessage("Request submitted to the owner account. You will receive confirmation shortly.");
-      setFullName("");
-      setEmail("");
-      setPhone("");
-      setCheckIn("");
-      setCheckOut("");
-      setGuests("1");
-      setNotes("");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to submit the request.";
-      toast.error(message);
-      setFormMessage(message);
+      window.open(link, "_blank", "noopener,noreferrer");
+      toast.success("Opening WhatsApp with your inquiry.");
+      setFormMessage("WhatsApp opened with a prefilled inquiry. The booking is not confirmed until the owner responds.");
+    } catch {
+      toast.error("Unable to open WhatsApp right now.");
+      setFormMessage("Unable to open WhatsApp right now. Please copy the inquiry and message the contact manually.");
     } finally {
       setIsSubmitting(false);
     }
@@ -96,9 +123,9 @@ export default function BookingRequest({ listingId, nightlyRate }: BookingReques
     <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
       <Toaster position="top-right" toastOptions={{ duration: 2500 }} />
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-slate-900">Booking request</h3>
+        <h3 className="text-base font-semibold text-slate-900">Book via WhatsApp</h3>
         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
-          <CalendarCheck size={12} /> Owner inbox
+          <CalendarCheck size={12} /> Direct contact
         </span>
       </div>
 
@@ -119,7 +146,7 @@ export default function BookingRequest({ listingId, nightlyRate }: BookingReques
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-              Email
+              Email (optional)
             </label>
             <input
               type="email"
@@ -127,7 +154,6 @@ export default function BookingRequest({ listingId, nightlyRate }: BookingReques
               onChange={(event) => setEmail(event.target.value)}
               placeholder="name@email.com"
               className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
-              required
             />
           </div>
         </div>
@@ -210,21 +236,28 @@ export default function BookingRequest({ listingId, nightlyRate }: BookingReques
               {totalEstimate ? `Ksh ${totalEstimate.toLocaleString()}` : "On request"}
             </span>
           </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span>Contact</span>
+            <span className="font-mono text-[10px] text-slate-700">
+              {contactPhone || "Not listed"}
+            </span>
+          </div>
         </div>
 
         <button
           type="submit"
-          disabled={!isValid || isSubmitting}
-          className="mt-2 w-full rounded-full bg-primary px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={!isValid || isSubmitting || !contactPhone}
+          className="mt-2 w-full rounded-full bg-primary px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 inline-flex items-center justify-center gap-2"
         >
-          {isSubmitting ? "Submitting..." : "Submit request"}
+          <MessageCircle size={14} />
+          {isSubmitting ? "Opening WhatsApp..." : "Contact on WhatsApp"}
         </button>
 
         {formMessage ? (
           <p className="text-[11px] text-slate-500">{formMessage}</p>
         ) : (
           <p className="text-[11px] text-slate-500">
-            Your request is logged in the owner account for review. A confirmation email is sent when enabled.
+            WhatsApp opens with a prefilled inquiry. This does not confirm the booking.
           </p>
         )}
       </form>

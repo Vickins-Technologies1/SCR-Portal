@@ -6,6 +6,7 @@ import sanitizeHtml from "sanitize-html";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 import bcrypt from "bcrypt";
+import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
 
 // ──────────────────────────────────────────────────────────────
 // In-memory rate limiter (IP-based, 5 attempts / 15 min)
@@ -188,10 +189,11 @@ export async function POST(request: NextRequest) {
     const sanitizedName = sanitizeHtml(name, { allowedTags: [], allowedAttributes: {} });
     const sanitizedEmail = sanitizeHtml(email, { allowedTags: [], allowedAttributes: {} });
     const sanitizedPhone = sanitizeHtml(phone, { allowedTags: [], allowedAttributes: {} });
+    const normalizedEmail = normalizeEmail(sanitizedEmail);
 
     // 7. Email validation
-    if (!validator.isEmail(sanitizedEmail)) {
-      logger.warn("Invalid email format", { email: sanitizedEmail });
+    if (!validator.isEmail(normalizedEmail)) {
+      logger.warn("Invalid email format", { email: normalizedEmail });
       return NextResponse.json(
         { success: false, message: "Invalid email format" },
         { status: 400 }
@@ -248,12 +250,10 @@ export async function POST(request: NextRequest) {
     logger.debug("Connected to database");
 
     // 11. Check for duplicate email (case-insensitive)
-    const existingUser = await db
-      .collection("propertyOwners")
-      .findOne({ email: new RegExp(`^${sanitizedEmail}$`, "i") });
+    const existingUser = await findAnyExistingEmail(db, normalizedEmail);
 
     if (existingUser) {
-      logger.warn("Email already registered", { email: sanitizedEmail });
+      logger.warn("Email already registered", { email: normalizedEmail, collection: existingUser.collection });
       return NextResponse.json(
         { success: false, message: "Email already registered" },
         { status: 409 }
@@ -267,7 +267,7 @@ export async function POST(request: NextRequest) {
     // 13. Create new property owner (auto-approved)
     const newUser = {
       name: sanitizedName.trim(),
-      email: sanitizedEmail.toLowerCase().trim(),
+      email: normalizedEmail,
       password: hashedPassword,
       phone: sanitizedPhone.trim(),
       role: "propertyOwner",
@@ -279,21 +279,32 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     };
 
-    const result = await db.collection("propertyOwners").insertOne(newUser);
+    let result;
+    try {
+      result = await db.collection("propertyOwners").insertOne(newUser);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json(
+          { success: false, message: "Email already registered" },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
     const userId = result.insertedId.toString();
 
     // 14. Audit log
       await db.collection("auditLogs").insertOne({
         action: "signup",
         userId,
-        email: sanitizedEmail,
+        email: normalizedEmail,
         ip,
         timestamp: new Date().toISOString(),
         status: "success",
         pendingApproval: false,
       });
 
-    logger.info("Property owner created", { userId, email: sanitizedEmail });
+    logger.info("Property owner created", { userId, email: normalizedEmail });
 
     // 15. Success response
       const response = NextResponse.json(

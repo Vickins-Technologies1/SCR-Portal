@@ -9,6 +9,7 @@ import validator from "validator";
 import sanitizeHtml from "sanitize-html";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { sendWelcomeSms } from "@/lib/sms";
+import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
 
 // Rate limiter (unchanged)
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     const sanitizedName = sanitizeHtml(name.trim(), { allowedTags: [] });
-    const sanitizedEmail = sanitizeHtml(email.trim().toLowerCase(), { allowedTags: [] });
+    const sanitizedEmail = normalizeEmail(email);
     const sanitizedPhone = phone ? sanitizeHtml(phone.trim(), { allowedTags: [] }) : undefined;
 
     if (!validator.isEmail(sanitizedEmail)) {
@@ -141,14 +142,10 @@ export async function POST(req: NextRequest) {
 
     const { db } = await connectToDatabase();
 
-    const existing = await db.collection("teamMembers").findOne({
-      ownerId: new ObjectId(requestedOwnerId),
-      email: sanitizedEmail,
-    });
-
+    const existing = await findAnyExistingEmail(db, sanitizedEmail);
     if (existing) {
       return NextResponse.json(
-        { success: false, message: "A team member with this email already exists" },
+        { success: false, message: "That email is already in use" },
         { status: 409 }
       );
     }
@@ -226,7 +223,15 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
-    const result = await db.collection("teamMembers").insertOne(newMember);
+    let result;
+    try {
+      result = await db.collection("teamMembers").insertOne(newMember);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json({ success: false, message: "That email is already in use" }, { status: 409 });
+      }
+      throw error;
+    }
 
     const createdMember = {
       _id: result.insertedId.toString(),

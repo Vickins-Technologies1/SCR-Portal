@@ -4,6 +4,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Cookies from "js-cookie";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
+import toast, { Toaster } from "react-hot-toast";
 import {
   Users,
   ArrowUpDown,
@@ -21,6 +23,7 @@ import {
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
+import { readJsonResponse } from "@/lib/api-client";
 
 const PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
@@ -30,6 +33,7 @@ interface PropertyOwner {
   email: string;
   name: string;
   phone: string;
+  password?: string;
   role: string;
   managementType?: "rentals" | "airbnb" | string;
   createdAt: string;
@@ -58,6 +62,8 @@ const SORTABLE_KEYS = new Set<keyof PropertyOwner>([
   "createdAt",
   "isApproved",
 ]);
+
+const OWNER_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 const parsePageSize = (value: string | null) => {
   const parsed = Number(value);
@@ -104,6 +110,9 @@ export default function PropertyOwnersPage() {
   const [expanded, setExpanded] = useState<string[]>([]);
   const [editUser, setEditUser] = useState<PropertyOwner | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newOwner, setNewOwner] = useState({
     name: "",
@@ -354,7 +363,7 @@ export default function PropertyOwnersPage() {
     const windowSize = 5;
     const halfWindow = Math.floor(windowSize / 2);
     let start = Math.max(1, currentPage - halfWindow);
-    let end = Math.min(totalPages, start + windowSize - 1);
+    const end = Math.min(totalPages, start + windowSize - 1);
     start = Math.max(1, end - windowSize + 1);
 
     const pages: number[] = [];
@@ -410,7 +419,10 @@ export default function PropertyOwnersPage() {
         return;
       }
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ success?: boolean; message?: string }>(
+        res,
+        "Delete request failed."
+      );
 
       if (data.success) {
         setShowDeleteModal(false);
@@ -429,7 +441,9 @@ export default function PropertyOwnersPage() {
 
   // ── Edit ───────────────────────────────────────────────────────────────────
   const handleEdit = (owner: PropertyOwner) => {
-    setEditUser(owner);
+    setEditUser({ ...owner, password: "" });
+    setEditError(null);
+    setShowEditPassword(false);
     setShowEditModal(true);
   };
 
@@ -495,29 +509,70 @@ export default function PropertyOwnersPage() {
     e.preventDefault();
     if (!editUser) return;
 
+    const normalizedEmail = editUser.email.trim().toLowerCase();
+    const normalizedName = editUser.name.trim();
+    const normalizedPhone = editUser.phone.trim();
+    const nextPassword = editUser.password?.trim() || "";
+
+    if (!normalizedName || !normalizedEmail || !normalizedPhone) {
+      setEditError("Name, email, and phone are required.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setEditError("Please enter a valid email address.");
+      return;
+    }
+
+    if (nextPassword && !OWNER_PASSWORD_REGEX.test(nextPassword)) {
+      setEditError("Password must be at least 8 characters and include uppercase, lowercase, number, and special character.");
+      return;
+    }
+
+    setIsUpdating(true);
+    setEditError(null);
+
     try {
+      const token = await ensureCsrfToken();
+      if (!token) {
+        setEditError("Security token missing. Please refresh and try again.");
+        return;
+      }
+
       const res = await fetch(`/api/admin/property-owners/${editUser._id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": token,
+        },
         credentials: "include",
         body: JSON.stringify({
-          name: editUser.name,
-          email: editUser.email,
-          phone: editUser.phone,
+          name: normalizedName,
+          email: normalizedEmail,
+          phone: normalizedPhone,
+          password: nextPassword || undefined,
         }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ success?: boolean; message?: string }>(
+        res,
+        "Update request failed."
+      );
 
       if (data.success) {
+        toast.success(data.message || "Property owner credentials updated successfully.");
         setShowEditModal(false);
         setEditUser(null);
+        setEditError(null);
+        setShowEditPassword(false);
         setRefreshKey((value) => value + 1);
       } else {
-        setError(data.message || "Update failed");
+        setEditError(data.message || "Update failed");
       }
     } catch {
-      setError("Update request failed.");
+      setEditError("Update request failed.");
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -570,6 +625,7 @@ export default function PropertyOwnersPage() {
         onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
       />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
 
       <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
         <main className="max-w-7xl mx-auto space-y-6">
@@ -815,10 +871,12 @@ export default function PropertyOwnersPage() {
                                 </button>
                                 <button
                                   onClick={() => handleEdit(owner)}
-                                  className="text-primary hover:text-primary-hover transition-colors"
-                                  title="Edit"
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-[10px] font-semibold text-primary transition hover:bg-primary/10"
+                                  title="Edit credentials"
                                 >
-                                  <Edit size={18} />
+                                  <Edit size={14} />
+                                  <span className="hidden sm:inline">Edit Credentials</span>
+                                  <span className="sm:hidden">Edit</span>
                                 </button>
                                 <button
                                   onClick={() => openDeleteModal(owner)}
@@ -999,16 +1057,23 @@ export default function PropertyOwnersPage() {
             <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
               <div className="modal-panel max-w-sm w-full overflow-hidden">
                 <div className="modal-header px-4 sm:px-5 py-3">
-                  <h2 className="text-base font-semibold text-foreground">Edit Property Owner</h2>
+                  <h2 className="text-base font-semibold text-foreground">Edit Credentials</h2>
                 </div>
 
                 <form onSubmit={handleUpdate} className="modal-body modal-stagger space-y-4">
+                  {editError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                      {editError}
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1.5">Name</label>
                     <input
                       type="text"
                       value={editUser.name}
                       onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
+                      required
                       className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                     />
                   </div>
@@ -1018,6 +1083,7 @@ export default function PropertyOwnersPage() {
                       type="email"
                       value={editUser.email}
                       onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
+                      required
                       className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                     />
                   </div>
@@ -1027,23 +1093,55 @@ export default function PropertyOwnersPage() {
                       type="tel"
                       value={editUser.phone}
                       onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
+                      required
                       className="w-full p-2.5 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showEditPassword ? "text" : "password"}
+                        value={editUser.password || ""}
+                        onChange={(e) => setEditUser({ ...editUser, password: e.target.value })}
+                        placeholder="Leave blank to keep current password"
+                        className="w-full p-2.5 pr-10 border border-border rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition bg-white/70 text-foreground"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEditPassword((visible) => !visible)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                        aria-label={showEditPassword ? "Hide password" : "Show password"}
+                      >
+                        {showEditPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Optional. Leave blank to keep the existing password.
+                    </p>
                   </div>
 
                   <div className="flex justify-end gap-3 mt-6">
                     <button
                       type="button"
-                      onClick={() => setShowEditModal(false)}
+                      onClick={() => {
+                        setShowEditModal(false);
+                        setEditUser(null);
+                        setEditError(null);
+                        setShowEditPassword(false);
+                      }}
                       className="px-4 py-2 bg-white/70 text-muted-foreground rounded-md hover:bg-white transition text-xs font-medium border border-border"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md"
+                      disabled={isUpdating}
+                      className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover transition text-xs font-medium shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Save Changes
+                      {isUpdating ? "Saving..." : "Save Changes"}
                     </button>
                   </div>
                 </form>

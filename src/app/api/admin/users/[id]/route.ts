@@ -4,6 +4,22 @@ import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
 import { cascadeDeleteOwner } from "../../../../../lib/admin-owner-delete";
 import { requireAdmin } from "../../../../../lib/admin-auth";
+import bcrypt from "bcryptjs";
+import validator from "validator";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
+import {
+  buildSafeOwnerResponse,
+  validateOwnerPassword,
+} from "@/lib/admin-owner-credentials";
+import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
+
+function assertCsrf(request: NextRequest) {
+  const csrfToken = request.headers.get("x-csrf-token");
+  if (!validateCsrfToken(request, csrfToken)) {
+    return buildInvalidCsrfResponse(request);
+  }
+  return null;
+}
 
 export async function GET(
   request: NextRequest,
@@ -35,14 +51,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      propertyOwner: {
-        ...owner,
-        _id: owner._id.toString(),
-        createdAt:
-          owner.createdAt instanceof Date
-            ? owner.createdAt.toISOString()
-            : String(owner.createdAt),
-      },
+      propertyOwner: buildSafeOwnerResponse(owner),
     });
   } catch (error) {
     console.error("User fetch error:", error);
@@ -61,6 +70,9 @@ export async function PUT(
   const auth = await requireAdmin(request, "admin:owners:manage");
   if (auth instanceof NextResponse) return auth;
 
+  const csrfError = assertCsrf(request);
+  if (csrfError) return csrfError;
+
   try {
     if (!ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -75,19 +87,49 @@ export async function PUT(
     const { db } = await connectToDatabase();
 
     const updateData: Record<string, any> = { updatedAt: new Date() };
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (phone) updateData.phone = phone;
+    if (name) updateData.name = String(name).trim();
+    if (email) {
+      const normalizedEmail = normalizeEmail(email);
+      const existing = await findAnyExistingEmail(db, normalizedEmail, { excludeId: id });
+      if (existing) {
+        return NextResponse.json(
+          { success: false, message: "This email is already associated with another account." },
+          { status: 409 }
+        );
+      }
+      updateData.email = normalizedEmail;
+    }
+    if (phone) updateData.phone = String(phone).trim();
+    if (typeof body.password === "string") {
+      const nextPassword = body.password.trim();
+      if (nextPassword) {
+        const passwordError = validateOwnerPassword(nextPassword);
+        if (passwordError) {
+          return NextResponse.json({ success: false, message: passwordError }, { status: 400 });
+        }
+        updateData.password = await bcrypt.hash(nextPassword, 10);
+      }
+    }
 
-    const result = await db
-      .collection("propertyOwners")
-      .findOneAndUpdate(
-        { _id: new ObjectId(id) },
-        { $set: updateData },
-        { returnDocument: "after" }
-      );
+    let result;
+    try {
+      result = await db
+        .collection("propertyOwners")
+        .findOneAndUpdate(
+          { _id: new ObjectId(id) },
+          { $set: updateData },
+          { returnDocument: "after" }
+        );
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json({ success: false, message: "Email already exists" }, { status: 409 });
+      }
+      throw error;
+    }
 
-    if (!result) {
+    const updatedOwner = (result as any)?.value ?? result;
+
+    if (!updatedOwner) {
       return NextResponse.json(
         { success: false, message: "User not found" },
         { status: 404 }
@@ -96,14 +138,8 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      propertyOwner: {
-        ...result,
-        _id: result._id.toString(),
-        createdAt:
-          result.createdAt instanceof Date
-            ? result.createdAt.toISOString()
-            : String(result.createdAt),
-      },
+      message: "Property owner credentials updated successfully.",
+      propertyOwner: buildSafeOwnerResponse(updatedOwner),
     });
   } catch (error) {
     console.error("User update error:", error);

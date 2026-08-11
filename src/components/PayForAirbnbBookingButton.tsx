@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { readJsonResponse } from "@/lib/api-client";
 
 export default function PayForAirbnbBookingButton({
   amount,
@@ -36,13 +37,16 @@ export default function PayForAirbnbBookingButton({
         body: JSON.stringify({ transaction_request_id: checkoutRequestId }),
       });
 
-      const statusData = await statusRes.json();
+      const statusData = await readJsonResponse<{ success?: boolean; status?: string; message?: string }>(
+        statusRes,
+        "Failed to check transaction status"
+      );
       if (!statusRes.ok || !statusData.success) {
         throw new Error(statusData.message || "Failed to check transaction status");
       }
 
-      const status = String(statusData.status || "pending");
-      if (status === "pending" || status === "pending_stk") {
+      const status = String(statusData.status || "initiated").toLowerCase();
+      if (["initiated", "pending", "pending_stk"].includes(status)) {
         attempts += 1;
         continue;
       }
@@ -68,7 +72,10 @@ export default function PayForAirbnbBookingButton({
         }),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ success?: boolean; message?: string; checkoutRequestId?: string }>(
+        res,
+        "Payment initiation failed"
+      );
       if (!res.ok || !data.success) {
         const message = data.message || "Payment initiation failed, try again";
         toast.error(message);
@@ -77,15 +84,21 @@ export default function PayForAirbnbBookingButton({
       }
 
       toast.success(data.message || "STK Push initiated. Check your phone.");
+      if (!data.checkoutRequestId) {
+        throw new Error("Payment initiation failed");
+      }
+
       const status = await pollStatus(data.checkoutRequestId);
 
-      if (status === "completed") {
+      if (["completed", "successful", "success"].includes(status)) {
         toast.success("Payment completed successfully");
         onSuccess?.();
-      } else if (status === "cancelled") {
+      } else if (["cancelled", "canceled"].includes(status)) {
         toast.error("Payment cancelled by user");
       } else if (status === "failed") {
         toast.error("Payment failed. Please check your balance.");
+      } else if (status === "expired") {
+        toast.error("Payment request expired.");
       } else {
         toast.error("Payment timed out. Please check again shortly.");
       }
@@ -125,4 +138,3 @@ export default function PayForAirbnbBookingButton({
     </div>
   );
 }
-

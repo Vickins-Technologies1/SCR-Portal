@@ -55,7 +55,14 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { name, ownerId, managementFeePercent, createInvoice } = body;
+    const { name, ownerId, managementFeePercent, createInvoice, billingType } = body;
+
+    const { db }: { db: Db } = await connectToDatabase();
+
+    const property = await db.collection<Property>("properties").findOne({ _id: new ObjectId(id) });
+    if (!property) {
+      return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
+    }
 
     const updateData: any = { updatedAt: new Date() };
     if (managementFeePercent !== undefined) {
@@ -67,15 +74,20 @@ export async function PUT(
       }
       updateData.managementFeePercent = managementFeePercent;
     }
+    if (billingType !== undefined) {
+      if (billingType !== "RentCollection" && billingType !== "FullManagement") {
+        return NextResponse.json(
+          { success: false, message: "billingType must be RentCollection or FullManagement" },
+          { status: 400 }
+        );
+      }
+      updateData.billingType = billingType;
+      if (billingType === "FullManagement" && updateData.managementFeePercent === undefined && typeof property.managementFeePercent === "number") {
+        updateData.managementFeePercent = property.managementFeePercent;
+      }
+    }
     if (name !== undefined) updateData.name = name;
     if (ownerId !== undefined) updateData.ownerId = new ObjectId(ownerId);
-
-    const { db }: { db: Db } = await connectToDatabase();
-
-    const property = await db.collection<Property>("properties").findOne({ _id: new ObjectId(id) });
-    if (!property) {
-      return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
-    }
 
     const result = await db.collection("properties").findOneAndUpdate(
       { _id: new ObjectId(id) },
@@ -83,14 +95,16 @@ export async function PUT(
       { returnDocument: "after" }
     );
 
-    if (!result) {
+    const updatedProperty = (result as any)?.value ?? result;
+
+    if (!updatedProperty) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
     let invoiceResult: any = null;
 
     if (createInvoice) {
-      const billingPlan = resolveBillingPlan(property);
+      const billingPlan = resolveBillingPlan({ billingType: updateData.billingType ?? property.billingType, unitTypes: property.unitTypes });
       if (billingPlan !== "FullManagement") {
         return NextResponse.json(
           { success: false, message: "Cannot create a full management invoice for a software leasing property." },
@@ -98,7 +112,11 @@ export async function PUT(
         );
       }
 
-      const percentToUse = managementFeePercent !== undefined ? managementFeePercent : property.managementFeePercent;
+      const percentToUse = managementFeePercent !== undefined
+        ? managementFeePercent
+        : typeof updateData.managementFeePercent === "number"
+          ? updateData.managementFeePercent
+          : property.managementFeePercent;
       if (!percentToUse || percentToUse <= 0) {
         return NextResponse.json(
           { success: false, message: "managementFeePercent must be greater than 0 to create an invoice." },
@@ -134,8 +152,8 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       property: {
-        ...result,
-        _id: result._id.toString(),
+        ...updatedProperty,
+        _id: updatedProperty._id.toString(),
       },
       invoice: invoiceResult,
     });

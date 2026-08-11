@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
+import validator from "validator";
 import { requireAdmin } from "../../../../lib/admin-auth";
+import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -200,17 +202,24 @@ export async function POST(request: NextRequest) {
     }
 
     const { db }: { db: Db } = await connectToDatabase();
+    const normalizedEmail = normalizeEmail(email);
 
-    const existing = await db.collection("propertyOwners").findOne({ email: email.toLowerCase() });
+    if (!validator.isEmail(normalizedEmail)) {
+      return NextResponse.json({ success: false, message: "Invalid email format" }, { status: 400 });
+    }
+
+    const existing = await findAnyExistingEmail(db, normalizedEmail);
     if (existing) {
       return NextResponse.json({ success: false, message: "Email already exists" }, { status: 409 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const result = await db.collection("propertyOwners").insertOne({
+    let result;
+    try {
+      result = await db.collection("propertyOwners").insertOne({
       name,
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       phone,
       password: hashedPassword,
       role: "propertyOwner",
@@ -220,6 +229,12 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json({ success: false, message: "Email already exists" }, { status: 409 });
+      }
+      throw error;
+    }
 
     const newOwner = await db.collection("propertyOwners").findOne({ _id: result.insertedId });
 

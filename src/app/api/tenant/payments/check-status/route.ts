@@ -13,6 +13,16 @@ const StatusSchema = z.object({
   csrfToken: z.string().trim().min(1),
 });
 
+const normalizeStatus = (status: unknown): "initiated" | "pending" | "successful" | "failed" | "cancelled" | "expired" => {
+  const value = String(status || "").toLowerCase();
+  if (["completed", "successful", "success", "paid"].includes(value)) return "successful";
+  if (["failed", "error"].includes(value)) return "failed";
+  if (["cancelled", "canceled", "reversed"].includes(value)) return "cancelled";
+  if (["expired", "timeout", "timed_out"].includes(value)) return "expired";
+  if (["pending", "pending_stk", "queued"].includes(value)) return "pending";
+  return "initiated";
+};
+
 export async function POST(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
   const role = request.cookies.get("role")?.value;
@@ -60,14 +70,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
 
+    const publicStatus = normalizeStatus(payment.status);
+
     return NextResponse.json({
       success: true,
       message: "Transaction status retrieved",
-      status: payment.status,
+      status: publicStatus,
       transaction: {
         mpesaCode: payment.mpesaCode,
         amount: payment.amount,
-        status: payment.status,
+        status: publicStatus,
         paymentDate: payment.paymentDate,
         phoneNumber: payment.phoneNumber,
         reference: payment.reference,

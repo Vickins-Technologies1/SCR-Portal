@@ -71,6 +71,7 @@ export interface Listing {
   _id: string;
   originalPropertyId: string; // reference to the core Property
   ownerId: string;
+  contactPhone?: string;
 
   // Denormalized snapshot from Property at time of listing
   name: string;
@@ -81,7 +82,6 @@ export interface Listing {
   description?: string;
   facilities?: string[];
   images: string[]; // Independent from any core property images
-  contactPhone?: string;
 
   // Advertisement controls
   isAdvertised: boolean;
@@ -102,6 +102,7 @@ export interface Listing {
 export interface AirbnbPublicListing {
   _id: string;
   ownerId: string;
+  contactPhone?: string;
   name: string;
   address: string;
   description?: string;
@@ -125,6 +126,7 @@ export type PublicRentalListing = Listing & { listingType: "rentals" };
 export interface SalePublicListing {
   _id: string;
   ownerId?: string;
+  contactPhone?: string;
   name: string;
   address: string;
   description?: string;

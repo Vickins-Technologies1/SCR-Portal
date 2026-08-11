@@ -33,7 +33,7 @@ interface Property {
   totalUnpaidInvoices?: number;
   unpaidInvoiceCount?: number;
   managementFeePercent?: number;
-  billingType?: string;
+  billingType?: "RentCollection" | "FullManagement";
 }
 
 interface SortConfig {
@@ -352,6 +352,65 @@ export default function PropertiesPage() {
       setFeeLoadingId(null);
     }
   };
+
+  const handleSwitchToFullManagement = async (property: Property) => {
+    const rawValue = feeInputs[property._id] ?? (property.managementFeePercent?.toString() ?? "1");
+    const percent = Number(rawValue);
+
+    if (Number.isNaN(percent) || percent <= 0 || percent > 100) {
+      setError("Please enter a management fee between 0 and 100 before switching plans.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Switch ${property.name} to Full Management with a ${percent}% fee?`
+    );
+    if (!confirmed) return;
+
+    setFeeLoadingId(property._id);
+    setError(null);
+
+    try {
+      const csrfToken = await fetchCsrfToken();
+      if (!csrfToken) {
+        setError("Failed to get security token. Please refresh the page.");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/properties/${property._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          billingType: "FullManagement",
+          managementFeePercent: percent,
+        }),
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        router.replace("/admin/login?session=expired");
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.success) {
+        setProperties(properties.map((p) =>
+          p._id === property._id ? { ...p, billingType: "FullManagement", managementFeePercent: percent } : p
+        ));
+      } else {
+        setError(data.message || "Failed to switch billing plan.");
+      }
+    } catch (err) {
+      console.error("Billing plan switch error:", err);
+      setError("Failed to switch billing plan.");
+    } finally {
+      setFeeLoadingId(null);
+    }
+  };
 // ── Rendering ───────────────────────────────────────────────────────────────
   if (status === "checking") {
     return (
@@ -553,6 +612,9 @@ export default function PropertiesPage() {
 
                                 {(p.billingType ? p.billingType === "FullManagement" : p.unitTypes.some((u) => u.managementType === "FullManagement")) ? (
                                   <div className="mt-3 rounded-lg border border-primary/20 bg-primary/10 p-3">
+                                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                      Current billing plan: Full Management
+                                    </p>
                                     <div className="flex flex-col sm:flex-row sm:items-end gap-2.5">
                                       <div className="flex-1">
                                         <label className="block text-[10px] font-semibold text-foreground uppercase tracking-wide mb-1.5">
@@ -583,9 +645,39 @@ export default function PropertiesPage() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <p className="mt-3 text-[10px] text-muted-foreground">
-                                    Software leasing invoices are 1% of expected monthly income and are auto-generated monthly based on the last invoice date.
-                                  </p>
+                                  <div className="mt-3 rounded-lg border border-dashed border-border bg-white/60 p-3">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Current billing plan: Rent Collection
+                                    </p>
+                                    <p className="mt-2 text-[10px] text-muted-foreground">
+                                      Software leasing invoices are 1% of expected monthly income and are auto-generated monthly based on the last invoice date.
+                                    </p>
+                                    <div className="mt-3 flex flex-col sm:flex-row sm:items-end gap-2.5">
+                                      <div className="flex-1">
+                                        <label className="block text-[10px] font-semibold text-foreground uppercase tracking-wide mb-1.5">
+                                          Proposed Full Management Fee (%)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          step="0.01"
+                                          value={feeInputs[p._id] ?? (p.managementFeePercent?.toString() ?? "1")}
+                                          onChange={(e) =>
+                                            setFeeInputs({ ...feeInputs, [p._id]: e.target.value })
+                                          }
+                                          className="w-full rounded-md border border-border bg-white/70 px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                      </div>
+                                      <button
+                                        onClick={() => handleSwitchToFullManagement(p)}
+                                        disabled={feeLoadingId === p._id}
+                                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {feeLoadingId === p._id ? "Saving..." : "Switch to Full Management"}
+                                      </button>
+                                    </div>
+                                  </div>
                                 )}
                               </td>
                             </tr>

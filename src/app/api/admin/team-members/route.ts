@@ -7,6 +7,7 @@ import sanitizeHtml from "sanitize-html";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getAdminRolePreset, normalizeAdminPermissions } from "@/lib/admin-permissions";
+import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail as normalizeIdentityEmail } from "@/lib/email-identity";
 
 type AdminTeamMemberDoc = {
   _id: ObjectId;
@@ -148,7 +149,7 @@ export async function POST(request: NextRequest) {
   }
 
   const name = normalizeName(payload?.name);
-  const email = normalizeEmail(payload?.email);
+  const email = normalizeIdentityEmail(payload?.email);
   const phone = normalizePhone(payload?.phone);
   const teamRoleRaw = typeof payload?.teamRole === "string" ? payload.teamRole.trim() : "";
   const password = typeof payload?.password === "string" ? payload.password : "";
@@ -173,21 +174,10 @@ export async function POST(request: NextRequest) {
   try {
     const { db } = await connectToDatabase();
 
-    const emailInAdmins = await db.collection("propertyOwners").findOne({
-      email,
-      role: "admin",
-    });
-    if (emailInAdmins) {
-      return NextResponse.json(
-        { success: false, message: "That email already belongs to an admin account." },
-        { status: 409 }
-      );
-    }
-
-    const existing = await db.collection("adminTeamMembers").findOne({ email, role: "adminTeamMember" });
+    const existing = await findAnyExistingEmail(db, email);
     if (existing) {
       return NextResponse.json(
-        { success: false, message: "A team member with this email already exists." },
+        { success: false, message: "That email is already in use." },
         { status: 409 }
       );
     }
@@ -208,7 +198,15 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     };
 
-    const result = await db.collection("adminTeamMembers").insertOne(doc);
+    let result;
+    try {
+      result = await db.collection("adminTeamMembers").insertOne(doc);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json({ success: false, message: "That email is already in use." }, { status: 409 });
+      }
+      throw error;
+    }
 
     return NextResponse.json(
       {
@@ -234,4 +232,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Failed to create team member" }, { status: 500 });
   }
 }
-

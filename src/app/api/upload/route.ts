@@ -9,17 +9,69 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 // Maximum number of files
 const MAX_FILES = 10;
 // Allowed file types
-const VALID_FILE_TYPES = ['image/jpeg', 'image/png'];
+const VALID_FILE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+];
+
+function normalizeExtension(file: File): string {
+  const byName = file.name.split('.').pop()?.toLowerCase() || "";
+  if (["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(byName)) return byName;
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  if (file.type === "image/gif") return "gif";
+  if (file.type === "image/heic") return "heic";
+  if (file.type === "image/heif") return "heif";
+  return "img";
+}
+
+function detectMimeFromSignature(bytes: Uint8Array): string | null {
+  if (bytes.length >= 4) {
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return "image/gif";
+  }
+  if (bytes.length >= 12) {
+    const riff = String.fromCharCode(...bytes.slice(0, 4));
+    const webp = String.fromCharCode(...bytes.slice(8, 12));
+    if (riff === "RIFF" && webp === "WEBP") return "image/webp";
+  }
+  if (bytes.length >= 12) {
+    const boxType = String.fromCharCode(...bytes.slice(4, 8));
+    if (boxType === "ftyp") {
+      const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+      if (brand.includes("heic") || brand.includes("heif") || brand.includes("mif1") || brand.includes("msf1")) {
+        return brand.includes("heif") || brand.includes("msf1") ? "image/heif" : "image/heic";
+      }
+    }
+  }
+  return null;
+}
 
 // Validate file type and size
-function isValidFile(file: File): { valid: boolean; error?: string } {
-  if (!VALID_FILE_TYPES.includes(file.type)) {
-    return { valid: false, error: `${file.name} is not a valid image (JPEG or PNG only)` };
+async function isValidFile(file: File): Promise<{ valid: boolean; error?: string; mimeType?: string }> {
+  if (file.size <= 0) {
+    return { valid: false, error: `${file.name} is empty` };
   }
   if (file.size > MAX_FILE_SIZE) {
     return { valid: false, error: `${file.name} exceeds 5MB limit` };
   }
-  return { valid: true };
+
+  const headerBytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const signatureMime = detectMimeFromSignature(headerBytes);
+  const declaredMime = file.type || "";
+  const mimeType = VALID_FILE_TYPES.includes(declaredMime) ? declaredMime : signatureMime || declaredMime;
+
+  if (!mimeType || !VALID_FILE_TYPES.includes(mimeType)) {
+    return { valid: false, error: `${file.name} is not a supported image format` };
+  }
+
+  return { valid: true, mimeType };
 }
 
 export async function POST(request: NextRequest) {
@@ -92,7 +144,7 @@ export async function POST(request: NextRequest) {
     const validFiles: File[] = [];
 
     for (const file of files) {
-      const validation = isValidFile(file);
+      const validation = await isValidFile(file);
       if (!validation.valid) {
         validationErrors.push(validation.error!);
       } else {
@@ -110,8 +162,9 @@ export async function POST(request: NextRequest) {
 
     // Upload files to Vercel Blob
     const urls: string[] = [];
+    const failedFiles: Array<{ name: string; error: string }> = [];
     for (const file of validFiles) {
-      const extension = file.name.split('.').pop()?.toLowerCase();
+      const extension = normalizeExtension(file);
       const fileName = `uploads/${ownerId}/${uuidv4()}.${extension}`;
 
       try {
@@ -129,14 +182,21 @@ export async function POST(request: NextRequest) {
           stack: error instanceof Error ? error.stack : undefined,
         });
         // Continue with the next file instead of throwing
-        validationErrors.push(`Failed to upload file: ${fileName}`);
+        failedFiles.push({
+          name: file.name,
+          error: error instanceof Error ? error.message : 'Upload failed',
+        });
       }
     }
 
     if (urls.length === 0) {
       logger.error('No files were uploaded successfully', { userId, errors: validationErrors });
       return NextResponse.json(
-        { success: false, message: validationErrors.join('; ') || 'Failed to upload any files' },
+        {
+          success: false,
+          message: validationErrors.join('; ') || failedFiles[0]?.error || 'Failed to upload any files',
+          failedFiles,
+        },
         { status: 500 }
       );
     }
@@ -146,6 +206,8 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         urls,
+        failedFiles,
+        message: failedFiles.length > 0 ? `Uploaded ${urls.length} image(s) with ${failedFiles.length} failure(s).` : undefined,
       },
       { status: 200 }
     );

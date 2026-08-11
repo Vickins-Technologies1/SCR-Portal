@@ -13,6 +13,7 @@ import { getOwnerDueStatus } from "../../../lib/billing";
 import { buildInvalidCsrfResponse } from "../../../lib/csrf";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
+import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -316,7 +317,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Basic validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+    const normalizedEmail = normalizeEmail(body.email);
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       return NextResponse.json({ success: false, message: "Invalid email" }, { status: 400 });
     }
     if (!/^\+?\d{10,15}$/.test(body.phone)) {
@@ -334,13 +337,10 @@ export async function POST(request: NextRequest) {
     // ────────────────────────────────────────────────
 
     // 1. Email already in use by this owner (case-insensitive)
-    const duplicateEmail = await db.collection("tenants").findOne({
-      ownerId: effectiveOwnerId,
-      email: { $regex: new RegExp(`^${body.email.trim()}$`, "i") }
-    });
+    const duplicateEmail = await findAnyExistingEmail(db, normalizedEmail);
     if (duplicateEmail) {
       return NextResponse.json(
-        { success: false, message: "A tenant with this email already exists under your account" },
+        { success: false, message: "That email is already in use" },
         { status: 409 }
       );
     }
@@ -475,7 +475,7 @@ export async function POST(request: NextRequest) {
       _id: new ObjectId(),
       ownerId: effectiveOwnerId,
       name: body.name.trim(),
-      email: body.email.trim(),
+      email: normalizedEmail,
       phone: body.phone.trim(),
       password: await bcrypt.hash(body.password!, 10),
       role: "tenant",
@@ -499,7 +499,15 @@ export async function POST(request: NextRequest) {
       deliveryMethod: "both",
     };
 
-    const result = await db.collection<Tenant>("tenants").insertOne(tenantData);
+    let result;
+    try {
+      result = await db.collection<Tenant>("tenants").insertOne(tenantData);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json({ success: false, message: "That email is already in use" }, { status: 409 });
+      }
+      throw error;
+    }
 
     await appendOwnerActivityFromRequest(db, request, {
       action: "tenants.create",
@@ -528,10 +536,10 @@ export async function POST(request: NextRequest) {
     // Full SMS (auto-split into multi-part messages if needed)
     const smsMessage =
       `Welcome ${body.name.trim()}!\n` +
-      `Property: ${property.name}\n` +
-      `Units: ${unitSummary}\n` +
-      `Login: ${loginUrl}\n` +
-      `Email: ${body.email.trim()}\n` +
+        `Property: ${property.name}\n` +
+        `Units: ${unitSummary}\n` +
+        `Login: ${loginUrl}\n` +
+      `Email: ${normalizedEmail}\n` +
       `Password: ${body.password!}\n` +
       `Please change your password after first login.`;
 
@@ -541,17 +549,17 @@ export async function POST(request: NextRequest) {
       `You've been added as a tenant to ${property.name}.\n` +
       `Units: ${unitSummary}\n\n` +
       `Login here: ${loginUrl}\n` +
-      `Email:    ${body.email.trim()}\n` +
+      `Email:    ${normalizedEmail}\n` +
       `Password: ${body.password!}\n\n` +
       `⚠️ IMPORTANT: Change your password immediately after first login!\n` +
       `Go to account settings → Change Password.\n` +
       `Never share this password.`;
 
     try {
-      await sendWelcomeEmail({
-        to: body.email,
+        await sendWelcomeEmail({
+        to: normalizedEmail,
         name: body.name,
-        email: body.email,
+        email: normalizedEmail,
         password: body.password!,
         loginUrl,
         propertyName: property.name,

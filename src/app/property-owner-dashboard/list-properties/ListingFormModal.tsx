@@ -7,6 +7,7 @@ import { X, Upload, Trash2, AlertCircle } from "lucide-react";
 import Modal from "../components/Modal"; // Adjust path if needed
 
 import { Property, Listing } from "@/types/property";
+import { readJsonResponse } from "@/lib/api-client";
 
 const FACILITIES = [
   "Wi-Fi",
@@ -51,6 +52,7 @@ export default function ListingFormModal({
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -74,6 +76,7 @@ export default function ListingFormModal({
     setImages([]);
     setImagePreviews([]);
     setImageUploadError(null);
+    setUploadProgress(null);
     setFormErrors({});
     setSubmitError(null);
     setIsSubmitting(false);
@@ -140,14 +143,24 @@ export default function ListingFormModal({
     const files = Array.from(e.target.files || []);
     const valid: File[] = [];
     const errors: string[] = [];
+    const existingKeys = new Set(
+      images.map((file) => `${file.name}:${file.size}:${file.lastModified}:${file.type}`)
+    );
 
     files.forEach((file) => {
-      if (!["image/jpeg", "image/png"].includes(file.type)) {
-        errors.push(`${file.name}: Only JPEG or PNG allowed`);
+      const key = `${file.name}:${file.size}:${file.lastModified}:${file.type}`;
+      if (existingKeys.has(key)) {
+        errors.push(`${file.name}: duplicate image ignored`);
+        return;
+      }
+
+      if (!["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"].includes(file.type)) {
+        errors.push(`${file.name}: unsupported image type`);
       } else if (file.size > 5 * 1024 * 1024) {
         errors.push(`${file.name}: Maximum 5MB per image`);
       } else {
         valid.push(file);
+        existingKeys.add(key);
       }
     });
 
@@ -168,6 +181,8 @@ export default function ListingFormModal({
       ...prev,
       ...valid.map((file) => URL.createObjectURL(file)),
     ]);
+
+    e.target.value = "";
   };
 
   const removeImage = (index: number) => {
@@ -184,6 +199,8 @@ export default function ListingFormModal({
     const formData = new FormData();
     files.forEach((file) => formData.append("images", file));
 
+    setUploadProgress(`Uploading ${files.length} image${files.length === 1 ? "" : "s"}...`);
+
     const res = await fetch("/api/upload", {
       method: "POST",
       body: formData,
@@ -193,10 +210,24 @@ export default function ListingFormModal({
       credentials: "include",
     });
 
-    const data = await res.json();
+    const data = await readJsonResponse<{
+      success?: boolean;
+      urls?: string[];
+      failedFiles?: Array<{ name: string; error: string }>;
+      message?: string;
+    }>(res, "Image upload failed.");
 
     if (!res.ok || !data.success) {
       throw new Error(data.message || "Image upload failed");
+    }
+
+    if (Array.isArray(data.failedFiles) && data.failedFiles.length > 0) {
+      setImageUploadError(
+        data.failedFiles.map((item) => `${item.name}: ${item.error}`).join("; ")
+      );
+      setUploadProgress(`Uploaded ${data.urls?.length || 0} image(s) with ${data.failedFiles.length} failure(s).`);
+    } else {
+      setUploadProgress(null);
     }
 
     return data.urls || [];
@@ -223,7 +254,6 @@ export default function ListingFormModal({
       if (images.length > 0) {
         setIsUploading(true);
         const uploadedUrls = await uploadImages(images);
-        setIsUploading(false);
         finalImageUrls = [...finalImageUrls, ...uploadedUrls];
       }
 
@@ -256,7 +286,7 @@ export default function ListingFormModal({
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await readJsonResponse<{ success?: boolean; message?: string }>(res, "Failed to save listing.");
 
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Failed to save listing");
@@ -269,6 +299,7 @@ export default function ListingFormModal({
     } finally {
       setIsSubmitting(false);
       setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -427,7 +458,7 @@ export default function ListingFormModal({
               <input
                 type="file"
                 multiple
-                accept="image/jpeg,image/png"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
                 className="hidden"
                 onChange={handleImageChange}
                 disabled={isSubmitting || isUploading}
@@ -437,6 +468,9 @@ export default function ListingFormModal({
 
           {imageUploadError && (
             <p className="text-red-500 text-xs mt-2">{imageUploadError}</p>
+          )}
+          {uploadProgress && (
+            <p className="text-xs text-slate-500 mt-2">{uploadProgress}</p>
           )}
 
           {imagePreviews.length > 0 && (
