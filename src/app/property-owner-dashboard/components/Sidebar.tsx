@@ -110,6 +110,7 @@ export default function Sidebar() {
 
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
+  const isFreeTierOverdue = isDue && tier === "free";
   const restrictedKeys = new Set(["dashboard", "reports", "properties"]);
   const isFreeTier = tier === "free";
   const propertiesActive = pathname === "/property-owner-dashboard/properties" || pathname.startsWith("/property-owner-dashboard/properties/");
@@ -266,16 +267,18 @@ export default function Sidebar() {
                       className={`grid overflow-hidden transition-all duration-200 ${isPropertiesExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
                     >
                       <div className="min-h-0 overflow-hidden pl-4 pr-2 pb-2">
-                        <Link
-                          href="/property-owner-dashboard/properties"
-                          onClick={close}
-                          className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
-                            propertiesActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
-                          }`}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          Properties
-                        </Link>
+                        {!isFreeTierOverdue && (
+                          <Link
+                            href="/property-owner-dashboard/properties"
+                            onClick={close}
+                            className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                              propertiesActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                            }`}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            Properties
+                          </Link>
+                        )}
                         <Link
                           href="/property-owner-dashboard/properties-report"
                           onClick={close}
@@ -286,6 +289,11 @@ export default function Sidebar() {
                           <span className="h-1.5 w-1.5 rounded-full bg-current" />
                           Properties Report
                         </Link>
+                        {isFreeTierOverdue && (
+                          <p className="mt-2 px-3 text-[10px] uppercase tracking-[0.22em] text-amber-700">
+                            Properties locked while invoice is overdue
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

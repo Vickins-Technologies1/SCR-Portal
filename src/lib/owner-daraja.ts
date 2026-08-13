@@ -2,7 +2,7 @@ import "server-only";
 import { Db, ObjectId } from "mongodb";
 import { decryptDarajaSecret, encryptDarajaSecret, isLikelyEncryptedDarajaSecret } from "@/lib/daraja-crypto";
 import { maskSecret } from "@/lib/owner-integrations";
-import { getMpesaPasskey, getMpesaShortcode } from "@/lib/mpesa";
+import { resolvePlatformStkCredentials } from "@/lib/mpesa";
 
 export type OwnerDarajaMode = "shared_daraja" | "user_paybill";
 export type OwnerDarajaEnvironment = "sandbox" | "production";
@@ -306,12 +306,13 @@ export async function resolveOwnerDarajaStkConfig(
       throw new Error("Shared Daraja destination number is not configured");
     }
 
-    const shortcode = getMpesaShortcode();
-    const passkey = getMpesaPasskey();
+    const platformCredentials = resolvePlatformStkCredentials();
+    const shortcode = destinationNumber || platformCredentials.shortcode;
+    const passkey = platformCredentials.passkey;
 
     return {
       mode,
-      environment: (process.env.MPESA_ENVIRONMENT === "production" ? "production" : "sandbox"),
+      environment: process.env.MPESA_ENVIRONMENT === "production" ? "production" : "sandbox",
       shortcode,
       passkey,
       consumerKey: process.env.MPESA_CONSUMER_KEY || "",

@@ -5,7 +5,7 @@ import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
-import { getMpesaShortcode } from "@/lib/mpesa";
+import { getMpesaShortcode, resolvePlatformStkCredentials } from "@/lib/mpesa";
 import logger from "@/lib/logger";
 import { resolveAccountTier } from "@/lib/tier";
 
@@ -93,8 +93,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (!shortcode) {
-      shortcode = getMpesaShortcode();
-      if (paymentType === "unknown") paymentType = "paybill";
+      try {
+        const platform = resolvePlatformStkCredentials();
+        shortcode = platform.shortcode;
+        if (paymentType === "unknown") paymentType = platform.source === "kopokopo" ? "till" : "paybill";
+      } catch {
+        shortcode = getMpesaShortcode();
+        if (paymentType === "unknown") paymentType = "paybill";
+      }
     }
 
     return NextResponse.json({

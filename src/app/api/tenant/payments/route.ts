@@ -11,6 +11,7 @@ import {
   decryptPasskey,
   getMpesaPasskey,
   getMpesaShortcode,
+  resolvePlatformStkCredentials,
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
@@ -59,18 +60,27 @@ interface Property {
 async function resolveMpesaCredentials(landlordId: string): Promise<{
   shortcode: string;
   passkey: string;
-  source: "landlord" | "platform";
+  source: "landlord" | "kopokopo" | "platform";
 }> {
   try {
     await connectMongoose();
     const doc = await LandlordMpesa.findOne({ landlord: landlordId })
-      .select({ shortcode: 1, passkey: 1 })
-      .lean<{ shortcode?: string; passkey?: string }>()
+      .select({ shortcode: 1, passkey: 1, paymentType: 1, paybillNumber: 1, tillNumber: 1 })
+      .lean<{ shortcode?: string; passkey?: string; paymentType?: string; paybillNumber?: string; tillNumber?: string }>()
       .exec();
 
+    const tillNumber = doc?.tillNumber?.trim() || "";
+    const paybillNumber = doc?.paybillNumber?.trim() || "";
     const shortcode = doc?.shortcode?.trim() || "";
     const rawPasskey = doc?.passkey?.trim() || "";
-    if (shortcode && rawPasskey) {
+    const resolvedShortcode =
+      doc?.paymentType === "till"
+        ? tillNumber || shortcode
+        : doc?.paymentType === "paybill"
+          ? paybillNumber || shortcode
+          : shortcode || tillNumber || paybillNumber;
+
+    if (resolvedShortcode && rawPasskey) {
       let resolvedPasskey = rawPasskey;
       try {
         resolvedPasskey = decryptPasskey(rawPasskey);
@@ -78,11 +88,18 @@ async function resolveMpesaCredentials(landlordId: string): Promise<{
         // Stored as plain text or missing encryption secret; fallback to raw value.
       }
       if (resolvedPasskey) {
-        return { shortcode, passkey: resolvedPasskey, source: "landlord" };
+        return { shortcode: resolvedShortcode, passkey: resolvedPasskey, source: "landlord" };
       }
     }
   } catch {
     // Ignore landlord lookup errors and fallback to platform credentials.
+  }
+
+  try {
+    const platform = resolvePlatformStkCredentials();
+    return { shortcode: platform.shortcode, passkey: platform.passkey, source: platform.source };
+  } catch {
+    // Ignore and fall through to legacy direct env lookups below.
   }
 
   return {
@@ -332,7 +349,7 @@ export async function POST(request: NextRequest) {
           message:
             err instanceof Error
               ? err.message
-              : "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+              : "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_PASSKEY or MPESA_SHORTCODE/MPESA_PASSKEY.",
         },
         { status: 500 }
       );
@@ -343,7 +360,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           message:
-            "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+            "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_PASSKEY or MPESA_SHORTCODE/MPESA_PASSKEY.",
         },
         { status: 500 }
       );

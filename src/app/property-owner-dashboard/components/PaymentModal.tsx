@@ -514,7 +514,9 @@ export default function PaymentModal({
   };
   const darajaModeBadgeText =
     paymentRail === "shared_daraja"
-      ? `Mpesa · funds land in ${ownerDarajaConfig?.shared.paymentType === "till" ? "Till" : "Paybill"} ${
+      ? `${ownerDarajaConfig?.shared.paymentType === "till" ? "K-till" : "Mpesa"} · funds land in ${
+          ownerDarajaConfig?.shared.paymentType === "till" ? "Till" : "Paybill"
+        } ${
           maskInline(
             ownerDarajaConfig?.shared.paymentType === "paybill"
               ? ownerDarajaConfig?.shared.accountNumber || ownerDarajaConfig?.shared.destinationNumber || ""
@@ -526,7 +528,9 @@ export default function PaymentModal({
         : "Legacy M-Pesa · platform shortcode";
   const selectedDarajaLabel =
     paymentRail === "shared_daraja"
-      ? "Mpesa"
+      ? ownerDarajaConfig?.shared.paymentType === "till"
+        ? "K-till"
+        : "Mpesa"
       : paymentRail === "user_paybill"
         ? "User-owned Paybill"
         : "Legacy M-Pesa";
@@ -661,7 +665,11 @@ export default function PaymentModal({
                   className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                 >
                   <option value="legacy_mpesa">Legacy M-Pesa flow</option>
-                  {sharedDarajaAvailable && <option value="shared_daraja">Mpesa</option>}
+                  {sharedDarajaAvailable && (
+                    <option value="shared_daraja">
+                      {ownerDarajaConfig?.shared.paymentType === "till" ? "K-till" : "Mpesa"}
+                    </option>
+                  )}
                   {userPaybillAvailable && <option value="user_paybill">User-owned Paybill</option>}
                 </select>
 

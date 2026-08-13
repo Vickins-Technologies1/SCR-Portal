@@ -61,6 +61,32 @@ export function getKopokopoPasskey(): string {
   return getMpesaPasskey();
 }
 
+export function resolvePlatformStkCredentials(): {
+  shortcode: string;
+  passkey: string;
+  source: "kopokopo" | "mpesa";
+} {
+  if (KOPOKOPO_TILL_NUMBER && KOPOKOPO_PASSKEY) {
+    return {
+      shortcode: KOPOKOPO_TILL_NUMBER,
+      passkey: KOPOKOPO_PASSKEY,
+      source: "kopokopo",
+    };
+  }
+
+  if (MPESA_SHORTCODE && MPESA_PASSKEY) {
+    return {
+      shortcode: MPESA_SHORTCODE,
+      passkey: MPESA_PASSKEY,
+      source: "mpesa",
+    };
+  }
+
+  throw new Error(
+    "Missing payment credentials. Configure KOPOKOPO_TILL_NUMBER/KOPOKOPO_PASSKEY or MPESA_SHORTCODE/MPESA_PASSKEY."
+  );
+}
+
 export function encryptPasskey(text: string): string {
   requireEnv("MPESA_ENCRYPTION_SECRET", MPESA_ENCRYPTION_SECRET);
   const key = Buffer.from(MPESA_ENCRYPTION_SECRET, "utf8");

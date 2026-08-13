@@ -16,6 +16,7 @@ import {
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
+  resolvePlatformStkCredentials,
 } from "@/lib/mpesa";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
@@ -414,36 +415,24 @@ export async function POST(request: NextRequest) {
     // Resolve M-Pesa credentials (prefer landlord-level, fallback to platform)
     let shortcode = preferredShortcode;
     let passkey = resolveStoredPasskey(storedPasskey);
+    const platformCredentials = (() => {
+      try {
+        return resolvePlatformStkCredentials();
+      } catch {
+        return null;
+      }
+    })();
+    const kopokopoShortcode = safeGetKopokopoTillNumber();
+    const kopokopoPasskey = safeGetKopokopoPasskey();
     const envShortcode = safeGetMpesaShortcode();
     const envPasskey = safeGetMpesaPasskey();
 
     if (!shortcode) {
-      shortcode = envShortcode;
+      shortcode = kopokopoShortcode || platformCredentials?.shortcode || envShortcode;
     }
 
     if (!passkey) {
-      if (shortcode && envShortcode && shortcode !== envShortcode) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: `Missing M-Pesa passkey for shortcode ${shortcode}. Configure the landlord passkey or set MPESA_SHORTCODE/MPESA_PASSKEY for the same shortcode.`,
-          },
-          { status: 500 }
-        );
-      }
-
-      if (!envShortcode || !envPasskey) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
-          },
-          { status: 500 }
-        );
-      }
-
-      passkey = envPasskey;
+      passkey = kopokopoPasskey || platformCredentials?.passkey || envPasskey;
     }
 
     if (!shortcode || !passkey) {
@@ -451,7 +440,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           message:
-            "Missing M-Pesa credentials. Configure landlord shortcode/passkey or platform MPESA_SHORTCODE/MPESA_PASSKEY.",
+            "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_PASSKEY or MPESA_SHORTCODE/MPESA_PASSKEY.",
         },
         { status: 500 }
       );

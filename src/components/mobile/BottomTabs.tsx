@@ -11,6 +11,7 @@ import {
   Settings,
   Building2,
   Users,
+  BarChart,
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
@@ -33,6 +34,8 @@ export default function BottomTabs({ variant, hidden = false }: { variant: Varia
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [isDue, setIsDue] = useState(false);
+  const [isFreeTier, setIsFreeTier] = useState(false);
 
   const storageKey = `sorana-bottom-tabs-collapsed:${variant}`;
 
@@ -60,6 +63,33 @@ export default function BottomTabs({ variant, hidden = false }: { variant: Varia
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (variant !== "owner") return;
+    try {
+      setIsFreeTier(Cookies.get("tier") === "free");
+    } catch {
+      setIsFreeTier(false);
+    }
+
+    let cancelled = false;
+    const fetchDueStatus = async () => {
+      try {
+        const res = await fetch("/api/owner-dues", { credentials: "include" });
+        const data = await res.json();
+        if (!cancelled && data?.success) {
+          setIsDue(Boolean(data.isDue));
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchDueStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [variant]);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -93,14 +123,18 @@ export default function BottomTabs({ variant, hidden = false }: { variant: Varia
       ];
     }
 
+    const showPropertiesReportTab = variant === "owner" && isDue && isFreeTier;
+
     return [
       { href: "/property-owner-dashboard", label: "Home", match: "exact", Icon: (p) => <LayoutDashboard {...p} /> },
-      { href: "/property-owner-dashboard/properties", label: "Props", match: "prefix", Icon: (p) => <Building2 {...p} /> },
+      showPropertiesReportTab
+        ? { href: "/property-owner-dashboard/properties-report", label: "Report", match: "prefix", Icon: (p) => <BarChart {...p} /> }
+        : { href: "/property-owner-dashboard/properties", label: "Props", match: "prefix", Icon: (p) => <Building2 {...p} /> },
       { href: "/property-owner-dashboard/tenants", label: "Tenants", match: "prefix", Icon: (p) => <Users {...p} /> },
       { href: "/property-owner-dashboard/payments", label: "Payments", match: "prefix", Icon: (p) => <CreditCard {...p} /> },
       { href: "/property-owner-dashboard/settings", label: "Settings", match: "prefix", Icon: (p) => <Settings {...p} /> },
     ];
-  }, [variant]);
+  }, [variant, isDue, isFreeTier]);
 
   if (hidden) return null;
   if (modalOpen) return null;
