@@ -183,8 +183,8 @@ export default function Sidebar() {
   ];
 
   const canAccessLink = (link: NavLink) => perm.hasPermission(link.requiredPermission ?? "");
-  const visibleLinks = mounted
-    ? allLinks.flatMap((item) => {
+  const visibleLinks: NavItem[] = mounted
+    ? allLinks.reduce<NavItem[]>((acc, item) => {
         if ("children" in item) {
           const filteredChildren = item.children.filter((child) => {
             if (!canAccessLink(child)) return false;
@@ -194,13 +194,17 @@ export default function Sidebar() {
             return true;
           });
 
-          return filteredChildren.length > 0
-            ? [{ ...item, children: filteredChildren }]
-            : [];
+          if (filteredChildren.length > 0) {
+            acc.push({ ...item, children: filteredChildren });
+          }
+          return acc;
         }
 
-        return canAccessLink(item) ? [item] : [];
-      })
+        if (canAccessLink(item)) {
+          acc.push(item);
+        }
+        return acc;
+      }, [])
     : [];
 
   const navLinks = isDue ? visibleLinks.filter((link) => restrictedKeys.has(link.key)) : visibleLinks;
