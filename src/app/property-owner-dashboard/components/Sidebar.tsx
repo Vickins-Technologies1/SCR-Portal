@@ -138,6 +138,7 @@ export default function Sidebar() {
   const isFreeTier = tier === "free";
   const propertiesPath = "/property-owner-dashboard/properties";
   const propertiesReportPath = "/property-owner-dashboard/properties-report";
+  const listPropertiesPath = "/property-owner-dashboard/list-properties";
   const reportsPath = "/property-owner-dashboard/reports";
   const paymentsPath = "/property-owner-dashboard/payments";
   const expensesPath = "/property-owner-dashboard/expenses";
@@ -145,7 +146,8 @@ export default function Sidebar() {
 
   const propertiesActive = pathname === propertiesPath || pathname.startsWith(`${propertiesPath}/`);
   const propertyReportActive = pathname === propertiesReportPath || pathname.startsWith(`${propertiesReportPath}/`);
-  const propertiesSectionActive = propertiesActive || propertyReportActive;
+  const listPropertyActive = pathname === listPropertiesPath || pathname.startsWith(`${listPropertiesPath}/`);
+  const propertiesSectionActive = propertiesActive || propertyReportActive || listPropertyActive;
   const financeSectionActive =
     pathname === reportsPath ||
     pathname.startsWith(`${reportsPath}/`) ||
@@ -170,7 +172,7 @@ export default function Sidebar() {
       children: [
         { key: "properties", href: propertiesPath, label: "Properties", icon: <Building2 size={18} />, requiredPermission: "properties:view" },
         { key: "properties-report", href: propertiesReportPath, label: "Properties Report", icon: <BarChart size={18} />, requiredPermission: "properties:view" },
-        { key: "list-properties", href: propertiesPath, label: "List Properties", icon: <PlusCircle size={18} />, requiredPermission: "properties:view" },
+        { key: "list-properties", href: "/property-owner-dashboard/list-properties", label: "List Properties", icon: <PlusCircle size={18} />, requiredPermission: "properties:view" },
       ],
     },
     { key: "tenants", href: "/property-owner-dashboard/tenants", label: "Tenants", icon: <Users size={20} />, requiredPermission: "tenants:view" },
@@ -399,7 +401,7 @@ export default function Sidebar() {
                                       : child.key === "properties-report"
                                           ? propertyReportActive
                                           : child.key === "list-properties"
-                                            ? propertiesActive
+                                            ? listPropertyActive
                                             : pathname === child.href || pathname.startsWith(child.href + "/");
 
                           return (
@@ -520,9 +522,6 @@ export default function Sidebar() {
     </>
   );
 }
-
-
-
 
 
 
