@@ -68,33 +68,15 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
       placement: "right",
     },
     {
-      title: "Payments",
-      body: "Track rent, deposits, utilities, and manual payments.",
-      selector: '[data-tour="owner-nav-payments"]',
-      placement: "right",
-    },
-    {
-      title: "Integrations",
-      body: "Connect payment providers like Tuma and manage API credentials.",
-      selector: '[data-tour="owner-nav-integrations"]',
-      placement: "right",
-    },
-    {
-      title: "Expenses",
-      body: "Log and review operating expenses for each property.",
-      selector: '[data-tour="owner-nav-expenses"]',
-      placement: "right",
-    },
-    {
       title: "Notifications",
       body: "Monitor updates, reminders, and action items.",
       selector: '[data-tour="owner-nav-notifications"]',
       placement: "right",
     },
     {
-      title: "Reports & Invoices",
-      body: "Generate reports, export data, and manage invoices.",
-      selector: '[data-tour="owner-nav-reports"]',
+      title: "Finance",
+      body: "Open reports, invoices, payments, expenses, and integrations from the Finance dropdown.",
+      selector: '[data-tour="owner-nav-finance"]',
       placement: "right",
     },
     {

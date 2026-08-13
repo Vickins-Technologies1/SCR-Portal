@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Cookies from "js-cookie";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FileText, BarChart2, ArrowUpDown, Download, Lock } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -98,6 +98,7 @@ interface SortConfig<T> {
 
 function ReportsAndInvoicesPageInner() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const perm = usePermissions();
   const { isFree } = useAccountTier();
@@ -105,9 +106,7 @@ function ReportsAndInvoicesPageInner() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab === "invoices") {
-      setActiveTab("invoices");
-    }
+    setActiveTab(tab === "invoices" ? "invoices" : "reports");
   }, [searchParams]);
   const [reports, setReports] = useState<Report[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -139,6 +138,17 @@ function ReportsAndInvoicesPageInner() {
   const [isInvoicePaymentOpen, setIsInvoicePaymentOpen] = useState(false);
   const [invoicePaymentPropertyId, setInvoicePaymentPropertyId] = useState<string>("");
   const [invoicePaymentPhone, setInvoicePaymentPhone] = useState<string>("");
+  const updateTabInUrl = useCallback((tab: "reports" | "invoices") => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (tab === "invoices") {
+      nextParams.set("tab", "invoices");
+    } else {
+      nextParams.delete("tab");
+    }
+
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   // Helper: Validate and format date
   const isValidDate = (dateString: string): boolean => {
@@ -452,6 +462,7 @@ function ReportsAndInvoicesPageInner() {
   const handleTabSwitch = (tab: "reports" | "invoices") => {
     if (isDue && tab === "reports") return;
     setActiveTab(tab);
+    updateTabInUrl(tab);
     setError(null);
     setSuccessMessage(null);
   };
@@ -459,8 +470,9 @@ function ReportsAndInvoicesPageInner() {
   useEffect(() => {
     if (isDue && activeTab === "reports") {
       setActiveTab("invoices");
+      updateTabInUrl("invoices");
     }
-  }, [isDue, activeTab]);
+  }, [isDue, activeTab, updateTabInUrl]);
 
   // Filters
   const handlePropertyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -616,7 +628,7 @@ function ReportsAndInvoicesPageInner() {
     } finally {
       setIsExporting(false);
     }
-  }, [reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties]);
+  }, [canExportReports, reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties]);
 
   // Chart data (unchanged)
   const chartLabels = getAllMonths(startDate, endDate);

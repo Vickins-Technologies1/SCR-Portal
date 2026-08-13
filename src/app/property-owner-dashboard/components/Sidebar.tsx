@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import {
@@ -17,6 +17,7 @@ import {
   Receipt,
   UserCog,
   PlugZap,
+  Landmark,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { useSidebar } from "./SidebarContext";
@@ -45,8 +46,19 @@ type NavLink = {
   requiredPermission?: string;
 };
 
+type NavGroup = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  requiredPermission?: string;
+  children: NavLink[];
+};
+
+type NavItem = NavLink | NavGroup;
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { isOpen, close } = useSidebar();
   const { userId, role, tier } = useAuth();
@@ -55,6 +67,7 @@ export default function Sidebar() {
   const [teamRole, setTeamRole] = useState("Team Member");
   const [mounted, setMounted] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [financeOpen, setFinanceOpen] = useState(false);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
@@ -110,29 +123,84 @@ export default function Sidebar() {
 
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
-  const isFreeTierOverdue = isDue && tier === "free";
-  const restrictedKeys = new Set(["dashboard", "reports"]);
+  const restrictedKeys = new Set(["dashboard", "finance"]);
   const isFreeTier = tier === "free";
-  const propertiesActive = pathname === "/property-owner-dashboard/properties" || pathname.startsWith("/property-owner-dashboard/properties/");
-  const propertyReportActive = pathname === "/property-owner-dashboard/properties-report" || pathname.startsWith("/property-owner-dashboard/properties-report/");
-  const propertiesSectionActive = propertiesActive || propertyReportActive;
+  const propertiesPath = "/property-owner-dashboard/properties";
+  const propertiesReportPath = "/property-owner-dashboard/properties-report";
+  const reportsPath = "/property-owner-dashboard/reports";
+  const paymentsPath = "/property-owner-dashboard/payments";
+  const expensesPath = "/property-owner-dashboard/expenses";
+  const integrationsPath = "/property-owner-dashboard/integrations";
+  const reportTab = searchParams.get("tab");
 
-  const allLinks: NavLink[] = [
+  const propertiesActive = pathname === propertiesPath || pathname.startsWith(`${propertiesPath}/`);
+  const propertyReportActive = pathname === propertiesReportPath || pathname.startsWith(`${propertiesReportPath}/`);
+  const propertiesSectionActive = propertiesActive || propertyReportActive;
+  const financeSectionActive =
+    pathname === reportsPath ||
+    pathname.startsWith(`${reportsPath}/`) ||
+    pathname === paymentsPath ||
+    pathname.startsWith(`${paymentsPath}/`) ||
+    pathname === expensesPath ||
+    pathname.startsWith(`${expensesPath}/`) ||
+    pathname === integrationsPath ||
+    pathname.startsWith(`${integrationsPath}/`);
+  const invoicesActive = pathname === reportsPath && (reportTab === "invoices" || isDue);
+  const reportsActive = pathname === reportsPath && !invoicesActive;
+  const paymentsActive = pathname === paymentsPath || pathname.startsWith(`${paymentsPath}/`);
+  const expensesActive = pathname === expensesPath || pathname.startsWith(`${expensesPath}/`);
+  const integrationsActive = pathname === integrationsPath || pathname.startsWith(`${integrationsPath}/`);
+
+  const allLinks: NavItem[] = [
     { key: "dashboard", href: "/property-owner-dashboard", label: "Overview", icon: <LayoutDashboard size={20} />, requiredPermission: "dashboard:view" },
-    { key: "properties", href: "/property-owner-dashboard/properties", label: "Properties", icon: <Building2 size={20} />, requiredPermission: "properties:view" },
     { key: "tenants", href: "/property-owner-dashboard/tenants", label: "Tenants", icon: <Users size={20} />, requiredPermission: "tenants:view" },
     { key: "users", href: "/property-owner-dashboard/users", label: "Users", icon: <UserCog size={20} />, requiredPermission: "users:view" },
-    { key: "payments", href: "/property-owner-dashboard/payments", label: "Payments", icon: <CreditCard size={20} />, requiredPermission: "payments:view" },
-    { key: "integrations", href: "/property-owner-dashboard/integrations", label: "Integrations", icon: <PlugZap size={20} />, requiredPermission: "integrations:view" },
-    { key: "expenses", href: "/property-owner-dashboard/expenses", label: "Expenses", icon: <Receipt size={20} />, requiredPermission: "expenses:view" },
     { key: "notifications", href: "/property-owner-dashboard/notifications", label: "Notifications", icon: <Bell size={20} />, requiredPermission: "notifications:view" },
-    { key: "reports", href: "/property-owner-dashboard/reports", label: "Reports & Invoices", icon: <BarChart size={20} />, requiredPermission: "reports:view" },
+    {
+      key: "properties",
+      label: "Properties",
+      icon: <Building2 size={20} />,
+      children: [
+        { key: "properties", href: propertiesPath, label: "Properties", icon: <Building2 size={18} />, requiredPermission: "properties:view" },
+        { key: "properties-report", href: propertiesReportPath, label: "Properties Report", icon: <BarChart size={18} />, requiredPermission: "properties:view" },
+        { key: "list-properties", href: propertiesPath, label: "List Properties", icon: <PlusCircle size={18} />, requiredPermission: "properties:view" },
+      ],
+    },
+    {
+      key: "finance",
+      label: "Finance",
+      icon: <Landmark size={20} />,
+      children: [
+        { key: "reports", href: "/property-owner-dashboard/reports", label: "Reports", icon: <BarChart size={18} />, requiredPermission: "reports:view" },
+        { key: "invoices", href: "/property-owner-dashboard/reports?tab=invoices", label: "Invoices", icon: <Receipt size={18} />, requiredPermission: "reports:view" },
+        { key: "payments", href: paymentsPath, label: "Payments", icon: <CreditCard size={18} />, requiredPermission: "payments:view" },
+        { key: "expenses", href: expensesPath, label: "Expenses", icon: <Receipt size={18} />, requiredPermission: "expenses:view" },
+        { key: "integrations", href: integrationsPath, label: "Integrations", icon: <PlugZap size={18} />, requiredPermission: "integrations:view" },
+      ],
+    },
     { key: "settings", href: "/property-owner-dashboard/settings", label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
     { key: "list-property", href: "/property-owner-dashboard/list-properties", label: "List Property", icon: <PlusCircle size={20} />, requiredPermission: "properties:list_new" },
   ];
 
+  const canAccessLink = (link: NavLink) => perm.hasPermission(link.requiredPermission ?? "");
   const visibleLinks = mounted
-    ? allLinks.filter((link) => perm.hasPermission(link.requiredPermission ?? ""))
+    ? allLinks.flatMap((item) => {
+        if ("children" in item) {
+          const filteredChildren = item.children.filter((child) => {
+            if (!canAccessLink(child)) return false;
+            if (item.key === "finance") {
+              return !isDue || child.key === "reports" || child.key === "invoices";
+            }
+            return true;
+          });
+
+          return filteredChildren.length > 0
+            ? [{ ...item, children: filteredChildren }]
+            : [];
+        }
+
+        return canAccessLink(item) ? [item] : [];
+      })
     : [];
 
   const navLinks = isDue ? visibleLinks.filter((link) => restrictedKeys.has(link.key)) : visibleLinks;
@@ -236,69 +304,116 @@ export default function Sidebar() {
           </div>
 
           <nav className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 space-y-1.5">
-            {navLinks.map(({ key, href, label, icon }) => {
-              const isActive = pathname === href || pathname.startsWith(href + "/");
-              const showUnreadBadge = key === "notifications" && unreadNotifications > 0;
+            {navLinks.map((item) => {
+              if ("children" in item) {
+                const isFinanceExpanded = financeOpen || financeSectionActive;
+                const isFinanceActive = financeSectionActive;
+                const isPropertiesGroup = item.key === "properties";
+                const visibleChildren = item.children;
 
-              if (key === "properties") {
-                const isPropertiesExpanded = propertiesOpen || propertiesSectionActive;
                 return (
-                  <div key={key} className={`rounded-xl ${propertiesSectionActive ? "bg-primary/10 ring-1 ring-primary/20" : ""}`}>
+                  <div
+                    key={item.key}
+                    className={`rounded-xl ${
+                      item.key === "finance" && isFinanceActive
+                        ? "bg-primary/10 ring-1 ring-primary/20"
+                        : isPropertiesGroup && propertiesSectionActive
+                          ? "bg-primary/10 ring-1 ring-primary/20"
+                          : ""
+                    }`}
+                  >
                     <button
                       type="button"
-                      onClick={() => setPropertiesOpen((prev) => !prev)}
-                      data-tour={`owner-nav-${key}`}
+                      onClick={() => {
+                        if (item.key === "finance") {
+                          setFinanceOpen((prev) => !prev);
+                        } else {
+                          setPropertiesOpen((prev) => !prev);
+                        }
+                      }}
+                      data-tour={`owner-nav-${item.key}`}
                       className={`group flex w-full items-center gap-3 sm:gap-4 rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
-                        propertiesSectionActive
-                          ? "text-primary"
-                          : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                        item.key === "finance"
+                          ? isFinanceActive
+                            ? "text-primary"
+                            : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                          : propertiesSectionActive
+                            ? "text-primary"
+                            : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
                       }`}
-                      aria-expanded={isPropertiesExpanded}
-                      aria-controls="owner-properties-submenu"
+                      aria-expanded={item.key === "finance" ? isFinanceExpanded : propertiesOpen || propertiesSectionActive}
+                      aria-controls={item.key === "finance" ? "owner-finance-submenu" : "owner-properties-submenu"}
                     >
-                      <span className={`relative ${propertiesSectionActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}`}>
-                        {icon}
+                      <span className={`relative ${
+                        item.key === "finance"
+                          ? isFinanceActive
+                            ? "text-primary"
+                            : "text-muted-foreground group-hover:text-primary"
+                          : propertiesSectionActive
+                            ? "text-primary"
+                            : "text-muted-foreground group-hover:text-primary"
+                      }`}>
+                        {item.icon}
                       </span>
-                      <span className="truncate flex-1 text-left">{label}</span>
-                      {isPropertiesExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <span className="truncate flex-1 text-left">{item.label}</span>
+                      {item.key === "finance"
+                        ? (isFinanceExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)
+                        : ((propertiesOpen || propertiesSectionActive) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
                     </button>
                     <div
-                      id="owner-properties-submenu"
-                      className={`grid overflow-hidden transition-all duration-200 ${isPropertiesExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+                      id={item.key === "finance" ? "owner-finance-submenu" : "owner-properties-submenu"}
+                      className={`grid overflow-hidden transition-all duration-200 ${
+                        item.key === "finance"
+                          ? (isFinanceExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")
+                          : ((propertiesOpen || propertiesSectionActive) ? "grid-rows-[1fr]" : "grid-rows-[0fr]")
+                      }`}
                     >
                       <div className="min-h-0 overflow-hidden pl-4 pr-2 pb-2">
-                        {!isFreeTierOverdue && (
-                          <Link
-                            href="/property-owner-dashboard/properties"
-                            onClick={close}
-                            className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
-                              propertiesActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
-                            }`}
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                            Properties
-                          </Link>
-                        )}
-                        <Link
-                          href="/property-owner-dashboard/properties-report"
-                          onClick={close}
-                          className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
-                            propertyReportActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
-                          }`}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          Properties Report
-                        </Link>
-                        {isFreeTierOverdue && (
-                          <p className="mt-2 px-3 text-[10px] uppercase tracking-[0.22em] text-amber-700">
-                            Properties locked while invoice is overdue
-                          </p>
-                        )}
+                        {visibleChildren.map((child) => {
+                          const isChildActive =
+                            child.key === "reports"
+                              ? reportsActive
+                              : child.key === "invoices"
+                                ? invoicesActive
+                                : child.key === "payments"
+                                  ? paymentsActive
+                                  : child.key === "expenses"
+                                    ? expensesActive
+                                    : child.key === "integrations"
+                                      ? integrationsActive
+                                      : child.key === "properties"
+                                        ? propertiesActive
+                                      : child.key === "properties-report"
+                                          ? propertyReportActive
+                                          : child.key === "list-properties"
+                                            ? propertiesActive
+                                            : pathname === child.href || pathname.startsWith(child.href + "/");
+
+                          return (
+                            <Link
+                              key={child.key}
+                              href={child.href}
+                              onClick={close}
+                              className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                                isChildActive
+                                  ? "bg-primary/10 text-primary"
+                                  : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                              }`}
+                            >
+                              <span className="shrink-0 text-current/80">{child.icon}</span>
+                              <span className="truncate">{child.label}</span>
+                            </Link>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
                 );
               }
+
+              const { key, href, label, icon } = item;
+              const isActive = pathname === href || pathname.startsWith(href + "/");
+              const showUnreadBadge = key === "notifications" && unreadNotifications > 0;
 
               return (
                 <Link
