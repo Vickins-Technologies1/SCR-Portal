@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import {
   LayoutDashboard,
   Users,
@@ -54,6 +54,7 @@ export default function Sidebar() {
   const [name, setName] = useState("User");
   const [teamRole, setTeamRole] = useState("Team Member");
   const [mounted, setMounted] = useState(false);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
@@ -109,8 +110,11 @@ export default function Sidebar() {
 
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
-  const restrictedKeys = new Set(["dashboard", "reports"]);
+  const restrictedKeys = new Set(["dashboard", "reports", "properties"]);
   const isFreeTier = tier === "free";
+  const propertiesActive = pathname === "/property-owner-dashboard/properties" || pathname.startsWith("/property-owner-dashboard/properties/");
+  const propertyReportActive = pathname === "/property-owner-dashboard/properties-report" || pathname.startsWith("/property-owner-dashboard/properties-report/");
+  const propertiesSectionActive = propertiesActive || propertyReportActive;
 
   const allLinks: NavLink[] = [
     { key: "dashboard", href: "/property-owner-dashboard", label: "Overview", icon: <LayoutDashboard size={20} />, requiredPermission: "dashboard:view" },
@@ -234,6 +238,60 @@ export default function Sidebar() {
             {navLinks.map(({ key, href, label, icon }) => {
               const isActive = pathname === href || pathname.startsWith(href + "/");
               const showUnreadBadge = key === "notifications" && unreadNotifications > 0;
+
+              if (key === "properties") {
+                const isPropertiesExpanded = propertiesOpen || propertiesSectionActive;
+                return (
+                  <div key={key} className={`rounded-xl ${propertiesSectionActive ? "bg-primary/10 ring-1 ring-primary/20" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => setPropertiesOpen((prev) => !prev)}
+                      data-tour={`owner-nav-${key}`}
+                      className={`group flex w-full items-center gap-3 sm:gap-4 rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
+                        propertiesSectionActive
+                          ? "text-primary"
+                          : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                      }`}
+                      aria-expanded={isPropertiesExpanded}
+                      aria-controls="owner-properties-submenu"
+                    >
+                      <span className={`relative ${propertiesSectionActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}`}>
+                        {icon}
+                      </span>
+                      <span className="truncate flex-1 text-left">{label}</span>
+                      {isPropertiesExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+                    <div
+                      id="owner-properties-submenu"
+                      className={`grid overflow-hidden transition-all duration-200 ${isPropertiesExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+                    >
+                      <div className="min-h-0 overflow-hidden pl-4 pr-2 pb-2">
+                        <Link
+                          href="/property-owner-dashboard/properties"
+                          onClick={close}
+                          className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                            propertiesActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                          }`}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          Properties
+                        </Link>
+                        <Link
+                          href="/property-owner-dashboard/properties-report"
+                          onClick={close}
+                          className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                            propertyReportActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                          }`}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          Properties Report
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <Link
                   key={key}

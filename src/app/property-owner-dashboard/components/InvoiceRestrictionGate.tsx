@@ -18,7 +18,7 @@ export default function InvoiceRestrictionGate() {
   const [dueStatus, setDueStatus] = useState<DueStatus | null>(null);
   const [checked, setChecked] = useState(false);
   const basePath = useMemo(() => getOwnerDashboardBasePath(), []);
-  const allowedPaths = useMemo(() => [basePath, `${basePath}/reports`], [basePath]);
+  const allowedPaths = useMemo(() => [basePath, `${basePath}/reports`, `${basePath}/properties-report`], [basePath]);
 
   useEffect(() => {
     const userId = Cookies.get("userId");

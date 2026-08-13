@@ -167,6 +167,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   // Shared / multi-role APIs
   "/api/payments": { roles: ["admin", "propertyOwner", "teamMember", "tenant"], isApi: true },
   "/api/tenant/payments": { roles: ["tenant", "propertyOwner", "teamMember"], isApi: true },
+  "/api/reports": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/invoices": { roles: ["admin", "propertyOwner", "teamMember"], isApi: true },
   "/api/invoices/estimate": { roles: ["propertyOwner", "teamMember"], isApi: true },
   "/api/properties": { roles: ["propertyOwner", "teamMember", "tenant"], isApi: true },
@@ -372,6 +373,8 @@ export async function proxy(request: NextRequest) {
         path.startsWith("/api/ownerstats/") ||
         path === "/api/ownercharts" ||
         path.startsWith("/api/ownercharts/") ||
+        path === "/api/reports" ||
+        path.startsWith("/api/reports/") ||
         path === "/api/properties" ||
         path.startsWith("/api/properties/") ||
         path === "/api/list-properties" ||

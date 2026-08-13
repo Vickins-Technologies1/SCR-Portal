@@ -2,6 +2,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Db, MongoClient, ObjectId } from "mongodb";
 import logger from "../../../lib/logger";
+import {
+  buildAvailableYears,
+  buildRollingPeriods,
+  filterPropertiesBySnapshot,
+  formatPeriodLabel,
+  getMonthEndSnapshot,
+  summarizePropertyPerformance,
+  type PropertyPerformanceProperty,
+} from "@/lib/property-report";
+import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 
 // Database connection
 const connectToDatabase = async (): Promise<Db> => {
@@ -62,6 +72,44 @@ interface ApiResponse<T> {
   message?: string;
 }
 
+interface PropertyReportResponse {
+  period: {
+    year: number;
+    month: number;
+    label: string;
+    snapshotDate: string;
+  };
+  summary: {
+    totalProperties: number;
+    totalUnits: number;
+    occupiedUnits: number;
+    vacantUnits: number;
+    occupancyRate: number;
+    vacancyRate: number;
+  };
+  properties: Array<{
+    propertyId: string;
+    propertyName: string;
+    totalUnits: number;
+    occupiedUnits: number;
+    vacantUnits: number;
+    occupancyRate: number;
+    vacancyRate: number;
+    statusLabel: string;
+    statusTone: "success" | "warning" | "danger" | "neutral";
+  }>;
+  trend: {
+    labels: string[];
+    occupancyRates: number[];
+    vacancyRates: number[];
+    occupiedUnits: number[];
+    vacantUnits: number[];
+    totalUnits: number[];
+  };
+  availableYears: number[];
+  basisNote: string;
+}
+
 // Validate date string
 const isValidDate = (dateString: string): boolean => {
   if (!dateString || !/^\d{4}-\d{2}-\d{2}/.test(dateString)) return false;
@@ -70,7 +118,7 @@ const isValidDate = (dateString: string): boolean => {
 };
 
 // GET /api/reports
-export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Report[]>>> {
+export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Report[] | PropertyReportResponse>>> {
   const startTime = Date.now();
   try {
     // Read cookies from client request
@@ -114,10 +162,137 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
     // Get query params
     const { searchParams } = new URL(request.url);
+    const reportType = searchParams.get("reportType");
     const propertyId = searchParams.get("propertyId");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const type = searchParams.get("type");
+
+    if (reportType === "properties") {
+      const month = Number(searchParams.get("month") || new Date().getUTCMonth() + 1);
+      const year = Number(searchParams.get("year") || new Date().getUTCFullYear());
+
+      if (!Number.isInteger(month) || month < 1 || month > 12) {
+        return NextResponse.json(
+          { success: false, message: "month must be between 1 and 12" },
+          { status: 400 }
+        );
+      }
+
+      if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        return NextResponse.json(
+          { success: false, message: "year is out of range" },
+          { status: 400 }
+        );
+      }
+
+      const db = await connectToDatabase();
+      let effectiveOwnerId = loggedInUserId;
+      let assignedPropertyIds: string[] | null = null;
+
+      if (role === "teamMember") {
+        const teamMember = await db.collection("teamMembers").findOne({
+          _id: new ObjectId(loggedInUserId),
+          active: true,
+        });
+
+        if (!teamMember || !teamMember.ownerId) {
+          return NextResponse.json(
+            { success: false, message: "Unauthorized: No property owner assigned" },
+            { status: 403 }
+          );
+        }
+
+        effectiveOwnerId = teamMember.ownerId.toString();
+        assignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+          ? Array.from(
+              new Set(
+                (teamMember as any).assignedPropertyIds
+                  .map((value: any) => String(value || "").trim())
+                  .filter((value: string) => ObjectId.isValid(value))
+              )
+            )
+          : null;
+      }
+
+      const propertiesQuery: Record<string, unknown> = {
+        $or: [{ ownerId: effectiveOwnerId }, { ownerId: new ObjectId(effectiveOwnerId) }],
+      };
+      if (role === "teamMember" && assignedPropertyIds && assignedPropertyIds.length > 0) {
+        propertiesQuery._id = { $in: assignedPropertyIds.map((id) => new ObjectId(id)) };
+      }
+
+      const properties = await db
+        .collection<PropertyPerformanceProperty>("properties")
+        .find(propertiesQuery)
+        .toArray();
+
+      const selectedSnapshot = getMonthEndSnapshot(year, month);
+      const selectedLabel = formatPeriodLabel(year, month);
+      const selectedProperties = filterPropertiesBySnapshot(properties, selectedSnapshot);
+      const selectedPropertyIds = selectedProperties.map((property) => property._id.toString());
+
+      const selectedTenants = selectedPropertyIds.length
+        ? await fetchTenantsActiveOnDay(db, selectedPropertyIds, selectedSnapshot, {
+            propertyId: 1,
+            leasedUnits: 1,
+            unitIdentifier: 1,
+            unitType: 1,
+          })
+        : [];
+
+      const selectedSummary = summarizePropertyPerformance(selectedProperties, selectedTenants as any);
+      const rollingPeriods = buildRollingPeriods(year, month, 6);
+
+      const trendResults = await Promise.all(
+        rollingPeriods.map(async (period) => {
+          const periodProperties = filterPropertiesBySnapshot(properties, period.snapshot);
+          const periodPropertyIds = periodProperties.map((property) => property._id.toString());
+          const periodTenants = periodPropertyIds.length
+            ? await fetchTenantsActiveOnDay(db, periodPropertyIds, period.snapshot, {
+                propertyId: 1,
+                leasedUnits: 1,
+                unitIdentifier: 1,
+                unitType: 1,
+              })
+            : [];
+
+          const periodSummary = summarizePropertyPerformance(periodProperties, periodTenants as any);
+          return {
+            label: period.label,
+            occupancyRate: periodSummary.summary.occupancyRate,
+            vacancyRate: periodSummary.summary.vacancyRate,
+            occupiedUnits: periodSummary.summary.occupiedUnits,
+            vacantUnits: periodSummary.summary.vacantUnits,
+            totalUnits: periodSummary.summary.totalUnits,
+          };
+        })
+      );
+
+      const report: PropertyReportResponse = {
+        period: {
+          year,
+          month,
+          label: selectedLabel,
+          snapshotDate: selectedSnapshot.toISOString(),
+        },
+        summary: selectedSummary.summary,
+        properties: selectedSummary.properties,
+        trend: {
+          labels: trendResults.map((item) => item.label),
+          occupancyRates: trendResults.map((item) => item.occupancyRate),
+          vacancyRates: trendResults.map((item) => item.vacancyRate),
+          occupiedUnits: trendResults.map((item) => item.occupiedUnits),
+          vacantUnits: trendResults.map((item) => item.vacantUnits),
+          totalUnits: trendResults.map((item) => item.totalUnits),
+        },
+        availableYears: buildAvailableYears(properties, new Date().getUTCFullYear()),
+        basisNote:
+          "Historical occupancy is calculated from lease start and end dates for properties that existed by the selected month-end. Unit totals use the current property configuration because historical unit snapshots are not stored.",
+      };
+
+      return NextResponse.json({ success: true, report });
+    }
 
     // Validate query parameters
     if (propertyId && propertyId !== "all" && !ObjectId.isValid(propertyId)) {
