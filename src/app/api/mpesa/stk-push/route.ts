@@ -326,18 +326,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
       }
 
-      const incomingPayment = await createIncomingPayment({
-        tillNumber,
-        phoneNumber: payerPhone,
-        amount: paymentAmount,
-        firstName,
-        lastName,
-        email: ownerEmail || ownerPhone || "",
-        reference: invoiceReference,
-        notes: `${parsed.data.type || "Invoice"} payment ${invoiceReference}`,
-        callbackUrl: `${appBaseUrl}/api/kopokopo/webhook`,
-        customerId: parsed.data.invoiceId,
-      });
+      let incomingPayment: Awaited<ReturnType<typeof createIncomingPayment>>;
+      try {
+        incomingPayment = await createIncomingPayment({
+          tillNumber,
+          phoneNumber: payerPhone,
+          amount: paymentAmount,
+          firstName,
+          lastName,
+          email: ownerEmail || ownerPhone || "",
+          reference: invoiceReference,
+          notes: `${parsed.data.type || "Invoice"} payment ${invoiceReference}`,
+          callbackUrl: `${appBaseUrl}/api/kopokopo/webhook`,
+          customerId: parsed.data.invoiceId,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error("KopoKopo invoice payment initiation failed", {
+          message,
+          userId,
+          invoiceId: parsed.data.invoiceId,
+        });
+        if (/invalid_client/i.test(message) || /access token/i.test(message)) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "KopoKopo authentication failed. Check KOPOKOPO_ENVIRONMENT, KOPOKOPO_CLIENT_ID, KOPOKOPO_CLIENT_SECRET, and KOPOKOPO_TILL_NUMBER.",
+            },
+            { status: 502 }
+          );
+        }
+        throw error;
+      }
 
       const nowIso = new Date().toISOString();
       await db.collection("payments").findOneAndUpdate(
@@ -519,7 +540,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           message:
-            "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_PASSKEY or MPESA_SHORTCODE/MPESA_PASSKEY.",
+            "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_CLIENT_SECRET (or KOPOKOPO_PASSKEY legacy alias) or MPESA_SHORTCODE/MPESA_PASSKEY.",
         },
         { status: 500 }
       );

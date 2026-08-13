@@ -1,9 +1,20 @@
 import "server-only";
 import * as crypto from "crypto";
 
-const KOPOKOPO_BASE_URL = (process.env.KOPOKOPO_BASE_URL || "https://sandbox.kopokopo.com").replace(/\/$/, "");
+const KOPOKOPO_ENVIRONMENT = (process.env.KOPOKOPO_ENVIRONMENT || "sandbox").toLowerCase() === "production"
+  ? "production"
+  : "sandbox";
+const KOPOKOPO_API_BASE_URL = (
+  process.env.KOPOKOPO_API_BASE_URL ||
+  (KOPOKOPO_ENVIRONMENT === "production" ? "https://api.kopokopo.com" : "https://sandbox.kopokopo.com")
+).replace(/\/$/, "");
+const KOPOKOPO_AUTH_BASE_URL = (
+  process.env.KOPOKOPO_AUTH_BASE_URL ||
+  (KOPOKOPO_ENVIRONMENT === "production" ? "https://app.kopokopo.com" : "https://sandbox.kopokopo.com")
+).replace(/\/$/, "");
 const KOPOKOPO_CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || "";
 const KOPOKOPO_CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || process.env.KOPOKOPO_PASSKEY || "";
+const KOPOKOPO_API_KEY = process.env.KOPOKOPO_API_KEY || "";
 const KOPOKOPO_TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || "";
 
 type CachedToken = {
@@ -27,7 +38,7 @@ function normalizeStatus(value: unknown): "pending" | "completed" | "failed" {
 }
 
 export function getKopokopoBaseUrl(): string {
-  return KOPOKOPO_BASE_URL;
+  return KOPOKOPO_API_BASE_URL;
 }
 
 export function getKopokopoTillNumber(): string {
@@ -50,11 +61,12 @@ async function getAccessToken(): Promise<string> {
     grant_type: "client_credentials",
   });
 
-  const res = await fetch(`${KOPOKOPO_BASE_URL}/oauth/token`, {
+  const res = await fetch(`${KOPOKOPO_AUTH_BASE_URL}/oauth/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
+      "User-Agent": "Sorana Rentals/1.0",
     },
     body,
     cache: "no-store",
@@ -62,7 +74,13 @@ async function getAccessToken(): Promise<string> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to fetch KopoKopo access token (HTTP ${res.status})${text ? `: ${text}` : ""}`);
+    const suffix = text ? `: ${text}` : "";
+    if (res.status === 401 && /invalid_client/i.test(text)) {
+      throw new Error(
+        `Failed to fetch KopoKopo access token (HTTP 401): invalid_client. Check KOPOKOPO_ENVIRONMENT, KOPOKOPO_CLIENT_ID, and KOPOKOPO_CLIENT_SECRET (or KOPOKOPO_PASSKEY if you are using the legacy alias) for the correct KopoKopo app.`
+      );
+    }
+    throw new Error(`Failed to fetch KopoKopo access token (HTTP ${res.status})${suffix}`);
   }
 
   const data = (await res.json()) as { access_token?: string; expires_in?: number | string };
@@ -125,12 +143,13 @@ export async function createIncomingPayment(input: KopokopoIncomingPaymentInput)
     },
   };
 
-  const res = await fetch(`${KOPOKOPO_BASE_URL}/api/v2/incoming_payments`, {
+  const res = await fetch(`${KOPOKOPO_API_BASE_URL}/api/v2/incoming_payments`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       Accept: "application/json",
+      "User-Agent": "Sorana Rentals/1.0",
     },
     body: JSON.stringify(payload),
   });
@@ -165,7 +184,7 @@ export async function createIncomingPayment(input: KopokopoIncomingPaymentInput)
 
   return {
     id,
-    location: location || `${KOPOKOPO_BASE_URL}/api/v2/incoming_payments/${id}`,
+    location: location || `${KOPOKOPO_API_BASE_URL}/api/v2/incoming_payments/${id}`,
     status: "pending",
     customerMessage: "STK Push initiated. Check your phone.",
     raw,
@@ -186,10 +205,11 @@ export async function getIncomingPaymentStatus(paymentId: string): Promise<{
   }
 
   const accessToken = await getAccessToken();
-  const res = await fetch(`${KOPOKOPO_BASE_URL}/api/v2/incoming_payments/${encodeURIComponent(paymentId)}`, {
+  const res = await fetch(`${KOPOKOPO_API_BASE_URL}/api/v2/incoming_payments/${encodeURIComponent(paymentId)}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/json",
+      "User-Agent": "Sorana Rentals/1.0",
     },
     cache: "no-store",
   });
@@ -225,8 +245,8 @@ export async function getIncomingPaymentStatus(paymentId: string): Promise<{
 
 export function verifyKopokopoWebhookSignature(body: string, signatureHeader: string | null): boolean {
   if (!signatureHeader) return false;
-  requireEnv("KOPOKOPO_CLIENT_SECRET", KOPOKOPO_CLIENT_SECRET);
-  const expected = crypto.createHmac("sha256", KOPOKOPO_CLIENT_SECRET).update(body, "utf8").digest("hex");
+  requireEnv("KOPOKOPO_API_KEY", KOPOKOPO_API_KEY);
+  const expected = crypto.createHmac("sha256", KOPOKOPO_API_KEY).update(body, "utf8").digest("hex");
   const expectedBytes = Buffer.from(expected, "utf8");
   const signatureBytes = Buffer.from(signatureHeader.trim(), "utf8");
   if (expectedBytes.length !== signatureBytes.length) {

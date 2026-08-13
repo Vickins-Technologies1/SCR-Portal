@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
           message:
             err instanceof Error
               ? err.message
-              : "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_PASSKEY or MPESA_SHORTCODE/MPESA_PASSKEY.",
+              : "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_CLIENT_SECRET (or KOPOKOPO_PASSKEY legacy alias) or MPESA_SHORTCODE/MPESA_PASSKEY.",
         },
         { status: 500 }
       );
@@ -364,7 +364,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           message:
-            "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_PASSKEY or MPESA_SHORTCODE/MPESA_PASSKEY.",
+            "Missing payment credentials. Configure landlord shortcode/passkey or platform KOPOKOPO_TILL_NUMBER/KOPOKOPO_CLIENT_SECRET (or KOPOKOPO_PASSKEY legacy alias) or MPESA_SHORTCODE/MPESA_PASSKEY.",
         },
         { status: 500 }
       );
