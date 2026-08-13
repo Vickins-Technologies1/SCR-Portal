@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import {
@@ -58,7 +58,6 @@ type NavItem = NavLink | NavGroup;
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { isOpen, close } = useSidebar();
   const { userId, role, tier } = useAuth();
@@ -68,6 +67,7 @@ export default function Sidebar() {
   const [mounted, setMounted] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [financeOpen, setFinanceOpen] = useState(false);
+  const [financeTab, setFinanceTab] = useState<string | null>(null);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
@@ -121,6 +121,17 @@ export default function Sidebar() {
     };
   }, [userId, perm, tier]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncFinanceTab = () => {
+      const nextTab = new URLSearchParams(window.location.search).get("tab");
+      setFinanceTab((prev) => (prev === nextTab ? prev : nextTab));
+    };
+
+    syncFinanceTab();
+  });
+
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
   const restrictedKeys = new Set(["dashboard", "finance"]);
@@ -131,7 +142,6 @@ export default function Sidebar() {
   const paymentsPath = "/property-owner-dashboard/payments";
   const expensesPath = "/property-owner-dashboard/expenses";
   const integrationsPath = "/property-owner-dashboard/integrations";
-  const reportTab = searchParams.get("tab");
 
   const propertiesActive = pathname === propertiesPath || pathname.startsWith(`${propertiesPath}/`);
   const propertyReportActive = pathname === propertiesReportPath || pathname.startsWith(`${propertiesReportPath}/`);
@@ -145,7 +155,7 @@ export default function Sidebar() {
     pathname.startsWith(`${expensesPath}/`) ||
     pathname === integrationsPath ||
     pathname.startsWith(`${integrationsPath}/`);
-  const invoicesActive = pathname === reportsPath && (reportTab === "invoices" || isDue);
+  const invoicesActive = pathname === reportsPath && (financeTab === "invoices" || isDue);
   const reportsActive = pathname === reportsPath && !invoicesActive;
   const paymentsActive = pathname === paymentsPath || pathname.startsWith(`${paymentsPath}/`);
   const expensesActive = pathname === expensesPath || pathname.startsWith(`${expensesPath}/`);

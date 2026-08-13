@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -67,7 +67,7 @@ const categoryConfig: Record<string, { icon: React.ElementType; color: string; b
   other: { icon: Receipt, color: "#6b7280", bg: "#f9fafb" },
 };
 
-export default function ExpensesPage() {
+function ExpensesPageInner() {
   const router = useRouter();
   const perm = usePermissions();
   const { isFree } = useAccountTier();
@@ -1233,14 +1233,26 @@ export default function ExpensesPage() {
   );
 }
 
-
-
-
-
-
-
-
-
-
+export default function ExpensesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen">
+          <Navbar />
+          <Sidebar />
+          <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
+            <main className="max-w-7xl mx-auto">
+              <div className="flex justify-center items-center min-h-[60vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            </main>
+          </div>
+        </div>
+      }
+    >
+      <ExpensesPageInner />
+    </Suspense>
+  );
+}
 
 
