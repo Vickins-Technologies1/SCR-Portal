@@ -101,9 +101,16 @@ export default function PaymentModal({
   const [isFetchingAmount, setIsFetchingAmount] = useState(false);
   const [csrfToken, setCsrfToken] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("Processing your payment. Please wait...");
+  const [statusEvents, setStatusEvents] = useState<{ id: string; message: string; tone: "info" | "success" | "warning" | "error" }[]>([]);
   const [ownerDarajaLoading, setOwnerDarajaLoading] = useState(false);
   const [ownerDarajaConfig, setOwnerDarajaConfig] = useState<OwnerDarajaIntegrationState | null>(null);
   const [paymentRail, setPaymentRail] = useState<PaymentRail>("legacy_mpesa");
+
+  const pushStatusEvent = useCallback((message: string, tone: "info" | "success" | "warning" | "error" = "info") => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    setStatusMessage(message);
+    setStatusEvents((prev) => [...prev, { id, message, tone }].slice(-8));
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -183,6 +190,7 @@ export default function PaymentModal({
     setPaymentFormErrors({});
     setIsFetchingAmount(false);
     setStatusMessage("Processing your payment. Please wait...");
+    setStatusEvents([]);
     setPaymentRail("legacy_mpesa");
   }, [initialPropertyId, initialPhone]);
 
@@ -267,6 +275,7 @@ export default function PaymentModal({
           if (!csrfToken) {
             throw new Error("CSRF token is missing");
           }
+          pushStatusEvent(`Checking payment status (${attempts + 1}/${maxAttempts})...`);
           const requestBody =
             statusEndpoint === "/api/owner/daraja/status"
               ? { checkoutRequestId: transactionRequestId }
@@ -289,11 +298,12 @@ export default function PaymentModal({
           const normalized = String(statusData.TransactionStatus || statusData.status || "").toLowerCase();
 
           if (normalized === "pending" || normalized === "pending_stk") {
-            setStatusMessage("Transaction pending, please complete the payment on your phone.");
+            pushStatusEvent("Transaction pending. Please complete the payment on your phone.", "warning");
             return false;
           }
 
           if (normalized === "completed") {
+            pushStatusEvent("Payment confirmed. Updating invoice status...", "success");
             try {
               const updateRes = await fetch("/api/invoices", {
                 method: "POST",
@@ -316,14 +326,14 @@ export default function PaymentModal({
               if (!updateRes.ok || !updateData.success) {
                 throw new Error(updateData.message || "Failed to update invoice status");
               }
-              setStatusMessage("Payment successful!");
+              pushStatusEvent("Invoice updated successfully.", "success");
               onSuccess();
               await new Promise((resolve) => setTimeout(resolve, 2000));
               setIsPaymentLoadingModalOpen(false);
               setIsLoading(false);
               return true;
             } catch (error) {
-              setStatusMessage("Failed to update invoice status.");
+              pushStatusEvent("Failed to update invoice status.", "error");
               onError(error instanceof Error ? error.message : "Failed to update invoice status");
               await new Promise((resolve) => setTimeout(resolve, 2000));
               setIsPaymentLoadingModalOpen(false);
@@ -339,7 +349,7 @@ export default function PaymentModal({
               : normalized === "cancelled"
               ? "Payment cancelled by user"
               : "Payment timed out: User not reachable");
-          setStatusMessage(errorMessage);
+          pushStatusEvent(errorMessage, normalized === "completed" ? "success" : "error");
           onError(errorMessage);
           await new Promise((resolve) => setTimeout(resolve, 2000));
           setIsPaymentLoadingModalOpen(false);
@@ -347,7 +357,7 @@ export default function PaymentModal({
           return true;
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Failed to check transaction status";
-          setStatusMessage(errorMessage);
+          pushStatusEvent(errorMessage, "error");
           onError(errorMessage);
           await new Promise((resolve) => setTimeout(resolve, 2000));
           setIsPaymentLoadingModalOpen(false);
@@ -371,7 +381,7 @@ export default function PaymentModal({
         if (attempts >= maxAttempts) {
           console.log(`Polling timed out for transaction ${transactionRequestId} after ${maxAttempts} attempts`);
           const timeoutMessage = "Payment processing timed out. Please check the transaction status later.";
-          setStatusMessage(timeoutMessage);
+          pushStatusEvent(timeoutMessage, "warning");
           onError(timeoutMessage);
           await new Promise((resolve) => setTimeout(resolve, 2000));
           setIsPaymentLoadingModalOpen(false);
@@ -379,9 +389,9 @@ export default function PaymentModal({
         }
       };
 
-      poll();
+      void poll();
     },
-    [onSuccess, paymentPropertyId, userId, csrfToken, onError]
+    [onSuccess, paymentPropertyId, userId, csrfToken, onError, pushStatusEvent]
   );
 
   const handlePayment = useCallback(
@@ -401,7 +411,8 @@ export default function PaymentModal({
 
       setIsLoading(true);
       setIsPaymentLoadingModalOpen(true);
-      setStatusMessage("Processing your payment. Please wait...");
+      setStatusEvents([]);
+      pushStatusEvent("Processing your payment. Please wait...");
 
       try {
         const billingPlanParam = billingPlan ? `&billingPlan=${encodeURIComponent(billingPlan)}` : "";
@@ -749,9 +760,47 @@ export default function PaymentModal({
         onClose={() => {}}
         disableClose={true}
       >
-        <div className="flex flex-col items-center justify-center py-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary mb-4"></div>
-          <p className="text-foreground text-sm">{statusMessage}</p>
+        <div className="flex flex-col gap-4 py-2">
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-3">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{statusMessage}</p>
+              <p className="text-xs text-muted-foreground">We’ll keep checking until the payment is confirmed or fails.</p>
+            </div>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto rounded-2xl border border-border bg-background/80 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Live updates</p>
+              <p className="text-[11px] text-muted-foreground">{statusEvents.length} event{statusEvents.length === 1 ? "" : "s"}</p>
+            </div>
+            <div className="space-y-2">
+              {statusEvents.map((event, index) => (
+                <div
+                  key={event.id}
+                  className={`rounded-xl border px-3 py-2 text-sm ${
+                    event.tone === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : event.tone === "warning"
+                      ? "border-amber-200 bg-amber-50 text-amber-900"
+                      : event.tone === "error"
+                      ? "border-red-200 bg-red-50 text-red-900"
+                      : "border-border bg-muted/20 text-foreground"
+                  }`}
+                >
+                  <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  {event.message}
+                </div>
+              ))}
+              {statusEvents.length === 0 && (
+                <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                  Waiting for the first payment update...
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </Modal>
     </>

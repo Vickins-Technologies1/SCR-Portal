@@ -111,7 +111,7 @@ export default function Sidebar() {
   const isOwner = role === "propertyOwner";
   const isDue = !!dueStatus?.isDue;
   const isFreeTierOverdue = isDue && tier === "free";
-  const restrictedKeys = new Set(["dashboard", "reports", "properties"]);
+  const restrictedKeys = new Set(["dashboard", "reports"]);
   const isFreeTier = tier === "free";
   const propertiesActive = pathname === "/property-owner-dashboard/properties" || pathname.startsWith("/property-owner-dashboard/properties/");
   const propertyReportActive = pathname === "/property-owner-dashboard/properties-report" || pathname.startsWith("/property-owner-dashboard/properties-report/");
@@ -138,7 +138,7 @@ export default function Sidebar() {
   const navLinks = isDue ? visibleLinks.filter((link) => restrictedKeys.has(link.key)) : visibleLinks;
   useEffect(() => {
     if (!isDue) return;
-    const allowed = ["/property-owner-dashboard", "/property-owner-dashboard/reports"];
+    const allowed = ["/property-owner-dashboard", "/property-owner-dashboard/reports", "/property-owner-dashboard/properties-report"];
     const isAllowed = allowed.some((base) => pathname === base || pathname.startsWith(base + "/"));
     if (!isAllowed) {
       router.replace("/property-owner-dashboard");
