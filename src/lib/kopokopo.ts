@@ -1,10 +1,19 @@
 import "server-only";
 import * as crypto from "crypto";
 
-const KOPOKOPO_ENVIRONMENT = (process.env.KOPOKOPO_ENVIRONMENT || "").toLowerCase() === "production" ? "production" : "sandbox";
-const KOPOKOPO_OAUTH_BASE_URL = (process.env.KOPOKOPO_OAUTH_BASE_URL || process.env.KOPOKOPO_AUTH_BASE_URL || "").trim().replace(/\/$/, "");
+function readEnv(name: string): string {
+  const value = process.env[name] || "";
+  const trimmed = value.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+const KOPOKOPO_ENVIRONMENT = readEnv("KOPOKOPO_ENVIRONMENT").toLowerCase() === "production" ? "production" : "sandbox";
+const KOPOKOPO_OAUTH_BASE_URL = readEnv("KOPOKOPO_OAUTH_BASE_URL") || readEnv("KOPOKOPO_AUTH_BASE_URL");
 const KOPOKOPO_API_BASE_URL = (
-  process.env.KOPOKOPO_API_BASE_URL ||
+  readEnv("KOPOKOPO_API_BASE_URL") ||
   (KOPOKOPO_OAUTH_BASE_URL.includes("app.kopokopo.com") || KOPOKOPO_ENVIRONMENT === "production"
     ? "https://api.kopokopo.com"
     : "https://sandbox.kopokopo.com")
@@ -12,10 +21,10 @@ const KOPOKOPO_API_BASE_URL = (
 const KOPOKOPO_AUTH_BASE_URL =
   KOPOKOPO_OAUTH_BASE_URL ||
   (KOPOKOPO_ENVIRONMENT === "production" ? "https://app.kopokopo.com" : "https://sandbox.kopokopo.com");
-const KOPOKOPO_CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || "";
-const KOPOKOPO_CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || process.env.KOPOKOPO_PASSKEY || "";
-const KOPOKOPO_API_KEY = process.env.KOPOKOPO_API_KEY || "";
-const KOPOKOPO_TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || "";
+const KOPOKOPO_CLIENT_ID = readEnv("KOPOKOPO_CLIENT_ID");
+const KOPOKOPO_CLIENT_SECRET = readEnv("KOPOKOPO_CLIENT_SECRET") || readEnv("KOPOKOPO_PASSKEY");
+const KOPOKOPO_API_KEY = readEnv("KOPOKOPO_API_KEY");
+const KOPOKOPO_TILL_NUMBER = readEnv("KOPOKOPO_TILL_NUMBER");
 
 type CachedToken = {
   token: string;
