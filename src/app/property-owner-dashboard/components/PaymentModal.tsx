@@ -525,7 +525,7 @@ export default function PaymentModal({
         }`
       : paymentRail === "user_paybill"
         ? `User Paybill · funds land in Paybill ${maskInline(ownerDarajaConfig?.userPaybill.shortcode || "") || "account"}`
-        : "Legacy M-Pesa · platform shortcode";
+        : "KopoKopo · platform till";
   const selectedDarajaLabel =
     paymentRail === "shared_daraja"
       ? ownerDarajaConfig?.shared.paymentType === "till"
@@ -533,7 +533,7 @@ export default function PaymentModal({
         : "Mpesa"
       : paymentRail === "user_paybill"
         ? "User-owned Paybill"
-        : "Legacy M-Pesa";
+        : "KopoKopo";
 
   return (
     <>
@@ -664,7 +664,8 @@ export default function PaymentModal({
                   disabled={ownerDarajaLoading}
                   className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                 >
-                  <option value="legacy_mpesa">Legacy M-Pesa flow</option>
+                  <option value="legacy_mpesa">KopoKopo till flow</option>
+                  {/* Platform invoice payments use KopoKopo behind the scenes. */}
                   {sharedDarajaAvailable && (
                     <option value="shared_daraja">
                       {ownerDarajaConfig?.shared.paymentType === "till" ? "K-till" : "Mpesa"}
@@ -696,7 +697,7 @@ export default function PaymentModal({
                   </div>
                   <div className="rounded-xl bg-white/80 px-3 py-2 border border-border">
                     <p className="uppercase tracking-[0.2em] text-[10px]">Fallback</p>
-                    <p className="mt-1 font-medium text-foreground">Legacy `/api/mpesa/stk-push`</p>
+                    <p className="mt-1 font-medium text-foreground">KopoKopo `/api/mpesa/stk-push`</p>
                   </div>
                 </div>
               </div>

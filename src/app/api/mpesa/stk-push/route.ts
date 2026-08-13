@@ -7,10 +7,10 @@ import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
+import { createIncomingPayment, getKopokopoTillNumber } from "@/lib/kopokopo";
 import {
   decryptPasskey,
   getKopokopoPasskey,
-  getKopokopoTillNumber,
   getMpesaPasskey,
   getMpesaShortcode,
   initiateStkPush,
@@ -297,17 +297,96 @@ export async function POST(request: NextRequest) {
     let storedPasskey = "";
 
     if (isPlatformInvoicePayment) {
-      paymentType = "till";
       tillNumber = safeGetKopokopoTillNumber();
-      storedShortcode = tillNumber;
-      storedPasskey = safeGetKopokopoPasskey();
-
       if (!tillNumber) {
         return NextResponse.json(
           { success: false, message: "Missing KOPOKOPO_TILL_NUMBER for invoice payments." },
           { status: 500 }
         );
       }
+
+      const ownerProfile = await db.collection("propertyOwners").findOne(
+        { _id: new ObjectId(userId), role: "propertyOwner" },
+        { projection: { name: 1, email: 1, phone: 1 } }
+      );
+      const ownerName = typeof ownerProfile?.name === "string" ? ownerProfile.name.trim() : "";
+      const ownerEmail = typeof ownerProfile?.email === "string" ? ownerProfile.email.trim() : "";
+      const ownerPhone = typeof ownerProfile?.phone === "string" ? ownerProfile.phone.trim() : "";
+      const nameParts = ownerName.split(/\s+/).filter(Boolean);
+      const firstName = nameParts[0] || "Customer";
+      const lastName = nameParts.slice(1).join(" ") || "Owner";
+      const appBaseUrl = (
+        process.env.APP_BASE_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        request.nextUrl.origin
+      )
+        .trim()
+        .replace(/\/$/, "");
+      if (!appBaseUrl) {
+        return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
+      }
+
+      const incomingPayment = await createIncomingPayment({
+        tillNumber,
+        phoneNumber: payerPhone,
+        amount: paymentAmount,
+        firstName,
+        lastName,
+        email: ownerEmail || ownerPhone || "",
+        reference: invoiceReference,
+        notes: `${parsed.data.type || "Invoice"} payment ${invoiceReference}`,
+        callbackUrl: `${appBaseUrl}/api/kopokopo/webhook`,
+        customerId: parsed.data.invoiceId,
+      });
+
+      const nowIso = new Date().toISOString();
+      await db.collection("payments").findOneAndUpdate(
+        {
+          invoiceId: parsed.data.invoiceId,
+          landlordId: parsed.data.landlordId,
+          status: { $in: ["pending", "pending_stk"] },
+        },
+        {
+          $set: {
+            tenantId,
+            amount: paymentAmount,
+            propertyId,
+            paymentDate: nowIso,
+            transactionId: incomingPayment.id,
+            status: "pending",
+            createdAt: nowIso,
+            type: parsed.data.type || "Rent",
+            phoneNumber: payerPhone,
+            reference: invoiceReference,
+            mpesaCode: null,
+            checkoutRequestId: incomingPayment.id,
+            merchantRequestId: "",
+            invoiceId: parsed.data.invoiceId,
+            landlordId: parsed.data.landlordId,
+            provider: "kopokopo",
+            kopokopoPaymentRequestId: incomingPayment.id,
+            kopokopoPaymentRequestUrl: incomingPayment.location,
+            kopokopoTillNumber: tillNumber,
+          },
+          $setOnInsert: {
+            createdAt: nowIso,
+          },
+        },
+        { upsert: true, returnDocument: "after" }
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: incomingPayment.customerMessage || "STK Push initiated. Check your phone.",
+          checkoutRequestId: incomingPayment.id,
+          merchantRequestId: "",
+          customerMessage: incomingPayment.customerMessage || "STK Push initiated. Check your phone.",
+          shortcode: tillNumber,
+          provider: "kopokopo",
+        },
+        { status: 200 }
+      );
     } else {
       try {
         await connectMongoose();
