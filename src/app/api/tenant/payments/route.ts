@@ -97,7 +97,11 @@ async function resolveMpesaCredentials(landlordId: string): Promise<{
 
   try {
     const platform = resolvePlatformStkCredentials();
-    return { shortcode: platform.shortcode, passkey: platform.passkey, source: platform.source };
+    return {
+      shortcode: platform.shortcode,
+      passkey: platform.passkey,
+      source: platform.source === "kopokopo" ? "kopokopo" : "platform",
+    };
   } catch {
     // Ignore and fall through to legacy direct env lookups below.
   }
