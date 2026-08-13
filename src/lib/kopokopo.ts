@@ -39,10 +39,25 @@ function requireEnv(name: string, value: string) {
   }
 }
 
-function normalizeStatus(value: unknown): "pending" | "completed" | "failed" {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (["success", "received", "paid", "completed"].includes(normalized)) return "completed";
-  if (["failed", "cancelled", "canceled", "reversed", "error"].includes(normalized)) return "failed";
+export function normalizeKopokopoPaymentStatus(input: {
+  attributesStatus?: unknown;
+  resourceStatus?: unknown;
+  errors?: unknown;
+}): "pending" | "completed" | "failed" {
+  const resourceStatus = String(input.resourceStatus || "").trim().toLowerCase();
+  const attributesStatus = String(input.attributesStatus || "").trim().toLowerCase();
+  const hasErrors =
+    Array.isArray(input.errors) ? input.errors.length > 0 : Boolean(input.errors && String(input.errors).trim());
+
+  if (["received", "paid", "completed", "success"].includes(resourceStatus)) return "completed";
+  if (["failed", "cancelled", "canceled", "reversed", "error", "declined", "timed_out", "timedout", "expired"].includes(resourceStatus)) {
+    return "failed";
+  }
+
+  if (hasErrors || ["failed", "cancelled", "canceled", "reversed", "error", "declined"].includes(attributesStatus)) {
+    return "failed";
+  }
+
   return "pending";
 }
 
@@ -238,6 +253,7 @@ export async function getIncomingPaymentStatus(paymentId: string): Promise<{
             status?: string;
             till_number?: string;
           } | null;
+          errors?: string[] | null;
         };
       };
     };
@@ -245,7 +261,11 @@ export async function getIncomingPaymentStatus(paymentId: string): Promise<{
 
   const attrStatus = raw?.data?.attributes?.status;
   const resourceStatus = raw?.data?.attributes?.event?.resource?.status;
-  const status = normalizeStatus(attrStatus || resourceStatus);
+  const status = normalizeKopokopoPaymentStatus({
+    attributesStatus: attrStatus,
+    resourceStatus,
+    errors: raw?.data?.attributes?.event?.errors,
+  });
   const reference = raw?.data?.attributes?.event?.resource?.reference || undefined;
   const receipt = raw?.data?.attributes?.event?.resource?.reference || raw?.data?.attributes?.event?.resource?.till_number || undefined;
 

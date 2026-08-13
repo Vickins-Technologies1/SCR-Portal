@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
-import { verifyKopokopoWebhookSignature } from "@/lib/kopokopo";
+import { normalizeKopokopoPaymentStatus, verifyKopokopoWebhookSignature } from "@/lib/kopokopo";
 
 type KopokopoWebhookPayload = {
   data?: {
@@ -33,13 +33,6 @@ type KopokopoWebhookPayload = {
   };
 };
 
-function normalizeStatus(value: unknown): "completed" | "failed" | "pending" {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (["success", "received", "paid", "completed"].includes(normalized)) return "completed";
-  if (["failed", "error", "cancelled", "canceled", "reversed"].includes(normalized)) return "failed";
-  return "pending";
-}
-
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-kopokopo-signature");
@@ -64,7 +57,11 @@ export async function POST(request: NextRequest) {
 
   const data = payload.data;
   const requestId = String(data?.id || "").trim();
-  const status = normalizeStatus(data?.attributes?.status || data?.attributes?.event?.resource?.status);
+  const status = normalizeKopokopoPaymentStatus({
+    attributesStatus: data?.attributes?.status,
+    resourceStatus: data?.attributes?.event?.resource?.status,
+    errors: data?.attributes?.event?.errors,
+  });
   const resource = data?.attributes?.event?.resource || undefined;
   const metadata = data?.attributes?.metadata || {};
   const reference = String(metadata.reference || resource?.reference || "").trim();
