@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { MapPin, DollarSign, ArrowLeft, Star } from "lucide-react";
+import { MapPin, DollarSign, ArrowLeft, Star, Mail, ShieldCheck, Warehouse } from "lucide-react";
 import { PublicListing, AirbnbPublicListing, SalePublicListing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";
+import { getPublicPropertyAvailability, type PublicPropertyAvailability } from "@/lib/public-property-availability";
 import ImageGallery from "./ImageGallery";
 import BookingRequest from "./BookingRequest";
 import ViewingRequestWhatsApp from "./ViewingRequestWhatsApp";
@@ -31,6 +32,11 @@ interface ReviewsResponse {
   reviews?: ReviewItem[];
   rating?: number;
   reviewCount?: number;
+}
+
+interface InternalPropertyResponse {
+  success: boolean;
+  property?: PublicPropertyAvailability;
 }
 
 async function getProperty(id: string): Promise<PropertyResponse> {
@@ -74,6 +80,16 @@ async function getReviews(id: string): Promise<ReviewsResponse> {
   }
 }
 
+async function getInternalProperty(id: string): Promise<InternalPropertyResponse> {
+  try {
+    const property = await getPublicPropertyAvailability(id);
+    if (!property) return { success: false };
+    return { success: true, property };
+  } catch {
+    return { success: false };
+  }
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -84,9 +100,17 @@ export async function generateMetadata({
   const property = data.property;
 
   if (!property) {
+    const internalData = await getInternalProperty(id);
+    if (!internalData.success || !internalData.property) {
+      return {
+        title: "Property not found",
+        description: "The requested property could not be found.",
+      };
+    }
+
     return {
-      title: "Property not found",
-      description: "The requested property could not be found.",
+      title: `${internalData.property.name} | Availability`,
+      description: `${internalData.property.name} in ${internalData.property.address}. ${internalData.property.availabilityLabel}.`,
     };
   }
 
@@ -122,7 +146,210 @@ export default async function PropertyDetailPage({
   if (!id) notFound();
 
   const data = await getProperty(id);
-  if (!data.success || !data.property) notFound();
+  if (!data.success || !data.property) {
+    const internalData = await getInternalProperty(id);
+    if (!internalData.success || !internalData.property) notFound();
+
+    const property = internalData.property;
+    const enquiryHref = `mailto:support@soranapropertymanagers.com?subject=${encodeURIComponent(
+      `Property availability enquiry: ${property.name}`
+    )}&body=${encodeURIComponent(
+      [
+        "Hello Sorana team,",
+        "",
+        `I scanned the QR code for ${property.name}.`,
+        `Location: ${property.address}`,
+        `Availability: ${property.availabilityLabel} (${property.availability.totalVacant} vacant of ${property.availability.totalUnits} units)`,
+        "",
+        "Please share the latest availability details and next steps.",
+      ].join("\n")
+    )}`;
+
+    const availabilityTone =
+      property.hasVacancy && property.status === "Active"
+        ? "bg-emerald-100 text-emerald-700"
+        : property.status === "Active"
+          ? "bg-amber-100 text-amber-700"
+          : "bg-slate-100 text-slate-700";
+
+    return (
+      <main className="relative isolate min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_45%,#eef2ff_100%)] text-slate-900">
+        <div className="absolute inset-x-0 top-0 -z-10 h-80 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_62%)]" />
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 pb-16">
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              href="/market-place"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600 transition hover:text-slate-900"
+            >
+              <ArrowLeft size={14} />
+              Back to listings
+            </Link>
+
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600">
+              <ShieldCheck size={14} />
+              Public availability
+            </span>
+          </div>
+
+          <section className="mt-8 rounded-[32px] border border-white/80 bg-white/90 p-6 sm:p-8 shadow-[0_22px_60px_-40px_rgba(15,23,42,0.45)] backdrop-blur">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-3xl">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-slate-500">Property availability</p>
+                <h1 className="mt-3 font-[var(--font-cormorant)] text-3xl sm:text-4xl lg:text-5xl font-semibold text-slate-950 break-words">
+                  {property.name}
+                </h1>
+                <p className="mt-3 flex items-start gap-2 text-sm sm:text-base text-slate-600">
+                  <MapPin size={16} className="mt-0.5 shrink-0 text-slate-400" />
+                  <span className="break-words">{property.address}</span>
+                </p>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider ${availabilityTone}`}>
+                    {property.availabilityLabel}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                    {property.status}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                    Live vacancy status
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid w-full max-w-xl gap-4 sm:grid-cols-2">
+                {[
+                  { label: "Vacant units", value: property.availability.totalVacant, tone: "text-emerald-600" },
+                  { label: "Occupied units", value: property.availability.totalOccupied, tone: "text-slate-900" },
+                  { label: "Total units", value: property.availability.totalUnits, tone: "text-slate-900" },
+                  { label: "Occupancy", value: `${property.availability.occupancyRate}%`, tone: "text-slate-900" },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                    <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">{stat.label}</p>
+                    <p className={`mt-2 text-2xl sm:text-3xl font-semibold ${stat.tone}`}>{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-8 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="space-y-6">
+              <div className="rounded-[32px] border border-white/80 bg-white/90 p-6 sm:p-8 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.38)] backdrop-blur">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Available units</p>
+                    <h2 className="mt-2 text-lg sm:text-xl font-semibold text-slate-950">Unit mix and vacancy</h2>
+                  </div>
+                  <Warehouse className="h-5 w-5 text-slate-400" />
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {property.unitTypes.length > 0 ? (
+                    property.unitTypes.map((unit) => (
+                      <div
+                        key={unit.uniqueType}
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:px-5 sm:py-5"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm sm:text-base font-semibold text-slate-900">{unit.type}</p>
+                            <p className="text-[11px] text-slate-500">
+                              {unit.quantity} total unit{unit.quantity === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-3 text-xs text-slate-600">
+                            <span className="rounded-full bg-slate-100 px-3 py-1.5">Vacant: {unit.vacant}</span>
+                            <span className="rounded-full bg-slate-100 px-3 py-1.5">
+                              Price: Ksh {unit.price.toLocaleString()}
+                            </span>
+                            <span className="rounded-full bg-slate-100 px-3 py-1.5">
+                              Deposit: Ksh {unit.deposit.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                      No unit mix is configured yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[32px] border border-white/80 bg-white/90 p-6 sm:p-8 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.38)] backdrop-blur">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Basic information</p>
+                <h2 className="mt-2 text-lg sm:text-xl font-semibold text-slate-950">Property details</h2>
+
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Billing plan</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {property.billingType || "RentCollection"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Rent due day</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {property.rentPaymentDate ? `Day ${property.rentPaymentDate}` : "Not set"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Availability</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">{property.availabilityLabel}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Live updated</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      Refreshed for every scan
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside className="space-y-6 lg:sticky lg:top-6 lg:h-fit">
+              <div className="rounded-[32px] border border-white/80 bg-white/90 p-6 sm:p-8 shadow-[0_18px_45px_-35px_rgba(15,23,42,0.38)] backdrop-blur">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Contact / Enquire</p>
+                    <h2 className="mt-2 text-lg sm:text-xl font-semibold text-slate-950">Need more details?</h2>
+                  </div>
+                  <Mail className="h-5 w-5 text-slate-400" />
+                </div>
+
+                <p className="mt-4 text-sm leading-relaxed text-slate-600">
+                  Send a general enquiry to Sorana Property Managers for the latest availability,
+                  viewing guidance, or next steps.
+                </p>
+
+                <a
+                  href={enquiryHref}
+                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-primary-foreground transition hover:bg-primary-hover"
+                >
+                  <Mail size={14} />
+                  Enquire by Email
+                </a>
+
+                <p className="mt-4 text-[11px] leading-relaxed text-slate-500">
+                  This public page intentionally hides tenant, owner, and other private dashboard details.
+                </p>
+              </div>
+
+              <div className="rounded-[32px] border border-white/80 bg-slate-950 p-6 sm:p-8 text-white shadow-[0_18px_45px_-35px_rgba(15,23,42,0.45)]">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-slate-400">Scan info</p>
+                <h2 className="mt-2 text-lg sm:text-xl font-semibold">QR code ready for printing</h2>
+                <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                  The downloaded QR code can be placed outside the property or gate and will open
+                  this public availability page on any phone.
+                </p>
+              </div>
+            </aside>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   const { property, owner } = data;
   const isAirbnb = property.listingType === "airbnb";

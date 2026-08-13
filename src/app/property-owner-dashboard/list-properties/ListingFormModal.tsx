@@ -265,7 +265,7 @@ export default function ListingFormModal({
         images: finalImageUrls, // Always send the full current set (can be [] in edit mode)
       };
 
-      let url = "/api/list-properties";
+      const url = "/api/list-properties";
       let method: "POST" | "PUT" = "POST";
 
       if (mode === "edit" && editingPropertyId) {

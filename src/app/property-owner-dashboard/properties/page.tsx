@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { Home, Pencil, Trash2, Plus, ArrowUpDown, Calendar } from "lucide-react";
+import QRCode from "qrcode";
+import { Home, Pencil, Trash2, Plus, ArrowUpDown, Calendar, QrCode } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -127,6 +128,60 @@ interface SortConfig {
   direction: "asc" | "desc";
 }
 
+const escapeXml = (value: string) =>
+  value.replace(/[<>&"']/g, (char) => {
+    switch (char) {
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case "&":
+        return "&amp;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&apos;";
+      default:
+        return char;
+    }
+  });
+
+const slugifyFileName = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "property";
+
+const buildPrintableQrSvg = async (propertyName: string, publicUrl: string) => {
+  const qrDataUrl = await QRCode.toDataURL(publicUrl, {
+    errorCorrectionLevel: "M",
+    margin: 2,
+    width: 900,
+    color: {
+      dark: "#0f172a",
+      light: "#ffffff",
+    },
+  });
+
+  const escapedName = escapeXml(propertyName);
+  const escapedUrl = escapeXml(publicUrl);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1600" viewBox="0 0 1200 1600" role="img" aria-labelledby="title desc">
+  <title id="title">${escapedName} QR Code</title>
+  <desc id="desc">Scan to check availability for ${escapedName}</desc>
+  <rect width="1200" height="1600" rx="64" fill="#ffffff" />
+  <rect x="40" y="40" width="1120" height="1520" rx="56" fill="#f8fafc" stroke="#e2e8f0" stroke-width="4" />
+  <text x="600" y="150" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="56" font-weight="700" fill="#0f172a">${escapedName}</text>
+  <text x="600" y="216" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="#475569">Scan to Check Availability</text>
+  <image x="220" y="286" width="760" height="760" href="${qrDataUrl}" preserveAspectRatio="xMidYMid meet" />
+  <rect x="170" y="1084" width="860" height="224" rx="32" fill="#ffffff" stroke="#cbd5e1" stroke-width="3" />
+  <text x="600" y="1166" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#0f172a">Public availability page</text>
+  <text x="600" y="1216" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#475569">${escapedUrl}</text>
+  <text x="600" y="1468" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#64748b">Sorana Property Managers</text>
+</svg>`;
+};
+
 export default function PropertiesPage() {
   const router = useRouter();
   const perm = usePermissions();
@@ -155,6 +210,7 @@ export default function PropertiesPage() {
   const [billingType, setBillingType] = useState<"RentCollection" | "FullManagement">("RentCollection");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [qrDownloadingPropertyId, setQrDownloadingPropertyId] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<{ [key: string]: string | undefined }>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "createdAt", direction: "desc" });
 
@@ -526,6 +582,29 @@ export default function PropertiesPage() {
     );
   }, [sortConfig]);
 
+  const handleDownloadPropertyQr = useCallback(async (property: Property) => {
+    if (typeof window === "undefined") return;
+
+    const publicUrl = `${window.location.origin}/market-place/${encodeURIComponent(property._id)}`;
+    setQrDownloadingPropertyId(property._id);
+
+    try {
+      const svg = await buildPrintableQrSvg(property.name, publicUrl);
+      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${slugifyFileName(property.name)}-qr-code.svg`;
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setQrDownloadingPropertyId(null);
+    }
+  }, []);
+
   const addUnitType = useCallback(() => {
     setUnitTypes((prev) => [...prev, { type: "", price: "", deposit: "", quantity: "" }]);
   }, []);
@@ -696,9 +775,19 @@ export default function PropertiesPage() {
                           : "None"}
                       </td>
                       <td
-                        className="px-4 py-3 flex gap-2"
+                        className="px-4 py-3 flex flex-wrap gap-2"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        <button
+                          onClick={() => handleDownloadPropertyQr(p)}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                          title="Download QR Code"
+                          aria-label={`Download QR Code for ${p.name}`}
+                          disabled={qrDownloadingPropertyId === p._id}
+                        >
+                          <QrCode className="h-4 w-4" />
+                          {qrDownloadingPropertyId === p._id ? "Preparing..." : "Download QR Code"}
+                        </button>
                         {canEditProperties && (
                           <>
                           <button
