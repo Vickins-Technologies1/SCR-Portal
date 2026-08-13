@@ -327,6 +327,36 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
       }
 
+      const nowIso = new Date().toISOString();
+      await db.collection("payments").findOneAndUpdate(
+        {
+          invoiceId: parsed.data.invoiceId,
+          landlordId: parsed.data.landlordId,
+          status: { $in: ["pending", "pending_stk"] },
+        },
+        {
+          $set: {
+            tenantId,
+            amount: paymentAmount,
+            propertyId,
+            paymentDate: nowIso,
+            status: "pending_stk",
+            type: parsed.data.type || "Rent",
+            phoneNumber: payerPhone,
+            reference: invoiceReference,
+            mpesaCode: null,
+            invoiceId: parsed.data.invoiceId,
+            landlordId: parsed.data.landlordId,
+            provider: "kopokopo",
+            kopokopoTillNumber: tillNumber,
+          },
+          $setOnInsert: {
+            createdAt: nowIso,
+          },
+        },
+        { upsert: true, returnDocument: "after" }
+      );
+
       let incomingPayment: Awaited<ReturnType<typeof createIncomingPayment>>;
       try {
         incomingPayment = await createIncomingPayment({
@@ -361,7 +391,6 @@ export async function POST(request: NextRequest) {
         throw error;
       }
 
-      const nowIso = new Date().toISOString();
       await db.collection("payments").findOneAndUpdate(
         {
           invoiceId: parsed.data.invoiceId,
@@ -376,7 +405,7 @@ export async function POST(request: NextRequest) {
             paymentDate: nowIso,
             transactionId: incomingPayment.id,
             status: "pending",
-            createdAt: nowIso,
+            updatedAt: nowIso,
             type: parsed.data.type || "Rent",
             phoneNumber: payerPhone,
             reference: invoiceReference,
