@@ -316,6 +316,7 @@ export async function POST(request: NextRequest) {
       const firstName = nameParts[0] || "Customer";
       const lastName = nameParts.slice(1).join(" ") || "Owner";
       const appBaseUrl = (
+        process.env.KOPOKOPO_CALLBACK_BASE_URL ||
         process.env.APP_BASE_URL ||
         process.env.NEXT_PUBLIC_APP_URL ||
         request.nextUrl.origin
@@ -352,7 +353,7 @@ export async function POST(request: NextRequest) {
             {
               success: false,
               message:
-                "KopoKopo authentication failed. Check KOPOKOPO_ENVIRONMENT, KOPOKOPO_CLIENT_ID, KOPOKOPO_CLIENT_SECRET, and KOPOKOPO_TILL_NUMBER.",
+                "KopoKopo authentication failed. Check KOPOKOPO_OAUTH_BASE_URL, KOPOKOPO_CLIENT_ID, KOPOKOPO_CLIENT_SECRET, and KOPOKOPO_TILL_NUMBER.",
             },
             { status: 502 }
           );

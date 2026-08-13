@@ -1,17 +1,17 @@
 import "server-only";
 import * as crypto from "crypto";
 
-const KOPOKOPO_ENVIRONMENT = (process.env.KOPOKOPO_ENVIRONMENT || "sandbox").toLowerCase() === "production"
-  ? "production"
-  : "sandbox";
+const KOPOKOPO_ENVIRONMENT = (process.env.KOPOKOPO_ENVIRONMENT || "").toLowerCase() === "production" ? "production" : "sandbox";
+const KOPOKOPO_OAUTH_BASE_URL = (process.env.KOPOKOPO_OAUTH_BASE_URL || process.env.KOPOKOPO_AUTH_BASE_URL || "").trim().replace(/\/$/, "");
 const KOPOKOPO_API_BASE_URL = (
   process.env.KOPOKOPO_API_BASE_URL ||
-  (KOPOKOPO_ENVIRONMENT === "production" ? "https://api.kopokopo.com" : "https://sandbox.kopokopo.com")
+  (KOPOKOPO_OAUTH_BASE_URL.includes("app.kopokopo.com") || KOPOKOPO_ENVIRONMENT === "production"
+    ? "https://api.kopokopo.com"
+    : "https://sandbox.kopokopo.com")
 ).replace(/\/$/, "");
-const KOPOKOPO_AUTH_BASE_URL = (
-  process.env.KOPOKOPO_AUTH_BASE_URL ||
-  (KOPOKOPO_ENVIRONMENT === "production" ? "https://app.kopokopo.com" : "https://sandbox.kopokopo.com")
-).replace(/\/$/, "");
+const KOPOKOPO_AUTH_BASE_URL =
+  KOPOKOPO_OAUTH_BASE_URL ||
+  (KOPOKOPO_ENVIRONMENT === "production" ? "https://app.kopokopo.com" : "https://sandbox.kopokopo.com");
 const KOPOKOPO_CLIENT_ID = process.env.KOPOKOPO_CLIENT_ID || "";
 const KOPOKOPO_CLIENT_SECRET = process.env.KOPOKOPO_CLIENT_SECRET || process.env.KOPOKOPO_PASSKEY || "";
 const KOPOKOPO_API_KEY = process.env.KOPOKOPO_API_KEY || "";
@@ -77,7 +77,7 @@ async function getAccessToken(): Promise<string> {
     const suffix = text ? `: ${text}` : "";
     if (res.status === 401 && /invalid_client/i.test(text)) {
       throw new Error(
-        `Failed to fetch KopoKopo access token (HTTP 401): invalid_client. Check KOPOKOPO_ENVIRONMENT, KOPOKOPO_CLIENT_ID, and KOPOKOPO_CLIENT_SECRET (or KOPOKOPO_PASSKEY if you are using the legacy alias) for the correct KopoKopo app.`
+        `Failed to fetch KopoKopo access token (HTTP 401): invalid_client. Check KOPOKOPO_OAUTH_BASE_URL, KOPOKOPO_CLIENT_ID, and KOPOKOPO_CLIENT_SECRET (or KOPOKOPO_PASSKEY if you are using the legacy alias) for the same KopoKopo app.`
       );
     }
     throw new Error(`Failed to fetch KopoKopo access token (HTTP ${res.status})${suffix}`);
