@@ -68,7 +68,7 @@ export async function getPublicPropertyAvailability(
   const occupiedByType = occupancy.occupiedByType || {};
   const unitTypes = Array.isArray(property.unitTypes) ? property.unitTypes : [];
 
-  const safeUnitTypes = unitTypes.map((unit: any, index: number) => {
+  const safeUnitTypes: PublicPropertyAvailabilityUnit[] = unitTypes.map((unit: any, index: number) => {
     const type = typeof unit?.type === "string" && unit.type.trim() ? unit.type.trim() : `Unit ${index + 1}`;
     const uniqueType =
       typeof unit?.uniqueType === "string" && unit.uniqueType.trim()
@@ -87,7 +87,9 @@ export async function getPublicPropertyAvailability(
       deposit: asNonNegativeNumber(unit?.deposit),
       quantity,
       vacant: Math.max(0, quantity - occupied),
-      managementType: unit?.managementType || property.billingType || "RentCollection",
+      managementType: (unit?.managementType || property.billingType || "RentCollection") as
+        | "RentCollection"
+        | "FullManagement",
     };
   });
 

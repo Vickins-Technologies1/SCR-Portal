@@ -154,7 +154,7 @@ const slugifyFileName = (value: string) =>
 
 const buildPrintableQrSvg = async (propertyName: string, publicUrl: string) => {
   const qrDataUrl = await QRCode.toDataURL(publicUrl, {
-    errorCorrectionLevel: "M",
+    errorCorrectionLevel: "medium",
     margin: 2,
     width: 900,
     color: {
