@@ -9,8 +9,17 @@ import SectionHeader from "../../components/SectionHeader";
 import { useAirbnbAccess } from "../../components/useAirbnbAccess";
 import type { AirbnbBooking } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
+import AirbnbBookingStatusCard from "@/components/airbnb/AirbnbBookingStatusCard";
+import AirbnbPaymentVerificationModal from "@/components/airbnb/AirbnbPaymentVerificationModal";
 
-type BookingDetails = AirbnbBooking & { createdAt?: string; updatedAt?: string };
+type BookingDetails = AirbnbBooking & {
+  createdAt?: string;
+  updatedAt?: string;
+  reference?: string;
+  paymentMethod?: string | null;
+  mpesaCode?: string | null;
+  paymentDate?: string | null;
+};
 
 export default function AirbnbBookingDetailsPage() {
   const router = useRouter();
@@ -22,6 +31,7 @@ export default function AirbnbBookingDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [isActing, setIsActing] = useState(false);
+  const [isVerifyOpen, setIsVerifyOpen] = useState(false);
 
   const fetchBooking = useCallback(async () => {
     if (!bookingId || !ownerId) return;
@@ -108,6 +118,26 @@ export default function AirbnbBookingDetailsPage() {
     setMessage("Cash payment recorded.");
   };
 
+  const verifyPayment = async (payload: { transactionCode: string; amount: number; paymentDateTime: string; note?: string }) => {
+    if (!booking) return;
+    const res = await fetch("/api/airbnb/payments/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken! },
+      credentials: "include",
+      body: JSON.stringify({
+        bookingId: booking.id,
+        transactionCode: payload.transactionCode,
+        amount: payload.amount,
+        paymentDateTime: payload.paymentDateTime,
+        note: payload.note,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.message || "Failed to verify payment");
+    setIsVerifyOpen(false);
+    setMessage("Payment verified and booking confirmed.");
+  };
+
   const impersonateTenant = async () => {
     if (!booking?.tenantId) {
       throw new Error("Payment portal account not created yet. Click “Payment link” first.");
@@ -166,6 +196,8 @@ export default function AirbnbBookingDetailsPage() {
             </section>
           ) : (
             <>
+              <AirbnbBookingStatusCard booking={booking as any} showReceiptLink={false} showPayNow={false} />
+
               <section className="surface-card rounded-3xl p-6 sm:p-7">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div className="rounded-2xl border border-border bg-white/70 px-4 py-4">
@@ -250,6 +282,13 @@ export default function AirbnbBookingDetailsPage() {
                       >
                         {isActing ? "Working..." : "Cash"}
                       </button>
+                      <button
+                        onClick={() => setIsVerifyOpen(true)}
+                        disabled={isActing}
+                        className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-[11px] font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-60"
+                      >
+                        {isActing ? "Working..." : "Verify M-Pesa"}
+                      </button>
                     </>
                   ) : null}
 
@@ -273,6 +312,30 @@ export default function AirbnbBookingDetailsPage() {
           )}
         </main>
       </div>
+
+      <AirbnbPaymentVerificationModal
+        open={isVerifyOpen}
+        booking={
+          booking
+            ? {
+                id: booking.id,
+                listingName: booking.listingName,
+                guestName: booking.guestName,
+                total: booking.total,
+                ownerId: undefined,
+                reference: booking.reference || booking.id,
+                paymentMethod: booking.paymentMethod || null,
+                mpesaCode: booking.mpesaCode || null,
+                paymentDate: booking.paymentDate || null,
+              }
+            : null
+        }
+        onClose={() => setIsVerifyOpen(false)}
+        onSubmit={async (payload) => {
+          await verifyPayment(payload);
+        }}
+        isSubmitting={isActing}
+      />
     </div>
   );
 }

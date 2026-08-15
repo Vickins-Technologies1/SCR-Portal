@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
+import { resolveAirbnbBookingReference, resolveAirbnbPaymentMethod } from "@/lib/airbnb-booking-workflow";
 
 export async function GET(
   request: NextRequest,
@@ -34,6 +35,10 @@ export async function GET(
   const id = booking.externalId || booking._id?.toString?.() || bookingId;
   const amountPaid = Number(booking.amountPaid || 0);
   const total = Number(booking.total || 0);
+  const latestPayment = await db.collection("payments").findOne(
+    { ownerId, airbnbBookingId: id },
+    { sort: { paymentDate: -1, createdAt: -1 } }
+  );
   const tenant = await db.collection("tenants").findOne(
     { ownerId, accountType: "airbnb_guest", airbnbBookingId: id },
     { projection: { _id: 1 } }
@@ -51,6 +56,7 @@ export async function GET(
       guestEmail: booking.guestEmail,
       guestPhone: booking.guestPhone,
       guestIdNumber: booking.guestIdNumber,
+      guestCount: booking.guestCount ?? null,
       tenantId: tenant?._id?.toString?.() || null,
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
@@ -61,6 +67,13 @@ export async function GET(
       status: booking.status,
       source: booking.source,
       payoutStatus: booking.payoutStatus,
+      reference: resolveAirbnbBookingReference(booking),
+      paymentMethod: resolveAirbnbPaymentMethod(latestPayment as any),
+      mpesaCode: latestPayment?.mpesaCode || latestPayment?.reference || null,
+      paymentDate: latestPayment?.paymentDate || null,
+      verifiedBy: latestPayment?.verifiedBy || null,
+      verificationTimestamp: latestPayment?.verificationTimestamp || null,
+      confirmedAt: booking.confirmedAt || booking.confirmationTimestamp || null,
       verificationStatus: docsCount > 0 ? "documents_uploaded" : "documents_missing",
       specialRequests: booking.specialRequests,
       createdAt: booking.createdAt,

@@ -117,6 +117,12 @@ interface AirbnbBookingEmailOptions {
   nights: number;
   total: number;
   supportEmail?: string;
+  bookingReference?: string;
+  bookingStatus?: "pending_verification" | "confirmed";
+  hostName?: string;
+  hostPhone?: string;
+  paymentMethod?: string;
+  mpesaCode?: string;
 }
 
 interface AirbnbPaymentEmailOptions {
@@ -713,23 +719,51 @@ export async function sendAirbnbBookingConfirmationEmail({
   nights,
   total,
   supportEmail,
+  bookingReference,
+  bookingStatus = "confirmed",
+  hostName,
+  hostPhone,
+  paymentMethod,
+  mpesaCode,
 }: AirbnbBookingEmailOptions): Promise<void> {
   try {
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
       throw new Error("SMTP credentials are missing");
     }
 
+    const isConfirmed = bookingStatus === "confirmed";
+    const title = isConfirmed ? "Booking Confirmed" : "Payment Verification Pending";
+    const intro = isConfirmed
+      ? `Your booking at ${listingName} is confirmed.`
+      : `Your booking at ${listingName} has been received and is waiting for payment verification.`;
+
+    const details = [
+      `<li><strong>Booking Reference:</strong> ${bookingReference || "Pending"}</li>`,
+      `<li><strong>Check-in:</strong> ${checkIn}</li>`,
+      `<li><strong>Check-out:</strong> ${checkOut}</li>`,
+      `<li><strong>Nights:</strong> ${nights}</li>`,
+      `<li><strong>Total:</strong> Ksh ${total.toLocaleString("en-KE")}</li>`,
+      hostName ? `<li><strong>Host:</strong> ${hostName}</li>` : "",
+      hostPhone ? `<li><strong>Host Contact:</strong> ${hostPhone}</li>` : "",
+      paymentMethod ? `<li><strong>Payment Method:</strong> ${paymentMethod}</li>` : "",
+      mpesaCode ? `<li><strong>M-Pesa Reference:</strong> ${mpesaCode}</li>` : "",
+    ]
+      .filter(Boolean)
+      .join("");
+
     const html = generateStyledTemplate({
       name: guestName,
-      title: "Booking Confirmation",
-      intro: `Your booking at ${listingName} is confirmed.`,
+      title,
+      intro,
       details: `
         <ul>
-          <li><strong>Check-in:</strong> ${checkIn}</li>
-          <li><strong>Check-out:</strong> ${checkOut}</li>
-          <li><strong>Nights:</strong> ${nights}</li>
-          <li><strong>Total:</strong> Ksh ${total.toLocaleString("en-KE")}</li>
+          ${details}
         </ul>
+        ${
+          !isConfirmed
+            ? "<p style=\"font-size: 14px; margin-top: 16px;\">We will confirm your reservation as soon as the payment is verified.</p>"
+            : ""
+        }
         <p style="font-size: 14px; margin-top: 16px;">
           Need help? Reach us at ${supportEmail || process.env.SMTP_USER}.
         </p>
@@ -739,7 +773,7 @@ export async function sendAirbnbBookingConfirmationEmail({
     await transporter.sendMail({
       from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
       to,
-      subject: `Booking confirmed: ${listingName}`,
+      subject: `${title}: ${listingName}`,
       html,
     });
     console.log(`Airbnb booking confirmation email sent to ${to}`);

@@ -7,6 +7,11 @@ import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/l
 import { decryptPasskey } from "@/lib/mpesa";
 import { resolveTenantContext } from "@/lib/impersonation";
 import { resolveAccountTier } from "@/lib/tier";
+import {
+  resolveAirbnbBookingReference,
+  resolveAirbnbOwnerProfile,
+  resolveAirbnbPaymentMethod,
+} from "@/lib/airbnb-booking-workflow";
 
 function resolveStoredPasskey(rawPasskey: string): string {
   if (!rawPasskey) return "";
@@ -59,6 +64,10 @@ export async function GET(request: NextRequest) {
   }
 
   const ownerId = typeof tenant.ownerId === "string" ? tenant.ownerId : tenant.ownerId?.toString?.() || "";
+  const ownerProfile = await resolveAirbnbOwnerProfile(db, ownerId);
+  const listing = booking.listingId
+    ? await db.collection("airbnbListings").findOne({ ownerId, externalId: String(booking.listingId) })
+    : null;
   const ownerTier = ObjectId.isValid(ownerId)
     ? resolveAccountTier(
         (
@@ -136,13 +145,24 @@ export async function GET(request: NextRequest) {
       id: booking.externalId || bookingId,
       listingName: booking.listingName,
       guestName: booking.guestName,
+      guestCount: booking.guestCount ?? null,
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
+      reference: resolveAirbnbBookingReference(booking as any),
       total,
       amountPaid,
       amountDue: remaining,
+      paymentMethod: resolveAirbnbPaymentMethod(latestPayment as any),
+      mpesaCode: latestPayment?.mpesaCode || latestPayment?.reference || null,
+      paymentDate: latestPayment?.paymentDate || null,
+      verifiedBy: latestPayment?.verifiedBy || null,
+      verificationTimestamp: latestPayment?.verificationTimestamp || null,
+      confirmedAt: booking.confirmedAt || booking.confirmationTimestamp || null,
       payoutStatus: booking.payoutStatus,
-      reference,
+      status: booking.status,
+      hostName: ownerProfile.name,
+      hostPhone: ownerProfile.phone || listing?.contactPhone || null,
+      hostEmail: ownerProfile.email || null,
     },
     paymentRail: {
       paymentType,

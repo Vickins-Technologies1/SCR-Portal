@@ -3,12 +3,10 @@
 import Link from "next/link";
 import { CreditCard, FileText, CalendarPlus, MessageCircle, ArrowRight } from "lucide-react";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
+import AirbnbBookingStatusCard from "@/components/airbnb/AirbnbBookingStatusCard";
 
 export default function AirbnbGuestDashboardOverviewPage() {
   const { booking, isLoading, error } = useAirbnbTenantBooking();
-
-  const isPaid = String(booking?.payoutStatus || "").toLowerCase() === "paid";
-  const amountDue = Number(booking?.amountDue ?? booking?.total ?? 0);
 
   return (
     <div className="space-y-6">
@@ -24,10 +22,7 @@ export default function AirbnbGuestDashboardOverviewPage() {
             {booking?.guestName ? `Guest: ${booking.guestName}` : null}
           </p>
         </div>
-        <Link
-          href="/airbnb-tenant-dashboard/payments"
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover"
-        >
+        <Link href="/airbnb-tenant-dashboard/payments" className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover">
           Make a payment <ArrowRight size={14} />
         </Link>
       </div>
@@ -39,52 +34,13 @@ export default function AirbnbGuestDashboardOverviewPage() {
       ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="surface-card rounded-3xl p-6 space-y-3 lg:col-span-2">
+        <div className="lg:col-span-2">
           {isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading booking…</div>
+            <div className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">Loading booking…</div>
           ) : booking ? (
-            <>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Amount due</p>
-                  <p className="text-2xl font-bold">KES {amountDue.toLocaleString("en-KE")}</p>
-                </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-[10px] font-semibold ${
-                    isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  {isPaid ? "Paid" : "Pending"}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
-                <div className="rounded-2xl border border-border bg-white/70 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.3em]">Check-in</p>
-                  <p className="mt-1 text-foreground font-semibold">
-                    {new Date(booking.checkIn).toLocaleDateString("en-KE", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-border bg-white/70 p-3">
-                  <p className="text-[10px] uppercase tracking-[0.3em]">Check-out</p>
-                  <p className="mt-1 text-foreground font-semibold">
-                    {new Date(booking.checkOut).toLocaleDateString("en-KE", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-              </div>
-            </>
+            <AirbnbBookingStatusCard booking={booking} />
           ) : (
-            <div className="text-sm text-muted-foreground">No booking found.</div>
+            <div className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">No booking found.</div>
           )}
         </div>
 
@@ -131,4 +87,3 @@ export default function AirbnbGuestDashboardOverviewPage() {
     </div>
   );
 }
-

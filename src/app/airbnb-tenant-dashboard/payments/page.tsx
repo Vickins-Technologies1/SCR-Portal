@@ -4,13 +4,14 @@ import { useState } from "react";
 import PayForAirbnbBookingButton from "@/components/PayForAirbnbBookingButton";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
 import { useCsrfToken } from "@/hooks/useCsrfToken";
+import AirbnbBookingStatusCard from "@/components/airbnb/AirbnbBookingStatusCard";
 
 export default function AirbnbGuestPaymentsPage() {
   const { csrfToken } = useCsrfToken();
   const { booking, paymentRail, canPay, isLoading, error, refetch } = useAirbnbTenantBooking();
   const [phone, setPhone] = useState("");
 
-  const isPaid = String(booking?.payoutStatus || "").toLowerCase() === "paid";
+  const isPaid = ["paid", "completed"].includes(String(booking?.payoutStatus || "").toLowerCase());
   const amountDue = Number(booking?.amountDue ?? booking?.total ?? 0);
 
   return (
@@ -27,11 +28,13 @@ export default function AirbnbGuestPaymentsPage() {
         <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-800">{error}</div>
       ) : null}
 
-      <div className="surface-card rounded-3xl p-6 space-y-4">
-        {isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading booking…</div>
-        ) : booking ? (
-          <>
+      {isLoading ? (
+        <div className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">Loading booking…</div>
+      ) : booking ? (
+        <div className="space-y-4">
+          <AirbnbBookingStatusCard booking={booking} />
+
+          <div className="surface-card rounded-3xl p-6 space-y-4">
             {!canPay ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
                 <p className="font-semibold">Payments locked</p>
@@ -51,33 +54,8 @@ export default function AirbnbGuestPaymentsPage() {
                   isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
                 }`}
               >
-                {isPaid ? "Paid" : "Pending"}
+                {isPaid ? "Paid" : "Pending verification"}
               </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
-              <div className="rounded-2xl border border-border bg-white/70 p-3">
-                <p className="text-[10px] uppercase tracking-[0.3em]">Check-in</p>
-                <p className="mt-1 text-foreground font-semibold">
-                  {new Date(booking.checkIn).toLocaleDateString("en-KE", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-border bg-white/70 p-3">
-                <p className="text-[10px] uppercase tracking-[0.3em]">Check-out</p>
-                <p className="mt-1 text-foreground font-semibold">
-                  {new Date(booking.checkOut).toLocaleDateString("en-KE", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </p>
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -105,11 +83,11 @@ export default function AirbnbGuestPaymentsPage() {
             ) : (
               <div className="text-xs text-muted-foreground">Preparing secure payment session…</div>
             )}
-          </>
-        ) : (
-          <div className="text-sm text-muted-foreground">No booking found.</div>
-        )}
-      </div>
+          </div>
+        </div>
+      ) : (
+        <div className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">No booking found.</div>
+      )}
     </div>
   );
 }

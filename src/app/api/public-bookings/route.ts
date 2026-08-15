@@ -4,23 +4,23 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { sendAirbnbBookingConfirmationEmail } from "@/lib/email";
-
-const GuestCountSchema = z.preprocess(
-  (value) => {
-    if (value === undefined || value === null || value === "") return undefined;
-    return Number(value);
-  },
-  z.number().int().min(1).max(20)
-);
+import {
+  findAirbnbBookingConflict,
+  resolveAirbnbBookingReference,
+} from "@/lib/airbnb-booking-workflow";
 
 const PublicBookingSchema = z.object({
   listingId: z.string().trim().min(1),
   guestName: z.string().trim().min(2),
   guestEmail: z.string().email(),
   guestPhone: z.string().trim().optional(),
+  guests: z.preprocess((value) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }, z.number().int().min(1).max(20).optional()),
   checkIn: z.string().trim().min(1),
   checkOut: z.string().trim().min(1),
-  guests: GuestCountSchema.optional(),
   notes: z.string().trim().max(1000).optional(),
 });
 
@@ -66,6 +66,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid dates provided" }, { status: 400 });
   }
 
+  const ownerId = listing.ownerId ? String(listing.ownerId) : "";
+  if (!ownerId) {
+    return NextResponse.json({ success: false, message: "Owner not available" }, { status: 404 });
+  }
+
   if (checkOutDate <= checkInDate) {
     return NextResponse.json(
       { success: false, message: "Check-out must be after check-in." },
@@ -73,9 +78,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ownerId = listing.ownerId ? String(listing.ownerId) : "";
-  if (!ownerId) {
-    return NextResponse.json({ success: false, message: "Owner not available" }, { status: 404 });
+  const conflict = await findAirbnbBookingConflict(db, {
+    ownerId,
+    listingId: listing.externalId || listing._id?.toString?.() || listingId,
+    checkIn: checkInDate,
+    checkOut: checkOutDate,
+  });
+  if (conflict) {
+    return NextResponse.json(
+      { success: false, message: "This property is already booked for the selected dates." },
+      { status: 409 }
+    );
   }
 
   const nights = diffNights(checkInDate, checkOutDate);
@@ -91,15 +104,23 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date().toISOString();
+  const bookingObjectId = new ObjectId();
+  const bookingExternalId = `web-${bookingObjectId.toString()}`;
   const booking = {
-    _id: new ObjectId(),
+    _id: bookingObjectId,
     ownerId,
-    externalId: `web-${new ObjectId().toString()}`,
+    externalId: bookingExternalId,
+    reference: resolveAirbnbBookingReference({
+      ownerId,
+      externalId: bookingExternalId,
+      createdAt: now,
+    }),
     listingId: listing.externalId || listing._id?.toString?.() || listingId,
     listingName: listing.name || "Airbnb Listing",
     guestName: parsed.data.guestName,
     guestEmail: parsed.data.guestEmail,
     guestPhone: parsed.data.guestPhone?.trim() || undefined,
+    guestCount: parsed.data.guests ?? null,
     checkIn: checkInDate.toISOString(),
     checkOut: checkOutDate.toISOString(),
     nights,
@@ -107,7 +128,7 @@ export async function POST(request: NextRequest) {
     amountPaid: 0,
     status: "pending",
     source: "Direct",
-    payoutStatus: "pending",
+    payoutStatus: "pending_verification",
     specialRequests: specialRequestsParts.length ? specialRequestsParts.join(" | ") : undefined,
     createdAt: now,
     updatedAt: now,
@@ -213,6 +234,8 @@ export async function POST(request: NextRequest) {
         nights,
         total,
         supportEmail: settings?.supportEmail,
+        bookingReference: booking.reference,
+        bookingStatus: "pending_verification",
       });
     } catch (error) {
       console.error("Failed to send booking confirmation email", {
@@ -235,6 +258,7 @@ export async function POST(request: NextRequest) {
       status: booking.status,
       source: booking.source,
       payoutStatus: booking.payoutStatus,
+      reference: booking.reference,
     },
   });
 }

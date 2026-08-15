@@ -8,6 +8,7 @@ import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import { cn } from "@/lib/cn";
 import { formatKes } from "@/lib/airbnb-metrics";
+import AirbnbPaymentVerificationModal from "@/components/airbnb/AirbnbPaymentVerificationModal";
 
 interface Booking {
   _id: string;
@@ -33,6 +34,8 @@ export default function AdminAirbnbBookingsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [verificationTarget, setVerificationTarget] = useState<Booking | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const checkSession = useCallback(async () => {
     try {
@@ -88,6 +91,32 @@ export default function AdminAirbnbBookingsPage() {
       setIsLoading(false);
     }
   }, [status, router]);
+
+  const verifyPayment = async (payload: { transactionCode: string; amount: number; paymentDateTime: string; note?: string }) => {
+    if (!verificationTarget) return;
+    setIsVerifying(true);
+    try {
+      const res = await fetch("/api/airbnb/payments/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          bookingId: verificationTarget._id,
+          ownerId: verificationTarget.ownerId,
+          transactionCode: payload.transactionCode,
+          amount: payload.amount,
+          paymentDateTime: payload.paymentDateTime,
+          note: payload.note,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to verify payment");
+      setVerificationTarget(null);
+      await fetchBookings();
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -181,6 +210,7 @@ export default function AdminAirbnbBookingsPage() {
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Source</th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Payout</th>
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -226,6 +256,18 @@ export default function AdminAirbnbBookingsPage() {
                             {booking.payoutStatus}
                           </span>
                         </td>
+                        <td className="py-3 px-4 text-xs">
+                          {booking.payoutStatus !== "paid" ? (
+                            <button
+                              onClick={() => setVerificationTarget(booking)}
+                              className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-100"
+                            >
+                              Verify
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">Completed</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -235,6 +277,28 @@ export default function AdminAirbnbBookingsPage() {
           )}
         </main>
       </div>
+
+      <AirbnbPaymentVerificationModal
+        open={Boolean(verificationTarget)}
+        booking={
+          verificationTarget
+            ? {
+                id: verificationTarget._id,
+                listingName: verificationTarget.listingName,
+                guestName: verificationTarget.guestName,
+                total: verificationTarget.total,
+                ownerId: verificationTarget.ownerId,
+                reference: verificationTarget._id,
+                paymentMethod: "M-Pesa",
+                mpesaCode: null,
+                paymentDate: verificationTarget.createdAt || null,
+              }
+            : null
+        }
+        onClose={() => setVerificationTarget(null)}
+        onSubmit={verifyPayment}
+        isSubmitting={isVerifying}
+      />
     </div>
   );
 }

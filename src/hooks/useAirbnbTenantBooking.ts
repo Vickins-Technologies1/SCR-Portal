@@ -13,13 +13,24 @@ export type AirbnbTenantBookingResponse = {
     id: string;
     listingName: string;
     guestName: string;
+    guestCount?: number | null;
     checkIn: string;
     checkOut: string;
     total: number;
     amountPaid?: number;
     amountDue?: number;
     payoutStatus?: string;
+    status?: string;
     reference?: string;
+    paymentMethod?: string | null;
+    mpesaCode?: string | null;
+    paymentDate?: string | null;
+    verifiedBy?: string | null;
+    verificationTimestamp?: string | null;
+    confirmedAt?: string | null;
+    hostName?: string | null;
+    hostPhone?: string | null;
+    hostEmail?: string | null;
   };
   paymentRail?: {
     paymentType?: string;

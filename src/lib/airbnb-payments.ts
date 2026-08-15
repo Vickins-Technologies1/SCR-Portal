@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { finalizeAirbnbBookingPayment, resolveAirbnbBookingReference } from "@/lib/airbnb-booking-workflow";
 
 export function buildAirbnbPaymentReference(bookingId: string): string {
   const trimmed = bookingId.trim();
@@ -64,7 +65,7 @@ export async function syncAirbnbBookingPaymentStatus(
 
   const booking = await db.collection("airbnbBookings").findOne(
     { ownerId, externalId: bookingId },
-    { projection: { total: 1 } }
+    { projection: { total: 1, reference: 1, createdAt: 1 } }
   );
   if (!booking) return null;
 
@@ -82,8 +83,12 @@ export async function syncAirbnbBookingPaymentStatus(
 
   await db.collection("airbnbBookings").updateOne(
     { ownerId, externalId: bookingId },
-    { $set: { payoutStatus, amountPaid, updatedAt: nowIso } }
+    { $set: { payoutStatus, amountPaid, reference: resolveAirbnbBookingReference(booking as any), updatedAt: nowIso } }
   );
+
+  if (payoutStatus === "paid") {
+    await finalizeAirbnbBookingPayment(db, { ownerId, bookingId, nowIso });
+  }
 
   return { payoutStatus, amountPaid, remaining, total };
 }

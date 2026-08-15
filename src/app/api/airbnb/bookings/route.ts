@@ -7,6 +7,10 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { sendAirbnbBookingConfirmationEmail } from "@/lib/email";
 import { ensureAirbnbGuestPortalAccount } from "@/lib/airbnb-guest-portal";
+import {
+  findAirbnbBookingConflict,
+  resolveAirbnbBookingReference,
+} from "@/lib/airbnb-booking-workflow";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -89,6 +93,11 @@ const DirectBookingSchema = z.object({
   guestEmail: z.string().trim().email(),
   guestPhone: z.string().trim().min(7),
   guestIdNumber: z.string().trim().min(3).optional(),
+  guests: z.preprocess((value) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }, z.number().int().min(1).max(20).optional()),
   checkIn: z.string().trim().min(1),
   checkOut: z.string().trim().min(1),
   total: z.preprocess((value) => Number(value), z.number().nonnegative()),
@@ -136,16 +145,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const booking = {
-    _id: new ObjectId(),
+  const conflict = await findAirbnbBookingConflict(db, {
     ownerId,
-    externalId: `dir-${new ObjectId().toString()}`,
+    listingId: parsed.data.listingId,
+    checkIn: checkInDate,
+    checkOut: checkOutDate,
+  });
+  if (conflict) {
+    return NextResponse.json(
+      { success: false, message: "This property is already booked for the selected dates." },
+      { status: 409 }
+    );
+  }
+
+  const createdAt = new Date().toISOString();
+  const bookingObjectId = new ObjectId();
+  const bookingExternalId = `dir-${bookingObjectId.toString()}`;
+  const booking = {
+    _id: bookingObjectId,
+    ownerId,
+    externalId: bookingExternalId,
+    reference: resolveAirbnbBookingReference({
+      ownerId,
+      externalId: bookingExternalId,
+      createdAt,
+    }),
     listingId: parsed.data.listingId,
     listingName: listing.name,
     guestName: parsed.data.guestName,
     guestEmail: parsed.data.guestEmail,
     guestPhone: parsed.data.guestPhone,
     guestIdNumber: parsed.data.guestIdNumber || null,
+    guestCount: parsed.data.guests ?? null,
     checkIn: checkInDate.toISOString(),
     checkOut: checkOutDate.toISOString(),
     nights: diffNights(checkInDate, checkOutDate),
@@ -153,11 +184,11 @@ export async function POST(request: NextRequest) {
     amountPaid: 0,
     status: "pending",
     source: "Direct",
-    payoutStatus: "pending",
+    payoutStatus: "pending_verification",
     checkInReminderSent: false,
     checkOutReminderSent: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt,
+    updatedAt: createdAt,
   };
 
   await db.collection("airbnbBookings").insertOne(booking);
@@ -186,6 +217,8 @@ export async function POST(request: NextRequest) {
         nights: booking.nights,
         total: booking.total,
         supportEmail: settings?.supportEmail,
+        bookingReference: booking.reference,
+        bookingStatus: "pending_verification",
       });
     } catch (error) {
       console.error("Failed to send Airbnb booking confirmation email", {
@@ -232,6 +265,7 @@ export async function POST(request: NextRequest) {
       status: booking.status,
       source: booking.source,
       payoutStatus: booking.payoutStatus,
+      reference: booking.reference,
     },
   });
 }
