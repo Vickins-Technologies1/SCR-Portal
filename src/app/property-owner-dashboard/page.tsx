@@ -83,6 +83,7 @@ export default function PropertyOwnerDashboard() {
     expectedMonthlyRent: 0,
     totalMonthlyRent: 0,
     totalRentPaid: 0,
+    totalDepositDue: 0,
     overduePayments: 0,
     totalPayments: 0,
     totalOverdueAmount: 0,
@@ -580,9 +581,9 @@ export default function PropertyOwnerDashboard() {
 
                         <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                           {[
-                            "Expected Monthly Revenue",
-                            "Monthly Rent",
-                            "Total Rent Paid",
+                          "Expected Monthly Revenue",
+                          "Monthly Rent",
+                            "Deposit Due",
                             "Overdue Amount",
                             "Late Payment Penalties",
                             "Total Tenants",
@@ -618,11 +619,11 @@ export default function PropertyOwnerDashboard() {
                           explanation: "Total rent collected in the current month (completed rent payments only).",
                         },
                         {
-                          title: "Total Rent Paid",
-                          value: formatCurrency(stats.totalRentPaid),
+                          title: "Deposit Due",
+                          value: formatCurrency(stats.totalDepositDue),
                           icon: DollarSign,
                           color: "blue",
-                          explanation: "All-time rent payments received from tenants (completed rent transactions only).",
+                          explanation: "Total outstanding security deposit balance still due from tenants across all properties.",
                         },
                         {
                           title: "Overdue Amount",

@@ -49,6 +49,7 @@ interface Stats {
   expectedMonthlyRent: number;
   totalMonthlyRent: number;
   totalRentPaid: number;
+  totalDepositDue: number;
   overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
@@ -179,6 +180,7 @@ export async function GET(request: NextRequest) {
         expectedMonthlyRent: 0,
         totalMonthlyRent: 0,
         totalRentPaid: 0,
+        totalDepositDue: 0,
         overduePayments: 0,
         totalPayments: 0,
         totalOverdueAmount: 0,
@@ -348,6 +350,7 @@ export async function GET(request: NextRequest) {
     let overduePayments = 0;
     let totalOverdueAmount = 0;
     let totalPenaltyAmount = 0;
+    let totalDepositDue = 0;
 
     const bulkOps = activeTenantsForDues.map((tenant) => {
       const property = propertyMap.get(tenant.propertyId);
@@ -377,6 +380,7 @@ export async function GET(request: NextRequest) {
         unitTypes: property?.unitTypes as any,
       });
       const depositDues = Math.max(0, totalDeposit - tenantTotals.depositPaid);
+      totalDepositDue += roundMoney(depositDues);
       const totalOverdueAmountForTenant = roundMoney(rentDues + depositDues + penaltyDues);
       const roundedOverdue = roundMoney(totalOverdueAmountForTenant);
 
@@ -423,6 +427,7 @@ export async function GET(request: NextRequest) {
       expectedMonthlyRent,
       totalMonthlyRent,
       totalRentPaid,
+      totalDepositDue: roundMoney(totalDepositDue),
       overduePayments,
       totalPayments,
       totalOverdueAmount: roundMoney(totalOverdueAmount),
