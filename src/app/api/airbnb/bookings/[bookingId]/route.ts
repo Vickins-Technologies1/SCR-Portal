@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
-import { resolveAirbnbBookingReference, resolveAirbnbPaymentMethod } from "@/lib/airbnb-booking-workflow";
+import {
+  resolveAirbnbBookingReference,
+  resolveAirbnbPaymentMethod,
+  type AirbnbBookingPayment,
+  type AirbnbBookingRecord,
+} from "@/lib/airbnb-booking-workflow";
 
 export async function GET(
   request: NextRequest,
@@ -27,7 +32,7 @@ export async function GET(
     filters.push({ _id: new ObjectId(bookingId) });
   }
 
-  const booking = await db.collection("airbnbBookings").findOne({ ownerId, $or: filters });
+  const booking = await db.collection<AirbnbBookingRecord>("airbnbBookings").findOne({ ownerId, $or: filters });
   if (!booking) {
     return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
   }
@@ -35,7 +40,7 @@ export async function GET(
   const id = booking.externalId || booking._id?.toString?.() || bookingId;
   const amountPaid = Number(booking.amountPaid || 0);
   const total = Number(booking.total || 0);
-  const latestPayment = await db.collection("payments").findOne(
+  const latestPayment = await db.collection<AirbnbBookingPayment>("payments").findOne(
     { ownerId, airbnbBookingId: id },
     { sort: { paymentDate: -1, createdAt: -1 } }
   );
@@ -68,7 +73,7 @@ export async function GET(
       source: booking.source,
       payoutStatus: booking.payoutStatus,
       reference: resolveAirbnbBookingReference(booking),
-      paymentMethod: resolveAirbnbPaymentMethod(latestPayment as any),
+      paymentMethod: resolveAirbnbPaymentMethod(latestPayment),
       mpesaCode: latestPayment?.mpesaCode || latestPayment?.reference || null,
       paymentDate: latestPayment?.paymentDate || null,
       verifiedBy: latestPayment?.verifiedBy || null,

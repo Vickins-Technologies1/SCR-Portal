@@ -12,6 +12,7 @@ export type AirbnbBookingRecord = {
   guestName?: string;
   guestEmail?: string;
   guestPhone?: string;
+  guestIdNumber?: string | null;
   checkIn?: string;
   checkOut?: string;
   nights?: number;
@@ -30,6 +31,8 @@ export type AirbnbBookingRecord = {
   verifiedBy?: string | null;
   verificationTimestamp?: string | null;
   confirmationTimestamp?: string | null;
+  confirmedAt?: string | null;
+  specialRequests?: string;
 };
 
 export type AirbnbOwnerProfile = {
