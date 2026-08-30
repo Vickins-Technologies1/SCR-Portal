@@ -15,6 +15,7 @@ import {
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
+  getMpesaCallbackUrl,
 } from "@/lib/mpesa";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 
@@ -35,6 +36,9 @@ interface Payment {
   phoneNumber?: string;
   reference?: string;
   mpesaCode?: string | null;
+  paymentId?: string;
+  provider?: "daraja" | "kopokopo" | "tuma";
+  paymentMethod?: string;
 }
 
 interface Tenant {
@@ -369,10 +373,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    const callbackBase = process.env.MPESA_CALLBACK_BASE_URL || "";
-    if (!callbackBase) {
-      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
-    }
+    let callbackUrl: string;
+    try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 }); }
 
     const accountReference = reference.startsWith("INV-") ? reference : `INV-${reference}`;
     // Initiate STK push with landlord shortcode
@@ -383,7 +385,7 @@ export async function POST(request: NextRequest) {
       phone: normalizedPhone,
       accountReference,
       transactionDesc: `${type} Payment`,
-      callbackUrl: `${callbackBase}/api/mpesa/stk-callback`,
+      callbackUrl,
     });
 
     if (stkResponse.ResponseCode !== "0") {
@@ -397,6 +399,7 @@ export async function POST(request: NextRequest) {
     const nowIso = new Date().toISOString();
     const payment: Payment = {
       _id: new ObjectId(),
+      paymentId: new ObjectId().toString(),
       tenantId: targetTenantId,
       amount: Number(amount),
       propertyId,
@@ -408,6 +411,8 @@ export async function POST(request: NextRequest) {
       phoneNumber: normalizedPhone,
       reference,
       mpesaCode: null,
+      provider: "daraja",
+      paymentMethod: "daraja_stk",
     };
 
     await db.collection<Payment>("payments").insertOne({

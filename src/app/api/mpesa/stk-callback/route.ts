@@ -1,6 +1,5 @@
 // src/app/api/mpesa/stk-callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
@@ -12,27 +11,7 @@ import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/ema
 import { sendWelcomeSms } from "@/lib/sms";
 import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
-
-const CallbackSchema = z.object({
-  Body: z.object({
-    stkCallback: z.object({
-      MerchantRequestID: z.string(),
-      CheckoutRequestID: z.string(),
-      ResultCode: z.number(),
-      ResultDesc: z.string(),
-      CallbackMetadata: z
-        .object({
-          Item: z.array(
-            z.object({
-              Name: z.string(),
-              Value: z.union([z.string(), z.number()]).optional(),
-            })
-          ),
-        })
-        .optional(),
-    }),
-  }),
-});
+import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
 
 function parseMpesaDate(value?: string | number): Date {
   if (!value) return new Date();
@@ -47,19 +26,6 @@ function parseMpesaDate(value?: string | number): Date {
   return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+03:00`);
 }
 
-function extractMetadata(items?: { Name: string; Value?: string | number }[]) {
-  const map = new Map<string, string | number>();
-  items?.forEach((item) => {
-    if (item?.Name) map.set(item.Name, item.Value ?? "");
-  });
-  return {
-    amount: Number(map.get("Amount") || 0),
-    receipt: String(map.get("MpesaReceiptNumber") || ""),
-    transactionDate: map.get("TransactionDate"),
-    phone: String(map.get("PhoneNumber") || ""),
-  };
-}
-
 export async function POST(request: NextRequest) {
   let payload: unknown;
   try {
@@ -68,63 +34,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid JSON" }, { status: 400 });
   }
 
-  const parsed = CallbackSchema.safeParse(payload);
+  const parsed = DarajaCallbackSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid payload" }, { status: 400 });
   }
 
   const callback = parsed.data.Body.stkCallback;
-  const metadata = extractMetadata(callback.CallbackMetadata?.Item);
-
-  const status =
-    callback.ResultCode === 0
-      ? "completed"
-      : /cancel/i.test(callback.ResultDesc) || callback.ResultCode === 1032
-      ? "cancelled"
-      : "failed";
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
 
-    const paymentQuery = {
-      $or: [
-        { checkoutRequestId: callback.CheckoutRequestID },
-        { transactionId: callback.CheckoutRequestID },
-        { merchantRequestId: callback.MerchantRequestID },
-      ],
-    };
-
-    const existingPayment = await db.collection("payments").findOne(paymentQuery);
-    if (!existingPayment) {
+    const claimed = await claimDarajaCallback(db, callback);
+    const { payment, metadata, status } = claimed;
+    if (!payment) {
       logger.warn("STK callback received but payment not found", {
         checkoutRequestId: callback.CheckoutRequestID,
       });
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
 
-    const wasAlreadyCompleted = String(existingPayment.status || "").toLowerCase() === "completed";
-    const sameReceipt = !metadata.receipt || metadata.receipt === existingPayment.mpesaCode;
-
-    if (wasAlreadyCompleted && sameReceipt && status === "completed") {
+    if (!claimed.shouldProcessEffects) {
+      logger.info("Daraja callback ignored as duplicate or finalized", {
+        paymentId: payment.paymentId || String(payment._id),
+        checkoutRequestId: callback.CheckoutRequestID,
+        provider: "daraja",
+        status: payment.status,
+        resultCode: callback.ResultCode,
+      });
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
-
-    // Match payment by CheckoutRequestID/MerchantRequestID
-    const paymentResult = await db.collection("payments").findOneAndUpdate(
-      paymentQuery,
-      {
-        $set: {
-          status,
-          ...(metadata.amount ? { amount: metadata.amount } : {}),
-          mpesaCode: metadata.receipt || null,
-          paymentDate: parseMpesaDate(metadata.transactionDate).toISOString(),
-          phoneNumber: metadata.phone || undefined,
-        },
-      },
-      { returnDocument: "after" }
-    );
-
-    const payment = paymentResult?.value;
 
     // If we have an invoice, only mark it paid after the callback confirms success.
     if (status === "completed" && payment.invoiceId && ObjectId.isValid(payment.invoiceId)) {
@@ -223,16 +161,19 @@ export async function POST(request: NextRequest) {
 
     // Only complete downstream ledger updates for successful tenant payments
     if (status !== "completed" || !payment.tenantId) {
+      await markDarajaEffectsApplied(db, payment._id);
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
 
     const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(payment.tenantId) });
     if (!tenant) {
+      await markDarajaEffectsApplied(db, payment._id);
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
 
     const property = await db.collection("properties").findOne({ _id: new ObjectId(payment.propertyId) });
     if (!property) {
+      await markDarajaEffectsApplied(db, payment._id);
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
 
@@ -352,6 +293,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await markDarajaEffectsApplied(db, payment._id);
     return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
   } catch (error) {
     logger.error("STK callback processing error", {

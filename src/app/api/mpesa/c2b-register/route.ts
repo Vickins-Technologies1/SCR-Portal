@@ -18,6 +18,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
+  return NextResponse.json({ success: false, message: "C2B is not enabled for this Sorana launch; use Daraja STK Push." }, { status: 501 });
+
   if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
     return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
   }

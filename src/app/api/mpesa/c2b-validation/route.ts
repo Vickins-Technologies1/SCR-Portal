@@ -22,5 +22,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid payload" }, { status: 400 });
   }
 
-  return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+  return NextResponse.json({ ResultCode: 1, ResultDesc: "C2B is not enabled for this Sorana launch" }, { status: 501 });
 }

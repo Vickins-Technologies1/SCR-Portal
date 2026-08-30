@@ -16,12 +16,13 @@ import {
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
-  resolvePlatformStkCredentials,
+  getMpesaCallbackUrl,
 } from "@/lib/mpesa";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
 import { resolveAccountTier } from "@/lib/tier";
+import { randomUUID } from "node:crypto";
 
 const StkPushSchema = z.object({
   amount: z.preprocess((v) => Number(v), z.number().int().positive()),
@@ -542,27 +543,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve M-Pesa credentials (prefer landlord-level, fallback to platform)
+    // Resolve Daraja credentials (provider remains explicit; KopoKopo/Tuma branches exit above).
     let shortcode = preferredShortcode;
     let passkey = resolveStoredPasskey(storedPasskey);
-    const platformCredentials = (() => {
-      try {
-        return resolvePlatformStkCredentials();
-      } catch {
-        return null;
-      }
-    })();
-    const kopokopoShortcode = safeGetKopokopoTillNumber();
-    const kopokopoPasskey = safeGetKopokopoPasskey();
     const envShortcode = safeGetMpesaShortcode();
     const envPasskey = safeGetMpesaPasskey();
 
     if (!shortcode) {
-      shortcode = kopokopoShortcode || platformCredentials?.shortcode || envShortcode;
+      shortcode = envShortcode;
     }
 
     if (!passkey) {
-      passkey = kopokopoPasskey || platformCredentials?.passkey || envPasskey;
+      passkey = envPasskey;
     }
 
     if (!shortcode || !passkey) {
@@ -575,9 +567,25 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    const callbackBase = process.env.MPESA_CALLBACK_BASE_URL || "";
-    if (!callbackBase) {
-      return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
+    let callbackUrl: string;
+    try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 }); }
+
+    const activeDarajaPayment = await db.collection("payments").findOne({
+      tenantId,
+      invoiceId: parsed.data.invoiceId,
+      landlordId: parsed.data.landlordId,
+      provider: { $in: ["daraja", "mpesa", null] },
+      status: { $in: ["pending", "processing", "pending_stk"] },
+    }, { sort: { createdAt: -1, _id: -1 } });
+    if (activeDarajaPayment) {
+      return NextResponse.json({
+        success: true,
+        message: "A Daraja payment request is already pending for this invoice.",
+        checkoutRequestId: activeDarajaPayment.checkoutRequestId || activeDarajaPayment.transactionId || "",
+        merchantRequestId: activeDarajaPayment.merchantRequestId || "",
+        customerMessage: "A payment request is already pending for this invoice.",
+        provider: "daraja",
+      }, { status: 200 });
     }
 
     // Initiate Daraja STK push
@@ -588,7 +596,7 @@ export async function POST(request: NextRequest) {
       phone: payerPhone,
       accountReference: stkAccountReference,
       transactionDesc: `${parsed.data.type || "Rent"} Payment`,
-      callbackUrl: `${callbackBase}/api/mpesa/stk-callback`,
+      callbackUrl,
       transactionType,
     });
 
@@ -610,6 +618,7 @@ export async function POST(request: NextRequest) {
       {
         $set: {
           tenantId,
+          paymentId: randomUUID(),
           amount: paymentAmount,
           propertyId,
           paymentDate: nowIso,
@@ -624,7 +633,12 @@ export async function POST(request: NextRequest) {
           merchantRequestId: stkResponse.MerchantRequestID,
           invoiceId: parsed.data.invoiceId,
           landlordId: parsed.data.landlordId,
-          provider: "kopokopo",
+          provider: "daraja",
+          paymentMethod: "daraja_stk",
+          transactionDesc: `${parsed.data.type || "Rent"} Payment`,
+          shortcode,
+          resultCode: null,
+          resultDesc: null,
         },
         $setOnInsert: {
           createdAt: nowIso,
@@ -641,6 +655,7 @@ export async function POST(request: NextRequest) {
         merchantRequestId: stkResponse.MerchantRequestID,
         customerMessage: stkResponse.CustomerMessage,
         shortcode,
+        provider: "daraja",
       },
       { status: 200 }
     );

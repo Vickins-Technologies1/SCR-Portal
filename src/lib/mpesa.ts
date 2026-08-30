@@ -25,6 +25,16 @@ export function getMpesaBaseUrl(): string {
     : "https://api.safaricom.co.ke";
 }
 
+export function getMpesaCallbackUrl(path = "/api/mpesa/stk-callback"): string {
+  const base = (process.env.MPESA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
+  if (!base) throw new Error("Missing required env: MPESA_CALLBACK_BASE_URL");
+  const url = new URL(`${base}${path.startsWith("/") ? path : `/${path}`}`);
+  if (MPESA_ENVIRONMENT === "production" && url.protocol !== "https:") {
+    throw new Error("MPESA_CALLBACK_BASE_URL must use HTTPS in production");
+  }
+  return url.toString();
+}
+
 export function generateTimestamp(date = new Date()): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
   return [
@@ -150,7 +160,7 @@ export async function getAccessToken(): Promise<string> {
 }
 
 export function normalizePhoneNumber(phone: string): string {
-  let normalized = phone.replace(/\D/g, "");
+  let normalized = phone.trim().replace(/\D/g, "");
   if (normalized.startsWith("07")) normalized = `254${normalized.slice(1)}`;
   if (normalized.startsWith("01")) normalized = `254${normalized.slice(1)}`;
   if (normalized.startsWith("+254")) normalized = normalized.slice(1);
@@ -179,6 +189,15 @@ export async function initiateStkPush(params: {
   ResponseDescription: string;
   CustomerMessage: string;
 }> {
+  if (!Number.isSafeInteger(params.amount) || params.amount <= 0) {
+    throw new Error("STK amount must be a positive whole number");
+  }
+  if (!isValidKenyanMsisdn(params.phone)) {
+    throw new Error("Invalid Kenyan phone number");
+  }
+  if (!params.accountReference.trim() || !params.transactionDesc.trim()) {
+    throw new Error("STK account reference and transaction description are required");
+  }
   const token = await getAccessToken();
   const timestamp = generateTimestamp();
   const password = generatePassword(params.shortcode, params.passkey, timestamp);
@@ -198,19 +217,31 @@ export async function initiateStkPush(params: {
     TransactionDesc: params.transactionDesc,
   };
 
-  const res = await fetch(`${baseUrl}/mpesa/stkpush/v1/processrequest`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/mpesa/stkpush/v1/processrequest`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw new Error("Daraja STK request timed out");
+    throw new Error("Unable to reach Daraja STK service");
+  } finally {
+    clearTimeout(timeout);
+  }
 
-  const data = (await res.json()) as any;
+  let data: any = {};
+  try { data = await res.json(); } catch { /* handled below with a safe generic error */ }
   if (!res.ok) {
-    const errorMessage = data?.errorMessage || data?.error?.message || "STK Push failed";
-    throw new Error(errorMessage);
+    throw new Error("Daraja STK request failed");
   }
 
   return data;

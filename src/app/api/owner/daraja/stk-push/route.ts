@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber } from "@/lib/mpesa";
+import { getMpesaCallbackUrl, initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber } from "@/lib/mpesa";
 import { resolveOwnerDarajaStkConfig } from "@/lib/owner-daraja";
 
 const StkSchema = z.object({
@@ -76,10 +76,8 @@ export async function POST(request: NextRequest) {
   try {
     const { db } = await connectToDatabase();
     const resolved = await resolveOwnerDarajaStkConfig(db, context.ownerId, parsed.data.mode);
-    const callbackBase = (process.env.MPESA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
-    if (!callbackBase) {
-      return NextResponse.json({ success: false, message: "Missing MPESA_CALLBACK_BASE_URL." }, { status: 500 });
-    }
+    let callbackUrl: string;
+    try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Invalid Daraja callback configuration." }, { status: 500 }); }
 
     const stkResponse = await initiateStkPush({
       shortcode: resolved.shortcode,
@@ -88,7 +86,7 @@ export async function POST(request: NextRequest) {
       phone: normalizedPhone,
       accountReference: parsed.data.accountReference || resolved.accountReference || normalizedPhone,
       transactionDesc: parsed.data.transactionDesc,
-      callbackUrl: `${callbackBase}/api/mpesa/stk-callback`,
+      callbackUrl,
     });
 
     if (stkResponse.ResponseCode !== "0") {
@@ -112,7 +110,8 @@ export async function POST(request: NextRequest) {
       mpesaCode: null,
       checkoutRequestId: stkResponse.CheckoutRequestID,
       merchantRequestId: stkResponse.MerchantRequestID,
-      provider: "mpesa",
+      provider: "daraja",
+      paymentMethod: "daraja_stk",
       mpesaMode: parsed.data.mode,
       integrationMode: parsed.data.mode,
     });

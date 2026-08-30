@@ -74,6 +74,10 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
       { key: { tenantId: 1, status: 1, createdAt: -1 }, name: "payments_tenant_status_createdAt" },
       { key: { invoiceId: 1 }, name: "payments_invoiceId" },
       { key: { type: 1, status: 1, ownerId: 1 }, name: "payments_type_status_owner" },
+      { key: { paymentId: 1 }, name: "payments_paymentId_unique", unique: true, partialFilterExpression: { paymentId: { $type: "string" } } },
+      { key: { provider: 1, checkoutRequestId: 1 }, name: "payments_daraja_checkout_unique", unique: true, partialFilterExpression: { provider: "daraja", checkoutRequestId: { $type: "string" } } },
+      { key: { provider: 1, merchantRequestId: 1 }, name: "payments_daraja_merchant_unique", unique: true, partialFilterExpression: { provider: "daraja", merchantRequestId: { $type: "string" } } },
+      { key: { provider: 1, mpesaCode: 1 }, name: "payments_daraja_receipt_unique", unique: true, partialFilterExpression: { provider: "daraja", mpesaCode: { $type: "string" } } },
     ],
   },
   {
