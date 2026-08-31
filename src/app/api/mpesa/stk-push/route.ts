@@ -221,34 +221,39 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isPlatformInvoicePayment) {
-      if (!ObjectId.isValid(parsed.data.invoiceId)) {
+      const isSyntheticTenantReference = parsed.data.invoiceId === "tenant" || /^tenant-[a-f0-9]{24}$/i.test(parsed.data.invoiceId);
+      if (!ObjectId.isValid(parsed.data.invoiceId) && !isSyntheticTenantReference) {
         return NextResponse.json({ success: false, message: "Invalid invoice ID" }, { status: 400 });
       }
 
-      const invoice = await db.collection("invoices").findOne({
-        _id: new ObjectId(parsed.data.invoiceId),
-        propertyId,
-        userId: parsed.data.landlordId,
-        status: { $nin: ["completed", "failed"] },
-      });
+      const invoice = ObjectId.isValid(parsed.data.invoiceId)
+        ? await db.collection("invoices").findOne({
+            _id: new ObjectId(parsed.data.invoiceId),
+            propertyId,
+            userId: parsed.data.landlordId,
+            status: { $nin: ["completed", "failed"] },
+          })
+        : null;
 
-      if (!invoice) {
+      if (ObjectId.isValid(parsed.data.invoiceId) && !invoice) {
         return NextResponse.json(
           { success: false, message: "Invoice not found or it is no longer payable." },
           { status: 404 }
         );
       }
 
-      const invoiceAmount = Number(invoice.amount || 0);
-      if (!Number.isSafeInteger(invoiceAmount) || invoiceAmount <= 0) {
-        return NextResponse.json({ success: false, message: "Invoice amount is invalid." }, { status: 400 });
-      }
+      if (invoice) {
+        const invoiceAmount = Number(invoice.amount || 0);
+        if (!Number.isSafeInteger(invoiceAmount) || invoiceAmount <= 0) {
+          return NextResponse.json({ success: false, message: "Invoice amount is invalid." }, { status: 400 });
+        }
 
-      // Never trust a client-supplied amount for an invoice payment.
-      paymentAmount = invoiceAmount;
-      invoiceReference = typeof invoice.reference === "string" && invoice.reference.trim()
-        ? invoice.reference.trim()
-        : `INV-${invoice._id.toString()}`;
+        // Never trust a client-supplied amount for an invoice payment.
+        paymentAmount = invoiceAmount;
+        invoiceReference = typeof invoice.reference === "string" && invoice.reference.trim()
+          ? invoice.reference.trim()
+          : `INV-${invoice._id.toString()}`;
+      }
     }
 
     if (!isPlatformInvoicePayment && !isValidKenyanMsisdn(payerPhone)) {
