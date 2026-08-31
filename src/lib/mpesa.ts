@@ -152,10 +152,15 @@ export async function getAccessToken(credentials?: {
 
   const baseUrl = getMpesaBaseUrl(environment);
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
-  const res = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
-    headers: { Authorization: `Basic ${auth}` },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+      headers: { Authorization: `Basic ${auth}` },
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error(`Unable to reach Safaricom OAuth endpoint (${baseUrl})`);
+  }
 
   if (!res.ok) {
     throw new Error(`Failed to fetch access token (HTTP ${res.status})`);
@@ -251,7 +256,7 @@ export async function initiateStkPush(params: {
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw new Error("Daraja STK request timed out");
-    throw new Error("Unable to reach Daraja STK service");
+    throw new Error(`Unable to reach Safaricom STK endpoint (${baseUrl})`);
   } finally {
     clearTimeout(timeout);
   }

@@ -15,6 +15,9 @@ const LandlordMpesaSchema = new Schema(
     bankBranchRef: { type: String, default: "" },
     bankSettlementMethod: { type: String, default: "EFT" },
     isDefault: { type: Boolean, default: true },
+    status: { type: String, enum: ["connected", "pending", "disconnected"], default: "connected" },
+    businessName: { type: String, default: "" },
+    lastVerifiedAt: { type: Date },
   },
   { timestamps: true }
 );

@@ -21,6 +21,23 @@ export async function POST(request: NextRequest) {
     const callback = parsed.data.Body.stkCallback;
     const claimed = await claimDarajaCallback(db, callback);
     if (!claimed.payment) {
+      await db.collection("unmatchedMpesaCallbacks").updateOne(
+        { checkoutRequestId: callback.CheckoutRequestID },
+        {
+          $setOnInsert: {
+            provider: "daraja",
+            merchantRequestId: callback.MerchantRequestID,
+            checkoutRequestId: callback.CheckoutRequestID,
+            resultCode: callback.ResultCode,
+            resultDesc: callback.ResultDesc,
+            metadata: claimed.metadata,
+            status: claimed.status,
+            receivedAt: new Date().toISOString(),
+            resolved: false,
+          },
+        },
+        { upsert: true },
+      );
       logger.warn("Owner Daraja callback received but payment not found", {
         checkoutRequestId: callback.CheckoutRequestID,
         provider: "daraja",

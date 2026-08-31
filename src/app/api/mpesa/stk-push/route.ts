@@ -220,6 +220,37 @@ export async function POST(request: NextRequest) {
       isPlatformInvoicePayment = true;
     }
 
+    if (!isPlatformInvoicePayment) {
+      if (!ObjectId.isValid(parsed.data.invoiceId)) {
+        return NextResponse.json({ success: false, message: "Invalid invoice ID" }, { status: 400 });
+      }
+
+      const invoice = await db.collection("invoices").findOne({
+        _id: new ObjectId(parsed.data.invoiceId),
+        propertyId,
+        userId: parsed.data.landlordId,
+        status: { $nin: ["completed", "failed"] },
+      });
+
+      if (!invoice) {
+        return NextResponse.json(
+          { success: false, message: "Invoice not found or it is no longer payable." },
+          { status: 404 }
+        );
+      }
+
+      const invoiceAmount = Number(invoice.amount || 0);
+      if (!Number.isSafeInteger(invoiceAmount) || invoiceAmount <= 0) {
+        return NextResponse.json({ success: false, message: "Invoice amount is invalid." }, { status: 400 });
+      }
+
+      // Never trust a client-supplied amount for an invoice payment.
+      paymentAmount = invoiceAmount;
+      invoiceReference = typeof invoice.reference === "string" && invoice.reference.trim()
+        ? invoice.reference.trim()
+        : `INV-${invoice._id.toString()}`;
+    }
+
     if (!isPlatformInvoicePayment && !isValidKenyanMsisdn(payerPhone)) {
       return NextResponse.json({ success: false, message: "Invalid phone number format" }, { status: 400 });
     }
@@ -634,6 +665,9 @@ export async function POST(request: NextRequest) {
           landlordId: parsed.data.landlordId,
           provider: "daraja",
           paymentMethod: "daraja_stk",
+          mpesaAccountType: paymentType === "till" ? "TILL" : "PAYBILL",
+          mpesaShortcode: shortcode,
+          mpesaAccountReference: paymentType === "paybill" ? stkAccountReference : null,
           transactionDesc: `${parsed.data.type || "Rent"} Payment`,
           shortcode,
           resultCode: null,

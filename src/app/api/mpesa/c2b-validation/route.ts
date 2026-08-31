@@ -1,26 +1,22 @@
-// src/app/api/mpesa/c2b-validation/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { findLandlordC2BConnection, normalizeC2BShortcode } from "@/lib/c2b";
 
 const ValidationSchema = z.object({
-  TransID: z.string().optional(),
-  TransAmount: z.string().optional(),
-  MSISDN: z.string().optional(),
+  TransID: z.string().trim().min(1),
+  TransAmount: z.union([z.string(), z.number()]),
+  BusinessShortCode: z.union([z.string(), z.number()]),
   BillRefNumber: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
-  let payload: unknown;
   try {
-    payload = await request.json();
+    const parsed = ValidationSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid payload" }, { status: 400 });
+    const connection = await findLandlordC2BConnection(normalizeC2BShortcode(parsed.data.BusinessShortCode));
+    if (!connection) return NextResponse.json({ ResultCode: 1, ResultDesc: "Unknown business shortcode" });
+    return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch {
-    return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ ResultCode: 1, ResultDesc: "Validation unavailable" }, { status: 500 });
   }
-
-  const parsed = ValidationSchema.safeParse(payload);
-  if (!parsed.success) {
-    return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid payload" }, { status: 400 });
-  }
-
-  return NextResponse.json({ ResultCode: 1, ResultDesc: "C2B is not enabled for this Sorana launch" }, { status: 501 });
 }

@@ -89,6 +89,14 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "unmatchedMpesaCallbacks",
+    indexes: [
+      { key: { checkoutRequestId: 1 }, name: "unmatched_mpesa_checkout_unique", unique: true },
+      { key: { provider: 1, transactionId: 1 }, name: "unmatched_mpesa_transaction_unique", unique: true, partialFilterExpression: { transactionId: { $type: "string" } } },
+      { key: { resolved: 1, receivedAt: -1 }, name: "unmatched_mpesa_resolution" },
+    ],
+  },
+  {
     collection: "propertyReviews",
     indexes: [
       { key: { listingId: 1, status: 1, createdAt: -1 }, name: "propertyReviews_listing_status_createdAt" },
