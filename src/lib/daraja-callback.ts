@@ -54,10 +54,22 @@ function identifierQuery(callback: DarajaCallback) {
   };
 }
 
+async function findPaymentWithRetry(db: Db, callback: DarajaCallback) {
+  // The provider can callback immediately after returning the request IDs,
+  // before the initiating request has finished persisting the payment.
+  const delaysMs = [0, 100, 250, 500, 1000];
+  for (const delayMs of delaysMs) {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const payment = await db.collection("payments").findOne(identifierQuery(callback));
+    if (payment) return payment;
+  }
+  return null;
+}
+
 export async function claimDarajaCallback(db: Db, callback: DarajaCallback) {
   const metadata = extractDarajaMetadata(callback.CallbackMetadata?.Item);
   const status = classifyDarajaResult(callback.ResultCode, callback.ResultDesc);
-  const existing = await db.collection("payments").findOne(identifierQuery(callback));
+  const existing = await findPaymentWithRetry(db, callback);
 
   if (!existing) return { payment: null, metadata, status, shouldProcessEffects: false, reason: "not_found" as const };
 
