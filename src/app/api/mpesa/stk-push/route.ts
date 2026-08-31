@@ -624,7 +624,6 @@ export async function POST(request: NextRequest) {
           paymentDate: nowIso,
           transactionId: stkResponse.CheckoutRequestID,
           status: "pending",
-          createdAt: nowIso,
           type: parsed.data.type || "Rent",
           phoneNumber: payerPhone,
           reference: invoiceReference,
