@@ -312,7 +312,7 @@ export async function resolveOwnerDarajaStkConfig(
 
     return {
       mode,
-      environment: process.env.MPESA_ENVIRONMENT === "production" ? "production" : "sandbox",
+      environment: process.env.MPESA_ENVIRONMENT?.trim().toLowerCase() === "sandbox" ? "sandbox" : "production",
       shortcode,
       passkey,
       consumerKey: process.env.MPESA_CONSUMER_KEY || "",

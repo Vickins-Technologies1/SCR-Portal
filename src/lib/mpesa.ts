@@ -6,7 +6,13 @@ export type MpesaEnvironment = "sandbox" | "production";
 
 const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || "";
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET || "";
-const MPESA_ENVIRONMENT = (process.env.MPESA_ENVIRONMENT || "sandbox") as MpesaEnvironment;
+const configuredEnvironment = String(process.env.MPESA_ENVIRONMENT || "").trim().toLowerCase();
+const MPESA_ENVIRONMENT: MpesaEnvironment =
+  configuredEnvironment === "sandbox"
+    ? "sandbox"
+    : configuredEnvironment === "production" || process.env.NODE_ENV === "production"
+      ? "production"
+      : "sandbox";
 const MPESA_ENCRYPTION_SECRET = process.env.MPESA_ENCRYPTION_SECRET || "";
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || "";
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY || "";
