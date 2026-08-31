@@ -51,7 +51,6 @@ export default function PaymentsPage() {
   const [tenantFeatures, setTenantFeatures] = useState<{ canPay: boolean; canNotifications: boolean } | null>(null);
   const [landlordId, setLandlordId] = useState<string>("");
   const [mpesaShortcode, setMpesaShortcode] = useState<string | null>(null);
-  const [invoiceId, setInvoiceId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -278,7 +277,6 @@ export default function PaymentsPage() {
       ]);
       return;
     }
-    setInvoiceId(`${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
     setAmount(getSuggestedAmount(paymentType, tenant?.dues));
     setIsModalOpen(true);
   };
@@ -620,7 +618,6 @@ export default function PaymentsPage() {
                       <PayWithMpesaButton
                         amount={amount}
                         phone={formatPhoneNumber(phoneNumber)}
-                        invoiceId={invoiceId || (tenantId ? `tenant-${tenantId}` : "tenant")}
                         landlordId={landlordId}
                         tenantId={tenantId || ""}
                         propertyId={tenant?.propertyId || ""}

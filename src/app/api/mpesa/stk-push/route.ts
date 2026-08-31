@@ -27,8 +27,8 @@ import { randomUUID } from "node:crypto";
 const StkPushSchema = z.object({
   amount: z.preprocess((v) => Number(v), z.number().int().positive()),
   phone: z.string().trim(),
-  invoiceId: z.string().trim().min(1),
-  landlordId: z.string().trim().min(1),
+  invoiceId: z.string().trim().optional().default(""),
+  landlordId: z.string().trim().optional().default(""),
   type: z.enum(["Rent", "Utility", "Deposit", "Other"]).optional(),
 });
 
@@ -131,9 +131,9 @@ export async function POST(request: NextRequest) {
     const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
     let payerPhone = normalizedPhone;
     let paymentAmount = parsed.data.amount;
-    let invoiceReference = parsed.data.invoiceId.startsWith("INV-")
-      ? parsed.data.invoiceId
-      : `INV-${parsed.data.invoiceId}`;
+    let invoiceReference = parsed.data.invoiceId
+      ? (parsed.data.invoiceId.startsWith("INV-") ? parsed.data.invoiceId : `INV-${parsed.data.invoiceId}`)
+      : "";
 
     let propertyId: string | null = null;
     let tenantId: string | null = null;
@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
         typeof tenant.ownerId === "string"
           ? tenant.ownerId
           : tenant.ownerId?.toString?.() || null;
+      invoiceReference = `TENANT-${tenantId}-${randomUUID().slice(0, 8)}`;
     }
 
     // Owner-initiated STK (e.g., platform invoices)
@@ -220,47 +221,11 @@ export async function POST(request: NextRequest) {
       isPlatformInvoicePayment = true;
     }
 
-    if (!isPlatformInvoicePayment) {
-      const isSyntheticTenantReference = parsed.data.invoiceId === "tenant" || /^tenant-[a-f0-9]{24}$/i.test(parsed.data.invoiceId);
-      if (!ObjectId.isValid(parsed.data.invoiceId) && !isSyntheticTenantReference) {
-        return NextResponse.json({ success: false, message: "Invalid invoice ID" }, { status: 400 });
-      }
-
-      const invoice = ObjectId.isValid(parsed.data.invoiceId)
-        ? await db.collection("invoices").findOne({
-            _id: new ObjectId(parsed.data.invoiceId),
-            propertyId,
-            userId: parsed.data.landlordId,
-            status: { $nin: ["completed", "failed"] },
-          })
-        : null;
-
-      if (ObjectId.isValid(parsed.data.invoiceId) && !invoice) {
-        return NextResponse.json(
-          { success: false, message: "Invoice not found or it is no longer payable." },
-          { status: 404 }
-        );
-      }
-
-      if (invoice) {
-        const invoiceAmount = Number(invoice.amount || 0);
-        if (!Number.isSafeInteger(invoiceAmount) || invoiceAmount <= 0) {
-          return NextResponse.json({ success: false, message: "Invoice amount is invalid." }, { status: 400 });
-        }
-
-        // Never trust a client-supplied amount for an invoice payment.
-        paymentAmount = invoiceAmount;
-        invoiceReference = typeof invoice.reference === "string" && invoice.reference.trim()
-          ? invoice.reference.trim()
-          : `INV-${invoice._id.toString()}`;
-      }
-    }
-
     if (!isPlatformInvoicePayment && !isValidKenyanMsisdn(payerPhone)) {
       return NextResponse.json({ success: false, message: "Invalid phone number format" }, { status: 400 });
     }
 
-    if (!derivedLandlordId || derivedLandlordId !== parsed.data.landlordId) {
+    if (!derivedLandlordId || (parsed.data.landlordId && derivedLandlordId !== parsed.data.landlordId)) {
       return NextResponse.json({ success: false, message: "Invalid landlord reference" }, { status: 403 });
     }
 

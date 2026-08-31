@@ -10,7 +10,7 @@ type PaymentType = "Rent" | "Utility" | "Deposit" | "Other";
 interface PayWithMpesaButtonProps {
   amount: number;
   phone: string;
-  invoiceId: string;
+  invoiceId?: string;
   landlordId: string;
   tenantId: string;
   propertyId: string;
@@ -99,7 +99,7 @@ export default function PayWithMpesaButton({
         body: JSON.stringify({
           amount,
           phone,
-          invoiceId,
+          ...(invoiceId ? { invoiceId } : {}),
           landlordId,
           type,
         }),
@@ -169,7 +169,7 @@ export default function PayWithMpesaButton({
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-gray-700">
           <p className="font-semibold text-primary">Manual Paybill/Till Option</p>
           <p>Paybill/Till: <span className="font-mono">{shortcode}</span></p>
-          <p>Reference: <span className="font-mono">INV-{invoiceId}</span></p>
+          {invoiceId && <p>Reference: <span className="font-mono">INV-{invoiceId}</span></p>}
         </div>
       ) : null}
     </div>
