@@ -550,6 +550,25 @@ export async function POST(request: NextRequest) {
     const envShortcode = safeGetMpesaShortcode();
     const envPasskey = safeGetMpesaPasskey();
 
+    // A C2B-authorized landlord destination is not automatically an STK
+    // destination for Sorana's platform Daraja credentials. Do not send an
+    // STK request that Safaricom will reject with 4999 Wrong credentials.
+    if (connectedShortcode && envShortcode && connectedShortcode !== envShortcode) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "C2B_PAYMENT_REQUIRED",
+          message: paymentType === "paybill"
+            ? `This landlord account accepts C2B payments. Pay KES ${paymentAmount} to PayBill ${connectedShortcode} using account ${stkAccountReference}.`
+            : `This landlord account accepts C2B payments. Pay KES ${paymentAmount} to Till ${connectedShortcode}.`,
+          paymentType,
+          shortcode: connectedShortcode,
+          accountReference: paymentType === "paybill" ? stkAccountReference : null,
+        },
+        { status: 409 },
+      );
+    }
+
     if (!shortcode) {
       shortcode = envShortcode;
     }
