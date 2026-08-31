@@ -9,7 +9,6 @@ import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
 import { createIncomingPayment, getKopokopoTillNumber } from "@/lib/kopokopo";
 import {
-  decryptPasskey,
   getKopokopoPasskey,
   getMpesaPasskey,
   getMpesaShortcode,
@@ -64,16 +63,6 @@ function safeGetKopokopoPasskey(): string {
     return getKopokopoPasskey();
   } catch {
     return "";
-  }
-}
-
-function resolveStoredPasskey(rawPasskey: string): string {
-  if (!rawPasskey) return "";
-  try {
-    return decryptPasskey(rawPasskey);
-  } catch {
-    // Stored as plain text or missing encryption secret; fallback to raw value.
-    return rawPasskey;
   }
 }
 
@@ -295,8 +284,6 @@ export async function POST(request: NextRequest) {
     let paybillNumber = "";
     let paybillAccountNumber = "";
     let tillNumber = "";
-    let storedShortcode = "";
-    let storedPasskey = "";
 
     if (isPlatformInvoicePayment) {
       tillNumber = safeGetKopokopoTillNumber();
@@ -444,22 +431,18 @@ export async function POST(request: NextRequest) {
       try {
         await connectMongoose();
         const doc = await LandlordMpesa.findOne({ landlord: derivedLandlordId })
-          .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1, shortcode: 1, passkey: 1 })
+        .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1 })
           .lean<{
             paymentType?: string;
             paybillNumber?: string;
             paybillAccountNumber?: string;
             tillNumber?: string;
-            shortcode?: string;
-            passkey?: string;
           }>()
           .exec();
 
         paybillNumber = doc?.paybillNumber?.trim() || "";
         paybillAccountNumber = doc?.paybillAccountNumber?.trim() || "";
         tillNumber = doc?.tillNumber?.trim() || "";
-        storedShortcode = doc?.shortcode?.trim() || "";
-        storedPasskey = doc?.passkey?.trim() || "";
 
         if (doc?.paymentType === "till" || doc?.paymentType === "paybill" || doc?.paymentType === "bank") {
           paymentType = doc.paymentType;
@@ -473,12 +456,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const connectedShortcode =
-      paymentType === "till" ? tillNumber : paymentType === "paybill" ? paybillNumber : "";
-    const preferredShortcode = connectedShortcode || storedShortcode;
     const stkAccountReference =
       paymentType === "paybill" && paybillAccountNumber ? paybillAccountNumber : invoiceReference;
-    const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
+    // Sorana's production Daraja application is configured as a PayBill.
+    const transactionType = "CustomerPayBillOnline";
 
     const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
     const tumaIntegration = await getOwnerTumaIntegration(db, derivedLandlordId);
@@ -494,7 +475,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (tumaConfigured && !isPlatformInvoicePayment) {
+    if (tumaConfigured && isPlatformInvoicePayment) {
       const description = `${parsed.data.type || "Rent"} payment ${invoiceReference}`;
       const incoming = await createTumaStkPush({
         amount: paymentAmount,
@@ -545,29 +526,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve Daraja credentials (provider remains explicit; KopoKopo/Tuma branches exit above).
-    let shortcode = preferredShortcode;
-    let passkey = resolveStoredPasskey(storedPasskey);
+    // Tenant STK Push uses Sorana's authorized Daraja shortcode. Landlord
+    // Till/PayBill destinations are handled through C2B, not this STK call.
+    let shortcode = "";
+    let passkey = "";
     const envShortcode = safeGetMpesaShortcode();
     const envPasskey = safeGetMpesaPasskey();
-
-    // A C2B-authorized landlord destination is not automatically an STK
-    // destination for Sorana's platform Daraja credentials. Do not send an
-    // STK request that Safaricom will reject with 4999 Wrong credentials.
-    if (connectedShortcode && envShortcode && connectedShortcode !== envShortcode) {
-      return NextResponse.json(
-        {
-          success: false,
-          code: "C2B_PAYMENT_REQUIRED",
-          message: paymentType === "paybill"
-            ? `This landlord account accepts C2B payments. Pay KES ${paymentAmount} to PayBill ${connectedShortcode} using account ${stkAccountReference}.`
-            : `This landlord account accepts C2B payments. Pay KES ${paymentAmount} to Till ${connectedShortcode}.`,
-          paymentType,
-          shortcode: connectedShortcode,
-          accountReference: paymentType === "paybill" ? stkAccountReference : null,
-        },
-        { status: 409 },
-      );
-    }
 
     if (!shortcode) {
       shortcode = envShortcode;
