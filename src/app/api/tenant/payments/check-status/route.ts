@@ -80,6 +80,8 @@ export async function POST(request: NextRequest) {
         mpesaCode: payment.mpesaCode,
         amount: payment.amount,
         status: publicStatus,
+        resultCode: payment.resultCode ?? null,
+        resultDesc: payment.resultDesc || null,
         paymentDate: payment.paymentDate,
         phoneNumber: payment.phoneNumber,
         reference: payment.reference,

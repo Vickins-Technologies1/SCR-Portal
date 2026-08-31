@@ -59,7 +59,12 @@ export default function PayWithMpesaButton({
         }),
       });
 
-      const statusData = await readJsonResponse<{ success?: boolean; status?: string; message?: string }>(
+      const statusData = await readJsonResponse<{
+        success?: boolean;
+        status?: string;
+        message?: string;
+        transaction?: { resultDesc?: string | null };
+      }>(
         statusRes,
         "Failed to check transaction status"
       );
@@ -73,10 +78,13 @@ export default function PayWithMpesaButton({
         continue;
       }
 
-      return status;
+      return {
+        status,
+        message: statusData.transaction?.resultDesc || "",
+      };
     }
 
-    return "timeout";
+    return { status: "timeout", message: "" };
   };
 
   const handleClick = async () => {
@@ -116,7 +124,8 @@ export default function PayWithMpesaButton({
         throw new Error("Payment initiation failed");
       }
 
-      const status = await pollStatus(data.checkoutRequestId);
+      const result = await pollStatus(data.checkoutRequestId);
+      const status = result.status;
       if (["completed", "successful", "success"].includes(status)) {
         toast.success("Payment completed successfully");
         onSuccess?.();
@@ -124,8 +133,9 @@ export default function PayWithMpesaButton({
         toast.error("Payment cancelled by user");
         onError?.("Payment cancelled by user");
       } else if (status === "failed") {
-        toast.error("Payment failed. Please check your balance.");
-        onError?.("Payment failed. Please check your balance.");
+        const failureMessage = result.message || "Payment failed. Please try again.";
+        toast.error(failureMessage);
+        onError?.(failureMessage);
       } else if (status === "expired") {
         toast.error("Payment request expired.");
         onError?.("Payment request expired.");

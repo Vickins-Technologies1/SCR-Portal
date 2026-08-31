@@ -48,7 +48,10 @@ export async function POST(request: NextRequest) {
     const { payment, metadata, status } = claimed;
     if (!payment) {
       logger.warn("STK callback received but payment not found", {
+        merchantRequestId: callback.MerchantRequestID,
         checkoutRequestId: callback.CheckoutRequestID,
+        resultCode: callback.ResultCode,
+        resultDesc: callback.ResultDesc,
       });
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }

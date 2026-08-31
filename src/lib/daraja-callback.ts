@@ -57,7 +57,7 @@ function identifierQuery(callback: DarajaCallback) {
 async function findPaymentWithRetry(db: Db, callback: DarajaCallback) {
   // The provider can callback immediately after returning the request IDs,
   // before the initiating request has finished persisting the payment.
-  const delaysMs = [0, 100, 250, 500, 1000];
+  const delaysMs = [0, 100, 250, 500, 1000, 2000, 3000];
   for (const delayMs of delaysMs) {
     if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
     const payment = await db.collection("payments").findOne(identifierQuery(callback));
