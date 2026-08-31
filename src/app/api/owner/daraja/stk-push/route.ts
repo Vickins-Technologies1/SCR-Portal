@@ -87,6 +87,9 @@ export async function POST(request: NextRequest) {
       accountReference: parsed.data.accountReference || resolved.accountReference || normalizedPhone,
       transactionDesc: parsed.data.transactionDesc,
       callbackUrl,
+      consumerKey: resolved.consumerKey,
+      consumerSecret: resolved.consumerSecret,
+      environment: resolved.environment,
     });
 
     if (stkResponse.ResponseCode !== "0") {

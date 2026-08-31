@@ -13,14 +13,14 @@ const MPESA_PASSKEY = process.env.MPESA_PASSKEY || "";
 const KOPOKOPO_TILL_NUMBER = process.env.KOPOKOPO_TILL_NUMBER || "";
 const KOPOKOPO_PASSKEY = process.env.KOPOKOPO_PASSKEY || "";
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+let cachedToken: { token: string; expiresAt: number; key: string } | null = null;
 
 function requireEnv(name: string, value: string) {
   if (!value) throw new Error(`Missing required env: ${name}`);
 }
 
-export function getMpesaBaseUrl(): string {
-  return MPESA_ENVIRONMENT === "sandbox"
+export function getMpesaBaseUrl(environment: MpesaEnvironment = MPESA_ENVIRONMENT): string {
+  return environment === "sandbox"
     ? "https://sandbox.safaricom.co.ke"
     : "https://api.safaricom.co.ke";
 }
@@ -127,17 +127,25 @@ export function decryptPasskey(encrypted: string): string {
   return decrypted.toString("utf8");
 }
 
-export async function getAccessToken(): Promise<string> {
-  requireEnv("MPESA_CONSUMER_KEY", MPESA_CONSUMER_KEY);
-  requireEnv("MPESA_CONSUMER_SECRET", MPESA_CONSUMER_SECRET);
+export async function getAccessToken(credentials?: {
+  consumerKey?: string;
+  consumerSecret?: string;
+  environment?: MpesaEnvironment;
+}): Promise<string> {
+  const consumerKey = credentials?.consumerKey || MPESA_CONSUMER_KEY;
+  const consumerSecret = credentials?.consumerSecret || MPESA_CONSUMER_SECRET;
+  const environment = credentials?.environment || MPESA_ENVIRONMENT;
+  requireEnv("MPESA_CONSUMER_KEY", consumerKey);
+  requireEnv("MPESA_CONSUMER_SECRET", consumerSecret);
 
   const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) {
+  const cacheKey = `${environment}:${consumerKey}`;
+  if (cachedToken && cachedToken.expiresAt > now + 60_000 && cachedToken.key === cacheKey) {
     return cachedToken.token;
   }
 
-  const baseUrl = getMpesaBaseUrl();
-  const auth = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString("base64");
+  const baseUrl = getMpesaBaseUrl(environment);
+  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
   const res = await fetch(`${baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
     headers: { Authorization: `Basic ${auth}` },
     cache: "no-store",
@@ -154,6 +162,7 @@ export async function getAccessToken(): Promise<string> {
   cachedToken = {
     token: data.access_token,
     expiresAt: now + expiresInSec * 1000,
+    key: cacheKey,
   };
 
   return data.access_token;
@@ -182,6 +191,9 @@ export async function initiateStkPush(params: {
   transactionDesc: string;
   callbackUrl: string;
   transactionType?: MpesaStkTransactionType;
+  consumerKey?: string;
+  consumerSecret?: string;
+  environment?: MpesaEnvironment;
 }): Promise<{
   MerchantRequestID: string;
   CheckoutRequestID: string;
@@ -198,10 +210,10 @@ export async function initiateStkPush(params: {
   if (!params.accountReference.trim() || !params.transactionDesc.trim()) {
     throw new Error("STK account reference and transaction description are required");
   }
-  const token = await getAccessToken();
+  const token = await getAccessToken(params);
   const timestamp = generateTimestamp();
   const password = generatePassword(params.shortcode, params.passkey, timestamp);
-  const baseUrl = getMpesaBaseUrl();
+  const baseUrl = getMpesaBaseUrl(params.environment);
 
   const payload = {
     BusinessShortCode: params.shortcode,
