@@ -456,10 +456,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const stkAccountReference =
-      paymentType === "paybill" && paybillAccountNumber ? paybillAccountNumber : invoiceReference;
-    // Sorana's production Daraja application is configured as a PayBill.
-    const transactionType = "CustomerPayBillOnline";
+    // The tenant reference identifies the payer/property in the callback.
+    // The landlord's PayBill account number is not a fixed tenant identity.
+    const stkAccountReference = invoiceReference;
 
     const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
     const tumaIntegration = await getOwnerTumaIntegration(db, derivedLandlordId);
@@ -525,10 +524,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve Daraja credentials (provider remains explicit; KopoKopo/Tuma branches exit above).
-    // Tenant STK Push uses Sorana's authorized Daraja shortcode. Landlord
-    // Till/PayBill destinations are handled through C2B, not this STK call.
-    let shortcode = "";
+    // Resolve Sorana credentials once, then route the STK request to the
+    // landlord shortcode authorized under Sorana's merchant-routing setup.
+    const connectedShortcode = paymentType === "till" ? tillNumber : paybillNumber;
+    let shortcode = connectedShortcode;
     let passkey = "";
     const envShortcode = safeGetMpesaShortcode();
     const envPasskey = safeGetMpesaPasskey();
@@ -540,6 +539,8 @@ export async function POST(request: NextRequest) {
     if (!passkey) {
       passkey = envPasskey;
     }
+
+    const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
 
     if (!shortcode || !passkey) {
       return NextResponse.json(
