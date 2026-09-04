@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { connectMongoose } from "@/lib/mongoose";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
-import { decryptPasskey } from "@/lib/mpesa";
+import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
 import { resolveTenantContext } from "@/lib/impersonation";
 import { resolveAccountTier } from "@/lib/tier";
 import {
@@ -12,15 +10,6 @@ import {
   resolveAirbnbOwnerProfile,
   resolveAirbnbPaymentMethod,
 } from "@/lib/airbnb-booking-workflow";
-
-function resolveStoredPasskey(rawPasskey: string): string {
-  if (!rawPasskey) return "";
-  try {
-    return decryptPasskey(rawPasskey);
-  } catch {
-    return rawPasskey;
-  }
-}
 
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
@@ -92,35 +81,14 @@ export async function GET(request: NextRequest) {
   let passkey = "";
 
   try {
-    await connectMongoose();
-    const mpesaDoc = await LandlordMpesa.findOne({ landlord: tenant.ownerId })
-      .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1, shortcode: 1, passkey: 1 })
-      .lean<{
-        paymentType?: string;
-        paybillNumber?: string;
-        paybillAccountNumber?: string;
-        tillNumber?: string;
-        shortcode?: string;
-        passkey?: string;
-      }>()
-      .exec();
-
-    const paybillNumber = mpesaDoc?.paybillNumber?.trim() || "";
-    paybillAccountNumber = mpesaDoc?.paybillAccountNumber?.trim() || "";
-    const tillNumber = mpesaDoc?.tillNumber?.trim() || "";
-    const storedShortcode = mpesaDoc?.shortcode?.trim() || "";
-    const storedPasskey = mpesaDoc?.passkey?.trim() || "";
-
-    if (mpesaDoc?.paymentType === "till" || mpesaDoc?.paymentType === "paybill" || mpesaDoc?.paymentType === "bank") {
-      paymentType = mpesaDoc.paymentType;
-    } else if (tillNumber) {
-      paymentType = "till";
-    } else if (paybillNumber) {
-      paymentType = "paybill";
-    }
-
-    shortcode = storedShortcode || paybillNumber || tillNumber || "";
-    passkey = resolveStoredPasskey(storedPasskey);
+    const resolved = await resolveLandlordMpesaRouting({
+      landlordId: ownerId,
+      propertyId: String(booking.listingId || ""),
+    });
+    paymentType = resolved.paymentType || "unknown";
+    shortcode = resolved.shortcode;
+    paybillAccountNumber = resolved.paybillAccountNumber || "";
+    passkey = resolved.passkey;
   } catch {
     // ignore
   }

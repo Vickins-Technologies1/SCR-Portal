@@ -2,22 +2,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId, Db } from "mongodb";
-import { connectMongoose } from "@/lib/mongoose";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
 import { z } from "zod";
 import {
-  decryptPasskey,
-  getMpesaPasskey,
-  getMpesaShortcode,
-  resolvePlatformStkCredentials,
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
   getMpesaCallbackUrl,
+  resolvePlatformStkCredentials,
 } from "@/lib/mpesa";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
+import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
 
 interface Payment {
   _id: ObjectId;
@@ -61,40 +57,18 @@ interface Property {
   name: string;
 }
 
-async function resolveMpesaCredentials(landlordId: string): Promise<{
+async function resolveMpesaCredentials(landlordId: string, propertyId?: string | null): Promise<{
   shortcode: string;
   passkey: string;
   source: "landlord" | "kopokopo" | "platform";
 }> {
   try {
-    await connectMongoose();
-    const doc = await LandlordMpesa.findOne({ landlord: landlordId })
-      .select({ shortcode: 1, passkey: 1, paymentType: 1, paybillNumber: 1, tillNumber: 1 })
-      .lean<{ shortcode?: string; passkey?: string; paymentType?: string; paybillNumber?: string; tillNumber?: string }>()
-      .exec();
-
-    const tillNumber = doc?.tillNumber?.trim() || "";
-    const paybillNumber = doc?.paybillNumber?.trim() || "";
-    const shortcode = doc?.shortcode?.trim() || "";
-    const rawPasskey = doc?.passkey?.trim() || "";
-    const resolvedShortcode =
-      doc?.paymentType === "till"
-        ? tillNumber || shortcode
-        : doc?.paymentType === "paybill"
-          ? paybillNumber || shortcode
-          : shortcode || tillNumber || paybillNumber;
-
-    if (resolvedShortcode && rawPasskey) {
-      let resolvedPasskey = rawPasskey;
-      try {
-        resolvedPasskey = decryptPasskey(rawPasskey);
-      } catch {
-        // Stored as plain text or missing encryption secret; fallback to raw value.
-      }
-      if (resolvedPasskey) {
-        return { shortcode: resolvedShortcode, passkey: resolvedPasskey, source: "landlord" };
-      }
-    }
+    const resolved = await resolveLandlordMpesaRouting({ landlordId, propertyId });
+    return {
+      shortcode: resolved.shortcode,
+      passkey: resolved.passkey,
+      source: resolved.source === "landlord" ? "landlord" : "platform",
+    };
   } catch {
     // Ignore landlord lookup errors and fallback to platform credentials.
   }
@@ -104,15 +78,15 @@ async function resolveMpesaCredentials(landlordId: string): Promise<{
     return {
       shortcode: platform.shortcode,
       passkey: platform.passkey,
-      source: platform.source === "kopokopo" ? "kopokopo" : "platform",
+      source: "platform",
     };
   } catch {
     // Ignore and fall through to legacy direct env lookups below.
   }
 
   return {
-    shortcode: getMpesaShortcode(),
-    passkey: getMpesaPasskey(),
+    shortcode: "",
+    passkey: "",
     source: "platform",
   };
 }
@@ -347,7 +321,7 @@ export async function POST(request: NextRequest) {
     let shortcode = "";
     let passkey = "";
     try {
-      const resolved = await resolveMpesaCredentials(landlordId);
+      const resolved = await resolveMpesaCredentials(landlordId, propertyId);
       shortcode = resolved.shortcode;
       passkey = resolved.passkey;
     } catch (err) {

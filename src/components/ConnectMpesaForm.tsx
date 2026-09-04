@@ -164,18 +164,6 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         return;
       }
 
-      const c2bRes = await fetch("/api/mpesa/c2b-register", {
-        method: "POST",
-        headers: { "x-csrf-token": csrfToken },
-        credentials: "include",
-      });
-      const c2bData = await c2bRes.json().catch(() => ({}));
-      if (!c2bRes.ok || !c2bData.success) {
-        toast.error(c2bData.message || "M-Pesa saved, but C2B registration failed.");
-        setConnected(false);
-        return;
-      }
-
       toast.success("Account details saved successfully");
       setConnected(true);
       setInitialValues({

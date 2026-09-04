@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
       accountReference: parsed.data.accountReference || resolved.accountReference || normalizedPhone,
       transactionDesc: parsed.data.transactionDesc,
       callbackUrl,
+      transactionType: resolved.paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline",
       consumerKey: resolved.consumerKey,
       consumerSecret: resolved.consumerSecret,
       environment: resolved.environment,

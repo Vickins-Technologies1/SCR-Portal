@@ -4,6 +4,7 @@ import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
+import { listLandlordMpesaConnections } from "@/lib/mpesa-routing";
 
 type PaymentType = "paybill" | "till";
 
@@ -18,30 +19,13 @@ export async function GET(request: NextRequest) {
 
   try {
     await connectMongoose();
-    const doc = await LandlordMpesa.findOne({ landlord: userId })
-      .select({
-        paymentType: 1,
-        paybillNumber: 1,
-        paybillAccountNumber: 1,
-        tillNumber: 1,
-        isDefault: 1,
-        _id: 0,
-      })
-      .lean<{
-        paymentType?: PaymentType;
-        paybillNumber?: string;
-        paybillAccountNumber?: string;
-        tillNumber?: string;
-        isDefault?: boolean;
-      }>()
-      .exec();
-
+    const connections = await listLandlordMpesaConnections({ landlordId: userId });
+    const doc = connections[0] || null;
     const safePaymentType: PaymentType = doc?.paymentType === "till" ? "till" : "paybill";
     const hasTill = !!doc?.tillNumber?.trim();
     const hasPaybill = !!doc?.paybillNumber?.trim();
     const hasPaybillAccount = !!doc?.paybillAccountNumber?.trim();
-    const connected =
-      safePaymentType === "till" ? hasTill : hasPaybill && hasPaybillAccount;
+    const connected = connections.length > 0 && (safePaymentType === "till" ? hasTill : hasPaybill && hasPaybillAccount);
 
     return NextResponse.json({
       success: true,
@@ -51,6 +35,9 @@ export async function GET(request: NextRequest) {
       paybillAccountNumber: doc?.paybillAccountNumber || "",
       tillNumber: doc?.tillNumber || "",
       isDefault: doc?.isDefault ?? true,
+      routingKey: doc?.routingKey || "default",
+      label: doc?.label || "",
+      connections,
     });
   } catch (error) {
     logger.error("GET /api/mpesa/connect error", {
@@ -81,6 +68,9 @@ export async function POST(request: NextRequest) {
     paybillAccountNumber?: string;
     tillNumber?: string;
     isDefault?: boolean;
+    label?: string;
+    routingKey?: string;
+    propertyIds?: string[];
   };
   let payload: Payload;
   try {
@@ -113,9 +103,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const routingKey = String(payload.routingKey || (Array.isArray(payload.propertyIds) && payload.propertyIds.length > 0 ? payload.propertyIds.map((id) => String(id).trim()).filter(Boolean).sort().join(":") : "default") || "default").trim() || "default";
+    const normalizedPropertyIds = Array.isArray(payload.propertyIds)
+      ? Array.from(new Set(payload.propertyIds.map((id) => String(id).trim()).filter(Boolean)))
+      : [];
+
     await LandlordMpesa.findOneAndUpdate(
-      { landlord: userId },
+      { landlord: userId, routingKey },
       {
+        landlord: userId,
+        routingKey,
+        label: String(payload.label || "").trim(),
+        propertyIds: normalizedPropertyIds,
+        enabled: true,
         paymentType,
         paybillNumber: paymentType === "paybill" ? payload.paybillNumber : "",
         paybillAccountNumber: paymentType === "paybill" ? payload.paybillAccountNumber : "",

@@ -3,20 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { connectMongoose } from "@/lib/mongoose";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
 import { createIncomingPayment, getKopokopoTillNumber } from "@/lib/kopokopo";
 import {
   getKopokopoPasskey,
-  getMpesaPasskey,
-  getMpesaShortcode,
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
   getMpesaCallbackUrl,
 } from "@/lib/mpesa";
+import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
@@ -33,22 +30,6 @@ const StkPushSchema = z.object({
 
 type RateLimitState = { count: number; resetAt: number };
 const rateLimitMap = new Map<string, RateLimitState>();
-
-function safeGetMpesaShortcode(): string {
-  try {
-    return getMpesaShortcode();
-  } catch {
-    return "";
-  }
-}
-
-function safeGetMpesaPasskey(): string {
-  try {
-    return getMpesaPasskey();
-  } catch {
-    return "";
-  }
-}
 
 function safeGetKopokopoTillNumber(): string {
   try {
@@ -281,9 +262,9 @@ export async function POST(request: NextRequest) {
     }
 
     let paymentType: "paybill" | "till" | "bank" | "unknown" = "unknown";
-    let paybillNumber = "";
-    let paybillAccountNumber = "";
     let tillNumber = "";
+    let shortcode = "";
+    let passkey = "";
 
     if (isPlatformInvoicePayment) {
       tillNumber = safeGetKopokopoTillNumber();
@@ -428,32 +409,14 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
     } else {
-      try {
-        await connectMongoose();
-        const doc = await LandlordMpesa.findOne({ landlord: derivedLandlordId })
-        .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1 })
-          .lean<{
-            paymentType?: string;
-            paybillNumber?: string;
-            paybillAccountNumber?: string;
-            tillNumber?: string;
-          }>()
-          .exec();
-
-        paybillNumber = doc?.paybillNumber?.trim() || "";
-        paybillAccountNumber = doc?.paybillAccountNumber?.trim() || "";
-        tillNumber = doc?.tillNumber?.trim() || "";
-
-        if (doc?.paymentType === "till" || doc?.paymentType === "paybill" || doc?.paymentType === "bank") {
-          paymentType = doc.paymentType;
-        } else if (tillNumber) {
-          paymentType = "till";
-        } else if (paybillNumber) {
-          paymentType = "paybill";
-        }
-      } catch {
-        // Ignore lookup errors and fall back to env defaults below.
-      }
+      const resolved = await resolveLandlordMpesaRouting({
+        landlordId: derivedLandlordId,
+        propertyId,
+      });
+      paymentType = resolved.paymentType;
+      shortcode = resolved.shortcode;
+      passkey = resolved.passkey;
+      tillNumber = resolved.tillNumber || "";
     }
 
     // The tenant reference identifies the payer/property in the callback.
@@ -526,22 +489,6 @@ export async function POST(request: NextRequest) {
 
     // Resolve Sorana credentials once, then route the STK request to the
     // landlord shortcode authorized under Sorana's merchant-routing setup.
-    const connectedShortcode = paymentType === "till" ? tillNumber : paybillNumber;
-    let shortcode = connectedShortcode;
-    let passkey = "";
-    const envShortcode = safeGetMpesaShortcode();
-    const envPasskey = safeGetMpesaPasskey();
-
-    if (!shortcode) {
-      shortcode = envShortcode;
-    }
-
-    if (!passkey) {
-      passkey = envPasskey;
-    }
-
-    const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
-
     if (!shortcode || !passkey) {
       return NextResponse.json(
         {
@@ -552,6 +499,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
     let callbackUrl: string;
     try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 }); }
 

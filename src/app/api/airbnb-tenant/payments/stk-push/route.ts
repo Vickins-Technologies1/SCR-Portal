@@ -2,18 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { connectMongoose } from "@/lib/mongoose";
-import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
-import {
-  decryptPasskey,
-  getMpesaPasskey,
-  getMpesaShortcode,
-  initiateStkPush,
-  isValidKenyanMsisdn,
-  normalizePhoneNumber,
-} from "@/lib/mpesa";
+import { initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber } from "@/lib/mpesa";
+import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
 import { resolveTenantContext } from "@/lib/impersonation";
@@ -23,15 +15,6 @@ const StkSchema = z.object({
   phone: z.string().trim().optional(),
   amount: z.preprocess((value) => (value == null ? undefined : Number(value)), z.number().positive().optional()),
 });
-
-function resolveStoredPasskey(rawPasskey: string): string {
-  if (!rawPasskey) return "";
-  try {
-    return decryptPasskey(rawPasskey);
-  } catch {
-    return rawPasskey;
-  }
-}
 
 export async function POST(request: NextRequest) {
   const csrfToken = request.headers.get("x-csrf-token");
@@ -186,31 +169,15 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  await connectMongoose();
-  const mpesaDoc = await LandlordMpesa.findOne({ landlord: tenant.ownerId })
-    .select({ paymentType: 1, paybillNumber: 1, paybillAccountNumber: 1, tillNumber: 1, shortcode: 1, passkey: 1 })
-    .lean<{
-      paymentType?: string;
-      paybillNumber?: string;
-      paybillAccountNumber?: string;
-      tillNumber?: string;
-      shortcode?: string;
-      passkey?: string;
-    }>()
-    .exec();
+  const resolvedMpesa = await resolveLandlordMpesaRouting({
+    landlordId: String(tenant.ownerId || ""),
+    propertyId: String(booking.listingId || ""),
+  });
 
-  const paymentType = mpesaDoc?.paymentType || "";
-  const paybillNumber = mpesaDoc?.paybillNumber?.trim() || "";
-  const paybillAccountNumber = mpesaDoc?.paybillAccountNumber?.trim() || "";
-  const tillNumber = mpesaDoc?.tillNumber?.trim() || "";
-  const storedShortcode = mpesaDoc?.shortcode?.trim() || "";
-  const storedPasskey = mpesaDoc?.passkey?.trim() || "";
-
-  let shortcode = storedShortcode || paybillNumber || tillNumber || "";
-  let passkey = resolveStoredPasskey(storedPasskey);
-
-  if (!shortcode) shortcode = getMpesaShortcode();
-  if (!passkey) passkey = getMpesaPasskey();
+  const paymentType = resolvedMpesa.paymentType || "";
+  const paybillAccountNumber = resolvedMpesa.paybillAccountNumber || "";
+  const shortcode = resolvedMpesa.shortcode;
+  const passkey = resolvedMpesa.passkey;
 
   const callbackBase = (process.env.MPESA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
   if (!callbackBase) {
@@ -218,13 +185,7 @@ export async function POST(request: NextRequest) {
   }
 
   const resolvedPaymentType =
-    paymentType === "till" || paymentType === "paybill" || paymentType === "bank"
-      ? paymentType
-      : tillNumber
-        ? "till"
-        : paybillNumber
-          ? "paybill"
-          : "paybill";
+    paymentType === "till" ? "till" : "paybill";
   const transactionType = resolvedPaymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
   const account = resolvedPaymentType === "paybill" && paybillAccountNumber ? paybillAccountNumber : reference;
 
