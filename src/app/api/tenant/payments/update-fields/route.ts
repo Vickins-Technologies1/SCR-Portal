@@ -8,6 +8,7 @@ import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resol
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { getTenantPaymentTotals } from "../../../../../lib/payment-totals";
 import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
+import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 
 interface Tenant {
   _id: ObjectId;
@@ -208,6 +209,7 @@ export async function POST(request: NextRequest) {
         },
       }
     );
+    await reconcileTenantPaymentAllocation(db, payment.tenantId);
 
     const updatedTenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(payment.tenantId),

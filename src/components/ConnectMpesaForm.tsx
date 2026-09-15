@@ -27,7 +27,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
     paymentType: "paybill" as PaymentType,
     paybillNumber: "",
     paybillAccountNumber: "",
-    tillNumber: "",
+          tillNumber: "",
     isDefault: true,
   });
 

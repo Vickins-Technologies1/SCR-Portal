@@ -35,6 +35,7 @@ interface Payment {
   paymentId?: string;
   provider?: "daraja" | "kopokopo" | "tuma";
   paymentMethod?: string;
+  allocation?: { rent: number; utilities: number; other: number; walletCredit: number; walletApplied?: number };
 }
 
 interface Tenant {
@@ -209,6 +210,7 @@ export async function GET(request: NextRequest) {
             type: 1,
             phoneNumber: 1,
             reference: 1,
+            allocation: 1,
             tenantName: { $ifNull: ["$tenant.name", "Unknown"] },
           },
         },

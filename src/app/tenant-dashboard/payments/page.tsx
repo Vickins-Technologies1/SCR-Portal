@@ -20,6 +20,7 @@ interface Payment {
   createdAt: string;
   tenantName: string;
   reference: string;
+  allocation?: { rent?: number; utilities?: number; other?: number; walletCredit?: number };
 }
 
 interface Tenant {
@@ -405,6 +406,7 @@ export default function PaymentsPage() {
                 <tr>
                   <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider">Type</th>
                   <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider">Allocation</th>
                   <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider">Status</th>
                   <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider">Date</th>
                   <th className="px-4 py-4 text-left text-[11px] font-bold uppercase tracking-wider">Trans. ID</th>
@@ -414,7 +416,7 @@ export default function PaymentsPage() {
               <tbody className="divide-y divide-gray-100 text-gray-700">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12">
+                    <td colSpan={7} className="text-center py-12">
                       <div className="flex flex-col items-center">
                         <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full mb-3"></div>
                         <span className="text-sm text-gray-500">Loading payments...</span>
@@ -431,6 +433,13 @@ export default function PaymentsPage() {
                     >
                       <td className="px-4 py-4 font-semibold text-foreground capitalize">{p.type || "Other"}</td>
                       <td className="px-4 py-4">KES {p.amount.toLocaleString()}</td>
+                      <td className="px-4 py-4 text-[11px] leading-5 text-gray-600">
+                        {p.allocation ? (
+                          <span title="Rent / Utilities / Other / Wallet credit">
+                            Rent {Number(p.allocation.rent || 0).toLocaleString()} · Utilities {Number(p.allocation.utilities || 0).toLocaleString()} · Other {Number(p.allocation.other || 0).toLocaleString()} · Wallet {Number(p.allocation.walletCredit || 0).toLocaleString()}
+                          </span>
+                        ) : "—"}
+                      </td>
                       <td className="px-4 py-4">
                         <span
                           className={`inline-flex px-3 py-1.5 rounded-full text-xs font-bold ${
@@ -466,7 +475,7 @@ export default function PaymentsPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-gray-500">
+                    <td colSpan={7} className="text-center py-16 text-gray-500">
                       <p className="text-base sm:text-lg font-medium">No payment records found.</p>
                     </td>
                   </tr>

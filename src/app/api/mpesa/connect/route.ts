@@ -107,10 +107,10 @@ export async function POST(request: NextRequest) {
     const normalizedPropertyIds = Array.isArray(payload.propertyIds)
       ? Array.from(new Set(payload.propertyIds.map((id) => String(id).trim()).filter(Boolean)))
       : [];
-
     await LandlordMpesa.findOneAndUpdate(
       { landlord: userId, routingKey },
       {
+        $set: {
         landlord: userId,
         routingKey,
         label: String(payload.label || "").trim(),
@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
         paybillAccountNumber: paymentType === "paybill" ? payload.paybillAccountNumber : "",
         tillNumber: paymentType === "till" ? payload.tillNumber : "",
         isDefault: payload.isDefault ?? true,
+        },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );

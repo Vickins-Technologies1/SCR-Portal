@@ -9,6 +9,8 @@ export type OwnerTumaIntegration = {
   businessId?: string;
 };
 
+export type OwnerPaymentGateway = "tuma" | "daraja" | "kopokopo";
+
 export function maskSecret(secret?: string): string {
   const value = (secret || "").trim();
   if (!value) return "";
@@ -44,4 +46,20 @@ export async function getOwnerTumaIntegration(
 
   if (!enabled || !email || !apiKey) return null;
   return { enabled, email, apiKey, businessId };
+}
+
+/** Return the only gateway allowed to initiate a new owner/tenant STK request. */
+export async function getOwnerPaymentGateway(db: Db, ownerId: string): Promise<OwnerPaymentGateway> {
+  if (!ObjectId.isValid(ownerId)) return "daraja";
+  const doc = await db.collection("ownerIntegrations").findOne(
+    { ownerId: new ObjectId(ownerId) },
+    { projection: { paymentGateway: 1, tuma: 1 } }
+  );
+  const selected = String(doc?.paymentGateway || "").trim().toLowerCase();
+  if (selected === "tuma" || selected === "daraja" || selected === "kopokopo") return selected;
+
+  const tuma = doc?.tuma || {};
+  return tuma.enabled !== false && Boolean(String(tuma.email || "").trim() && String(tuma.apiKey || "").trim())
+    ? "tuma"
+    : "daraja";
 }

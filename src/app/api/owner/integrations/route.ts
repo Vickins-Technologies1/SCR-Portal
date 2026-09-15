@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { maskSecret } from "@/lib/owner-integrations";
+import { getOwnerPaymentGateway, maskSecret } from "@/lib/owner-integrations";
 import { decryptTumaApiKey, encryptTumaApiKey, isLikelyEncryptedTumaApiKey } from "@/lib/tuma-crypto";
 
 type OwnerContext = {
@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
     );
 
     const tuma = record?.tuma || {};
+    const paymentGateway = await getOwnerPaymentGateway(db, context.ownerId);
     const email = String(tuma.email || "").trim();
     const storedApiKey = String(tuma.apiKey || "").trim();
     const businessId = String(tuma.businessId || "").trim();
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       integrations: {
+        paymentGateway,
         tuma: {
           enabled,
           email,
@@ -110,6 +112,26 @@ export async function PUT(request: NextRequest) {
       payload = await request.json();
     } catch {
       return NextResponse.json({ success: false, message: "Invalid JSON payload" }, { status: 400 });
+    }
+
+    const selectedGateway = payload?.paymentGateway;
+    if (selectedGateway !== undefined && selectedGateway !== "tuma" && selectedGateway !== "daraja") {
+      return NextResponse.json({ success: false, message: "Invalid payment gateway." }, { status: 400 });
+    }
+
+    const hasTumaPayload = payload?.tuma && typeof payload.tuma === "object";
+    if (!hasTumaPayload && selectedGateway) {
+      const { db } = await connectToDatabase();
+      const now = new Date().toISOString();
+      await db.collection("ownerIntegrations").updateOne(
+        { ownerId: new ObjectId(context.ownerId) },
+        {
+          $set: { ownerId: new ObjectId(context.ownerId), paymentGateway: selectedGateway, updatedAt: now },
+          $setOnInsert: { createdAt: now },
+        },
+        { upsert: true }
+      );
+      return NextResponse.json({ success: true, integrations: { paymentGateway: selectedGateway } });
     }
 
     const tumaPayload = payload?.tuma || {};
@@ -149,6 +171,7 @@ export async function PUT(request: NextRequest) {
 
     const updateDoc = {
       ownerId: new ObjectId(context.ownerId),
+      ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
       tuma: {
         email: nextEmail,
         apiKey: nextStoredApiKey,
@@ -168,6 +191,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       integrations: {
+        paymentGateway: selectedGateway || (await getOwnerPaymentGateway(db, context.ownerId)),
         tuma: {
           enabled: nextEnabled,
           email: nextEmail,

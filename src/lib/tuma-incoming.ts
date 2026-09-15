@@ -8,6 +8,7 @@ import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/pr
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
+import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 
 export type TumaIncomingUpdate = {
   id: string;
@@ -204,6 +205,10 @@ export async function applyTumaPaymentUpdate(params: {
     }
   }
 
+  if (prevStatus === "completed" && normalizedStatus !== "completed" && updatedPayment.tenantId) {
+    await reconcileTenantPaymentAllocation(db, String(updatedPayment.tenantId));
+  }
+
   if (normalizedStatus !== "completed" || !updatedPayment.tenantId) {
     return { payment: updatedPayment, normalizedStatus };
   }
@@ -259,6 +264,7 @@ export async function applyTumaPaymentUpdate(params: {
       },
     }
   );
+  await reconcileTenantPaymentAllocation(db, updatedPayment.tenantId);
 
   const ownerId = typeof property.ownerId === "string" ? property.ownerId : property.ownerId?.toString?.();
   const owner = ownerId

@@ -35,6 +35,8 @@ type TumaBank = {
   country?: string;
 };
 
+type PaymentGateway = "tuma" | "daraja";
+
 export default function AirbnbIntegrationsPage() {
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("settings:view");
   const { isFree } = useAccountTier();
@@ -75,6 +77,8 @@ export default function AirbnbIntegrationsPage() {
     logo: "",
     description: "",
   });
+  const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>("daraja");
+  const [gatewaySaving, setGatewaySaving] = useState(false);
 
   const isTumaModal = selectedIntegration?.provider === "tuma";
   const tumaConfigured = useMemo(() => !!(tuma?.hasApiKey && tuma.email.trim()), [tuma]);
@@ -82,10 +86,16 @@ export default function AirbnbIntegrationsPage() {
   const fetchIntegrations = useCallback(async () => {
     if (!ownerId) return;
     setIsLoading(true);
-    const res = await fetch(`/api/airbnb/integrations?ownerId=${ownerId}`, { credentials: "include" });
-    const data = await res.json();
+    const [res, gatewayRes] = await Promise.all([
+      fetch(`/api/airbnb/integrations?ownerId=${ownerId}`, { credentials: "include" }),
+      fetch("/api/airbnb/payment-gateway", { credentials: "include" }),
+    ]);
+    const [data, gatewayData] = await Promise.all([res.json(), gatewayRes.json()]);
     if (data.success) {
       setIntegrations(data.integrations || []);
+    }
+    if (gatewayRes.ok && gatewayData.success && (gatewayData.gateway === "tuma" || gatewayData.gateway === "daraja")) {
+      setPaymentGateway(gatewayData.gateway);
     }
     setIsLoading(false);
   }, [ownerId]);
@@ -220,6 +230,32 @@ export default function AirbnbIntegrationsPage() {
       setFormMessage(err instanceof Error ? err.message : "Failed to disconnect Tuma integration");
     } finally {
       setTumaSaving(false);
+    }
+  };
+
+  const handleSelectPaymentGateway = async (gateway: PaymentGateway) => {
+    if (!csrfToken) {
+      setFormMessage("Missing session token. Refresh and try again.");
+      return;
+    }
+
+    setGatewaySaving(true);
+    setFormMessage(null);
+    try {
+      const res = await fetch("/api/airbnb/payment-gateway", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ gateway }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to switch payment gateway");
+      setPaymentGateway(data.gateway);
+      await fetchIntegrations();
+    } catch (err) {
+      setFormMessage(err instanceof Error ? err.message : "Failed to switch payment gateway");
+    } finally {
+      setGatewaySaving(false);
     }
   };
 
@@ -406,9 +442,15 @@ export default function AirbnbIntegrationsPage() {
                       <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground space-y-2">
                         <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Tuma Gateway</p>
                         <p>
-                          Configure a dedicated Tuma business for Airbnb STK Push collections here.
+                          Configure a dedicated Tuma business. Its credentials remain separate from Daraja.
                         </p>
                       </div>
+
+                      <GatewaySelector
+                        activeGateway={paymentGateway}
+                        onSelect={handleSelectPaymentGateway}
+                        saving={gatewaySaving}
+                      />
 
                       {tumaLoading ? (
                         <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-xs text-muted-foreground">
@@ -568,6 +610,24 @@ export default function AirbnbIntegrationsPage() {
                       )}
                     </div>
                   )}
+                  {selectedIntegration.provider === "daraja" && (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground space-y-2">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Daraja Gateway</p>
+                        <p>
+                          Daraja uses the M-Pesa shortcode and passkey configured in your payment settings. Switching here never changes Tuma credentials.
+                        </p>
+                      </div>
+                      <GatewaySelector
+                        activeGateway={paymentGateway}
+                        onSelect={handleSelectPaymentGateway}
+                        saving={gatewaySaving}
+                      />
+                      <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-xs text-sky-800">
+                        Before activating Daraja, make sure a Daraja shortcode and passkey are connected for this property owner.
+                      </p>
+                    </div>
+                  )}
                   {managedProviders.includes(selectedIntegration.provider || "") && (
                     <div className="rounded-xl border border-border bg-white/70 px-3 py-3 text-[11px] text-muted-foreground space-y-2">
                       <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
@@ -579,7 +639,7 @@ export default function AirbnbIntegrationsPage() {
                       </p>
                     </div>
                   )}
-                  {!isTumaModal && !managedProviders.includes(selectedIntegration.provider || "") && (
+                  {!isTumaModal && selectedIntegration.provider !== "daraja" && !managedProviders.includes(selectedIntegration.provider || "") && (
                     <>
                       <input
                         className="w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm"
@@ -619,7 +679,7 @@ export default function AirbnbIntegrationsPage() {
                       />
                     </>
                   )}
-                  {!isTumaModal && (
+                  {!isTumaModal && selectedIntegration.provider !== "daraja" && (
                     <div className="flex justify-end gap-3">
                       {selectedIntegration.status === "connected" && (
                         <button
@@ -645,6 +705,43 @@ export default function AirbnbIntegrationsPage() {
           </PremiumGate>
         </main>
       </div>
+    </div>
+  );
+}
+
+function GatewaySelector({
+  activeGateway,
+  onSelect,
+  saving,
+}: {
+  activeGateway: PaymentGateway;
+  onSelect: (gateway: PaymentGateway) => void;
+  saving: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-white/70 p-3">
+      <p className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Active booking gateway</p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {(["tuma", "daraja"] as const).map((gateway) => {
+          const active = activeGateway === gateway;
+          return (
+            <button
+              key={gateway}
+              type="button"
+              disabled={saving || active}
+              onClick={() => onSelect(gateway)}
+              className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-white text-foreground hover:bg-muted"
+              } disabled:cursor-not-allowed disabled:opacity-70`}
+            >
+              {gateway === "tuma" ? "Tuma" : "Daraja"}{active ? " · Active" : ""}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">Only the active gateway receives a new STK request.</p>
     </div>
   );
 }

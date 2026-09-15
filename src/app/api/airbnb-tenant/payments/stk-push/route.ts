@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
-import { getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
+import { getAirbnbOwnerPaymentGateway, getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
 import { initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber } from "@/lib/mpesa";
 import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
@@ -111,21 +111,18 @@ export async function POST(request: NextRequest) {
 
   const reference = buildAirbnbPaymentReference(bookingId);
 
-  const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
-  const tumaIntegration = await getAirbnbOwnerTumaIntegration(db, String(tenant.ownerId));
-  const tumaConfigured = isTumaConfigured(
-    tumaIntegration ? { email: tumaIntegration.email, apiKey: tumaIntegration.apiKey } : null
-  );
-  if (tumaConfigured && !tumaCallbackBase) {
-    return NextResponse.json(
-      { success: false, message: "Missing TUMA_CALLBACK_BASE_URL for Tuma gateway." },
-      { status: 500 }
-    );
-  }
-
   const nowIso = new Date().toISOString();
+  const gateway = await getAirbnbOwnerPaymentGateway(db, String(tenant.ownerId));
 
-  if (tumaConfigured) {
+  if (gateway === "tuma") {
+    const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
+    const tumaIntegration = await getAirbnbOwnerTumaIntegration(db, String(tenant.ownerId));
+    if (!isTumaConfigured(tumaIntegration) || !tumaCallbackBase) {
+      return NextResponse.json(
+        { success: false, message: "Tuma is selected but its API credentials or callback URL are missing." },
+        { status: 500 }
+      );
+    }
     const incoming = await createTumaStkPush({
       amount,
       phone: normalizedPhone,

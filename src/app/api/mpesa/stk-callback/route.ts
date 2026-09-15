@@ -10,6 +10,7 @@ import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/pr
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
+import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
 
@@ -238,6 +239,7 @@ export async function POST(request: NextRequest) {
         },
       }
     );
+    await reconcileTenantPaymentAllocation(db, payment.tenantId);
 
     const ownerId = typeof property.ownerId === "string" ? property.ownerId : property.ownerId?.toString?.();
     const owner = ownerId

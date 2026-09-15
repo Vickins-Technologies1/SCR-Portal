@@ -53,6 +53,7 @@ type TumaBank = {
 };
 
 type DarajaMode = "shared_daraja" | "user_paybill";
+type PaymentGateway = "tuma" | "daraja";
 
 type DarajaPaymentType = "till" | "paybill";
 
@@ -210,6 +211,8 @@ export default function OwnerIntegrationsPage() {
   const [darajaSavingMode, setDarajaSavingMode] = useState<DarajaMode | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showDarajaSecrets, setShowDarajaSecrets] = useState(false);
+  const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>("daraja");
+  const [gatewaySaving, setGatewaySaving] = useState(false);
 
   useEffect(() => {
     const id = Cookies.get("userId");
@@ -245,6 +248,9 @@ export default function OwnerIntegrationsPage() {
         const [tumaData, darajaData] = await Promise.all([tumaRes.json(), darajaRes.json()]);
         if (tumaRes.ok && tumaData.success) {
           const nextTuma = tumaData.integrations?.tuma || {};
+          if (tumaData.integrations?.paymentGateway === "tuma" || tumaData.integrations?.paymentGateway === "daraja") {
+            setPaymentGateway(tumaData.integrations.paymentGateway);
+          }
           setTuma({
             enabled: nextTuma.enabled !== false,
             email: nextTuma.email || "",
@@ -474,6 +480,35 @@ export default function OwnerIntegrationsPage() {
     setDarajaSharedErrors({});
     setDarajaUserPaybillErrors({});
     setShowDarajaSecrets(false);
+  };
+
+  const handleSelectPaymentGateway = async (gateway: PaymentGateway) => {
+    if (isReadOnly) {
+      toast.error("You do not have permission to edit integrations.");
+      return;
+    }
+    if (!csrfToken) {
+      toast.error("Missing CSRF token. Please refresh and try again.");
+      return;
+    }
+
+    setGatewaySaving(true);
+    try {
+      const res = await fetch("/api/owner/integrations", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ paymentGateway: gateway }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to switch payment gateway.");
+      setPaymentGateway(gateway);
+      toast.success(`${gateway === "tuma" ? "Tuma" : "Daraja"} is now the active payment gateway.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to switch payment gateway.");
+    } finally {
+      setGatewaySaving(false);
+    }
   };
 
   const handleSave = async (event: React.FormEvent) => {
@@ -1023,6 +1058,36 @@ export default function OwnerIntegrationsPage() {
             title="Upgrade to unlock integrations"
             message="Connect payment providers, manage API keys, and automate collections with Premium."
           >
+          <section className="surface-card rounded-3xl p-5 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Active payment gateway</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  New STK requests are sent only to the selected gateway. Credentials for the other gateway stay unchanged.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:min-w-64">
+                {(["tuma", "daraja"] as const).map((gateway) => {
+                  const active = paymentGateway === gateway;
+                  return (
+                    <button
+                      key={gateway}
+                      type="button"
+                      disabled={isReadOnly || gatewaySaving || active}
+                      onClick={() => handleSelectPaymentGateway(gateway)}
+                      className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-white text-foreground hover:bg-muted"
+                      } disabled:cursor-not-allowed disabled:opacity-70`}
+                    >
+                      {gateway === "tuma" ? "Tuma" : "Daraja"}{active ? " · Active" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {loading ? (
               [...Array(6)].map((_, i) => (

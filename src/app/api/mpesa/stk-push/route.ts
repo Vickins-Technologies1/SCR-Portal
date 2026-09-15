@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
-import { getOwnerTumaIntegration } from "@/lib/owner-integrations";
+import { getOwnerPaymentGateway, getOwnerTumaIntegration } from "@/lib/owner-integrations";
 import { createIncomingPayment, getKopokopoTillNumber } from "@/lib/kopokopo";
 import {
   getKopokopoPasskey,
@@ -265,8 +265,9 @@ export async function POST(request: NextRequest) {
     let tillNumber = "";
     let shortcode = "";
     let passkey = "";
+    const paymentGateway = await getOwnerPaymentGateway(db, derivedLandlordId);
 
-    if (isPlatformInvoicePayment) {
+    if (isPlatformInvoicePayment && paymentGateway === "kopokopo") {
       tillNumber = safeGetKopokopoTillNumber();
       if (!tillNumber) {
         return NextResponse.json(
@@ -408,7 +409,7 @@ export async function POST(request: NextRequest) {
         },
         { status: 200 }
       );
-    } else {
+    } else if (paymentGateway === "daraja") {
       const resolved = await resolveLandlordMpesaRouting({
         landlordId: derivedLandlordId,
         propertyId,
@@ -423,21 +424,15 @@ export async function POST(request: NextRequest) {
     // The landlord's PayBill account number is not a fixed tenant identity.
     const stkAccountReference = invoiceReference;
 
-    const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
-    const tumaIntegration = await getOwnerTumaIntegration(db, derivedLandlordId);
-    const tumaConfigured = isTumaConfigured(
-      tumaIntegration
-        ? { email: tumaIntegration.email, apiKey: tumaIntegration.apiKey }
-        : null
-    );
-    if (tumaConfigured && !tumaCallbackBase) {
-      return NextResponse.json(
-        { success: false, message: "Missing TUMA_CALLBACK_BASE_URL for Tuma gateway." },
-        { status: 500 }
-      );
-    }
-
-    if (tumaConfigured && isPlatformInvoicePayment) {
+    if (paymentGateway === "tuma") {
+      const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
+      const tumaIntegration = await getOwnerTumaIntegration(db, derivedLandlordId);
+      if (!isTumaConfigured(tumaIntegration) || !tumaCallbackBase) {
+        return NextResponse.json(
+          { success: false, message: "Tuma is selected but its API credentials or callback URL are missing." },
+          { status: 500 }
+        );
+      }
       const description = `${parsed.data.type || "Rent"} payment ${invoiceReference}`;
       const incoming = await createTumaStkPush({
         amount: paymentAmount,

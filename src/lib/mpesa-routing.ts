@@ -2,7 +2,7 @@ import "server-only";
 
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { connectMongoose } from "@/lib/mongoose";
-import { decryptPasskey, resolvePlatformStkCredentials } from "@/lib/mpesa";
+import { getMpesaPasskey, getMpesaShortcode } from "@/lib/mpesa";
 
 export type MpesaPaymentType = "paybill" | "till" | "bank";
 
@@ -63,17 +63,6 @@ function resolveShortcodeFromDoc(doc: LandlordMpesaDoc): string {
   return String(doc.paybillNumber || doc.shortcode || doc.tillNumber || "").trim();
 }
 
-function resolvePasskeyFromDoc(doc: LandlordMpesaDoc): string {
-  const rawPasskey = String(doc.passkey || "").trim();
-  if (!rawPasskey) return "";
-
-  try {
-    return decryptPasskey(rawPasskey);
-  } catch {
-    return rawPasskey;
-  }
-}
-
 function toDocId(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -108,6 +97,23 @@ function sortByPriority(a: LandlordMpesaDoc, b: LandlordMpesaDoc): number {
   return bCreated - aCreated;
 }
 
+function resolveDarajaPlatformCredentials(): { shortcode: string; passkey: string; source: "mpesa" } {
+  return {
+    shortcode: getMpesaShortcode(),
+    passkey: getMpesaPasskey(),
+    source: "mpesa",
+  };
+}
+
+function hasDarajaPlatformCredentials(): boolean {
+  try {
+    const credentials = resolveDarajaPlatformCredentials();
+    return Boolean(credentials.shortcode && credentials.passkey);
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveLandlordMpesaRouting(input: {
   landlordId: string;
   propertyId?: string | null;
@@ -123,7 +129,6 @@ export async function resolveLandlordMpesaRouting(input: {
   })
     .select({
       shortcode: 1,
-      passkey: 1,
       paymentType: 1,
       paybillNumber: 1,
       paybillAccountNumber: 1,
@@ -146,15 +151,17 @@ export async function resolveLandlordMpesaRouting(input: {
   const selectedDoc = propertyMatch || paymentTypeMatch || sortedDocs[0];
 
   if (selectedDoc) {
-    let platformFallback: ReturnType<typeof resolvePlatformStkCredentials> | null = null;
+    let platformFallback: ReturnType<typeof resolveDarajaPlatformCredentials> | null = null;
     try {
-      platformFallback = resolvePlatformStkCredentials();
+      platformFallback = resolveDarajaPlatformCredentials();
     } catch {
       platformFallback = null;
     }
 
     const shortcode = resolveShortcodeFromDoc(selectedDoc) || platformFallback?.shortcode || "";
-    const passkey = resolvePasskeyFromDoc(selectedDoc) || platformFallback?.passkey || "";
+    // Shared landlord routing uses the passkey issued to the production Daraja app.
+    // A shortcode alone does not authorize a different merchant passkey.
+    const passkey = platformFallback?.passkey || "";
 
     if (shortcode && passkey) {
       return {
@@ -174,12 +181,12 @@ export async function resolveLandlordMpesaRouting(input: {
     }
   }
 
-  const platform = resolvePlatformStkCredentials();
+  const platform = resolveDarajaPlatformCredentials();
   return {
     source: "platform",
     shortcode: platform.shortcode,
     passkey: platform.passkey,
-    paymentType: platform.source === "kopokopo" ? "till" : "paybill",
+    paymentType: "paybill",
   };
 }
 
@@ -193,7 +200,6 @@ export async function listLandlordMpesaConnections(input: {
   })
     .select({
       shortcode: 1,
-      passkey: 1,
       paymentType: 1,
       paybillNumber: 1,
       paybillAccountNumber: 1,
@@ -224,7 +230,7 @@ export async function listLandlordMpesaConnections(input: {
       paybillNumber: String(doc.paybillNumber || "").trim() || undefined,
       paybillAccountNumber: String(doc.paybillAccountNumber || "").trim() || undefined,
       tillNumber: String(doc.tillNumber || "").trim() || undefined,
-      hasPasskey: Boolean(resolvePasskeyFromDoc(doc)),
+      hasPasskey: hasDarajaPlatformCredentials(),
     }))
     .filter((doc) => Boolean(doc.shortcode));
 }
