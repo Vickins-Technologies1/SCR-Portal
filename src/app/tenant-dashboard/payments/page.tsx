@@ -20,7 +20,7 @@ interface Payment {
   createdAt: string;
   tenantName: string;
   reference: string;
-  allocation?: { rent?: number; utilities?: number; other?: number; walletCredit?: number };
+  allocation?: { deposit?: number; rent?: number; utilities?: number; other?: number; walletCredit?: number };
 }
 
 interface Tenant {
@@ -436,7 +436,7 @@ export default function PaymentsPage() {
                       <td className="px-4 py-4 text-[11px] leading-5 text-gray-600">
                         {p.allocation ? (
                           <span title="Rent / Utilities / Other / Wallet credit">
-                            Rent {Number(p.allocation.rent || 0).toLocaleString()} · Utilities {Number(p.allocation.utilities || 0).toLocaleString()} · Other {Number(p.allocation.other || 0).toLocaleString()} · Wallet {Number(p.allocation.walletCredit || 0).toLocaleString()}
+                            Deposit {Number(p.allocation.deposit || 0).toLocaleString()} · Rent {Number(p.allocation.rent || 0).toLocaleString()} · Utilities {Number(p.allocation.utilities || 0).toLocaleString()} · Other {Number(p.allocation.other || 0).toLocaleString()} · Wallet {Number(p.allocation.walletCredit || 0).toLocaleString()}
                           </span>
                         ) : "—"}
                       </td>

@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
     const allocation = await reconcileTenantPaymentAllocation(db, tenantIdStr);
     if (!allocation) return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     const rentPaid = allocation.rentPaid;
-    const depositPaid = allocation.otherPaid;
+    const depositPaid = allocation.depositPaid;
     const utilityPaid = allocation.utilityPaid;
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
       : null;
 
     const updatedTotalRentPaid = allocation.rentPaid;
-    const totalDeposit = allocation.otherDue;
+    const totalDeposit = allocation.depositDue;
     const totalUtilityDue = allocation.utilityDue;
     const updatedWalletBalance = allocation.walletBalance;
 
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
       penaltyFrequency: property?.penaltyFrequency,
     });
     const rentDues = Math.max(0, baseRentDues + penaltyDues);
-    const depositDues = allocation.otherOutstanding;
+    const depositDues = allocation.depositOutstanding;
     const utilityDues = allocation.utilitiesOutstanding;
     const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
 

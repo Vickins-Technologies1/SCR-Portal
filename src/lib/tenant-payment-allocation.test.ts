@@ -39,4 +39,37 @@ describe("tenant payment allocation", () => {
     expect(result.otherPaid).toBe(1_000);
     expect(result.walletBalance).toBe(0);
   });
+
+  it("isolates deposit, including partial and excess deposit payments", () => {
+    const partial = allocatePaymentLedger({ depositDue: 20_000, rentDue: 20_000, utilityDue: 3_000, payments: [payment(10_000)] });
+    expect(partial.depositPaid).toBe(10_000);
+    expect([...partial.allocations.values()][0]).toMatchObject({ deposit: 10_000, rent: 0 });
+
+    const exact = allocatePaymentLedger({ depositDue: 20_000, rentDue: 20_000, utilityDue: 3_000, payments: [payment(20_000)] });
+    expect(exact.depositPaid).toBe(20_000);
+    expect(exact.walletBalance).toBe(0);
+
+    const followedByRent = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 20_000,
+      utilityDue: 3_000,
+      payments: [payment(20_000), payment(20_000)],
+    });
+    const rows = [...followedByRent.allocations.values()];
+    expect(rows[1]).toMatchObject({ deposit: 0, rent: 20_000 });
+    expect(followedByRent.depositPaid).toBe(20_000);
+  });
+
+  it("never reuses a fully paid deposit as utility credit", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 20_000,
+      utilityDue: 3_000,
+      payments: [payment(20_000), payment(25_000)],
+    });
+    const rows = [...result.allocations.values()];
+    expect(rows[1]).toMatchObject({ deposit: 0, rent: 20_000, utilities: 3_000, walletCredit: 2_000 });
+    expect(result.depositPaid).toBe(20_000);
+    expect(result.walletBalance).toBe(2_000);
+  });
 });

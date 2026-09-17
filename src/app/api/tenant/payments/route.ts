@@ -35,7 +35,7 @@ interface Payment {
   paymentId?: string;
   provider?: "daraja" | "kopokopo" | "tuma";
   paymentMethod?: string;
-  allocation?: { rent: number; utilities: number; other: number; walletCredit: number; walletApplied?: number };
+  allocation?: { deposit: number; rent: number; utilities: number; other: number; walletCredit: number; walletApplied?: number };
 }
 
 interface Tenant {
