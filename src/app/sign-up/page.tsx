@@ -211,8 +211,7 @@ export default function SignUp() {
         managementType: managementType || "rentals",
         tier: derivedTier || "premium",
           packageTier: packageTier || "one_percent",
-          referralOnly,
-        appHash,
+          appHash,
       });
     } catch {
       setError("Unable to start Google sign-in.");
