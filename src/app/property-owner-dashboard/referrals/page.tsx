@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Gift, Link2, Share2, WalletCards } from "lucide-react";
+import OwnerPageShell from "../components/OwnerPageShell";
 
 type ReferralData = {
   profile: { referralCode: string; rewardMode: string; referralLink: string };
@@ -85,11 +86,11 @@ export default function ReferralsPage() {
   const canPayout = isCash && !!data && data.wallet.available >= data.settings.minimumPayoutAmount;
   const moreNeeded = useMemo(() => Math.max(0, (data?.settings.minimumPayoutAmount || 0) - (data?.wallet.available || 0)), [data]);
 
-  if (loading) return <main className="min-h-screen p-6 text-muted-foreground">Loading your referral dashboard…</main>;
-  if (!data) return <main className="min-h-screen p-6 text-destructive">{message || "Referral dashboard unavailable."}</main>;
+  if (loading) return <OwnerPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 text-muted-foreground sm:p-6">Loading your referral dashboard…</main></OwnerPageShell>;
+  if (!data) return <OwnerPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 text-destructive sm:p-6">{message || "Referral dashboard unavailable."}</main></OwnerPageShell>;
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl space-y-5 px-4 pb-10 pt-20 sm:px-6 lg:px-8">
+    <OwnerPageShell><main className="mx-auto min-h-screen max-w-7xl space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-[0.28em] text-primary">Sorana referral program</p>
@@ -125,6 +126,6 @@ export default function ReferralsPage() {
       {data.payouts.length > 0 && <section className="rounded-2xl border border-border bg-card p-5 sm:p-6"><h2 className="font-semibold text-foreground">Payout history</h2><div className="mt-4 space-y-3">{data.payouts.map((payout) => <div key={payout._id} className="flex flex-col gap-2 rounded-xl border border-border p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-foreground">{money(payout.amount)} · {payout.method}</p><p className="text-xs text-muted-foreground">{payout.destinationMasked} · {new Date(payout.requestedAt).toLocaleDateString("en-KE")}</p></div><span className="text-xs font-semibold capitalize text-primary">{payout.status}</span></div>)}</div></section>}
 
       {showPayout && <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"><form onSubmit={requestPayout} className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"><h2 className="text-lg font-semibold text-foreground">Request payout</h2><p className="mt-1 text-xs text-muted-foreground">Funds are reserved while your payout is reviewed.</p><label className="mt-5 block text-xs font-medium text-muted-foreground">Amount (KSh)<input type="number" min={data.settings.minimumPayoutAmount} max={data.wallet.available} step="1" value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground" required /></label><label className="mt-4 block text-xs font-medium text-muted-foreground">Method<select value={method} onChange={(event) => setMethod(event.target.value)} className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground"><option>M-Pesa</option><option>Bank</option></select></label><label className="mt-4 block text-xs font-medium text-muted-foreground">Destination<input value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="M-Pesa number or bank details" className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground" required /></label><div className="mt-6 flex gap-3"><button type="button" onClick={() => setShowPayout(false)} className="flex-1 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-muted-foreground">Cancel</button><button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">Submit request</button></div></form></div>}
-    </main>
+    </main></OwnerPageShell>
   );
 }
