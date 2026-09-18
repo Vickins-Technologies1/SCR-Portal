@@ -7,6 +7,8 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
 import bcrypt from "bcrypt";
 import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
+import crypto from "crypto";
+import { createReferralAttribution, ensureReferralProfile, normalizeRewardMode } from "@/lib/referrals";
 
 // ──────────────────────────────────────────────────────────────
 // In-memory rate limiter (IP-based, 5 attempts / 15 min)
@@ -54,6 +56,7 @@ interface SignupRequestBody {
   managementType?: string;
   tier?: string;
   packageTier?: string;
+  referralOnly?: boolean;
   acceptedTermsAndPrivacy?: boolean;
   csrfToken: string;
 }
@@ -87,7 +90,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, phone, role, csrfToken, managementType, tier, packageTier, acceptedTermsAndPrivacy } = body;
+    const { name, email, password, phone, role, csrfToken, managementType, tier, packageTier, referralOnly, acceptedTermsAndPrivacy } = body;
+    const isReferralOnly = referralOnly === true;
 
     // 3. Required fields
     if (!name || !email || !password || !phone || !role || !csrfToken) {
@@ -106,7 +110,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof managementType !== "string" || managementType.trim().length === 0) {
+    if (!isReferralOnly && (typeof managementType !== "string" || managementType.trim().length === 0)) {
       logger.warn("Missing management type", { email: email ?? "unknown", ip });
       return NextResponse.json(
         { success: false, message: "Management type is required." },
@@ -114,7 +118,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedManagementType = managementType.trim().toLowerCase();
+    const normalizedManagementType = isReferralOnly ? "rentals" : managementType!.trim().toLowerCase();
 
     if (!["rentals", "airbnb"].includes(normalizedManagementType)) {
       logger.warn("Invalid management type", { managementType });
@@ -124,7 +128,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof tier !== "string" || tier.trim().length === 0) {
+    if (!isReferralOnly && (typeof tier !== "string" || tier.trim().length === 0)) {
       logger.warn("Missing tier", { email: email ?? "unknown", ip });
       return NextResponse.json(
         { success: false, message: "Tier is required." },
@@ -132,7 +136,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedTier = tier.trim().toLowerCase();
+    const normalizedTier = isReferralOnly ? "free" : tier!.trim().toLowerCase();
 
     if (!["free", "premium"].includes(normalizedTier)) {
       logger.warn("Invalid tier", { tier });
@@ -142,7 +146,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (typeof packageTier !== "string" || packageTier.trim().length === 0) {
+    if (!isReferralOnly && (typeof packageTier !== "string" || packageTier.trim().length === 0)) {
       logger.warn("Missing package tier", { email: email ?? "unknown", ip });
       return NextResponse.json(
         { success: false, message: "Package is required." },
@@ -150,7 +154,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedPackageTier = packageTier.trim().toLowerCase();
+    const normalizedPackageTier = isReferralOnly ? "free" : packageTier!.trim().toLowerCase();
 
     if (!["free", "one_percent", "full_management"].includes(normalizedPackageTier)) {
       logger.warn("Invalid package tier", { packageTier });
@@ -274,6 +278,8 @@ export async function POST(request: NextRequest) {
       managementType: normalizedManagementType,
       tier: normalizedTier,
       packageTier: normalizedPackageTier,
+      referralRewardMode: isReferralOnly ? "cash_commission" : "subscription_credit",
+      referralProgramActive: true,
       isApproved: true,
       legalAcceptedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
@@ -293,6 +299,18 @@ export async function POST(request: NextRequest) {
     }
     const userId = result.insertedId.toString();
 
+    // Referral identity and attribution are created server-side. The browser can
+    // carry a code, but it cannot choose or mutate the authoritative relationship.
+    await ensureReferralProfile(db, userId, sanitizedName.trim(), normalizeRewardMode(newUser.referralRewardMode));
+    const referralCode = request.cookies.get("sorana_referral_code")?.value || null;
+    const referral = await createReferralAttribution({
+      db,
+      referredUserId: userId,
+      referralCode,
+      ipHash: crypto.createHash("sha256").update(ip).digest("hex"),
+      userAgent: request.headers.get("user-agent"),
+    });
+
     // 14. Audit log
       await db.collection("auditLogs").insertOne({
         action: "signup",
@@ -302,6 +320,7 @@ export async function POST(request: NextRequest) {
         timestamp: new Date().toISOString(),
         status: "success",
         pendingApproval: false,
+        referralId: referral?._id?.toString?.(),
       });
 
     logger.info("Property owner created", { userId, email: normalizedEmail });
@@ -323,6 +342,7 @@ export async function POST(request: NextRequest) {
       "Content-Security-Policy",
       "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
     );
+    response.cookies.delete("sorana_referral_code");
 
     return response;
   } catch (error) {

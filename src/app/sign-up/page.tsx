@@ -71,6 +71,7 @@ export default function SignUp() {
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
+  const [referralOnly, setReferralOnly] = useState(false);
   const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: () => undefined });
   const derivedTier: "free" | "premium" | null =
     packageTier === "free" ? "free" : packageTier ? "premium" : null;
@@ -131,7 +132,7 @@ export default function SignUp() {
 
   const canProceed =
     step === 0
-      ? isNameValid && isEmailValid && !!managementType
+      ? isNameValid && isEmailValid && (!!managementType || referralOnly)
       : step === 1
         ? isPhoneValid
         : step === 2
@@ -184,7 +185,7 @@ export default function SignUp() {
     }
 
     if (step === 0) {
-      setError("Please enter your full name, a valid email address, and select a management type.");
+      setError("Please enter your full name, a valid email address, and select a management type or referral-only access.");
       return;
     }
     if (step === 1) {
@@ -209,7 +210,8 @@ export default function SignUp() {
         action: "signup",
         managementType: managementType || "rentals",
         tier: derivedTier || "premium",
-        packageTier: packageTier || "one_percent",
+          packageTier: packageTier || "one_percent",
+          referralOnly,
         appHash,
       });
     } catch {
@@ -264,7 +266,7 @@ export default function SignUp() {
       return;
     }
 
-    if (!managementType) {
+    if (!managementType && !referralOnly) {
       setError("Please select a management type to continue.");
       setIsLoading(false);
       return;
@@ -286,6 +288,7 @@ export default function SignUp() {
           managementType,
           tier: derivedTier,
           packageTier,
+          referralOnly,
           acceptedTermsAndPrivacy,
           csrfToken,
         }),
@@ -587,10 +590,28 @@ export default function SignUp() {
                       </div>
 
                       <div className="mt-8 grid gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReferralOnly(true);
+                            setPackageTier("free");
+                            setManagementType("rentals");
+                            setIsPackageModalOpen(false);
+                          }}
+                          className={`text-left rounded-[32px] border p-6 sm:p-7 transition shadow-[0_22px_55px_-45px_rgba(15,23,42,0.35)] backdrop-blur md:col-span-2 xl:col-span-3 ${
+                            referralOnly ? "border-primary/35 ring-1 ring-primary/25 bg-card" : "border-primary/20 bg-primary/5 hover:border-primary/35"
+                          }`}
+                          aria-pressed={referralOnly}
+                        >
+                          <p className="text-[10px] uppercase tracking-[0.25em] text-primary">Referral program</p>
+                          <h3 className="mt-2 text-lg font-semibold text-foreground">I’m joining to earn referral rewards</h3>
+                          <p className="mt-2 max-w-2xl text-xs text-muted-foreground">No property is required. Start with a Sorana account, share your referral link, and earn cash commissions when qualified customers join.</p>
+                        </button>
                         {/* Free */}
                         <button
                           type="button"
                           onClick={() => {
+                            setReferralOnly(false);
                             setPackageTier("free");
                             setIsPackageModalOpen(false);
                           }}
@@ -647,6 +668,7 @@ export default function SignUp() {
                         <button
                           type="button"
                           onClick={() => {
+                            setReferralOnly(false);
                             setPackageTier("one_percent");
                             setIsPackageModalOpen(false);
                           }}
@@ -707,6 +729,7 @@ export default function SignUp() {
                         <button
                           type="button"
                           onClick={() => {
+                            setReferralOnly(false);
                             setPackageTier("full_management");
                             setIsPackageModalOpen(false);
                           }}
@@ -1493,7 +1516,7 @@ export default function SignUp() {
                     isLoading ||
                     !csrfToken ||
                     !packageTier ||
-                    !managementType ||
+                    (!managementType && !referralOnly) ||
                     !isNameValid ||
                     !isEmailValid ||
                     !isPhoneValid ||

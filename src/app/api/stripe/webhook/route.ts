@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { sendAirbnbPaymentReceivedEmail } from "@/lib/email";
 import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
+import { qualifyReferralForUser } from "@/lib/referrals";
 
 const STRIPE_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_TOLERANCE = Number(process.env.STRIPE_WEBHOOK_TOLERANCE || 300);
@@ -78,12 +79,28 @@ export async function POST(request: NextRequest) {
   const amount = Math.round(Number(amountCents || 0)) / 100;
   const paymentId = obj?.payment_intent || obj?.id || event?.id;
   const paymentDate = obj?.created ? new Date(obj.created * 1000).toISOString() : new Date().toISOString();
+  const subscriptionUserId = metadata.soranaSubscriptionUserId || metadata.subscriptionUserId;
 
-  if (!ownerId || !paymentId) {
+  if (!paymentId || (!ownerId && !subscriptionUserId)) {
     return NextResponse.json({ received: true });
   }
 
   const { db } = await connectToDatabase();
+
+  // Only a signature-verified provider event can qualify a referral. Airbnb
+  // booking payments are not referral qualification events; billing flows can
+  // opt in explicitly through Stripe metadata without creating a second billing system.
+  if (subscriptionUserId && (metadata.soranaSubscription === "true" || metadata.paymentType === "SoranaSubscription")) {
+    await qualifyReferralForUser({
+      db,
+      referredUserId: String(subscriptionUserId),
+      eventId: String(event.id || paymentId),
+      eventType: "paid_subscription",
+    }).catch((error) => console.error("Referral qualification failed", { paymentId, error }));
+  }
+
+  if (!ownerId) return NextResponse.json({ received: true });
+
   const existing = await db.collection("payments").findOne({ transactionId: paymentId });
 
   if (existing) {

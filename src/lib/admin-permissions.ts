@@ -16,7 +16,9 @@ export type AdminPermission =
   | "admin:webhooks:view"
   | "admin:impersonation:manage"
   | "admin:team-members:view"
-  | "admin:team-members:manage";
+  | "admin:team-members:manage"
+  | "admin:referrals:view"
+  | "admin:referrals:manage";
 
 export const ALL_ADMIN_PERMISSIONS: AdminPermission[] = [
   "admin:dashboard:view",
@@ -37,6 +39,8 @@ export const ALL_ADMIN_PERMISSIONS: AdminPermission[] = [
   "admin:impersonation:manage",
   "admin:team-members:view",
   "admin:team-members:manage",
+  "admin:referrals:view",
+  "admin:referrals:manage",
 ];
 
 export type AdminPermissionGroup = {
@@ -176,6 +180,22 @@ export const ADMIN_PERMISSION_GROUPS: AdminPermissionGroup[] = [
       },
     ],
   },
+  {
+    key: "referrals",
+    title: "Referrals & payouts",
+    items: [
+      {
+        key: "admin:referrals:view",
+        label: "View referrals",
+        description: "Review referral attribution, rewards, and payout activity.",
+      },
+      {
+        key: "admin:referrals:manage",
+        label: "Manage referrals and payouts",
+        description: "Process payouts and update referral program settings.",
+      },
+    ],
+  },
 ];
 
 export const ADMIN_ROLE_PRESETS: Record<string, AdminPermission[]> = {
@@ -194,6 +214,8 @@ export const ADMIN_ROLE_PRESETS: Record<string, AdminPermission[]> = {
     "admin:payments:manage",
     "admin:invoices:view",
     "admin:owners:view",
+    "admin:referrals:view",
+    "admin:referrals:manage",
   ],
   "Support": [
     "admin:dashboard:view",

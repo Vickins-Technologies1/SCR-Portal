@@ -23,6 +23,7 @@ import {
   Star,
   Store,
   LogOut,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
@@ -161,6 +162,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       label: "Payments & Invoices",
       icon: <CreditCard size={20} />,
       requiredPermission: "admin:payments:view",
+    },
+    {
+      key: "referrals",
+      href: "/admin/referrals",
+      label: "Referrals & Payouts",
+      icon: <Gift size={20} />,
+      requiredPermission: "admin:referrals:view",
     },
     {
       key: "reviews",

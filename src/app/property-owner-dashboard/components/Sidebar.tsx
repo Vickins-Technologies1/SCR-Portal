@@ -18,6 +18,7 @@ import {
   UserCog,
   PlugZap,
   Landmark,
+  Gift,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { useSidebar } from "./SidebarContext";
@@ -190,6 +191,7 @@ export default function Sidebar() {
       ],
     },
     { key: "notifications", href: "/property-owner-dashboard/notifications", label: "Notifications", icon: <Bell size={20} />, requiredPermission: "notifications:view" },
+    { key: "referrals", href: "/property-owner-dashboard/referrals", label: "Referrals", icon: <Gift size={20} />, requiredPermission: "dashboard:view" },
     { key: "settings", href: "/property-owner-dashboard/settings", label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
   ];
 
@@ -522,7 +524,6 @@ export default function Sidebar() {
     </>
   );
 }
-
 
 
 

@@ -52,6 +52,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       if (path.startsWith("/admin/reviews")) return "admin:reviews:view";
       if (path.startsWith("/admin/support")) return "admin:support:view";
       if (path.startsWith("/admin/tuma-webhooks") || path.startsWith("/admin/kopokopo-webhooks")) return "admin:webhooks:view";
+      if (path.startsWith("/admin/referrals")) return "admin:referrals:view";
       return null;
     };
 

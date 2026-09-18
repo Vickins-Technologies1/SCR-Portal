@@ -11,7 +11,43 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     collection: "propertyOwners",
     indexes: [
       { key: { email: 1 }, name: "propertyOwners_email" },
+      { key: { referralCode: 1 }, name: "propertyOwners_referralCode_unique", unique: true, partialFilterExpression: { referralCode: { $type: "string" } } },
       { key: { role: 1, isApproved: 1, createdAt: -1, _id: -1 }, name: "propertyOwners_admin_list" },
+    ],
+  },
+  {
+    collection: "referrals",
+    indexes: [
+      { key: { referredUserId: 1 }, name: "referrals_referred_user_unique", unique: true, partialFilterExpression: { referredUserId: { $type: "string" } } },
+      { key: { referrerUserId: 1, status: 1, createdAt: -1 }, name: "referrals_referrer_status" },
+      { key: { referralCode: 1, createdAt: -1 }, name: "referrals_code_createdAt" },
+    ],
+  },
+  {
+    collection: "referralCommissions",
+    indexes: [
+      { key: { referralId: 1 }, name: "referralCommissions_referral_unique", unique: true },
+      { key: { userId: 1, status: 1, createdAt: -1 }, name: "referralCommissions_user_status" },
+    ],
+  },
+  {
+    collection: "subscriptionRewards",
+    indexes: [{ key: { referralId: 1 }, name: "subscriptionRewards_referral_unique", unique: true }],
+  },
+  {
+    collection: "rewardLedger",
+    indexes: [
+      { key: { userId: 1, currency: 1, status: 1, createdAt: -1 }, name: "rewardLedger_user_currency_status" },
+      { key: { sourceId: 1 }, name: "rewardLedger_source_unique", unique: true, partialFilterExpression: { sourceId: { $type: "string" } } },
+    ],
+  },
+  {
+    collection: "payouts",
+    indexes: [
+      { key: { userId: 1, status: 1, requestedAt: -1 }, name: "payouts_user_status" },
+      { key: { idempotencyKey: 1 }, name: "payouts_idempotency_unique", unique: true },
+      { key: { reference: 1 }, name: "payouts_reference_unique", unique: true, partialFilterExpression: { reference: { $type: "string" } } },
+      { key: { status: 1, requestedAt: -1 }, name: "payouts_status_requestedAt" },
     ],
   },
   {
