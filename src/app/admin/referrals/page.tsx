@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type AdminData = {
   settings: { attributionDays: number; subscriptionRewardMonths: number; cashCommissionAmount: number; minimumPayoutAmount: number; requirePaidSubscription: boolean };
-  referrals: Array<{ _id: string; status: string; referredUserId: string; referrer?: { name?: string; email?: string } }>;
+  referrals: Array<{ _id: string; status: string; referredUserId: string; referrerUserId: string; referrer?: { name?: string; email?: string } }>;
   payouts: Array<{ _id: string; amount: number; method: string; destinationMasked: string; status: string; requestedAt: string; user?: { name?: string; email?: string }; reference?: string }>;
 };
 
