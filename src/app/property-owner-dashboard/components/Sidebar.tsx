@@ -289,12 +289,12 @@ export default function Sidebar() {
     <>
       <aside
         data-tour="owner-sidebar"
-        className={`fixed left-0 top-16 bottom-0 z-40 w-[82vw] max-w-[18rem] md:w-72 bg-card backdrop-blur-xl shadow-[0_20px_60px_rgba(15,23,42,0.16)] border-r border-border transition-transform duration-300 ease-out ${
+        className={`sorana-sidebar fixed left-0 top-16 bottom-0 z-40 w-[82vw] max-w-[18rem] md:w-[15.5rem] bg-card backdrop-blur-xl border-r border-border transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:inset-y-0 flex flex-col`}
       >
         <div className="flex h-full flex-col">
-          <div className="border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent px-5 sm:px-6 py-5 sm:py-6">
+          <div className="sorana-sidebar-header border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent px-5 sm:px-6 py-5 sm:py-6">
             <div className="flex flex-col items-center text-center">
               <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--color-primary)] to-[color:var(--color-primary-hover)] text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
                 {initials}
@@ -321,7 +321,7 @@ export default function Sidebar() {
             </div>
           </div>
 
-          <nav className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 space-y-1.5">
+          <nav className="sorana-sidebar-nav flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 space-y-1.5">
             {navLinks.map((item) => {
               if ("children" in item) {
                 const isFinanceExpanded = financeOpen || financeSectionActive;
@@ -482,7 +482,7 @@ export default function Sidebar() {
             )}
           </nav>
 
-          <div className="mt-auto border-t border-border px-6 py-4 footer-fade">
+          <div className="sorana-sidebar-footer mt-auto border-t border-border px-6 py-4 footer-fade">
             <div className="text-center space-y-1">
               <div className="flex justify-center pb-3">
                 <ShellFooterActions onSignOut={handleSignOut} />
@@ -518,15 +518,13 @@ export default function Sidebar() {
 
       {isOpen && (
         <div
-          className="fixed inset-x-0 bottom-0 top-16 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+          className="sorana-sidebar-overlay fixed inset-x-0 bottom-0 top-16 z-30 bg-black/50 backdrop-blur-sm md:hidden"
           onClick={close}
         />
       )}
     </>
   );
 }
-
-
 
 
 

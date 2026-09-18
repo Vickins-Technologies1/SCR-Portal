@@ -326,7 +326,7 @@ export default function TenantDashboardLayout({
           isImpersonating ? "top-10" : "top-0"
         }`}
       >
-        <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[18rem] lg:pr-8">
+        <div className="flex h-full w-full min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:pl-[15.5rem] lg:pr-8">
           {/* Left side – logo */}
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -367,11 +367,11 @@ export default function TenantDashboardLayout({
       {/* ─── Sidebar ─── */}
       <aside
         data-tour="tenant-sidebar"
-        className={`fixed left-0 bottom-0 z-40 w-[82vw] max-w-[18rem] lg:w-72 bg-card border-r border-border backdrop-blur-xl shadow-[0_20px_60px_rgba(15,23,42,0.16)] transition-transform duration-300 ease-out
+        className={`sorana-sidebar fixed left-0 bottom-0 z-40 w-[82vw] max-w-[18rem] lg:w-[15.5rem] bg-card border-r border-border backdrop-blur-xl transition-transform duration-300 ease-out
           ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:inset-y-0 ${isImpersonating ? "top-[6.5rem]" : "top-16"}`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent">
+          <div className="sorana-sidebar-header p-6 border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent">
             <div className="flex justify-center mb-5">
               <Image
                 src="/logo.png"
@@ -390,7 +390,7 @@ export default function TenantDashboardLayout({
             </div>
           </div>
 
-          <nav className="flex-1 px-4 py-5 space-y-1.5 overflow-y-auto">
+          <nav className="sorana-sidebar-nav flex-1 px-4 py-5 space-y-1.5 overflow-y-auto">
             {links.map(({ key, href, label, icon }) => {
               const isActive = pathname === href || pathname.startsWith(href + "/");
               return (
@@ -414,7 +414,7 @@ export default function TenantDashboardLayout({
             })}
           </nav>
 
-          <div className="mt-auto border-t border-border px-6 py-4 footer-fade">
+          <div className="sorana-sidebar-footer mt-auto border-t border-border px-6 py-4 footer-fade">
             <div className="flex justify-center pb-3">
               <ShellFooterActions onSignOut={handleLogout} />
             </div>
@@ -448,7 +448,7 @@ export default function TenantDashboardLayout({
 
       {isSidebarOpen && (
         <div
-          className={`fixed inset-x-0 bottom-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden ${
+          className={`sorana-sidebar-overlay fixed inset-x-0 bottom-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden ${
             isImpersonating ? "top-[6.5rem]" : "top-16"
           }`}
           onClick={() => setIsSidebarOpen(false)}

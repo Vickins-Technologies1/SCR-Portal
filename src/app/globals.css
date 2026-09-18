@@ -744,3 +744,189 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Shared portal navigation system. Keep route/permission data in each portal,
+   but give every authenticated workspace the same compact visual language. */
+.sorana-sidebar {
+  --sorana-sidebar-width: 248px;
+  width: min(88vw, var(--sorana-sidebar-width)) !important;
+  max-width: var(--sorana-sidebar-width) !important;
+  background: color-mix(in srgb, var(--color-card) 94%, var(--color-background)) !important;
+  box-shadow: 14px 0 40px -32px rgba(15, 23, 42, 0.46) !important;
+  transition: transform 220ms ease, box-shadow 220ms ease !important;
+}
+
+.sorana-sidebar > div {
+  min-height: 0;
+}
+
+.sorana-sidebar-header {
+  flex: 0 0 auto;
+  padding: 14px 16px !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent) !important;
+}
+
+.sorana-sidebar-header .h-14.w-14 {
+  width: 40px !important;
+  height: 40px !important;
+  margin-bottom: 8px !important;
+  border-radius: 12px !important;
+  font-size: 1rem !important;
+  box-shadow: 0 10px 24px -14px var(--color-primary) !important;
+}
+
+.sorana-sidebar-header .text-gradient-primary {
+  margin-top: 2px !important;
+  font-size: 1rem !important;
+  line-height: 1.25 !important;
+}
+
+.sorana-sidebar-header .rounded-full {
+  margin-top: 6px !important;
+  padding: 4px 8px !important;
+  font-size: 0.625rem !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.08em !important;
+}
+
+.sorana-sidebar-header img {
+  height: 32px !important;
+  width: auto !important;
+  margin-bottom: 10px !important;
+  filter: drop-shadow(0 8px 12px rgba(15, 23, 42, 0.12));
+}
+
+.sorana-sidebar-header .mb-5 {
+  margin-bottom: 10px !important;
+}
+
+.sorana-sidebar-header p {
+  line-height: 1.25 !important;
+}
+
+.sorana-sidebar nav {
+  min-height: 0;
+  padding: 12px !important;
+  gap: 4px !important;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-muted-foreground) 36%, transparent) transparent;
+}
+
+.sorana-sidebar nav .space-y-5 > * + * {
+  margin-top: 0.75rem !important;
+}
+
+.sorana-sidebar nav .space-y-2 > * + * {
+  margin-top: 0.35rem !important;
+}
+
+.sorana-sidebar nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sorana-sidebar nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-muted-foreground) 30%, transparent);
+}
+
+.sorana-sidebar nav > a,
+.sorana-sidebar nav > div > button,
+.sorana-sidebar nav ul a {
+  min-height: 40px;
+  padding: 8px 10px !important;
+  gap: 10px !important;
+  border-radius: 10px !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.005em;
+}
+
+.sorana-sidebar nav > a svg,
+.sorana-sidebar nav > div > button svg,
+.sorana-sidebar nav ul a svg {
+  width: 18px !important;
+  height: 18px !important;
+  flex: 0 0 18px;
+}
+
+.sorana-sidebar nav > div > div a {
+  min-height: 34px;
+  padding: 6px 10px !important;
+  gap: 8px !important;
+  border-radius: 8px !important;
+  font-size: 0.75rem !important;
+  line-height: 1.2 !important;
+}
+
+.sorana-sidebar nav > div > div a svg {
+  width: 16px !important;
+  height: 16px !important;
+  flex: 0 0 16px;
+}
+
+.sorana-sidebar nav > a[class*="bg-primary"],
+.sorana-sidebar nav > div > button[class*="text-primary"],
+.sorana-sidebar nav ul a[class*="bg-primary"] {
+  box-shadow: inset 3px 0 0 var(--color-primary), 0 5px 14px -12px var(--color-primary) !important;
+}
+
+.sorana-sidebar-footer {
+  flex: 0 0 auto;
+  padding: 9px 12px !important;
+}
+
+.sorana-sidebar-footer .pb-3 {
+  padding-bottom: 4px !important;
+}
+
+.sorana-sidebar-footer .mb-3 {
+  margin-bottom: 4px !important;
+}
+
+.sorana-sidebar-footer button {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  padding: 0 !important;
+}
+
+.sorana-sidebar-footer .pb-2 {
+  padding-bottom: 4px !important;
+}
+
+.sorana-sidebar-footer p {
+  font-size: 0.5625rem !important;
+  line-height: 1.25 !important;
+}
+
+.sorana-sidebar-footer a[href*="upgrade"],
+.sorana-sidebar-footer a[href*="reports"] {
+  min-height: 30px;
+  padding: 6px 9px !important;
+  border-radius: 8px !important;
+}
+
+.sorana-sidebar-overlay {
+  background: rgba(15, 23, 42, 0.34) !important;
+  backdrop-filter: blur(4px);
+}
+
+/* Existing page shells use the old 18rem utility in many route files. Keep
+   those shells aligned with the shared 248px rail without touching routing. */
+@media (min-width: 768px) {
+  .md\:ml-72 { margin-left: var(--sorana-sidebar-width, 248px) !important; }
+  .md\:pl-72 { padding-left: var(--sorana-sidebar-width, 248px) !important; }
+  .md\:w-72 { width: var(--sorana-sidebar-width, 248px) !important; }
+}
+
+@media (min-width: 1024px) {
+  .lg\:ml-72 { margin-left: var(--sorana-sidebar-width, 248px) !important; }
+  .lg\:pl-\[18rem\] { padding-left: var(--sorana-sidebar-width, 248px) !important; }
+  .lg\:w-72 { width: var(--sorana-sidebar-width, 248px) !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sorana-sidebar {
+    transition: none !important;
+  }
+}
