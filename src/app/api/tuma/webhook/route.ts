@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { applyTumaPaymentUpdate } from "@/lib/tuma-incoming";
 import logger from "@/lib/logger";
+import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 
 function parseNumber(value: unknown): number | undefined {
   if (value == null) return undefined;
@@ -165,6 +166,14 @@ export async function POST(request: NextRequest) {
         timestamp: normalized.timestamp,
       },
     });
+
+    if (result.normalizedStatus === "completed" && result.payment?.planType === "lifetime" && result.payment?.billingType === "one_time") {
+      await activateLifetimeFromVerifiedPayment({
+        db,
+        paymentId: result.payment._id,
+        providerReference: normalized.mpesaReceiptNumber || normalized.paymentId || null,
+      });
+    }
 
     await db.collection("tumaWebhooks").updateOne(
       { _id: webhookInsert.insertedId },

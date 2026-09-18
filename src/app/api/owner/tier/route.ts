@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAccountTier } from "@/lib/tier";
 import { getOwnerDueStatus } from "@/lib/billing";
+import { getActiveLifetimeEntitlement } from "@/lib/lifetime";
 import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 type OwnerManagementType = "rentals" | "airbnb";
@@ -34,7 +35,8 @@ export async function GET() {
 
   const dueStatus = await getOwnerDueStatus(db, effectiveOwnerId, new Date());
   const planTier = resolveAccountTier(owner?.tier, "premium");
-  const effectiveTier = dueStatus.isDue ? "free" : planTier;
+  const lifetime = await getActiveLifetimeEntitlement(db, effectiveOwnerId);
+  const effectiveTier = lifetime ? "premium" : dueStatus.isDue ? "free" : planTier;
 
   return NextResponse.json(
     {
@@ -42,6 +44,8 @@ export async function GET() {
       tier: effectiveTier,
       planTier,
       isDue: dueStatus.isDue,
+      planType: lifetime ? "lifetime" : planTier,
+      billingType: lifetime ? "one_time" : planTier === "premium" ? "recurring" : "none",
     },
     { status: 200 }
   );

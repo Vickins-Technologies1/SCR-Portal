@@ -9,6 +9,7 @@ import { Tenant } from '../../../types/tenant';
 import { buildInvalidCsrfResponse } from '../../../lib/csrf';
 import { fetchTenantsActiveOnDay } from '@/lib/tenant-occupancy';
 import { resolveAccountTier } from '@/lib/tier';
+import { enforceLifetimeLimit } from '@/lib/lifetime';
 import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 import { sanitizePropertyUtilities } from '@/lib/property-utilities';
 
@@ -425,6 +426,12 @@ export async function POST(request: NextRequest) {
     }
     const { name, address, unitTypes, status, rentPaymentDate, billingType, penaltyAmount, penaltyFrequency, utilities } = body;
 
+    const existingProperties = await db.collection<Property>('properties').countDocuments({ ownerId });
+    const propertyLimit = await enforceLifetimeLimit({ db, ownerId, key: "propertyLimit", current: existingProperties });
+    if (!propertyLimit.allowed) {
+      return NextResponse.json({ success: false, message: `You have reached the property limit for your ${propertyLimit.plan === "lifetime" ? "Lifetime" : "account"} package.`, code: "PROPERTY_LIMIT_REACHED" }, { status: 403 });
+    }
+
     if (
       !name ||
       !address ||
@@ -469,6 +476,17 @@ export async function POST(request: NextRequest) {
     }
 
     const billingPlan = billingType === 'FullManagement' ? 'FullManagement' : 'RentCollection';
+
+    const requestedUnitCount = unitTypes.reduce((total: number, unit: any) => total + Math.max(0, Number(unit?.quantity || 0)), 0);
+    const existingUnitCount = await db.collection<Property>('properties').aggregate([
+      { $match: { ownerId } },
+      { $unwind: "$unitTypes" },
+      { $group: { _id: null, count: { $sum: { $ifNull: ["$unitTypes.quantity", 0] } } } },
+    ]).toArray();
+    const unitLimit = await enforceLifetimeLimit({ db, ownerId, key: "unitLimit", current: Number(existingUnitCount[0]?.count || 0), additional: requestedUnitCount });
+    if (!unitLimit.allowed) {
+      return NextResponse.json({ success: false, message: `You have reached the unit limit for your ${unitLimit.plan === "lifetime" ? "Lifetime" : "account"} package.`, code: "UNIT_LIMIT_REACHED" }, { status: 403 });
+    }
 
     // Validate unit types before persisting the property shape.
     const validatedUnitTypes: UnitType[] = unitTypes.map((unit: any, index: number) => {

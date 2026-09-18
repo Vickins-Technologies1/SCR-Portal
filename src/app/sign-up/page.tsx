@@ -53,7 +53,7 @@ const countryList: Country[] = Object.entries(
 export default function SignUp() {
   const router = useRouter();
 
-  const [packageTier, setPackageTier] = useState<"free" | "one_percent" | "full_management" | null>(null);
+  const [packageTier, setPackageTier] = useState<"free" | "one_percent" | "full_management" | "lifetime" | null>(null);
   const [isPackageModalOpen, setIsPackageModalOpen] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
@@ -71,10 +71,11 @@ export default function SignUp() {
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
+  const [lifetimePrice, setLifetimePrice] = useState<number | null>(null);
   const [referralOnly, setReferralOnly] = useState(false);
   const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: () => undefined });
   const derivedTier: "free" | "premium" | null =
-    packageTier === "free" ? "free" : packageTier ? "premium" : null;
+    packageTier === "free" || packageTier === "lifetime" ? "free" : packageTier ? "premium" : null;
 
   const [criteria, setCriteria] = useState({
     length: false,
@@ -144,6 +145,13 @@ export default function SignUp() {
       .then((r) => r.json())
       .then((d) => d.success && setCsrfToken(d.csrfToken))
       .catch(() => setError("Security token missing"));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/lifetime/plan", { credentials: "include" })
+      .then((response) => response.json())
+      .then((data) => setLifetimePrice(typeof data?.plan?.price === "number" ? data.plan.price : null))
+      .catch(() => undefined);
   }, []);
 
   const [open, setOpen] = useState(false);
@@ -298,6 +306,11 @@ export default function SignUp() {
 
       if (!data.success) {
         throw new Error(data.message || "Signup failed");
+      }
+
+      if (data.requiresLifetimeCheckout) {
+        router.replace(data.redirectTo || "/lifetime/checkout");
+        return;
       }
 
       setSuccess(
@@ -577,14 +590,15 @@ export default function SignUp() {
                           </div>
 
                           {packageTier && (
-                            <button
+                         <button
                               type="button"
                               onClick={() => setIsPackageModalOpen(false)}
                               className="shrink-0 rounded-full border border-border bg-card px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground hover:text-foreground transition"
                             >
                               Close
-                            </button>
-                          )}
+                         </button>
+
+                           )}
                         </div>
                       </div>
 
@@ -606,7 +620,33 @@ export default function SignUp() {
                           <h3 className="mt-2 text-lg font-semibold text-foreground">I’m joining to earn referral rewards</h3>
                           <p className="mt-2 max-w-2xl text-xs text-muted-foreground">No property is required. Start with a Sorana account, share your referral link, and earn cash commissions when qualified customers join.</p>
                         </button>
-                        {/* Free */}
+                         {/* Lifetime */}
+                         <button
+                           type="button"
+                           onClick={() => {
+                             setReferralOnly(false);
+                             setPackageTier("lifetime");
+                             setIsPackageModalOpen(false);
+                           }}
+                           className={`relative overflow-hidden text-left rounded-[32px] border p-6 sm:p-7 transition shadow-[0_28px_70px_-55px_rgba(66,199,117,0.45)] backdrop-blur md:col-span-2 xl:col-span-3 ${
+                             packageTier === "lifetime" ? "border-primary/45 ring-1 ring-primary/30 bg-card" : "border-primary/25 bg-primary/5 hover:border-primary/40"
+                           }`}
+                           aria-pressed={packageTier === "lifetime"}
+                         >
+                           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(66,199,117,0.18),_transparent_58%)]" />
+                           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                             <div>
+                               <div className="flex flex-wrap items-center gap-2"><h3 className="text-xl font-semibold text-foreground">Lifetime</h3><span className="rounded-full bg-primary px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary-foreground">One-time</span><span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Lifetime access</span></div>
+                               <p className="mt-2 text-sm font-semibold text-foreground">Pay once. No recurring subscription.</p>
+                               <p className="mt-2 max-w-2xl text-xs text-muted-foreground">Your configured Sorana property-management features and limits, with no monthly fees or annual renewal.</p>
+                             </div>
+                             <span className="shrink-0 rounded-full border border-primary/25 bg-card px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">{lifetimePrice ? `KES ${lifetimePrice.toLocaleString("en-KE")}` : "KES —"}</span>
+                           </div>
+                           <ul className="relative mt-6 grid gap-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                             {["No monthly subscription", "No annual renewal", "Property & tenant tools", "Reports & maintenance", "Notifications", "Multi-user support", "Marketplace access", "Permanent entitlement"].map((item) => <li key={item} className="flex items-start gap-2"><FaCheck className="mt-0.5 text-primary" size={12} /><span className="text-foreground/90">{item}</span></li>)}
+                           </ul>
+                         </button>
+                         {/* Free */}
                         <button
                           type="button"
                           onClick={() => {

@@ -1,0 +1,109 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Check, CreditCard, ShieldCheck } from "lucide-react";
+import { useCsrfToken } from "@/hooks/useCsrfToken";
+
+type Plan = { price: number; currency: string; active: boolean; features: Record<string, boolean>; limits: Record<string, number | string> };
+
+export default function LifetimeCheckoutPage() {
+  const router = useRouter();
+  const { csrfToken, ensureCsrf } = useCsrfToken();
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [phone, setPhone] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/lifetime/plan", { credentials: "include" })
+      .then((response) => response.json())
+      .then((data) => setPlan(data.plan || null))
+      .catch(() => setMessage("Unable to load Lifetime package details."));
+  }, []);
+
+  useEffect(() => {
+    if (!paymentId || status === "paid" || status === "failed" || status === "cancelled") return;
+    const timer = window.setInterval(async () => {
+      const response = await fetch(`/api/lifetime/checkout/status?paymentId=${encodeURIComponent(paymentId)}`, { credentials: "include" });
+      const data = await response.json();
+      if (data.success) {
+        setStatus(data.payment.status);
+        if (data.entitlement) {
+          setMessage("Payment successful. Your Lifetime entitlement is active.");
+          window.clearInterval(timer);
+          window.setTimeout(() => router.replace("/property-owner-dashboard"), 1200);
+        }
+      }
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [paymentId, status, router]);
+
+  const startPayment = async () => {
+    if (!confirmed) return setMessage("Please confirm that this is a one-time payment.");
+    setLoading(true);
+    setMessage(null);
+    try {
+      const token = csrfToken || await ensureCsrf();
+      const response = await fetch("/api/lifetime/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token || "" },
+        credentials: "include",
+        body: JSON.stringify({ phone }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || "Unable to start payment.");
+      setPaymentId(data.paymentId);
+      setStatus(data.status || "pending");
+      setMessage(data.message || "Check your phone to complete payment.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to start payment.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const money = plan?.price ? `${plan.currency} ${plan.price.toLocaleString("en-KE")}` : "Price to be configured";
+  const featureLabels = ["Property management", "Tenant management", "Financial reporting", "Maintenance management", "Notifications", "Multi-user support", "Marketplace access"];
+
+  return (
+    <main className="min-h-[100svh] bg-background px-4 py-10 text-foreground sm:px-6">
+      <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1.05fr_.95fr] lg:items-start">
+        <section className="rounded-[2rem] border border-primary/20 bg-card p-7 shadow-2xl sm:p-10">
+          <p className="text-xs font-semibold uppercase tracking-[.28em] text-primary">Sorana Lifetime</p>
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-5xl">Own your property management experience — pay once.</h1>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">A permanent product entitlement with no monthly subscription and no annual renewal. Access remains tied to your Sorana account.</p>
+          <div className="mt-8 flex flex-wrap items-end gap-3">
+            <span className="text-4xl font-semibold">{money}</span>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary">One-time payment</span>
+          </div>
+          <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+            {featureLabels.map((feature) => <li key={feature} className="flex items-center gap-2 text-sm"><Check size={16} className="text-primary" />{feature}</li>)}
+          </ul>
+          <div className="mt-8 rounded-2xl bg-muted/50 p-4 text-xs text-muted-foreground">Configured limits are applied server-side and remain visible in your account after purchase.</div>
+        </section>
+
+        <section className="rounded-[2rem] border border-border bg-card p-6 shadow-xl sm:p-8">
+          <div className="flex items-center gap-3"><CreditCard className="text-primary" /><h2 className="text-xl font-semibold">Confirm your package</h2></div>
+          <div className="mt-6 space-y-4 rounded-2xl border border-border bg-muted/30 p-4 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Your package</span><span className="font-semibold">Lifetime</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Payment type</span><span className="font-semibold">One-time</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-semibold">{money}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Renewal</span><span className="font-semibold">None</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Access</span><span className="font-semibold">Lifetime</span></div>
+          </div>
+          <label className="mt-6 block text-sm font-medium">M-Pesa phone number<input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="0712 345 678" className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-3 outline-none focus:border-primary" /></label>
+          <label className="mt-5 flex items-start gap-3 text-xs leading-5 text-muted-foreground"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1 h-4 w-4 accent-primary" />I understand that this is a one-time payment and the Lifetime package does not renew automatically.</label>
+          <button type="button" onClick={startPayment} disabled={loading || Boolean(paymentId) || !plan?.active || !plan?.price} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground shadow-lg disabled:cursor-not-allowed disabled:opacity-50"><ShieldCheck size={17} />{loading ? "Starting secure payment…" : paymentId ? "Awaiting payment confirmation…" : "Continue to Payment"}</button>
+          {status && <p className="mt-4 text-center text-xs font-semibold uppercase tracking-widest text-primary">Payment status: {status}</p>}
+          {message && <p className="mt-4 rounded-xl bg-muted p-3 text-center text-xs text-muted-foreground">{message}</p>}
+          {!paymentId && <Link href="/property-owner-dashboard" className="mt-5 block text-center text-xs font-semibold text-primary hover:underline">Return to dashboard</Link>}
+        </section>
+      </div>
+    </main>
+  );
+}

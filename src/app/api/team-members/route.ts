@@ -10,6 +10,7 @@ import sanitizeHtml from "sanitize-html";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { sendWelcomeSms } from "@/lib/sms";
 import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
+import { enforceLifetimeLimit } from "@/lib/lifetime";
 
 // Rate limiter (unchanged)
 const rateLimitStore = new Map<string, { count: number; lastReset: number }>();
@@ -141,6 +142,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
+
+    const staffCount = await db.collection("teamMembers").countDocuments({ ownerId: { $in: [requestedOwnerId, new ObjectId(requestedOwnerId)] }, active: true });
+    const staffLimit = await enforceLifetimeLimit({ db, ownerId: requestedOwnerId, key: "staffLimit", current: staffCount });
+    if (!staffLimit.allowed) {
+      return NextResponse.json({ success: false, message: `You have reached the staff limit for your ${staffLimit.plan === "lifetime" ? "Lifetime" : "account"} package.`, code: "STAFF_LIMIT_REACHED" }, { status: 403 });
+    }
 
     const existing = await findAnyExistingEmail(db, sanitizedEmail);
     if (existing) {

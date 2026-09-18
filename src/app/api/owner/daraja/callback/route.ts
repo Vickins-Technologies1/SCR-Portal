@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
 import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
+import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 
 export async function POST(request: NextRequest) {
   let payload: unknown;
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest) {
         provider: "daraja",
       });
     } else {
+      if (claimed.shouldProcessEffects && claimed.status === "completed" && claimed.payment.planType === "lifetime" && claimed.payment.billingType === "one_time") {
+        await activateLifetimeFromVerifiedPayment({
+          db,
+          paymentId: claimed.payment._id,
+          providerReference: claimed.metadata.receipt || callback.CheckoutRequestID,
+        });
+      }
       await markDarajaEffectsApplied(db, claimed.payment._id);
       logger.info("Owner Daraja callback processed", {
         paymentId: claimed.payment.paymentId || String(claimed.payment._id),

@@ -193,6 +193,7 @@ export default function Sidebar() {
     { key: "notifications", href: "/property-owner-dashboard/notifications", label: "Notifications", icon: <Bell size={20} />, requiredPermission: "notifications:view" },
     { key: "referrals", href: "/property-owner-dashboard/referrals", label: "Referrals", icon: <Gift size={20} />, requiredPermission: "dashboard:view" },
     { key: "settings", href: "/property-owner-dashboard/settings", label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
+    { key: "billing", href: "/account/billing", label: "Billing & Access", icon: <CreditCard size={20} />, requiredPermission: "settings:view" },
   ];
 
   const canAccessLink = (link: NavLink) => perm.hasPermission(link.requiredPermission ?? "");
@@ -524,7 +525,6 @@ export default function Sidebar() {
     </>
   );
 }
-
 
 
 

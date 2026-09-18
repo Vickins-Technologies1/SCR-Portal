@@ -53,8 +53,9 @@ export async function GET(request: NextRequest) {
       packageTier:
         url.searchParams.get("packageTier") === "one_percent" ||
         url.searchParams.get("packageTier") === "full_management" ||
-        url.searchParams.get("packageTier") === "free"
-          ? (url.searchParams.get("packageTier") as "free" | "one_percent" | "full_management")
+        url.searchParams.get("packageTier") === "free" ||
+        url.searchParams.get("packageTier") === "lifetime"
+          ? (url.searchParams.get("packageTier") as "free" | "one_percent" | "full_management" | "lifetime")
           : undefined,
       tier: url.searchParams.get("tier") === "free" || url.searchParams.get("tier") === "premium"
         ? (url.searchParams.get("tier") as "free" | "premium")

@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
 import { normalizeKopokopoPaymentStatus, verifyKopokopoWebhookSignature } from "@/lib/kopokopo";
+import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 
 type KopokopoWebhookPayload = {
   data?: {
@@ -107,6 +108,10 @@ export async function POST(request: NextRequest) {
         },
       }
     );
+
+    if (nextStatus === "completed" && payment.planType === "lifetime" && payment.billingType === "one_time") {
+      await activateLifetimeFromVerifiedPayment({ db, paymentId: payment._id, providerReference: resource?.id || resource?.reference || null, purchasedAt: new Date(paymentDate) });
+    }
 
     if (nextStatus === "completed" && payment.invoiceId && ObjectId.isValid(String(payment.invoiceId))) {
       await db.collection("invoices").updateOne(

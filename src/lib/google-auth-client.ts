@@ -9,7 +9,7 @@ export type GoogleAuthStartParams = {
   action: GoogleAuthAction;
   returnTo?: string;
   managementType?: "rentals" | "airbnb";
-  packageTier?: "free" | "one_percent" | "full_management";
+  packageTier?: "free" | "one_percent" | "full_management" | "lifetime";
   tier?: "free" | "premium";
   tenantPortal?: "rental" | "airbnb";
   platform?: GoogleAuthPlatform;

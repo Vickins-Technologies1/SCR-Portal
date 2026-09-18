@@ -114,6 +114,23 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
       { key: { provider: 1, checkoutRequestId: 1 }, name: "payments_daraja_checkout_unique", unique: true, partialFilterExpression: { provider: "daraja", checkoutRequestId: { $type: "string" } } },
       { key: { provider: 1, merchantRequestId: 1 }, name: "payments_daraja_merchant_unique", unique: true, partialFilterExpression: { provider: "daraja", merchantRequestId: { $type: "string" } } },
       { key: { provider: 1, mpesaCode: 1 }, name: "payments_daraja_receipt_unique", unique: true, partialFilterExpression: { provider: "daraja", mpesaCode: { $type: "string" } } },
+      { key: { ownerId: 1, planType: 1, status: 1 }, name: "payments_owner_plan_status" },
+      { key: { provider: 1, providerTransactionId: 1 }, name: "payments_provider_transaction_unique", unique: true, partialFilterExpression: { providerTransactionId: { $type: "string" } } },
+    ],
+  },
+  {
+    collection: "planDefinitions",
+    indexes: [
+      { key: { planType: 1 }, name: "planDefinitions_planType_unique", unique: true },
+      { key: { active: 1 }, name: "planDefinitions_active" },
+    ],
+  },
+  {
+    collection: "entitlements",
+    indexes: [
+      { key: { ownerId: 1, planType: 1, status: 1 }, name: "entitlements_owner_plan_status" },
+      { key: { ownerId: 1, planType: 1 }, name: "entitlements_owner_plan_active_unique", unique: true, partialFilterExpression: { status: "active" } },
+      { key: { paymentId: 1 }, name: "entitlements_payment_unique", unique: true, partialFilterExpression: { paymentId: { $exists: true } } },
     ],
   },
   {

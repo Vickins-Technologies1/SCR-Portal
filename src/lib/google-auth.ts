@@ -13,7 +13,7 @@ export type GoogleAuthState = {
   appHash?: string;
   returnTo?: string;
   managementType?: "rentals" | "airbnb";
-  packageTier?: "free" | "one_percent" | "full_management";
+  packageTier?: "free" | "one_percent" | "full_management" | "lifetime";
   tier?: "free" | "premium";
   tenantPortal?: "rental" | "airbnb";
   nonce?: string;
@@ -30,7 +30,7 @@ export type GooglePendingProfile = {
   phoneMissing: boolean;
   returnTo?: string;
   managementType?: "rentals" | "airbnb";
-  packageTier?: "free" | "one_percent" | "full_management";
+  packageTier?: "free" | "one_percent" | "full_management" | "lifetime";
   tier?: "free" | "premium";
   tenantPortal?: "rental" | "airbnb";
   requiresOtpAfterPhone?: boolean;
@@ -107,6 +107,7 @@ export async function verifyGoogleStateToken(token: string): Promise<GoogleAuthS
       payload.packageTier === "free" ||
       payload.packageTier === "one_percent" ||
       payload.packageTier === "full_management"
+      || payload.packageTier === "lifetime"
         ? payload.packageTier
         : undefined,
     tier: payload.tier === "free" || payload.tier === "premium" ? payload.tier : undefined,
@@ -163,6 +164,7 @@ export async function verifyGooglePendingToken(token: string): Promise<GooglePen
       payload.packageTier === "free" ||
       payload.packageTier === "one_percent" ||
       payload.packageTier === "full_management"
+      || payload.packageTier === "lifetime"
         ? payload.packageTier
         : undefined,
     tier: payload.tier === "free" || payload.tier === "premium" ? payload.tier : undefined,

@@ -233,7 +233,7 @@ export async function GET(request: NextRequest) {
           phoneMissing: true,
           returnTo: state.returnTo || "/property-owner-dashboard",
           managementType: normalizeManagementType(user.managementType),
-          packageTier: (user.packageTier || state.packageTier || "one_percent") as "free" | "one_percent" | "full_management",
+          packageTier: (user.packageTier || state.packageTier || "one_percent") as "free" | "one_percent" | "full_management" | "lifetime",
           tier: normalizeTier(user.tier),
           requiresOtpAfterPhone: state.action === "login",
         });
@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
                 ? "/airbnb-dashboard"
                 : "/property-owner-dashboard",
               managementType: normalizeManagementType(user.managementType),
-              packageTier: (user.packageTier || "one_percent") as "free" | "one_percent" | "full_management",
+              packageTier: (user.packageTier || "one_percent") as "free" | "one_percent" | "full_management" | "lifetime",
               tier: normalizeTier(user.tier),
               requiresOtpAfterPhone: true,
             });

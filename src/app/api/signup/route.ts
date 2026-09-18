@@ -9,6 +9,7 @@ import bcrypt from "bcrypt";
 import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
 import crypto from "crypto";
 import { createReferralAttribution, ensureReferralProfile, normalizeRewardMode } from "@/lib/referrals";
+import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/session";
 
 // ──────────────────────────────────────────────────────────────
 // In-memory rate limiter (IP-based, 5 attempts / 15 min)
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     const normalizedPackageTier = isReferralOnly ? "free" : packageTier!.trim().toLowerCase();
 
-    if (!["free", "one_percent", "full_management"].includes(normalizedPackageTier)) {
+    if (!["free", "one_percent", "full_management", "lifetime"].includes(normalizedPackageTier)) {
       logger.warn("Invalid package tier", { packageTier });
       return NextResponse.json(
         { success: false, message: "Invalid package." },
@@ -164,7 +165,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const expectedTier = normalizedPackageTier === "free" ? "free" : "premium";
+    // A Lifetime signup is created as a free/pending account. It becomes
+    // premium only after the payment callback activates the entitlement.
+    const expectedTier = normalizedPackageTier === "free" || normalizedPackageTier === "lifetime" ? "free" : "premium";
     if (normalizedTier !== expectedTier) {
       logger.warn("Tier/package mismatch", { normalizedTier, normalizedPackageTier });
       return NextResponse.json(
@@ -330,9 +333,27 @@ export async function POST(request: NextRequest) {
         {
           success: true,
           message: "Account created successfully. You can sign in now.",
+          requiresLifetimeCheckout: normalizedPackageTier === "lifetime",
+          redirectTo: normalizedPackageTier === "lifetime" ? "/lifetime/checkout" : "/",
         },
         { status: 201 }
       );
+
+    if (normalizedPackageTier === "lifetime") {
+      const sessionToken = await createSessionToken({
+        sub: userId,
+        role: "propertyOwner",
+        ownerId: userId,
+        managementType: normalizedManagementType as "rentals" | "airbnb",
+        tier: "free",
+      });
+      response.cookies.set(SESSION_COOKIE_NAME, sessionToken, getSessionCookieOptions());
+      response.cookies.set("userId", userId, { httpOnly: false, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+      response.cookies.set("ownerId", userId, { httpOnly: false, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+      response.cookies.set("role", "propertyOwner", { httpOnly: false, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+      response.cookies.set("managementType", normalizedManagementType, { httpOnly: false, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+      response.cookies.set("tier", "free", { httpOnly: false, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
+    }
 
     // Security headers
     response.headers.set("X-Content-Type-Options", "nosniff");

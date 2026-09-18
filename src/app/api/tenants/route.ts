@@ -10,6 +10,7 @@ import { sendWhatsAppMessage } from "../../../lib/whatsapp";
 import { TenantRequest, ResponseTenant, Tenant } from "../../../types/tenant";
 import { Property } from "../../../types/property";
 import { getOwnerDueStatus } from "../../../lib/billing";
+import { enforceLifetimeLimit } from "../../../lib/lifetime";
 import { buildInvalidCsrfResponse } from "../../../lib/csrf";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
@@ -465,6 +466,11 @@ export async function POST(request: NextRequest) {
         { success: false, message: "Payment required: Outstanding invoice past grace period. Please pay your invoice to continue." },
         { status: 402 }
       );
+    }
+    const tenantCount = await db.collection("tenants").countDocuments({ ownerId: effectiveOwnerId, status: { $nin: ["inactive", "terminated", "moved out"] } });
+    const tenantLimit = await enforceLifetimeLimit({ db, ownerId: effectiveOwnerId, key: "tenantLimit", current: tenantCount });
+    if (!tenantLimit.allowed) {
+      return NextResponse.json({ success: false, message: `You have reached the tenant limit for your ${tenantLimit.plan === "lifetime" ? "Lifetime" : "account"} package.`, code: "TENANT_LIMIT_REACHED" }, { status: 403 });
     }
     // Create tenant
     const totalRent = leasedUnits.reduce((sum: number, unit: { price?: number }) => sum + (unit.price || 0), 0);

@@ -164,6 +164,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       requiredPermission: "admin:payments:view",
     },
     {
+      key: "lifetime",
+      href: "/admin/lifetime",
+      label: "Lifetime Package",
+      icon: <CreditCard size={20} />,
+      requiredPermission: "admin:payments:view",
+    },
+    {
       key: "referrals",
       href: "/admin/referrals",
       label: "Referrals & Payouts",

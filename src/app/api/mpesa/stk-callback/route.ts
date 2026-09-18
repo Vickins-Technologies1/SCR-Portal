@@ -13,6 +13,7 @@ import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
+import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 
 function parseMpesaDate(value?: string | number): Date {
   if (!value) return new Date();
@@ -82,6 +83,22 @@ export async function POST(request: NextRequest) {
         status: payment.status,
         resultCode: callback.ResultCode,
       });
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
+    // Lifetime is a product entitlement, not an invoice or recurring
+    // subscription. Activate it only after this server-verified provider
+    // callback has claimed the payment.
+    if (payment.planType === "lifetime" && payment.billingType === "one_time") {
+      if (status === "completed") {
+        await activateLifetimeFromVerifiedPayment({
+          db,
+          paymentId: payment._id,
+          providerReference: metadata.receipt || callback.CheckoutRequestID,
+          purchasedAt: new Date(),
+        });
+      }
+      await markDarajaEffectsApplied(db, payment._id);
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
 
