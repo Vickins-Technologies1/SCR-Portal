@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { requireAdmin } from "@/lib/admin-auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import { defaultLifetimePlan, getLifetimePlan, publicLifetimePlan } from "@/lib/lifetime";
+import logger from "@/lib/logger";
 
 function serialize(value: any) {
   return { ...value, _id: value?._id?.toString?.() || value?._id };
@@ -28,33 +29,58 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireAdmin(request, "admin:payments:manage");
-  if (auth instanceof NextResponse) return auth;
-  const body = await request.json().catch(() => ({}));
-  const current = defaultLifetimePlan();
-  const allowedFeatures = Object.keys(current.features);
-  const update: Record<string, unknown> = {};
-  if (typeof body.price === "number" && Number.isSafeInteger(body.price) && body.price >= 0) update.price = body.price;
-  if (typeof body.currency === "string" && /^[A-Z]{3}$/.test(body.currency.trim().toUpperCase())) update.currency = body.currency.trim().toUpperCase();
-  if (typeof body.active === "boolean") update.active = body.active;
-  if (body.limits && typeof body.limits === "object") {
-    const limits: Record<string, number | null> = {};
-    for (const key of Object.keys(current.limits)) {
-      const value = body.limits[key];
-      if (value === null || value === -1 || (typeof value === "number" && Number.isInteger(value) && value >= 0)) limits[key] = value;
+  try {
+    const auth = await requireAdmin(request, "admin:payments:manage");
+    if (auth instanceof NextResponse) return auth;
+    const body = await request.json().catch(() => ({}));
+    const current = defaultLifetimePlan();
+    const allowedFeatures = Object.keys(current.features);
+    const update: Record<string, unknown> = {};
+    if (typeof body.price === "number" && Number.isSafeInteger(body.price) && body.price >= 0) update.price = body.price;
+    if (typeof body.currency === "string" && /^[A-Z]{3}$/.test(body.currency.trim().toUpperCase())) update.currency = body.currency.trim().toUpperCase();
+    if (typeof body.active === "boolean") update.active = body.active;
+    if (body.limits && typeof body.limits === "object") {
+      const limits: Record<string, number | null> = {};
+      for (const key of Object.keys(current.limits)) {
+        const value = body.limits[key];
+        if (value === null || value === -1 || (typeof value === "number" && Number.isInteger(value) && value >= 0)) limits[key] = value;
+      }
+      if (Object.keys(limits).length) update.limits = limits;
     }
-    if (Object.keys(limits).length) update.limits = limits;
+    if (body.features && typeof body.features === "object") {
+      const features: Record<string, boolean> = {};
+      for (const key of allowedFeatures) if (typeof body.features[key] === "boolean") features[key] = body.features[key];
+      if (Object.keys(features).length) update.features = features;
+    }
+    if (!Object.keys(update).length) return NextResponse.json({ success: false, message: "No valid Lifetime settings supplied." }, { status: 400 });
+
+    const { db } = await connectToDatabase();
+    const plans = db.collection<any>("planDefinitions");
+    const existing = await plans.findOne({ $or: [{ _id: "lifetime" }, { planType: "lifetime" }] });
+    const now = new Date();
+    const updateFields = { ...update, updatedAt: now, updatedBy: auth.userId };
+
+    if (existing) {
+      await plans.updateOne({ _id: existing._id }, { $set: updateFields });
+    } else {
+      try {
+        await plans.insertOne({ ...current, ...update, createdAt: now, updatedAt: now, updatedBy: auth.userId });
+      } catch (error: any) {
+        if (error?.code !== 11000) throw error;
+        const concurrentPlan = await plans.findOne({ $or: [{ _id: "lifetime" }, { planType: "lifetime" }] });
+        if (!concurrentPlan) throw error;
+        await plans.updateOne({ _id: concurrentPlan._id }, { $set: updateFields });
+      }
+    }
+
+    await db.collection("auditLogs").insertOne({ action: "lifetime_plan_updated", adminUserId: auth.userId, changes: update, timestamp: now.toISOString() });
+    return NextResponse.json({ success: true, plan: publicLifetimePlan(await getLifetimePlan(db)) });
+  } catch (error) {
+    logger.error("Failed to update Lifetime plan", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ success: false, message: "Unable to save Lifetime settings. Please try again." }, { status: 500 });
   }
-  if (body.features && typeof body.features === "object") {
-    const features: Record<string, boolean> = {};
-    for (const key of allowedFeatures) if (typeof body.features[key] === "boolean") features[key] = body.features[key];
-    if (Object.keys(features).length) update.features = features;
-  }
-  if (!Object.keys(update).length) return NextResponse.json({ success: false, message: "No valid Lifetime settings supplied." }, { status: 400 });
-  const { db } = await connectToDatabase();
-  await db.collection<any>("planDefinitions").updateOne({ _id: "lifetime" }, { $set: { ...update, updatedAt: new Date(), updatedBy: auth.userId }, $setOnInsert: { ...current, createdAt: new Date() } }, { upsert: true });
-  await db.collection("auditLogs").insertOne({ action: "lifetime_plan_updated", adminUserId: auth.userId, changes: update, timestamp: new Date().toISOString() });
-  return NextResponse.json({ success: true, plan: publicLifetimePlan(await getLifetimePlan(db)) });
 }
 
 export async function POST(request: NextRequest) {

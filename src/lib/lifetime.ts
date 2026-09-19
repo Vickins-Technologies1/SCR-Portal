@@ -121,7 +121,7 @@ export function formatLimit(limit: number | null | undefined): number | "Unlimit
 export async function getLifetimePlan(db: Db): Promise<LifetimePlan> {
   const defaults = defaultLifetimePlan();
   const collection = db.collection<any>("planDefinitions");
-  const existing = await collection.findOne({ _id: LIFETIME_PLAN_ID });
+  const existing = await collection.findOne({ $or: [{ _id: LIFETIME_PLAN_ID }, { planType: LIFETIME_PLAN_TYPE }] });
   if (existing) {
     return {
       ...defaults,
