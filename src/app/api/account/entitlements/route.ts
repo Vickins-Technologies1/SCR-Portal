@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
             type: "lifetime",
             billingType: "one_time",
             status: lifetime.status,
+            purchasedUnits: lifetime.purchasedUnits || lifetime.limits?.unitLimit || null,
           }
         : { name: access.plan === "premium" ? "Premium" : "Free", type: access.plan, billingType: access.billingType, status: access.status },
       billing: lifetime
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
             expiresAt: null,
             autoRenew: false,
             providerReference: lifetime.providerReference || null,
+            purchasedUnits: lifetime.purchasedUnits || lifetime.limits?.unitLimit || null,
+            pricingSnapshot: lifetime.pricingSnapshot || null,
           }
         : { amountPaid: null, currency: plan.currency, purchasedAt: null, expiresAt: null, autoRenew: false },
       features: access.features,

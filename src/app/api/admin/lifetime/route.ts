@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireAdmin } from "@/lib/admin-auth";
 import { connectToDatabase } from "@/lib/mongodb";
-import { defaultLifetimePlan, getLifetimePlan, publicLifetimePlan } from "@/lib/lifetime";
+import { defaultLifetimePlan, getLifetimePlan, publicLifetimePlan, validateLifetimePricing } from "@/lib/lifetime";
 import logger from "@/lib/logger";
 
 function serialize(value: any) {
@@ -36,8 +36,6 @@ export async function PATCH(request: NextRequest) {
     const current = defaultLifetimePlan();
     const allowedFeatures = Object.keys(current.features);
     const update: Record<string, unknown> = {};
-    if (typeof body.price === "number" && Number.isSafeInteger(body.price) && body.price >= 0) update.price = body.price;
-    if (typeof body.currency === "string" && /^[A-Z]{3}$/.test(body.currency.trim().toUpperCase())) update.currency = body.currency.trim().toUpperCase();
     if (typeof body.active === "boolean") update.active = body.active;
     if (body.limits && typeof body.limits === "object") {
       const limits: Record<string, number | null> = {};
@@ -52,11 +50,31 @@ export async function PATCH(request: NextRequest) {
       for (const key of allowedFeatures) if (typeof body.features[key] === "boolean") features[key] = body.features[key];
       if (Object.keys(features).length) update.features = features;
     }
+    const pricingInput = body.pricing && typeof body.pricing === "object" ? body.pricing : body.pricingTiers ? body : null;
+    let pricingValidation: ReturnType<typeof validateLifetimePricing> | null = null;
+    if (pricingInput) {
+      const { db: pricingDb } = await connectToDatabase();
+      const existingPlan = await getLifetimePlan(pricingDb);
+      pricingValidation = validateLifetimePricing({
+        minimumUnits: "minimumUnits" in pricingInput ? pricingInput.minimumUnits : existingPlan.minimumUnits,
+        maximumUnits: "maximumUnits" in pricingInput ? pricingInput.maximumUnits : existingPlan.maximumUnits,
+        currency: "currency" in pricingInput ? pricingInput.currency : existingPlan.currency,
+        tiers: "tiers" in pricingInput ? pricingInput.tiers : pricingInput.pricingTiers,
+      });
+      if (pricingValidation.errors.length) return NextResponse.json({ success: false, message: pricingValidation.errors[0], errors: pricingValidation.errors, warnings: pricingValidation.warnings }, { status: 400 });
+      if (body.active === true && !pricingValidation.tiers.some((tier) => tier.active)) return NextResponse.json({ success: false, message: "Activate at least one pricing tier before enabling Lifetime checkout." }, { status: 400 });
+      update.minimumUnits = pricingValidation.minimumUnits;
+      update.maximumUnits = pricingValidation.maximumUnits;
+      update.currency = pricingValidation.currency;
+      update.pricingTiers = pricingValidation.tiers;
+      update.pricingUpdatedAt = new Date();
+    }
     if (!Object.keys(update).length) return NextResponse.json({ success: false, message: "No valid Lifetime settings supplied." }, { status: 400 });
 
     const { db } = await connectToDatabase();
     const plans = db.collection<any>("planDefinitions");
     const existing = await plans.findOne({ $or: [{ _id: "lifetime" }, { planType: "lifetime" }] });
+    const oldPlan = await getLifetimePlan(db);
     const now = new Date();
     const updateFields = { ...update, updatedAt: now, updatedBy: auth.userId };
 
@@ -73,8 +91,9 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    await db.collection("auditLogs").insertOne({ action: "lifetime_plan_updated", adminUserId: auth.userId, changes: update, timestamp: now.toISOString() });
-    return NextResponse.json({ success: true, plan: publicLifetimePlan(await getLifetimePlan(db)) });
+    const savedPlan = await getLifetimePlan(db);
+    await db.collection("auditLogs").insertOne({ action: "lifetime_plan_updated", adminUserId: auth.userId, oldConfiguration: { minimumUnits: oldPlan.minimumUnits, maximumUnits: oldPlan.maximumUnits, currency: oldPlan.currency, tiers: oldPlan.pricingTiers }, newConfiguration: { minimumUnits: savedPlan.minimumUnits, maximumUnits: savedPlan.maximumUnits, currency: savedPlan.currency, tiers: savedPlan.pricingTiers }, changes: update, ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null, timestamp: now.toISOString() });
+    return NextResponse.json({ success: true, plan: publicLifetimePlan(savedPlan), warnings: pricingValidation?.warnings || [] });
   } catch (error) {
     logger.error("Failed to update Lifetime plan", {
       error: error instanceof Error ? error.message : String(error),

@@ -10,6 +10,7 @@ import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib
 import crypto from "crypto";
 import { createReferralAttribution, ensureReferralProfile, normalizeRewardMode } from "@/lib/referrals";
 import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/session";
+import { calculateLifetimePrice, LifetimePricingError } from "@/lib/lifetime";
 
 // ──────────────────────────────────────────────────────────────
 // In-memory rate limiter (IP-based, 5 attempts / 15 min)
@@ -57,6 +58,7 @@ interface SignupRequestBody {
   managementType?: string;
   tier?: string;
   packageTier?: string;
+  lifetimeUnits?: number;
   referralOnly?: boolean;
   acceptedTermsAndPrivacy?: boolean;
   csrfToken: string;
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, phone, role, csrfToken, managementType, tier, packageTier, referralOnly, acceptedTermsAndPrivacy } = body;
+    const { name, email, password, phone, role, csrfToken, managementType, tier, packageTier, lifetimeUnits, referralOnly, acceptedTermsAndPrivacy } = body;
     const isReferralOnly = referralOnly === true;
 
     // 3. Required fields
@@ -267,6 +269,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let requestedLifetimeUnits: number | undefined;
+    if (normalizedPackageTier === "lifetime") {
+      try {
+        requestedLifetimeUnits = (await calculateLifetimePrice(db, lifetimeUnits)).units;
+      } catch (error) {
+        if (error instanceof LifetimePricingError) return NextResponse.json({ success: false, message: error.message }, { status: 400 });
+        throw error;
+      }
+    }
+
     // 12. Hash password
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -281,6 +293,7 @@ export async function POST(request: NextRequest) {
       managementType: normalizedManagementType,
       tier: normalizedTier,
       packageTier: normalizedPackageTier,
+      ...(requestedLifetimeUnits ? { lifetimeRequestedUnits: requestedLifetimeUnits } : {}),
       referralRewardMode: isReferralOnly ? "cash_commission" : "subscription_credit",
       referralProgramActive: true,
       isApproved: true,
@@ -334,7 +347,7 @@ export async function POST(request: NextRequest) {
           success: true,
           message: "Account created successfully. You can sign in now.",
           requiresLifetimeCheckout: normalizedPackageTier === "lifetime",
-          redirectTo: normalizedPackageTier === "lifetime" ? "/lifetime/checkout" : "/",
+          redirectTo: normalizedPackageTier === "lifetime" ? `/lifetime/checkout?units=${requestedLifetimeUnits}` : "/",
         },
         { status: 201 }
       );

@@ -4,6 +4,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from '@/lib/csrf';
 import { ObjectId } from 'mongodb';
 import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 import { sanitizePropertyUtilities } from '@/lib/property-utilities';
+import { enforceLifetimeLimit } from '@/lib/lifetime';
 
 // ===============================================
 // INTERFACES
@@ -338,6 +339,16 @@ export async function PUT(
     if (update.unitTypes) {
       const validated: UnitType[] = [];
       const enforcedPlan = requestedBillingType ?? existing.billingType;
+      const existingPropertyUnits = existing.unitTypes.reduce((sum, unit) => sum + Math.max(0, Number(unit.quantity || 0)), 0);
+      const ownerUnitTotals = await db.collection<Property>('properties').aggregate([
+        { $match: { ownerId: userId } },
+        { $unwind: '$unitTypes' },
+        { $group: { _id: null, count: { $sum: { $ifNull: ['$unitTypes.quantity', 0] } } } },
+      ]).toArray();
+      const ownerUnitsExcludingCurrent = Math.max(0, Number(ownerUnitTotals[0]?.count || 0) - existingPropertyUnits);
+      const requestedPropertyUnits = update.unitTypes.reduce((sum, unit) => sum + Math.max(0, Number(unit?.quantity || 0)), 0);
+      const unitLimit = await enforceLifetimeLimit({ db, ownerId: userId, key: 'unitLimit', current: ownerUnitsExcludingCurrent, additional: requestedPropertyUnits });
+      if (!unitLimit.allowed) return NextResponse.json({ success: false, message: `You have reached the unit limit for your ${unitLimit.plan === 'lifetime' ? 'Lifetime' : 'account'} package.`, code: 'UNIT_LIMIT_REACHED' }, { status: 403 });
       const currentTypes = new Set(existing.unitTypes.map(u => u.type));
       const newTypes = new Set(update.unitTypes.map(u => u.type));
 

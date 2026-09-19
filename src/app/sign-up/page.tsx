@@ -71,7 +71,9 @@ export default function SignUp() {
   const [csrfToken, setCsrfToken] = useState("");
   const [step, setStep] = useState(0);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
-  const [lifetimePrice, setLifetimePrice] = useState<number | null>(null);
+  const [lifetimePricing, setLifetimePricing] = useState<{ minimumUnits: number; maximumUnits: number | null; currency: string; tiers: Array<{ minUnits: number; maxUnits: number | null; price: number; currency: string; active: boolean }> } | null>(null);
+  const [lifetimeUnits, setLifetimeUnits] = useState(1);
+  const [lifetimeQuote, setLifetimeQuote] = useState<{ minUnits: number; maxUnits: number | null; price: number; currency: string } | null>(null);
   const [referralOnly, setReferralOnly] = useState(false);
   const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: () => undefined });
   const derivedTier: "free" | "premium" | null =
@@ -93,7 +95,7 @@ export default function SignUp() {
   ];
 
   useEffect(() => {
-    setIsPackageModalOpen(!packageTier && !success);
+    if (!packageTier && !success) setIsPackageModalOpen(true);
   }, [packageTier, success]);
 
   useEffect(() => {
@@ -130,6 +132,21 @@ export default function SignUp() {
   const isPhoneValid = /^\+\d{8,15}$/.test(fullPhone);
   const isPasswordValid = score === 5;
   const isPasswordMatch = password.length > 0 && password === confirmPassword;
+  useEffect(() => {
+    if (packageTier !== "lifetime" || !lifetimePricing || !Number.isSafeInteger(lifetimeUnits)) {
+      setLifetimeQuote(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/lifetime/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ units: lifetimeUnits }) })
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success) throw new Error(result.message || "No price is available for this unit count.");
+        if (!cancelled) setLifetimeQuote(result.tier);
+      })
+      .catch(() => { if (!cancelled) setLifetimeQuote(null); });
+    return () => { cancelled = true; };
+  }, [lifetimePricing, lifetimeUnits, packageTier]);
 
   const canProceed =
     step === 0
@@ -150,7 +167,13 @@ export default function SignUp() {
   useEffect(() => {
     fetch("/api/lifetime/plan", { credentials: "include" })
       .then((response) => response.json())
-      .then((data) => setLifetimePrice(typeof data?.plan?.price === "number" ? data.plan.price : null))
+      .then((data) => {
+        const pricing = data?.plan?.pricing;
+        if (pricing) {
+          setLifetimePricing(pricing);
+          setLifetimeUnits(Number.isInteger(pricing.minimumUnits) ? pricing.minimumUnits : 1);
+        }
+      })
       .catch(() => undefined);
   }, []);
 
@@ -279,6 +302,13 @@ export default function SignUp() {
       return;
     }
 
+    if (packageTier === "lifetime" && !lifetimeQuote) {
+      setError("Choose a unit count with an available Lifetime price before continuing.");
+      setIsPackageModalOpen(true);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/signup", {
         method: "POST",
@@ -295,6 +325,7 @@ export default function SignUp() {
           managementType,
           tier: derivedTier,
           packageTier,
+          lifetimeUnits: packageTier === "lifetime" ? lifetimeUnits : undefined,
           referralOnly,
           acceptedTermsAndPrivacy,
           csrfToken,
@@ -624,9 +655,10 @@ export default function SignUp() {
                          <button
                            type="button"
                            onClick={() => {
-                             setReferralOnly(false);
-                             setPackageTier("lifetime");
-                             setIsPackageModalOpen(false);
+                           setReferralOnly(false);
+                            setPackageTier("lifetime");
+                             setLifetimeUnits((current) => Math.max(lifetimePricing?.minimumUnits || 1, current));
+                             setIsPackageModalOpen(true);
                            }}
                            className={`relative overflow-hidden text-left rounded-[32px] border p-6 sm:p-7 transition shadow-[0_28px_70px_-55px_rgba(66,199,117,0.45)] backdrop-blur md:col-span-2 xl:col-span-3 ${
                              packageTier === "lifetime" ? "border-primary/45 ring-1 ring-primary/30 bg-card" : "border-primary/25 bg-primary/5 hover:border-primary/40"
@@ -640,7 +672,7 @@ export default function SignUp() {
                                <p className="mt-2 text-sm font-semibold text-foreground">Pay once. No recurring subscription.</p>
                                <p className="mt-2 max-w-2xl text-xs text-muted-foreground">Your configured Sorana property-management features and limits, with no monthly fees or annual renewal.</p>
                              </div>
-                             <span className="shrink-0 rounded-full border border-primary/25 bg-card px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">{lifetimePrice ? `KES ${lifetimePrice.toLocaleString("en-KE")}` : "KES —"}</span>
+                             <span className="shrink-0 rounded-full border border-primary/25 bg-card px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">{lifetimeQuote ? `${lifetimeQuote.currency} ${lifetimeQuote.price.toLocaleString("en-KE")}` : "Configure units"}</span>
                            </div>
                            <ul className="relative mt-6 grid gap-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                              {["No monthly subscription", "No annual renewal", "Property & tenant tools", "Reports & maintenance", "Notifications", "Multi-user support", "Marketplace access", "Permanent entitlement"].map((item) => <li key={item} className="flex items-start gap-2"><FaCheck className="mt-0.5 text-primary" size={12} /><span className="text-foreground/90">{item}</span></li>)}
@@ -825,6 +857,28 @@ export default function SignUp() {
                           </ul>
                         </button>
                       </div>
+
+                      {packageTier === "lifetime" && (
+                        <section className="mt-6 rounded-[2rem] border border-primary/25 bg-card p-5 shadow-xl sm:p-7">
+                          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.28em] text-primary">Lifetime package calculator</p>
+                              <h3 className="mt-2 text-xl font-semibold text-foreground">How many units do you manage?</h3>
+                              <p className="mt-2 text-xs text-muted-foreground">Your one-time price is calculated from the active Sorana pricing tiers.</p>
+                            </div>
+                            <label className="text-xs font-semibold text-muted-foreground">Number of units
+                              <input type="number" min={lifetimePricing?.minimumUnits ?? 1} max={lifetimePricing?.maximumUnits ?? undefined} step="1" value={lifetimeUnits} onChange={(event) => setLifetimeUnits(Math.max(lifetimePricing?.minimumUnits ?? 1, Number(event.target.value) || 0))} className="mt-2 block w-full rounded-xl border border-border bg-background px-4 py-3 text-lg font-semibold text-foreground outline-none focus:border-primary sm:w-40" />
+                            </label>
+                          </div>
+                          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                            <div className="rounded-xl bg-primary/10 p-4"><p className="text-xs text-muted-foreground">Selected units</p><p className="mt-1 text-2xl font-semibold text-foreground">{lifetimeUnits || "—"}</p></div>
+                            <div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">Pricing tier</p><p className="mt-1 font-semibold text-foreground">{lifetimeQuote ? `${lifetimeQuote.minUnits}–${lifetimeQuote.maxUnits ?? "∞"} units` : "Unavailable"}</p></div>
+                            <div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">One-time price</p><p className="mt-1 text-2xl font-semibold text-foreground">{lifetimeQuote ? `${lifetimeQuote.currency} ${lifetimeQuote.price.toLocaleString("en-KE")}` : "Contact Sorana"}</p></div>
+                          </div>
+                          {!lifetimeQuote && <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700">No active tier covers this unit count. Select another count or contact Sorana for a custom package.</p>}
+                          <button type="button" onClick={() => setIsPackageModalOpen(false)} disabled={!lifetimeQuote} className="mt-6 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Continue with Lifetime</button>
+                        </section>
+                      )}
 
                       <div className="mt-6 rounded-2xl border border-border bg-muted/30 px-5 py-4 text-xs text-muted-foreground">
                         Account access level:{" "}

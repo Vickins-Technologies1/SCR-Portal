@@ -3,11 +3,11 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { getLifetimePlan, getActiveLifetimeEntitlement } from "@/lib/lifetime";
+import { calculateLifetimePrice, LifetimePricingError, getLifetimePlan, getActiveLifetimeEntitlement } from "@/lib/lifetime";
 import { getMpesaCallbackUrl, getMpesaPasskey, getMpesaShortcode, initiateStkPush, normalizePhoneNumber, isValidKenyanMsisdn } from "@/lib/mpesa";
 import { createIncomingPayment, getKopokopoTillNumber } from "@/lib/kopokopo";
 
-const CheckoutSchema = z.object({ phone: z.string().trim().min(7) });
+const CheckoutSchema = z.object({ phone: z.string().trim().min(7), units: z.number().int().positive() });
 
 export async function POST(request: NextRequest) {
   const csrfToken = request.headers.get("x-csrf-token");
@@ -28,8 +28,12 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
     const plan = await getLifetimePlan(db);
     if (!plan.active) return NextResponse.json({ success: false, message: "Lifetime is not currently available." }, { status: 409 });
-    if (!Number.isSafeInteger(plan.price) || plan.price <= 0) {
-      return NextResponse.json({ success: false, message: "Lifetime pricing has not been configured yet." }, { status: 503 });
+    let quote;
+    try {
+      quote = await calculateLifetimePrice(db, parsed.data.units);
+    } catch (error) {
+      if (error instanceof LifetimePricingError) return NextResponse.json({ success: false, code: error.code, message: error.message }, { status: error.code === "INVALID_UNITS" ? 400 : 409 });
+      throw error;
     }
     if (await getActiveLifetimeEntitlement(db, ownerId)) {
       return NextResponse.json({ success: false, message: "Your Lifetime entitlement is already active." }, { status: 409 });
@@ -37,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     const pending = await db.collection("payments").findOne({ ownerId, planType: "lifetime", billingType: "one_time", status: { $in: ["pending", "processing"] } });
     if (pending) {
-      return NextResponse.json({ success: true, paymentId: pending._id.toString(), checkoutRequestId: pending.checkoutRequestId || pending.transactionId, status: pending.status, plan: "lifetime" });
+      return NextResponse.json({ success: true, paymentId: pending._id.toString(), checkoutRequestId: pending.checkoutRequestId || pending.transactionId, status: pending.status, plan: "lifetime", units: pending.purchasedUnits, amount: pending.amount, currency: pending.currency, pricingSnapshot: pending.pricingSnapshot });
     }
 
     const accountReference = `SORANA-LT-${ownerId.slice(-8).toUpperCase()}`;
@@ -52,11 +56,11 @@ export async function POST(request: NextRequest) {
       const incoming = await createIncomingPayment({
         tillNumber: getKopokopoTillNumber(),
         phoneNumber: phone,
-        amount: plan.price,
+        amount: quote.amount,
         firstName: "Sorana",
         lastName: "Lifetime",
         reference: accountReference,
-        notes: "Sorana Lifetime package",
+        notes: `Sorana Lifetime package - ${quote.units} units`,
         callbackUrl: `${callbackBase}/api/kopokopo/webhook`,
         customerId: ownerId,
       });
@@ -68,7 +72,7 @@ export async function POST(request: NextRequest) {
       const stk = await initiateStkPush({
         shortcode: getMpesaShortcode(),
         passkey: getMpesaPasskey(),
-        amount: plan.price,
+        amount: quote.amount,
         phone,
         accountReference,
         transactionDesc: "Sorana Lifetime package",
@@ -88,8 +92,10 @@ export async function POST(request: NextRequest) {
       planId: "lifetime",
       planType: "lifetime",
       billingType: "one_time",
-      amount: plan.price,
-      currency: plan.currency,
+      amount: quote.amount,
+      currency: quote.currency,
+      purchasedUnits: quote.units,
+      pricingSnapshot: quote,
       paymentProvider: provider,
       provider,
       providerTransactionId: checkoutRequestId,
@@ -104,10 +110,10 @@ export async function POST(request: NextRequest) {
       initiatedAt: now,
       createdAt: now,
       updatedAt: now,
-      metadata: { product: "lifetime", subscriptionPeriod: "lifetime", recurring: false, autoRenew: false },
+      metadata: { product: "lifetime", subscriptionPeriod: "lifetime", recurring: false, autoRenew: false, purchasedUnits: quote.units, pricingSnapshot: quote },
     });
 
-    return NextResponse.json({ success: true, paymentId: result.insertedId.toString(), checkoutRequestId, message: customerMessage, plan: "lifetime" }, { status: 201 });
+    return NextResponse.json({ success: true, paymentId: result.insertedId.toString(), checkoutRequestId, message: customerMessage, plan: "lifetime", units: quote.units, amount: quote.amount, currency: quote.currency, pricingSnapshot: quote }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Unable to start Lifetime checkout." }, { status: 500 });
   }
