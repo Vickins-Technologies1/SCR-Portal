@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Check, CreditCard, ShieldCheck } from "lucide-react";
 import { useCsrfToken } from "@/hooks/useCsrfToken";
@@ -12,7 +11,6 @@ type Quote = { units: number; amount: number; currency: string; tier: { minUnits
 
 export default function LifetimeCheckoutPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { csrfToken, ensureCsrf } = useCsrfToken();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [phone, setPhone] = useState("");
@@ -31,11 +29,11 @@ export default function LifetimeCheckoutPage() {
       .then((data) => {
         const nextPlan = data.plan || null;
         setPlan(nextPlan);
-        const requestedUnits = Number(searchParams.get("units"));
+        const requestedUnits = Number(new URLSearchParams(window.location.search).get("units"));
         setUnits(Number.isSafeInteger(requestedUnits) && requestedUnits > 0 ? requestedUnits : nextPlan?.pricing?.minimumUnits || 1);
       })
       .catch(() => setMessage("Unable to load Lifetime package details."));
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     if (!plan || !Number.isSafeInteger(units) || units < plan.pricing.minimumUnits) {
