@@ -9,7 +9,7 @@ interface ConnectMpesaFormProps {
   disabled?: boolean;
 }
 
-type PaymentType = "till" | "paybill";
+type PaymentType = "till" | "paybill" | "bank";
 
 const normalizeTillNumber = (value: string) => value.replace(/\s+/g, "").toUpperCase();
 const normalizeNumeric = (value: string) => value.replace(/\s+/g, "");
@@ -17,7 +17,8 @@ const normalizeNumeric = (value: string) => value.replace(/\s+/g, "");
 export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
   const [paymentType, setPaymentType] = useState<PaymentType>("paybill");
   const [paybillNumber, setPaybillNumber] = useState("");
-  const [paybillAccountNumber, setPaybillAccountNumber] = useState("");
+  const [bankPaybillNumber, setBankPaybillNumber] = useState("");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
   const [tillNumber, setTillNumber] = useState("");
   const [isDefault, setIsDefault] = useState(true);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -26,8 +27,9 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
   const [initialValues, setInitialValues] = useState({
     paymentType: "paybill" as PaymentType,
     paybillNumber: "",
-    paybillAccountNumber: "",
-          tillNumber: "",
+    bankPaybillNumber: "",
+    bankAccountNumber: "",
+    tillNumber: "",
     isDefault: true,
   });
 
@@ -35,18 +37,12 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
     return (
       paymentType !== initialValues.paymentType ||
       normalizeNumeric(paybillNumber) !== initialValues.paybillNumber ||
-      normalizeNumeric(paybillAccountNumber) !== initialValues.paybillAccountNumber ||
+      normalizeNumeric(bankPaybillNumber) !== initialValues.bankPaybillNumber ||
+      normalizeNumeric(bankAccountNumber) !== initialValues.bankAccountNumber ||
       normalizeTillNumber(tillNumber) !== initialValues.tillNumber ||
       isDefault !== initialValues.isDefault
     );
-  }, [
-    paymentType,
-    paybillNumber,
-    paybillAccountNumber,
-    tillNumber,
-    isDefault,
-    initialValues,
-  ]);
+  }, [paymentType, paybillNumber, bankPaybillNumber, bankAccountNumber, tillNumber, isDefault, initialValues]);
 
   const statusLabel =
     connected === null
@@ -59,13 +55,11 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
 
   const handlePaymentTypeChange = (nextType: PaymentType) => {
     setPaymentType(nextType);
-
-    if (nextType !== "paybill") {
-      setPaybillNumber("");
-      setPaybillAccountNumber("");
-    }
-    if (nextType !== "till") {
-      setTillNumber("");
+    if (nextType !== "paybill") setPaybillNumber("");
+    if (nextType !== "till") setTillNumber("");
+    if (nextType !== "bank") {
+      setBankPaybillNumber("");
+      setBankAccountNumber("");
     }
   };
 
@@ -75,21 +69,27 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         const res = await fetch("/api/mpesa/connect", { credentials: "include" });
         const data = await res.json();
         if (res.ok && data.success) {
-          const resolvedPaymentType = data.paymentType === "till" || data.paymentType === "paybill" ? data.paymentType : "paybill";
+          const resolvedPaymentType: PaymentType =
+            data.paymentType === "till" || data.paymentType === "bank" || data.paymentType === "paybill"
+              ? data.paymentType
+              : "paybill";
           setConnected(!!data.connected);
           setPaymentType(resolvedPaymentType);
           const nextPaybill = data.paybillNumber ? String(data.paybillNumber) : "";
-          const nextAccount = data.paybillAccountNumber ? String(data.paybillAccountNumber) : "";
+          const nextBankPaybill = data.bankPaybillNumber ? String(data.bankPaybillNumber) : "";
+          const nextBankAccount = data.bankAccountNumber ? String(data.bankAccountNumber) : "";
           const nextTill = data.tillNumber ? normalizeTillNumber(String(data.tillNumber)) : "";
           const nextDefault = typeof data.isDefault === "boolean" ? data.isDefault : true;
           setPaybillNumber(nextPaybill);
-          setPaybillAccountNumber(nextAccount);
+          setBankPaybillNumber(nextBankPaybill);
+          setBankAccountNumber(nextBankAccount);
           setTillNumber(nextTill);
           setIsDefault(nextDefault);
           setInitialValues({
             paymentType: resolvedPaymentType,
             paybillNumber: normalizeNumeric(nextPaybill),
-            paybillAccountNumber: normalizeNumeric(nextAccount),
+            bankPaybillNumber: normalizeNumeric(nextBankPaybill),
+            bankAccountNumber: normalizeNumeric(nextBankAccount),
             tillNumber: normalizeTillNumber(nextTill),
             isDefault: nextDefault,
           });
@@ -121,17 +121,26 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
 
     const sanitizedTill = normalizeTillNumber(tillNumber);
     const sanitizedPaybill = normalizeNumeric(paybillNumber);
-    const sanitizedAccount = normalizeNumeric(paybillAccountNumber);
+    const sanitizedBankPaybill = normalizeNumeric(bankPaybillNumber);
+    const sanitizedBankAccount = normalizeNumeric(bankAccountNumber);
 
     if (paymentType === "till" && !sanitizedTill.trim()) {
       toast.error("Please enter your till number.");
       return;
-    } else if (paymentType === "paybill" && !sanitizedPaybill.trim()) {
+    }
+    if (paymentType === "paybill" && !sanitizedPaybill.trim()) {
       toast.error("Please enter your paybill number.");
       return;
-    } else if (paymentType === "paybill" && !sanitizedAccount.trim()) {
-      toast.error("Please enter your paybill account number.");
-      return;
+    }
+    if (paymentType === "bank") {
+      if (!sanitizedBankPaybill.trim()) {
+        toast.error("Please enter your bank paybill number.");
+        return;
+      }
+      if (!sanitizedBankAccount.trim()) {
+        toast.error("Please enter your bank account number.");
+        return;
+      }
     }
 
     if (!csrfToken) {
@@ -151,7 +160,8 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         body: JSON.stringify({
           paymentType,
           paybillNumber: paymentType === "paybill" ? sanitizedPaybill : "",
-          paybillAccountNumber: paymentType === "paybill" ? sanitizedAccount : "",
+          bankPaybillNumber: paymentType === "bank" ? sanitizedBankPaybill : "",
+          bankAccountNumber: paymentType === "bank" ? sanitizedBankAccount : "",
           tillNumber: paymentType === "till" ? sanitizedTill : "",
           isDefault,
         }),
@@ -169,17 +179,25 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
       setInitialValues({
         paymentType,
         paybillNumber: paymentType === "paybill" ? sanitizedPaybill : "",
-        paybillAccountNumber: paymentType === "paybill" ? sanitizedAccount : "",
+        bankPaybillNumber: paymentType === "bank" ? sanitizedBankPaybill : "",
+        bankAccountNumber: paymentType === "bank" ? sanitizedBankAccount : "",
         tillNumber: paymentType === "till" ? sanitizedTill : "",
         isDefault,
       });
-    } catch (error) {
+    } catch {
       toast.error("Failed to save account details");
       setConnected(false);
     } finally {
       setLoading(false);
     }
   };
+
+  const destinationSummary =
+    paymentType === "till"
+      ? tillNumber || "—"
+      : paymentType === "paybill"
+        ? paybillNumber || "—"
+        : bankPaybillNumber || "—";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -230,21 +248,21 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
           <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2 backdrop-blur">
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Payment Type</p>
             <p className="text-sm font-semibold text-foreground">
-              {paymentType === "till" ? "Buy Goods Till" : "Paybill"}
+              {paymentType === "till" ? "Till" : paymentType === "bank" ? "Bank" : "Paybill"}
             </p>
           </div>
           <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2 backdrop-blur">
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              {paymentType === "till" ? "Till Number" : "Paybill Number"}
+              {paymentType === "till" ? "Till Number" : paymentType === "bank" ? "Bank Paybill" : "Paybill Number"}
             </p>
-            <p className="text-sm font-semibold text-foreground">
-              {paymentType === "till" ? tillNumber || "—" : paybillNumber || "—"}
-            </p>
+            <p className="text-sm font-semibold text-foreground">{destinationSummary}</p>
           </div>
           <div className="rounded-xl border border-white/60 bg-white/70 px-3 py-2 backdrop-blur">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Account / Default</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              {paymentType === "bank" ? "Bank Account" : "Default Route"}
+            </p>
             <p className="text-sm font-semibold text-foreground">
-              {paymentType === "paybill" ? paybillAccountNumber || "—" : isDefault ? "Default Route" : "Secondary"}
+              {paymentType === "bank" ? bankAccountNumber || "—" : isDefault ? "Yes" : "No"}
             </p>
           </div>
         </div>
@@ -259,8 +277,9 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
             disabled={disabled}
             className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
           >
-            <option value="till">Buy Goods Till Number</option>
-            <option value="paybill">Paybill Number</option>
+            <option value="till">Till (Buy Goods)</option>
+            <option value="paybill">Paybill</option>
+            <option value="bank">Bank</option>
           </select>
         </div>
 
@@ -279,29 +298,44 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
         )}
 
         {paymentType === "paybill" && (
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600">Paybill Number</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={paybillNumber}
+              onChange={(e) => setPaybillNumber(normalizeNumeric(e.target.value))}
+              disabled={disabled}
+              className="mt-1 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
+              placeholder="e.g. 400200"
+            />
+          </div>
+        )}
+
+        {paymentType === "bank" && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="text-xs font-medium text-gray-600">Paybill Number</label>
+              <label className="text-xs font-medium text-gray-600">Bank Paybill Number</label>
               <input
                 type="text"
                 inputMode="numeric"
-                value={paybillNumber}
-                onChange={(e) => setPaybillNumber(normalizeNumeric(e.target.value))}
+                value={bankPaybillNumber}
+                onChange={(e) => setBankPaybillNumber(normalizeNumeric(e.target.value))}
                 disabled={disabled}
                 className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                placeholder="Enter Paybill Number"
+                placeholder="e.g. 522522"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">Paybill Account Number</label>
+              <label className="text-xs font-medium text-gray-600">Bank Account Number</label>
               <input
                 type="text"
                 inputMode="numeric"
-                value={paybillAccountNumber}
-                onChange={(e) => setPaybillAccountNumber(normalizeNumeric(e.target.value))}
+                value={bankAccountNumber}
+                onChange={(e) => setBankAccountNumber(normalizeNumeric(e.target.value))}
                 disabled={disabled}
                 className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                placeholder="Enter Account Number"
+                placeholder="Your bank account number"
               />
             </div>
           </div>
@@ -318,7 +352,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
             disabled={disabled}
             className="mt-2 w-full px-3 py-2.5 border border-white/60 rounded-xl bg-white/70 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
           >
-            <option value="yes">Yes (Paybill & Till to M-Pesa)</option>
+            <option value="yes">Yes</option>
             <option value="no">No</option>
           </select>
         </div>

@@ -53,7 +53,7 @@ const SharedPayloadSchema = z.object({
   paymentType: z.enum(["till", "paybill", "bank"]),
   destinationNumber: z.string().trim().min(1),
   accountNumber: z.string().trim().optional().default(""),
-  accountReference: z.string().trim().min(1).max(100),
+  accountReference: z.string().trim().max(100).optional().default(""),
 });
 
 const UserPaybillPayloadSchema = z.object({

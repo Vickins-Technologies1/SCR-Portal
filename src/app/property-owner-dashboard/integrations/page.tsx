@@ -800,6 +800,17 @@ export default function OwnerIntegrationsPage() {
     });
   };
 
+  const handleDarajaPaymentTypeChange = (nextType: DarajaPaymentType) => {
+    setDarajaShared((prev) => ({
+      ...prev,
+      paymentType: nextType,
+      destinationNumber: nextType === prev.paymentType ? prev.destinationNumber : "",
+      accountNumber: nextType === "bank" && prev.paymentType === "bank" ? prev.accountNumber : "",
+      accountReference: "",
+    }));
+    setDarajaSharedErrors({});
+  };
+
   const handleSaveDarajaShared = async (event: React.FormEvent) => {
     event.preventDefault();
     if (isReadOnly) {
@@ -817,14 +828,19 @@ export default function OwnerIntegrationsPage() {
     const nextErrors: Partial<Record<keyof DarajaSharedState, string>> = {};
 
     if (darajaShared.enabled) {
-      if (!destinationNumber) {
-        nextErrors.destinationNumber = "Till or Paybill number is required.";
+      if (darajaShared.paymentType === "till" && !destinationNumber) {
+        nextErrors.destinationNumber = "Till number is required.";
       }
-      if (darajaShared.paymentType === "bank" && !accountNumber) {
-        nextErrors.accountNumber = "Bank account number is required.";
+      if (darajaShared.paymentType === "paybill" && !destinationNumber) {
+        nextErrors.destinationNumber = "Paybill number is required.";
       }
-      if (darajaShared.paymentType !== "bank" && !accountReference) {
-        nextErrors.accountReference = "Account reference is required.";
+      if (darajaShared.paymentType === "bank") {
+        if (!destinationNumber) {
+          nextErrors.destinationNumber = "Bank paybill number is required.";
+        }
+        if (!accountNumber) {
+          nextErrors.accountNumber = "Bank account number is required.";
+        }
       }
     }
 
@@ -848,8 +864,8 @@ export default function OwnerIntegrationsPage() {
           enabled: darajaShared.enabled,
           paymentType: darajaShared.paymentType,
           destinationNumber,
-          accountNumber,
-          accountReference,
+          accountNumber: darajaShared.paymentType === "bank" ? accountNumber : "",
+          accountReference: accountReference || destinationNumber,
         }),
       });
 
@@ -1189,8 +1205,8 @@ export default function OwnerIntegrationsPage() {
                 <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 text-xs text-sky-800">
                   <p className="font-semibold">Mpesa mode</p>
                   <p className="mt-1">
-                    Configure the tenant&apos;s destination number and account reference here. The app will keep the
-                    record tenant-scoped for payment initiation and callback reconciliation.
+                    Choose where tenant M-Pesa payments should land. Pick Till, Paybill, or Bank and enter the
+                    receiving details below.
                   </p>
                 </div>
 
@@ -1215,9 +1231,7 @@ export default function OwnerIntegrationsPage() {
                       <label className="text-xs font-medium text-muted-foreground">Payment Type</label>
                       <select
                         value={darajaShared.paymentType}
-                        onChange={(e) =>
-                          setDarajaShared((prev) => ({ ...prev, paymentType: e.target.value as DarajaPaymentType }))
-                        }
+                        onChange={(e) => handleDarajaPaymentTypeChange(e.target.value as DarajaPaymentType)}
                         disabled={isReadOnly}
                         className="mt-2 w-full rounded-xl border border-border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
                       >
@@ -1229,91 +1243,127 @@ export default function OwnerIntegrationsPage() {
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">
-                        {darajaShared.paymentType === "bank"
-                          ? "Bank Identifier / Code"
-                          : "Connected Till / Paybill Number"}
-                      </label>
-                      <input
-                        type="text"
-                        value={darajaShared.destinationNumber}
-                        onChange={(e) => {
-                          setDarajaShared((prev) => ({ ...prev, destinationNumber: e.target.value }));
-                          if (darajaSharedErrors.destinationNumber) {
-                            setDarajaSharedErrors((prev) => ({ ...prev, destinationNumber: undefined }));
-                          }
-                        }}
-                        disabled={isReadOnly}
-                        className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
-                          darajaSharedErrors.destinationNumber ? "border-rose-300" : "border-border"
-                        }`}
-                        placeholder={
-                          darajaShared.paymentType === "bank"
-                            ? "Bank paybill / identifier code"
-                            : "2547XXXXXXX or Till number"
-                        }
-                      />
-                      {darajaSharedErrors.destinationNumber ? (
-                        <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.destinationNumber}</p>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                          Stored securely and used to map payment callbacks back to the right tenant.
-                        </p>
-                      )}
-                    </div>
-                    {darajaShared.paymentType === "bank" ? (
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground">Bank Account Number</label>
+                    {darajaShared.paymentType === "till" && (
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-muted-foreground">Till Number</label>
                         <input
                           type="text"
-                          value={darajaShared.accountNumber}
+                          value={darajaShared.destinationNumber}
                           onChange={(e) => {
-                            setDarajaShared((prev) => ({ ...prev, accountNumber: e.target.value }));
-                            if (darajaSharedErrors.accountNumber) {
-                              setDarajaSharedErrors((prev) => ({ ...prev, accountNumber: undefined }));
+                            setDarajaShared((prev) => ({ ...prev, destinationNumber: e.target.value }));
+                            if (darajaSharedErrors.destinationNumber) {
+                              setDarajaSharedErrors((prev) => ({ ...prev, destinationNumber: undefined }));
                             }
                           }}
                           disabled={isReadOnly}
                           className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
-                            darajaSharedErrors.accountNumber ? "border-rose-300" : "border-border"
+                            darajaSharedErrors.destinationNumber ? "border-rose-300" : "border-border"
                           }`}
-                          placeholder="Customer bank account number"
+                          placeholder="e.g. K123456"
                         />
-                        {darajaSharedErrors.accountNumber ? (
-                          <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountNumber}</p>
+                        {darajaSharedErrors.destinationNumber ? (
+                          <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.destinationNumber}</p>
                         ) : (
                           <p className="text-[11px] text-muted-foreground mt-1">
-                            Sent as the STK account number when the account type is Bank.
+                            Buy Goods till where tenant payments will be received.
                           </p>
                         )}
                       </div>
-                    ) : (
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground">Account Reference</label>
+                    )}
+
+                    {darajaShared.paymentType === "paybill" && (
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-medium text-muted-foreground">Paybill Number</label>
                         <input
                           type="text"
-                          value={darajaShared.accountReference}
+                          inputMode="numeric"
+                          value={darajaShared.destinationNumber}
                           onChange={(e) => {
-                            setDarajaShared((prev) => ({ ...prev, accountReference: e.target.value }));
-                            if (darajaSharedErrors.accountReference) {
-                              setDarajaSharedErrors((prev) => ({ ...prev, accountReference: undefined }));
+                            setDarajaShared((prev) => ({
+                              ...prev,
+                              destinationNumber: e.target.value.replace(/\s+/g, ""),
+                            }));
+                            if (darajaSharedErrors.destinationNumber) {
+                              setDarajaSharedErrors((prev) => ({ ...prev, destinationNumber: undefined }));
                             }
                           }}
                           disabled={isReadOnly}
                           className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
-                            darajaSharedErrors.accountReference ? "border-rose-300" : "border-border"
+                            darajaSharedErrors.destinationNumber ? "border-rose-300" : "border-border"
                           }`}
-                          placeholder="Reference shown on STK prompt"
+                          placeholder="e.g. 400200"
                         />
-                        {darajaSharedErrors.accountReference ? (
-                          <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountReference}</p>
+                        {darajaSharedErrors.destinationNumber ? (
+                          <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.destinationNumber}</p>
                         ) : (
                           <p className="text-[11px] text-muted-foreground mt-1">
-                            Used as the STK account number for Paybill and Till payments.
+                            Paybill number where tenant payments will be received.
                           </p>
                         )}
                       </div>
+                    )}
+
+                    {darajaShared.paymentType === "bank" && (
+                      <>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Bank Paybill Number</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={darajaShared.destinationNumber}
+                            onChange={(e) => {
+                              setDarajaShared((prev) => ({
+                                ...prev,
+                                destinationNumber: e.target.value.replace(/\s+/g, ""),
+                              }));
+                              if (darajaSharedErrors.destinationNumber) {
+                                setDarajaSharedErrors((prev) => ({ ...prev, destinationNumber: undefined }));
+                              }
+                            }}
+                            disabled={isReadOnly}
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              darajaSharedErrors.destinationNumber ? "border-rose-300" : "border-border"
+                            }`}
+                            placeholder="e.g. 522522"
+                          />
+                          {darajaSharedErrors.destinationNumber ? (
+                            <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.destinationNumber}</p>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              Bank paybill or identifier code used for M-Pesa bank transfers.
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground">Bank Account Number</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={darajaShared.accountNumber}
+                            onChange={(e) => {
+                              setDarajaShared((prev) => ({
+                                ...prev,
+                                accountNumber: e.target.value.replace(/\s+/g, ""),
+                              }));
+                              if (darajaSharedErrors.accountNumber) {
+                                setDarajaSharedErrors((prev) => ({ ...prev, accountNumber: undefined }));
+                              }
+                            }}
+                            disabled={isReadOnly}
+                            className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                              darajaSharedErrors.accountNumber ? "border-rose-300" : "border-border"
+                            }`}
+                            placeholder="Your bank account number"
+                          />
+                          {darajaSharedErrors.accountNumber ? (
+                            <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountNumber}</p>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              Account number linked to the bank paybill above.
+                            </p>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
 
