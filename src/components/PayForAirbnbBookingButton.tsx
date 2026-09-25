@@ -9,18 +9,12 @@ export default function PayForAirbnbBookingButton({
   phone,
   csrfToken,
   disabled,
-  shortcode,
-  reference,
-  paybillAccountNumber,
   onSuccess,
 }: {
   amount: number;
   phone?: string;
   csrfToken: string;
   disabled?: boolean;
-  shortcode?: string | null;
-  reference?: string | null;
-  paybillAccountNumber?: string | null;
   onSuccess?: () => void;
 }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -110,31 +104,13 @@ export default function PayForAirbnbBookingButton({
     }
   };
 
-  const manualReference = (paybillAccountNumber || reference || "").trim() || null;
-
   return (
-    <div className="space-y-3">
-      <button
-        onClick={handleClick}
-        disabled={disabled || isLoading}
-        className="w-full bg-primary text-white font-semibold px-6 py-3 rounded-2xl shadow-lg hover:bg-primary-hover transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
-      >
-        {isLoading ? "Processing..." : "Pay with M-Pesa"}
-      </button>
-
-      {shortcode ? (
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs text-gray-700">
-          <p className="font-semibold text-primary">Manual Paybill/Till Option</p>
-          <p>
-            Paybill/Till: <span className="font-mono">{shortcode}</span>
-          </p>
-          {manualReference ? (
-            <p>
-              Reference: <span className="font-mono">{manualReference}</span>
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+    <button
+      onClick={handleClick}
+      disabled={disabled || isLoading}
+      className="w-full bg-primary text-white font-semibold px-6 py-3 rounded-2xl shadow-lg hover:bg-primary-hover transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
+    >
+      {isLoading ? "Processing..." : "Pay with M-Pesa"}
+    </button>
   );
 }

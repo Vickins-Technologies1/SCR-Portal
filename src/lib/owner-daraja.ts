@@ -2,7 +2,7 @@ import "server-only";
 import { Db, ObjectId } from "mongodb";
 import { decryptDarajaSecret, encryptDarajaSecret, isLikelyEncryptedDarajaSecret } from "@/lib/daraja-crypto";
 import { maskSecret } from "@/lib/owner-integrations";
-import { resolvePlatformStkCredentials } from "@/lib/mpesa";
+import { resolveDarajaPlatformStkCredentials } from "@/lib/mpesa";
 
 export type OwnerDarajaMode = "shared_daraja" | "user_paybill";
 export type OwnerDarajaEnvironment = "sandbox" | "production";
@@ -312,17 +312,15 @@ export async function resolveOwnerDarajaStkConfig(
       throw new Error("Bank account number is not configured");
     }
 
-    const platformCredentials = resolvePlatformStkCredentials();
-    const shortcode = platformCredentials.shortcode;
-    const passkey = platformCredentials.passkey;
+    const platformCredentials = resolveDarajaPlatformStkCredentials();
 
     return {
       mode,
       environment: process.env.MPESA_ENVIRONMENT?.trim().toLowerCase() === "sandbox" ? "sandbox" : "production",
-      shortcode,
-      passkey,
-      consumerKey: process.env.MPESA_CONSUMER_KEY || "",
-      consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
+      shortcode: platformCredentials.shortcode,
+      passkey: platformCredentials.passkey,
+      consumerKey: platformCredentials.consumerKey,
+      consumerSecret: platformCredentials.consumerSecret,
       destinationNumber,
       accountNumber: accountNumber || undefined,
       accountReference: String(shared.accountReference || "").trim() || undefined,

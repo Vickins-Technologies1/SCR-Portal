@@ -77,6 +77,29 @@ export function getKopokopoPasskey(): string {
   return getMpesaPasskey();
 }
 
+/** Daraja STK auth must use MPESA_* platform paybill credentials, never KopoKopo till. */
+export function resolveDarajaPlatformStkCredentials(): {
+  shortcode: string;
+  passkey: string;
+  consumerKey: string;
+  consumerSecret: string;
+} {
+  requireEnv("MPESA_SHORTCODE", MPESA_SHORTCODE);
+  requireEnv("MPESA_PASSKEY", MPESA_PASSKEY);
+  requireEnv("MPESA_CONSUMER_KEY", MPESA_CONSUMER_KEY);
+  requireEnv("MPESA_CONSUMER_SECRET", MPESA_CONSUMER_SECRET);
+  return {
+    shortcode: MPESA_SHORTCODE,
+    passkey: MPESA_PASSKEY,
+    consumerKey: MPESA_CONSUMER_KEY,
+    consumerSecret: MPESA_CONSUMER_SECRET,
+  };
+}
+
+export function isStkPushAccepted(response: { ResponseCode?: string | number | null }): boolean {
+  return String(response?.ResponseCode ?? "") === "0";
+}
+
 export function resolvePlatformStkCredentials(): {
   shortcode: string;
   passkey: string;
@@ -233,7 +256,7 @@ export async function initiateStkPush(params: {
     Password: password,
     Timestamp: timestamp,
     TransactionType: params.transactionType || "CustomerPayBillOnline",
-    Amount: params.amount,
+    Amount: Math.round(params.amount),
     PartyA: params.phone,
     PartyB: partyB,
     PhoneNumber: params.phone,
@@ -266,7 +289,11 @@ export async function initiateStkPush(params: {
   let data: any = {};
   try { data = await res.json(); } catch { /* handled below with a safe generic error */ }
   if (!res.ok) {
-    throw new Error("Daraja STK request failed");
+    const message =
+      data?.errorMessage ||
+      data?.ResponseDescription ||
+      `Daraja STK request failed (HTTP ${res.status})`;
+    throw new Error(String(message));
   }
 
   return data;

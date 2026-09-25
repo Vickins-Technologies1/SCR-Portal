@@ -51,7 +51,6 @@ export default function PaymentsPage() {
   const [ownerTier, setOwnerTier] = useState<"free" | "premium" | null>(null);
   const [tenantFeatures, setTenantFeatures] = useState<{ canPay: boolean; canNotifications: boolean } | null>(null);
   const [landlordId, setLandlordId] = useState<string>("");
-  const [mpesaShortcode, setMpesaShortcode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -168,26 +167,6 @@ export default function PaymentsPage() {
       } catch {
         setOwnerTier(null);
         setTenantFeatures(null);
-      }
-
-      if (tenantData.tenant.ownerId && canPay) {
-        try {
-          const ownerValue = tenantData.tenant.ownerId;
-          const normalizedOwnerId = typeof ownerValue === "string" ? ownerValue : ownerValue.toString?.();
-          if (!normalizedOwnerId) return;
-          const shortcodeRes = await fetch(`/api/mpesa/shortcode?landlordId=${normalizedOwnerId}`, {
-            headers: { "x-csrf-token": csrfToken },
-            credentials: "include",
-          });
-          const shortcodeData = await shortcodeRes.json();
-          if (shortcodeRes.ok && shortcodeData.success) {
-            setMpesaShortcode(shortcodeData.shortcode || null);
-          }
-        } catch {
-          setMpesaShortcode(null);
-        }
-      } else {
-        setMpesaShortcode(null);
       }
 
       const paymentsRes = await fetch(`/api/tenant/payments?tenantId=${tenantId}&page=${page}&limit=${limit}`, {
@@ -615,35 +594,44 @@ export default function PaymentsPage() {
                         placeholder="+2547xxxxxxxx or 07xxxxxxxx"
                       />
                     </label>
+
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-900">
+                      <p className="font-semibold">M-Pesa STK Push</p>
+                      <p className="mt-1 text-emerald-800/90">
+                        Tap Pay with M-Pesa below. You will get a prompt on your phone — enter your M-Pesa PIN to
+                        complete the payment to your landlord&apos;s account.
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex gap-3 mt-7">
-                    <button
-                      onClick={() => setIsModalOpen(false)}
-                      className="flex-1 py-3 px-6 bg-gray-100 text-foreground font-semibold rounded-xl hover:bg-gray-200 transition text-sm"
-                    >
-                      Cancel
-                    </button>
-                      <PayWithMpesaButton
-                        amount={amount}
-                        phone={formatPhoneNumber(phoneNumber)}
-                        landlordId={landlordId}
-                        tenantId={tenantId || ""}
-                        propertyId={tenant?.propertyId || ""}
-                        csrfToken={csrfToken || ""}
+                  <div className="mt-7 space-y-3">
+                    <PayWithMpesaButton
+                      amount={amount}
+                      phone={formatPhoneNumber(phoneNumber)}
+                      landlordId={landlordId}
+                      tenantId={tenantId || ""}
+                      propertyId={tenant?.propertyId || ""}
+                      csrfToken={csrfToken || ""}
                       type={paymentType}
-                      shortcode={mpesaShortcode}
                       disabled={isProcessing || amount < 1 || !validatePhoneNumber(phoneNumber) || !landlordId}
                       onStart={() => {
                         setIsProcessing(true);
                         setMessages([
-                          { type: "success", text: "STK Push initiated — please check your phone and enter M-Pesa PIN.", timestamp: new Date().toISOString() },
+                          {
+                            type: "success",
+                            text: "STK Push initiated — please check your phone and enter M-Pesa PIN.",
+                            timestamp: new Date().toISOString(),
+                          },
                         ]);
                       }}
                       onSuccess={async () => {
                         setMessages((prev) => [
                           ...prev,
-                          { type: "success", text: "Payment completed successfully!", timestamp: new Date().toISOString() },
+                          {
+                            type: "success",
+                            text: "Payment completed successfully!",
+                            timestamp: new Date().toISOString(),
+                          },
                         ]);
                         await fetchData();
                         setIsModalOpen(false);
@@ -659,6 +647,13 @@ export default function PaymentsPage() {
                         setIsProcessing(false);
                       }}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="w-full py-3 px-6 bg-gray-100 text-foreground font-semibold rounded-xl hover:bg-gray-200 transition text-sm"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               </motion.div>

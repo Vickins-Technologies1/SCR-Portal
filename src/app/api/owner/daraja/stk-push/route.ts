@@ -3,7 +3,13 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { getMpesaCallbackUrl, initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber } from "@/lib/mpesa";
+import {
+  getMpesaCallbackUrl,
+  initiateStkPush,
+  isStkPushAccepted,
+  isValidKenyanMsisdn,
+  normalizePhoneNumber,
+} from "@/lib/mpesa";
 import { buildMpesaStkRequestFields } from "@/lib/mpesa-stk-routing";
 import { resolveOwnerDarajaStkConfig } from "@/lib/owner-daraja";
 
@@ -116,7 +122,7 @@ export async function POST(request: NextRequest) {
       environment: resolved.environment,
     });
 
-    if (stkResponse.ResponseCode !== "0") {
+    if (!isStkPushAccepted(stkResponse)) {
       return NextResponse.json(
         { success: false, message: stkResponse.ResponseDescription || "Payment initiation failed" },
         { status: 400 }

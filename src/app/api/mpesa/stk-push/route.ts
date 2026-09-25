@@ -12,9 +12,10 @@ import {
   isValidKenyanMsisdn,
   normalizePhoneNumber,
   getMpesaCallbackUrl,
-  resolvePlatformStkCredentials,
+  resolveDarajaPlatformStkCredentials,
+  isStkPushAccepted,
 } from "@/lib/mpesa";
-import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
+import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
 import { buildMpesaStkRequestFields } from "@/lib/mpesa-stk-routing";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
@@ -267,7 +268,7 @@ export async function POST(request: NextRequest) {
     let tillNumber = "";
     let shortcode = "";
     let passkey = "";
-    let resolvedMpesaRouting: Awaited<ReturnType<typeof resolveLandlordMpesaRouting>> | null = null;
+    let resolvedMpesaRouting: Awaited<ReturnType<typeof resolveOwnerTenantMpesaRouting>> | null = null;
     const paymentGateway = await getOwnerPaymentGateway(db, derivedLandlordId);
 
     if (isPlatformInvoicePayment && paymentGateway === "kopokopo") {
@@ -413,12 +414,25 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
     } else if (paymentGateway === "daraja") {
-      resolvedMpesaRouting = await resolveLandlordMpesaRouting({
-        landlordId: derivedLandlordId,
-        propertyId,
-      });
+      try {
+        resolvedMpesaRouting = await resolveOwnerTenantMpesaRouting(db, {
+          landlordId: derivedLandlordId,
+          propertyId,
+        });
+      } catch (routingError) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              routingError instanceof Error
+                ? routingError.message
+                : "Property owner M-Pesa receiving details are not configured.",
+          },
+          { status: 400 }
+        );
+      }
       paymentType = resolvedMpesaRouting.paymentType;
-      const platformCredentials = resolvePlatformStkCredentials();
+      const platformCredentials = resolveDarajaPlatformStkCredentials();
       shortcode = platformCredentials.shortcode;
       passkey = platformCredentials.passkey;
       tillNumber = resolvedMpesaRouting.tillNumber || "";
@@ -522,24 +536,26 @@ export async function POST(request: NextRequest) {
 
     const resolvedPaymentType =
       paymentType === "bank" || paymentType === "till" || paymentType === "paybill" ? paymentType : "paybill";
-    const stkFields = resolvedMpesaRouting
-      ? buildMpesaStkRequestFields(
-          {
-            accountType: resolvedPaymentType,
-            bank: resolvedMpesaRouting.bank,
-            bankAccount: resolvedMpesaRouting.bankAccount,
-            paybillNumber: resolvedMpesaRouting.paybillNumber || resolvedMpesaRouting.shortcode,
-            buyGoodsNumber: resolvedMpesaRouting.tillNumber || resolvedMpesaRouting.shortcode,
-          },
-          stkAccountReference
-        )
-      : buildMpesaStkRequestFields(
-          {
-            accountType: "paybill",
-            paybillNumber: shortcode,
-          },
-          stkAccountReference
-        );
+    if (!resolvedMpesaRouting) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "M-Pesa routing is not configured for this property owner.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const stkFields = buildMpesaStkRequestFields(
+      {
+        accountType: resolvedPaymentType,
+        bank: resolvedMpesaRouting.bank,
+        bankAccount: resolvedMpesaRouting.bankAccount,
+        paybillNumber: resolvedMpesaRouting.paybillNumber || resolvedMpesaRouting.shortcode,
+        buyGoodsNumber: resolvedMpesaRouting.tillNumber || resolvedMpesaRouting.shortcode,
+      },
+      stkAccountReference
+    );
 
     // Initiate Daraja STK push
     const stkResponse = await initiateStkPush({
@@ -554,7 +570,7 @@ export async function POST(request: NextRequest) {
       partyB: stkFields.partyB,
     });
 
-    if (stkResponse.ResponseCode !== "0") {
+    if (!isStkPushAccepted(stkResponse)) {
       return NextResponse.json(
         { success: false, message: stkResponse.ResponseDescription || "Payment initiation failed" },
         { status: 400 }

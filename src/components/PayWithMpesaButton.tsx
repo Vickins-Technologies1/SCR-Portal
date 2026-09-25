@@ -16,7 +16,6 @@ interface PayWithMpesaButtonProps {
   propertyId: string;
   csrfToken: string;
   type?: PaymentType;
-  shortcode?: string | null;
   disabled?: boolean;
   className?: string;
   onSuccess?: () => void;
@@ -33,7 +32,6 @@ export default function PayWithMpesaButton({
   propertyId,
   csrfToken,
   type = "Rent",
-  shortcode,
   disabled,
   className,
   onSuccess,
@@ -153,25 +151,15 @@ export default function PayWithMpesaButton({
   };
 
   return (
-    <div className="space-y-3">
-      <button
-        onClick={handleClick}
-        disabled={disabled || isLoading}
-        className={
-          className ||
-          "w-full bg-primary text-white font-semibold px-6 py-3 rounded-full shadow-lg hover:bg-primary-hover transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
-        }
-      >
-        {isLoading ? "Processing..." : "Pay Now"}
-      </button>
-
-      {shortcode ? (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-gray-700">
-          <p className="font-semibold text-primary">Manual Paybill/Till Option</p>
-          <p>Paybill/Till: <span className="font-mono">{shortcode}</span></p>
-          {invoiceId && <p>Reference: <span className="font-mono">INV-{invoiceId}</span></p>}
-        </div>
-      ) : null}
-    </div>
+    <button
+      onClick={handleClick}
+      disabled={disabled || isLoading}
+      className={
+        className ||
+        "w-full bg-primary text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:bg-primary-hover transition-all duration-300 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
+      }
+    >
+      {isLoading ? "Processing..." : "Pay with M-Pesa"}
+    </button>
   );
 }

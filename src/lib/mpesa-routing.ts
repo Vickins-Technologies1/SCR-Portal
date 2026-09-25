@@ -1,13 +1,15 @@
 import "server-only";
 
+import { Db } from "mongodb";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { connectMongoose } from "@/lib/mongoose";
 import { getMpesaPasskey, getMpesaShortcode } from "@/lib/mpesa";
+import { getOwnerDarajaIntegrations } from "@/lib/owner-daraja";
 
 export type MpesaPaymentType = "paybill" | "till" | "bank";
 
 export type ResolvedMpesaRouting = {
-  source: "landlord" | "platform";
+  source: "landlord" | "platform" | "owner_daraja";
   shortcode: string;
   passkey: string;
   paymentType: MpesaPaymentType;
@@ -121,6 +123,53 @@ function hasDarajaPlatformCredentials(): boolean {
   } catch {
     return false;
   }
+}
+
+function mapOwnerDarajaSharedToRouting(shared: {
+  enabled: boolean;
+  paymentType: "till" | "paybill" | "bank";
+  destinationNumber: string;
+  accountNumber: string;
+  hasDestinationNumber: boolean;
+}): ResolvedMpesaRouting | null {
+  if (shared.enabled === false || !shared.hasDestinationNumber || !shared.destinationNumber.trim()) {
+    return null;
+  }
+
+  const destinationNumber = shared.destinationNumber.trim();
+  const paymentType = shared.paymentType;
+
+  return {
+    source: "owner_daraja",
+    shortcode: destinationNumber,
+    passkey: "",
+    paymentType,
+    paybillNumber: paymentType === "paybill" ? destinationNumber : undefined,
+    tillNumber: paymentType === "till" ? destinationNumber : undefined,
+    bank: paymentType === "bank" ? destinationNumber : undefined,
+    bankAccount: paymentType === "bank" ? shared.accountNumber.trim() || undefined : undefined,
+  };
+}
+
+/** Resolve where tenant M-Pesa payments should land — owner Integrations first, never platform till. */
+export async function resolveOwnerTenantMpesaRouting(
+  db: Db,
+  input: { landlordId: string; propertyId?: string | null }
+): Promise<ResolvedMpesaRouting> {
+  const ownerDaraja = await getOwnerDarajaIntegrations(db, input.landlordId);
+  const fromIntegrations = mapOwnerDarajaSharedToRouting(ownerDaraja.shared);
+  if (fromIntegrations) {
+    return fromIntegrations;
+  }
+
+  const landlordRouting = await resolveLandlordMpesaRouting(input);
+  if (landlordRouting.source === "landlord") {
+    return landlordRouting;
+  }
+
+  throw new Error(
+    "Property owner has not configured M-Pesa receiving details. Ask the owner to set Till, Paybill, or Bank under Integrations → Mpesa."
+  );
 }
 
 export async function resolveLandlordMpesaRouting(input: {

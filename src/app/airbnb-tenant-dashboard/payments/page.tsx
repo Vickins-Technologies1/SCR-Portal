@@ -75,9 +75,6 @@ export default function AirbnbGuestPaymentsPage() {
                 phone={phone}
                 csrfToken={csrfToken}
                 disabled={isPaid || amountDue <= 0 || !canPay}
-                shortcode={canPay ? paymentRail?.shortcode || null : null}
-                reference={booking.reference || null}
-                paybillAccountNumber={canPay ? paymentRail?.paybillAccountNumber || null : null}
                 onSuccess={refetch}
               />
             ) : (

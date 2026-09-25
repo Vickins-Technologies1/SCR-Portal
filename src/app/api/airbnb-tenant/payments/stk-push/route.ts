@@ -4,8 +4,14 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getAirbnbOwnerPaymentGateway, getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
-import { initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber, resolvePlatformStkCredentials } from "@/lib/mpesa";
-import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
+import {
+  initiateStkPush,
+  isStkPushAccepted,
+  isValidKenyanMsisdn,
+  normalizePhoneNumber,
+  resolveDarajaPlatformStkCredentials,
+} from "@/lib/mpesa";
+import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
 import { buildMpesaStkRequestFields } from "@/lib/mpesa-stk-routing";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
@@ -167,13 +173,27 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const resolvedMpesa = await resolveLandlordMpesaRouting({
-    landlordId: String(tenant.ownerId || ""),
-    propertyId: String(booking.listingId || ""),
-  });
+  let resolvedMpesa;
+  try {
+    resolvedMpesa = await resolveOwnerTenantMpesaRouting(db, {
+      landlordId: String(tenant.ownerId || ""),
+      propertyId: String(booking.listingId || ""),
+    });
+  } catch (routingError) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          routingError instanceof Error
+            ? routingError.message
+            : "Property owner M-Pesa receiving details are not configured.",
+      },
+      { status: 400 }
+    );
+  }
 
   const paymentType = resolvedMpesa.paymentType || "";
-  const platformCredentials = resolvePlatformStkCredentials();
+  const platformCredentials = resolveDarajaPlatformStkCredentials();
   const shortcode = platformCredentials.shortcode;
   const passkey = platformCredentials.passkey;
 
@@ -189,8 +209,8 @@ export async function POST(request: NextRequest) {
       accountType: resolvedPaymentType,
       bank: resolvedMpesa.bank,
       bankAccount: resolvedMpesa.bankAccount,
-      paybillNumber: resolvedMpesa.paybillNumber || shortcode,
-      buyGoodsNumber: resolvedMpesa.tillNumber || shortcode,
+      paybillNumber: resolvedMpesa.paybillNumber || resolvedMpesa.shortcode,
+      buyGoodsNumber: resolvedMpesa.tillNumber || resolvedMpesa.shortcode,
     },
     reference
   );
@@ -207,7 +227,7 @@ export async function POST(request: NextRequest) {
     partyB: stkFields.partyB,
   });
 
-  if (stkResponse.ResponseCode !== "0") {
+  if (!isStkPushAccepted(stkResponse)) {
     return NextResponse.json(
       { success: false, message: stkResponse.ResponseDescription || "Payment initiation failed" },
       { status: 400 }
