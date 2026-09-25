@@ -4,6 +4,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { getMpesaCallbackUrl, initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber } from "@/lib/mpesa";
+import { buildMpesaStkRequestFields } from "@/lib/mpesa-stk-routing";
 import { resolveOwnerDarajaStkConfig } from "@/lib/owner-daraja";
 
 const StkSchema = z.object({
@@ -79,15 +80,37 @@ export async function POST(request: NextRequest) {
     let callbackUrl: string;
     try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Invalid Daraja callback configuration." }, { status: 500 }); }
 
+    const paymentReference = parsed.data.accountReference || resolved.accountReference || normalizedPhone;
+    const stkFields =
+      resolved.mode === "shared_daraja" && resolved.paymentType
+        ? buildMpesaStkRequestFields(
+            {
+              accountType: resolved.paymentType,
+              bank: resolved.destinationNumber,
+              bankAccount: resolved.accountNumber,
+              paybillNumber: resolved.destinationNumber,
+              buyGoodsNumber: resolved.destinationNumber,
+            },
+            paymentReference
+          )
+        : buildMpesaStkRequestFields(
+            {
+              accountType: "paybill",
+              paybillNumber: resolved.shortcode,
+            },
+            paymentReference
+          );
+
     const stkResponse = await initiateStkPush({
       shortcode: resolved.shortcode,
       passkey: resolved.passkey,
       amount: parsed.data.amount,
       phone: normalizedPhone,
-      accountReference: parsed.data.accountReference || resolved.accountReference || normalizedPhone,
+      accountReference: stkFields.accountReference,
       transactionDesc: parsed.data.transactionDesc,
       callbackUrl,
-      transactionType: resolved.paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline",
+      transactionType: stkFields.transactionType,
+      partyB: stkFields.partyB,
       consumerKey: resolved.consumerKey,
       consumerSecret: resolved.consumerSecret,
       environment: resolved.environment,

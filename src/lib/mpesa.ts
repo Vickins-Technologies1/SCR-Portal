@@ -202,6 +202,7 @@ export async function initiateStkPush(params: {
   transactionDesc: string;
   callbackUrl: string;
   transactionType?: MpesaStkTransactionType;
+  partyB?: string;
   consumerKey?: string;
   consumerSecret?: string;
   environment?: MpesaEnvironment;
@@ -226,6 +227,7 @@ export async function initiateStkPush(params: {
   const password = generatePassword(params.shortcode, params.passkey, timestamp);
   const baseUrl = getMpesaBaseUrl(params.environment);
 
+  const partyB = String(params.partyB || params.shortcode).trim();
   const payload = {
     BusinessShortCode: params.shortcode,
     Password: password,
@@ -233,7 +235,7 @@ export async function initiateStkPush(params: {
     TransactionType: params.transactionType || "CustomerPayBillOnline",
     Amount: params.amount,
     PartyA: params.phone,
-    PartyB: params.shortcode,
+    PartyB: partyB,
     PhoneNumber: params.phone,
     CallBackURL: params.callbackUrl,
     AccountReference: params.accountReference,

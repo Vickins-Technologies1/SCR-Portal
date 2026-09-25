@@ -3,8 +3,9 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getAirbnbOwnerPaymentGateway, getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
-import { initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber } from "@/lib/mpesa";
+import { initiateStkPush, isValidKenyanMsisdn, normalizePhoneNumber, resolvePlatformStkCredentials } from "@/lib/mpesa";
 import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
+import { buildMpesaStkRequestFields } from "@/lib/mpesa-stk-routing";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildAirbnbPaymentReference, getAirbnbBookingPaymentSummary } from "@/lib/airbnb-payments";
@@ -149,27 +150,38 @@ export async function POST(request: NextRequest) {
     propertyId: String(booking.listingId || ""),
   });
   const paymentType = resolvedMpesa.paymentType || "";
-  const paybillAccountNumber = resolvedMpesa.paybillAccountNumber || "";
-  const shortcode = resolvedMpesa.shortcode;
-  const passkey = resolvedMpesa.passkey;
+  const platformCredentials = resolvePlatformStkCredentials();
+  const shortcode = platformCredentials.shortcode;
+  const passkey = platformCredentials.passkey;
 
   const callbackBase = process.env.MPESA_CALLBACK_BASE_URL || "";
   if (!callbackBase) {
     return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 });
   }
 
-  const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
-  const account = paymentType === "paybill" && paybillAccountNumber ? paybillAccountNumber : accountReference;
+  const resolvedPaymentType =
+    paymentType === "bank" ? "bank" : paymentType === "till" ? "till" : "paybill";
+  const stkFields = buildMpesaStkRequestFields(
+    {
+      accountType: resolvedPaymentType,
+      bank: resolvedMpesa.bank,
+      bankAccount: resolvedMpesa.bankAccount,
+      paybillNumber: resolvedMpesa.paybillNumber || shortcode,
+      buyGoodsNumber: resolvedMpesa.tillNumber || shortcode,
+    },
+    accountReference
+  );
 
   const stkResponse = await initiateStkPush({
     shortcode,
     passkey,
     amount: amountToCollect,
     phone: normalizedPhone,
-    accountReference: account,
+    accountReference: stkFields.accountReference,
     transactionDesc: `Airbnb booking ${bookingId}`,
     callbackUrl: `${callbackBase}/api/mpesa/stk-callback`,
-    transactionType,
+    transactionType: stkFields.transactionType,
+    partyB: stkFields.partyB,
   });
 
   if (stkResponse.ResponseCode !== "0") {

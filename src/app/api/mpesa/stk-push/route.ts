@@ -12,8 +12,10 @@ import {
   isValidKenyanMsisdn,
   normalizePhoneNumber,
   getMpesaCallbackUrl,
+  resolvePlatformStkCredentials,
 } from "@/lib/mpesa";
 import { resolveLandlordMpesaRouting } from "@/lib/mpesa-routing";
+import { buildMpesaStkRequestFields } from "@/lib/mpesa-stk-routing";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
@@ -265,6 +267,7 @@ export async function POST(request: NextRequest) {
     let tillNumber = "";
     let shortcode = "";
     let passkey = "";
+    let resolvedMpesaRouting: Awaited<ReturnType<typeof resolveLandlordMpesaRouting>> | null = null;
     const paymentGateway = await getOwnerPaymentGateway(db, derivedLandlordId);
 
     if (isPlatformInvoicePayment && paymentGateway === "kopokopo") {
@@ -410,14 +413,15 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
     } else if (paymentGateway === "daraja") {
-      const resolved = await resolveLandlordMpesaRouting({
+      resolvedMpesaRouting = await resolveLandlordMpesaRouting({
         landlordId: derivedLandlordId,
         propertyId,
       });
-      paymentType = resolved.paymentType;
-      shortcode = resolved.shortcode;
-      passkey = resolved.passkey;
-      tillNumber = resolved.tillNumber || "";
+      paymentType = resolvedMpesaRouting.paymentType;
+      const platformCredentials = resolvePlatformStkCredentials();
+      shortcode = platformCredentials.shortcode;
+      passkey = platformCredentials.passkey;
+      tillNumber = resolvedMpesaRouting.tillNumber || "";
     }
 
     // The tenant reference identifies the payer/property in the callback.
@@ -495,7 +499,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transactionType = paymentType === "till" ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline";
     let callbackUrl: string;
     try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 }); }
 
@@ -517,16 +520,38 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
 
+    const resolvedPaymentType =
+      paymentType === "bank" || paymentType === "till" || paymentType === "paybill" ? paymentType : "paybill";
+    const stkFields = resolvedMpesaRouting
+      ? buildMpesaStkRequestFields(
+          {
+            accountType: resolvedPaymentType,
+            bank: resolvedMpesaRouting.bank,
+            bankAccount: resolvedMpesaRouting.bankAccount,
+            paybillNumber: resolvedMpesaRouting.paybillNumber || resolvedMpesaRouting.shortcode,
+            buyGoodsNumber: resolvedMpesaRouting.tillNumber || resolvedMpesaRouting.shortcode,
+          },
+          stkAccountReference
+        )
+      : buildMpesaStkRequestFields(
+          {
+            accountType: "paybill",
+            paybillNumber: shortcode,
+          },
+          stkAccountReference
+        );
+
     // Initiate Daraja STK push
     const stkResponse = await initiateStkPush({
       shortcode,
       passkey,
       amount: paymentAmount,
       phone: payerPhone,
-      accountReference: stkAccountReference,
+      accountReference: stkFields.accountReference,
       transactionDesc: `${parsed.data.type || "Rent"} Payment`,
       callbackUrl,
-      transactionType,
+      transactionType: stkFields.transactionType,
+      partyB: stkFields.partyB,
     });
 
     if (stkResponse.ResponseCode !== "0") {
@@ -563,9 +588,10 @@ export async function POST(request: NextRequest) {
           landlordId: parsed.data.landlordId,
           provider: "daraja",
           paymentMethod: "daraja_stk",
-          mpesaAccountType: paymentType === "till" ? "TILL" : "PAYBILL",
-          mpesaShortcode: shortcode,
-          mpesaAccountReference: paymentType === "paybill" ? stkAccountReference : null,
+          mpesaAccountType:
+            paymentType === "till" ? "TILL" : paymentType === "bank" ? "BANK" : "PAYBILL",
+          mpesaShortcode: stkFields.partyB,
+          mpesaAccountReference: stkFields.accountReference,
           transactionDesc: `${parsed.data.type || "Rent"} Payment`,
           shortcode,
           resultCode: null,

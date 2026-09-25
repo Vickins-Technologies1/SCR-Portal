@@ -55,7 +55,7 @@ type TumaBank = {
 type DarajaMode = "shared_daraja" | "user_paybill";
 type PaymentGateway = "tuma" | "daraja";
 
-type DarajaPaymentType = "till" | "paybill";
+type DarajaPaymentType = "till" | "paybill" | "bank";
 
 type DarajaSharedState = {
   enabled: boolean;
@@ -279,7 +279,12 @@ export default function OwnerIntegrationsPage() {
 
           setDarajaShared({
             enabled: nextShared.enabled !== false,
-            paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
+            paymentType:
+              nextShared.paymentType === "till"
+                ? "till"
+                : nextShared.paymentType === "bank"
+                  ? "bank"
+                  : "paybill",
             destinationNumber: nextShared.destinationNumber || "",
             maskedDestinationNumber: nextShared.maskedDestinationNumber || "",
             accountNumber: nextShared.accountNumber || "",
@@ -289,7 +294,12 @@ export default function OwnerIntegrationsPage() {
           });
           setDarajaSharedInitial({
             enabled: nextShared.enabled !== false,
-            paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
+            paymentType:
+              nextShared.paymentType === "till"
+                ? "till"
+                : nextShared.paymentType === "bank"
+                  ? "bank"
+                  : "paybill",
             destinationNumber: nextShared.destinationNumber || "",
             accountNumber: nextShared.accountNumber || "",
             accountReference: nextShared.accountReference || "",
@@ -749,7 +759,8 @@ export default function OwnerIntegrationsPage() {
   const applyDarajaSharedResponse = (updated: any) => {
     setDarajaShared({
       enabled: updated.enabled !== false,
-      paymentType: updated.paymentType === "till" ? "till" : "paybill",
+      paymentType:
+        updated.paymentType === "till" ? "till" : updated.paymentType === "bank" ? "bank" : "paybill",
       destinationNumber: updated.destinationNumber || "",
       maskedDestinationNumber: updated.maskedDestinationNumber || "",
       accountNumber: updated.accountNumber || "",
@@ -759,7 +770,8 @@ export default function OwnerIntegrationsPage() {
     });
     setDarajaSharedInitial({
       enabled: updated.enabled !== false,
-      paymentType: updated.paymentType === "till" ? "till" : "paybill",
+      paymentType:
+        updated.paymentType === "till" ? "till" : updated.paymentType === "bank" ? "bank" : "paybill",
       destinationNumber: updated.destinationNumber || "",
       accountNumber: updated.accountNumber || "",
       accountReference: updated.accountReference || "",
@@ -808,10 +820,10 @@ export default function OwnerIntegrationsPage() {
       if (!destinationNumber) {
         nextErrors.destinationNumber = "Till or Paybill number is required.";
       }
-      if (darajaShared.paymentType === "paybill" && !accountNumber) {
-        nextErrors.accountNumber = "Account number is required for Paybill.";
+      if (darajaShared.paymentType === "bank" && !accountNumber) {
+        nextErrors.accountNumber = "Bank account number is required.";
       }
-      if (!accountReference) {
+      if (darajaShared.paymentType !== "bank" && !accountReference) {
         nextErrors.accountReference = "Account reference is required.";
       }
     }
@@ -1211,6 +1223,7 @@ export default function OwnerIntegrationsPage() {
                       >
                         <option value="paybill">Paybill</option>
                         <option value="till">Till</option>
+                        <option value="bank">Bank</option>
                       </select>
                     </div>
                   </div>
@@ -1218,7 +1231,9 @@ export default function OwnerIntegrationsPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">
-                        Connected Till / Paybill Number
+                        {darajaShared.paymentType === "bank"
+                          ? "Bank Identifier / Code"
+                          : "Connected Till / Paybill Number"}
                       </label>
                       <input
                         type="text"
@@ -1233,7 +1248,11 @@ export default function OwnerIntegrationsPage() {
                         className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
                           darajaSharedErrors.destinationNumber ? "border-rose-300" : "border-border"
                         }`}
-                        placeholder="2547XXXXXXX or Till number"
+                        placeholder={
+                          darajaShared.paymentType === "bank"
+                            ? "Bank paybill / identifier code"
+                            : "2547XXXXXXX or Till number"
+                        }
                       />
                       {darajaSharedErrors.destinationNumber ? (
                         <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.destinationNumber}</p>
@@ -1243,34 +1262,9 @@ export default function OwnerIntegrationsPage() {
                         </p>
                       )}
                     </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Account Reference</label>
-                      <input
-                        type="text"
-                        value={darajaShared.accountReference}
-                        onChange={(e) => {
-                          setDarajaShared((prev) => ({ ...prev, accountReference: e.target.value }));
-                          if (darajaSharedErrors.accountReference) {
-                            setDarajaSharedErrors((prev) => ({ ...prev, accountReference: undefined }));
-                          }
-                        }}
-                        disabled={isReadOnly}
-                        className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
-                          darajaSharedErrors.accountReference ? "border-rose-300" : "border-border"
-                        }`}
-                        placeholder="Reference shown on STK prompt"
-                      />
-                      {darajaSharedErrors.accountReference ? (
-                        <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountReference}</p>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                          This reference should identify the tenant, invoice, or booking clearly.
-                        </p>
-                      )}
-                    </div>
-                    {darajaShared.paymentType === "paybill" && (
+                    {darajaShared.paymentType === "bank" ? (
                       <div>
-                        <label className="text-xs font-medium text-muted-foreground">Account Number</label>
+                        <label className="text-xs font-medium text-muted-foreground">Bank Account Number</label>
                         <input
                           type="text"
                           value={darajaShared.accountNumber}
@@ -1284,12 +1278,40 @@ export default function OwnerIntegrationsPage() {
                           className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
                             darajaSharedErrors.accountNumber ? "border-rose-300" : "border-border"
                           }`}
-                          placeholder="Account number"
+                          placeholder="Customer bank account number"
                         />
                         {darajaSharedErrors.accountNumber ? (
                           <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountNumber}</p>
                         ) : (
-                          <p className="text-[11px] text-muted-foreground mt-1">Required when Paybill is selected.</p>
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Sent as the STK account number when the account type is Bank.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Account Reference</label>
+                        <input
+                          type="text"
+                          value={darajaShared.accountReference}
+                          onChange={(e) => {
+                            setDarajaShared((prev) => ({ ...prev, accountReference: e.target.value }));
+                            if (darajaSharedErrors.accountReference) {
+                              setDarajaSharedErrors((prev) => ({ ...prev, accountReference: undefined }));
+                            }
+                          }}
+                          disabled={isReadOnly}
+                          className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
+                            darajaSharedErrors.accountReference ? "border-rose-300" : "border-border"
+                          }`}
+                          placeholder="Reference shown on STK prompt"
+                        />
+                        {darajaSharedErrors.accountReference ? (
+                          <p className="text-[11px] text-rose-600 mt-1">{darajaSharedErrors.accountReference}</p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Used as the STK account number for Paybill and Till payments.
+                          </p>
                         )}
                       </div>
                     )}

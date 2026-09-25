@@ -10,7 +10,7 @@ export type ResolvedMpesaRouting = {
   source: "landlord" | "platform";
   shortcode: string;
   passkey: string;
-  paymentType: Exclude<MpesaPaymentType, "bank">;
+  paymentType: MpesaPaymentType;
   paymentAccountId?: string;
   routingKey?: string;
   label?: string;
@@ -19,6 +19,8 @@ export type ResolvedMpesaRouting = {
   paybillNumber?: string;
   paybillAccountNumber?: string;
   tillNumber?: string;
+  bank?: string;
+  bankAccount?: string;
 };
 
 export type MpesaConnectionSummary = Omit<ResolvedMpesaRouting, "passkey"> & {
@@ -38,6 +40,8 @@ type LandlordMpesaDoc = {
   paybillNumber?: string;
   paybillAccountNumber?: string;
   tillNumber?: string;
+  bankBranchRef?: string;
+  accountNumber?: string;
   isDefault?: boolean;
   status?: string;
   updatedAt?: string | Date;
@@ -48,15 +52,20 @@ function isTruthyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function normalizePaymentType(doc?: LandlordMpesaDoc): Exclude<MpesaPaymentType, "bank"> {
+function normalizePaymentType(doc?: LandlordMpesaDoc): MpesaPaymentType {
+  if (doc?.paymentType === "bank") return "bank";
   if (doc?.paymentType === "till") return "till";
   if (doc?.paymentType === "paybill") return "paybill";
   if (isTruthyString(doc?.tillNumber)) return "till";
+  if (isTruthyString(doc?.bankBranchRef)) return "bank";
   return "paybill";
 }
 
 function resolveShortcodeFromDoc(doc: LandlordMpesaDoc): string {
   const paymentType = normalizePaymentType(doc);
+  if (paymentType === "bank") {
+    return String(doc.bankBranchRef || doc.shortcode || "").trim();
+  }
   if (paymentType === "till") {
     return String(doc.tillNumber || doc.shortcode || doc.paybillNumber || "").trim();
   }
@@ -125,7 +134,7 @@ export async function resolveLandlordMpesaRouting(input: {
     landlord: input.landlordId,
     enabled: { $ne: false },
     status: { $ne: "disconnected" },
-    paymentType: { $in: ["paybill", "till"] },
+    paymentType: { $in: ["paybill", "till", "bank"] },
   })
     .select({
       shortcode: 1,
@@ -133,6 +142,8 @@ export async function resolveLandlordMpesaRouting(input: {
       paybillNumber: 1,
       paybillAccountNumber: 1,
       tillNumber: 1,
+      bankBranchRef: 1,
+      accountNumber: 1,
       routingKey: 1,
       label: 1,
       propertyIds: 1,
@@ -177,6 +188,8 @@ export async function resolveLandlordMpesaRouting(input: {
         paybillNumber: String(selectedDoc.paybillNumber || "").trim() || undefined,
         paybillAccountNumber: String(selectedDoc.paybillAccountNumber || "").trim() || undefined,
         tillNumber: String(selectedDoc.tillNumber || "").trim() || undefined,
+        bank: String(selectedDoc.bankBranchRef || "").trim() || undefined,
+        bankAccount: String(selectedDoc.accountNumber || "").trim() || undefined,
       };
     }
   }
@@ -204,6 +217,8 @@ export async function listLandlordMpesaConnections(input: {
       paybillNumber: 1,
       paybillAccountNumber: 1,
       tillNumber: 1,
+      bankBranchRef: 1,
+      accountNumber: 1,
       routingKey: 1,
       label: 1,
       propertyIds: 1,
@@ -230,6 +245,8 @@ export async function listLandlordMpesaConnections(input: {
       paybillNumber: String(doc.paybillNumber || "").trim() || undefined,
       paybillAccountNumber: String(doc.paybillAccountNumber || "").trim() || undefined,
       tillNumber: String(doc.tillNumber || "").trim() || undefined,
+      bank: String(doc.bankBranchRef || "").trim() || undefined,
+      bankAccount: String(doc.accountNumber || "").trim() || undefined,
       hasPasskey: hasDarajaPlatformCredentials(),
     }))
     .filter((doc) => Boolean(doc.shortcode));

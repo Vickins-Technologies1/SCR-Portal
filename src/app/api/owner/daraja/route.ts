@@ -50,7 +50,7 @@ async function resolveOwnerContext(request: NextRequest): Promise<OwnerContext |
 const SharedPayloadSchema = z.object({
   mode: z.literal("shared_daraja"),
   enabled: z.boolean().optional().default(true),
-  paymentType: z.enum(["till", "paybill"]),
+  paymentType: z.enum(["till", "paybill", "bank"]),
   destinationNumber: z.string().trim().min(1),
   accountNumber: z.string().trim().optional().default(""),
   accountReference: z.string().trim().min(1).max(100),

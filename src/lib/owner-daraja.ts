@@ -6,7 +6,7 @@ import { resolvePlatformStkCredentials } from "@/lib/mpesa";
 
 export type OwnerDarajaMode = "shared_daraja" | "user_paybill";
 export type OwnerDarajaEnvironment = "sandbox" | "production";
-export type OwnerDarajaPaymentType = "till" | "paybill";
+export type OwnerDarajaPaymentType = "till" | "paybill" | "bank";
 
 type OwnerDarajaDoc = {
   ownerId?: ObjectId;
@@ -96,7 +96,9 @@ function encryptIfPresent(value?: string): string {
 }
 
 function normalizePaymentType(value?: string): OwnerDarajaPaymentType {
-  return value === "till" ? "till" : "paybill";
+  if (value === "till") return "till";
+  if (value === "bank") return "bank";
+  return "paybill";
 }
 
 function normalizeEnvironment(value?: string): OwnerDarajaEnvironment {
@@ -300,14 +302,18 @@ export async function resolveOwnerDarajaStkConfig(
     );
 
     const shared = doc?.daraja?.shared || {};
+    const paymentType = normalizePaymentType(shared.paymentType);
     const destinationNumber = decryptMaybe(shared.destinationNumber);
     const accountNumber = String(shared.accountNumber || "").trim();
     if (!destinationNumber) {
       throw new Error("Shared Daraja destination number is not configured");
     }
+    if (paymentType === "bank" && !accountNumber) {
+      throw new Error("Bank account number is not configured");
+    }
 
     const platformCredentials = resolvePlatformStkCredentials();
-    const shortcode = destinationNumber || platformCredentials.shortcode;
+    const shortcode = platformCredentials.shortcode;
     const passkey = platformCredentials.passkey;
 
     return {
@@ -318,11 +324,9 @@ export async function resolveOwnerDarajaStkConfig(
       consumerKey: process.env.MPESA_CONSUMER_KEY || "",
       consumerSecret: process.env.MPESA_CONSUMER_SECRET || "",
       destinationNumber,
-      accountReference:
-        (shared.paymentType === "paybill"
-          ? accountNumber || String(shared.accountReference || "").trim()
-          : String(shared.accountReference || "").trim()) || destinationNumber,
-      paymentType: normalizePaymentType(shared.paymentType),
+      accountNumber: accountNumber || undefined,
+      accountReference: String(shared.accountReference || "").trim() || undefined,
+      paymentType,
     };
   }
 

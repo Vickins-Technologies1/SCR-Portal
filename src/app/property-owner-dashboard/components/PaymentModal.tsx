@@ -66,7 +66,7 @@ type PaymentRail = "legacy_mpesa" | "shared_daraja" | "user_paybill";
 type OwnerDarajaIntegrationState = {
   shared: {
     enabled: boolean;
-    paymentType: "till" | "paybill";
+    paymentType: "till" | "paybill" | "bank";
     destinationNumber: string;
     accountNumber: string;
     hasDestinationNumber: boolean;
@@ -150,7 +150,12 @@ export default function PaymentModal({
           setOwnerDarajaConfig({
             shared: {
               enabled: nextShared.enabled !== false,
-              paymentType: nextShared.paymentType === "till" ? "till" : "paybill",
+              paymentType:
+                nextShared.paymentType === "till"
+                  ? "till"
+                  : nextShared.paymentType === "bank"
+                    ? "bank"
+                    : "paybill",
               destinationNumber: nextShared.destinationNumber || "",
               accountNumber: nextShared.accountNumber || "",
               hasDestinationNumber: !!nextShared.hasDestinationNumber,
@@ -523,13 +528,14 @@ export default function PaymentModal({
     if (trimmed.length <= 4) return trimmed;
     return `${"*".repeat(Math.max(2, trimmed.length - 4))}${trimmed.slice(-4)}`;
   };
+  const sharedPaymentType = ownerDarajaConfig?.shared.paymentType || "paybill";
+  const sharedDestinationLabel =
+    sharedPaymentType === "till" ? "Till" : sharedPaymentType === "bank" ? "Bank" : "Paybill";
   const darajaModeBadgeText =
     paymentRail === "shared_daraja"
-      ? `${ownerDarajaConfig?.shared.paymentType === "till" ? "K-till" : "Mpesa"} · funds land in ${
-          ownerDarajaConfig?.shared.paymentType === "till" ? "Till" : "Paybill"
-        } ${
+      ? `${sharedPaymentType === "till" ? "K-till" : "Mpesa"} · funds land in ${sharedDestinationLabel} ${
           maskInline(
-            ownerDarajaConfig?.shared.paymentType === "paybill"
+            sharedPaymentType === "bank"
               ? ownerDarajaConfig?.shared.accountNumber || ownerDarajaConfig?.shared.destinationNumber || ""
               : ownerDarajaConfig?.shared.destinationNumber || ""
           ) || "destination"
@@ -539,7 +545,7 @@ export default function PaymentModal({
         : "KopoKopo · platform till";
   const selectedDarajaLabel =
     paymentRail === "shared_daraja"
-      ? ownerDarajaConfig?.shared.paymentType === "till"
+      ? sharedPaymentType === "till"
         ? "K-till"
         : "Mpesa"
       : paymentRail === "user_paybill"
@@ -679,7 +685,7 @@ export default function PaymentModal({
                   {/* Platform invoice payments use KopoKopo behind the scenes. */}
                   {sharedDarajaAvailable && (
                     <option value="shared_daraja">
-                      {ownerDarajaConfig?.shared.paymentType === "till" ? "K-till" : "Mpesa"}
+                      {sharedPaymentType === "till" ? "K-till" : "Mpesa"}
                     </option>
                   )}
                   {userPaybillAvailable && <option value="user_paybill">User-owned Paybill</option>}
@@ -690,7 +696,7 @@ export default function PaymentModal({
                     <p className="uppercase tracking-[0.2em] text-[10px]">Mpesa</p>
                     <p className="mt-1 font-medium text-foreground">
                       {sharedDarajaAvailable
-                        ? `${ownerDarajaConfig?.shared.paymentType === "till" ? "Till" : "Paybill"} connected`
+                        ? `${sharedDestinationLabel} connected`
                         : ownerDarajaLoading
                           ? "Checking..."
                           : "Unavailable"}
