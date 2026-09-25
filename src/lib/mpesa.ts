@@ -96,6 +96,9 @@ export function resolveDarajaPlatformStkCredentials(): {
   };
 }
 
+
+
+
 export function isStkPushAccepted(response: { ResponseCode?: string | number | null }): boolean {
   return String(response?.ResponseCode ?? "") === "0";
 }
