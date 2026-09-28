@@ -33,6 +33,8 @@ export async function generateInvoicePdf(params: {
   const now = params.now ?? new Date();
   const calculation = calculateInvoiceTotals({ ...invoice, now });
   const invoiceNumber = safeText(invoice.reference, "INV");
+  const invoiceIdDigits = invoiceNumber.replace(/\D/g, "");
+  const displayInvoiceId = (invoiceIdDigits.slice(-8) || "0").padStart(8, "0");
   const pdfDoc = await PDFDocument.create();
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica), bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const page = pdfDoc.addPage(A4_PAGE_SIZE);
@@ -47,7 +49,7 @@ export async function generateInvoicePdf(params: {
   page.drawText(calculation.status, { x: right - badgeWidth + 11, y: y + 3, size: 8, font: bold, color: rgb(1, 1, 1) });
   y -= 24; page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.8, color: light }); y -= 18;
   const metaX = right - 190;
-  drawLabel(page, "INVOICE NUMBER", metaX, y, regular); drawRight(page, invoiceNumber, right, y, 9, bold); y -= 15;
+  drawLabel(page, "INVOICE NUMBER", metaX, y, regular); drawRight(page, displayInvoiceId, right, y, 9, bold); y -= 15;
   drawLabel(page, "ISSUE DATE", metaX, y, regular); drawRight(page, now.toLocaleDateString("en-KE"), right, y, 9, regular); y -= 15;
   drawLabel(page, "DUE DATE", metaX, y, regular);
   const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
@@ -86,7 +88,6 @@ export async function generateInvoicePdf(params: {
     drawRight(page, money(amount), right, y, emphasis ? 10 : 8.5, emphasis ? bold : regular, emphasis ? navy : slate); y -= emphasis ? 19 : 15;
   };
   summaryRow("Subtotal", calculation.subtotal); summaryRow("Discount", calculation.discount); summaryRow("Tax", calculation.tax);
-  page.drawLine({ start: { x: summaryX, y: y + 6 }, end: { x: right, y: y + 6 }, thickness: 1.1, color: navy });
   summaryRow("TOTAL", calculation.total, true); summaryRow("Amount Paid", calculation.amountPaid); summaryRow("Balance Due", calculation.balanceDue, true);
 
   const footerY = safeArea.bottom + 10;
