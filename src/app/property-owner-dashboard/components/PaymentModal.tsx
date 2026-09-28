@@ -105,6 +105,7 @@ export default function PaymentModal({
   const [ownerDarajaLoading, setOwnerDarajaLoading] = useState(false);
   const [ownerDarajaConfig, setOwnerDarajaConfig] = useState<OwnerDarajaIntegrationState | null>(null);
   const [paymentRail, setPaymentRail] = useState<PaymentRail>("legacy_mpesa");
+  const [invoicePaymentProvider, setInvoicePaymentProvider] = useState<"kopokopo" | "daraja">("kopokopo");
 
   const pushStatusEvent = useCallback((message: string, tone: "info" | "success" | "warning" | "error" = "info") => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -183,8 +184,17 @@ export default function PaymentModal({
         }
       };
 
+      const fetchInvoiceProvider = async () => {
+        try {
+          const response = await fetch("/api/owner/integrations", { credentials: "include" });
+          const data = await response.json().catch(() => ({}));
+          if (data?.integrations?.invoicePaymentProvider === "daraja" || data?.integrations?.invoicePaymentProvider === "kopokopo") setInvoicePaymentProvider(data.integrations.invoicePaymentProvider);
+        } catch { setInvoicePaymentProvider("kopokopo"); }
+      };
+
       fetchCsrfToken();
       fetchOwnerDarajaConfig();
+      fetchInvoiceProvider();
     }
   }, [isOpen, onError]);
 
@@ -268,7 +278,8 @@ export default function PaymentModal({
       options?: {
         maxAttempts?: number;
         interval?: number;
-        statusEndpoint?: "/api/transaction-status" | "/api/owner/daraja/status";
+        statusEndpoint?: "/api/transaction-status" | "/api/owner/daraja/status" | "/api/owner/invoice-payments/daraja-status";
+        serverConfirmsInvoice?: boolean;
       }
     ) => {
       const maxAttempts = options?.maxAttempts ?? 6;
@@ -282,7 +293,7 @@ export default function PaymentModal({
           }
           pushStatusEvent(`Checking payment status (${attempts + 1}/${maxAttempts})...`);
           const requestBody =
-            statusEndpoint === "/api/owner/daraja/status"
+            statusEndpoint === "/api/owner/daraja/status" || statusEndpoint === "/api/owner/invoice-payments/daraja-status"
               ? { checkoutRequestId: transactionRequestId }
               : { transactionRequestId };
 
@@ -310,6 +321,12 @@ export default function PaymentModal({
           if (normalized === "completed") {
             pushStatusEvent("Payment confirmed. Updating invoice status...", "success");
             try {
+              if (options?.serverConfirmsInvoice) {
+                onSuccess();
+                setIsPaymentLoadingModalOpen(false);
+                setIsLoading(false);
+                return true;
+              }
               const updateRes = await fetch("/api/invoices", {
                 method: "POST",
                 headers: {
@@ -458,15 +475,9 @@ export default function PaymentModal({
         }
         const invoice: Invoice = invoiceData.invoices[0];
 
-        const useOwnerDaraja = paymentRail === "shared_daraja" || paymentRail === "user_paybill";
-        const requestBody = useOwnerDaraja
-          ? {
-              mode: paymentRail,
-              amount: invoice.amount,
-              phone: paymentPhone,
-              accountReference: invoice.reference || paymentPropertyId || invoice._id,
-              transactionDesc: invoice.description || `Invoice payment ${invoice.reference || invoice._id}`,
-            }
+        const useInvoiceDaraja = invoicePaymentProvider === "daraja";
+        const requestBody = useInvoiceDaraja
+          ? { invoiceId: invoice._id, phone: paymentPhone }
           : {
               amount: invoice.amount,
               phone: paymentPhone,
@@ -475,7 +486,7 @@ export default function PaymentModal({
               type: "Other",
             };
 
-        const stkRes = await fetch(useOwnerDaraja ? "/api/owner/daraja/stk-push" : "/api/mpesa/stk-push", {
+        const stkRes = await fetch(useInvoiceDaraja ? "/api/owner/invoice-payments/daraja-stk-push" : "/api/mpesa/stk-push", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -486,7 +497,8 @@ export default function PaymentModal({
         const stkData = await stkRes.json();
         if (stkRes.ok && stkData.success) {
           pollTransactionStatus(stkData.checkoutRequestId, invoice, {
-            statusEndpoint: useOwnerDaraja ? "/api/owner/daraja/status" : "/api/transaction-status",
+            statusEndpoint: useInvoiceDaraja ? "/api/owner/invoice-payments/daraja-status" : "/api/transaction-status",
+            serverConfirmsInvoice: useInvoiceDaraja,
           });
         } else {
           onError(stkData.message || "Failed to initiate payment");
@@ -510,6 +522,7 @@ export default function PaymentModal({
       onError,
       billingPlan,
       paymentRail,
+      invoicePaymentProvider,
     ]
   );
 

@@ -198,28 +198,37 @@ export async function GET(request: NextRequest) {
     const startOfMonthISO = startOfMonth.toISOString();
     const endOfMonthISO = endOfMonth.toISOString();
 
-    // === FIXED: Accurate totalUnits from unitTypes.quantity ===
-    const totalUnitsResult = await db
-      .collection("properties")
-      .aggregate<{ totalUnits: number }>([
-        { $match: propertyFilter },
-        { $unwind: "$unitTypes" },
-        {
-          $group: {
-            _id: null,
-            totalUnits: { $sum: "$unitTypes.quantity" },
-          },
-        },
-      ])
-      .toArray();
-    const totalUnits = totalUnitsResult[0]?.totalUnits || 0;
-
-    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
-
     const tenantCollection = db.collection<TenantDoc>("tenants");
-    const totalTenants = await tenantCollection.countDocuments({ propertyId: { $in: propertyIds } });
-    const activeTenantsForOccupancy = await fetchTenantsActiveOnDay<TenantDoc>(db, propertyIds, today);
-    const activeTenantsForMonth = await fetchTenantsOverlappingRange<TenantDoc>(db, propertyIds, startOfMonth, endOfMonth);
+    // These reads are independent after the property list is known. Keep the
+    // individual queries and result handling unchanged while overlapping their
+    // network/database wait time.
+    const [
+      totalUnitsResult,
+      rentOverrideMap,
+      totalTenants,
+      activeTenantsForOccupancy,
+      activeTenantsForMonth,
+    ] = await Promise.all([
+      db
+        .collection("properties")
+        .aggregate<{ totalUnits: number }>([
+          { $match: propertyFilter },
+          { $unwind: "$unitTypes" },
+          {
+            $group: {
+              _id: null,
+              totalUnits: { $sum: "$unitTypes.quantity" },
+            },
+          },
+        ])
+        .toArray(),
+      fetchActiveRentOverridesByPropertyIds(db, propertyIds),
+      tenantCollection.countDocuments({ propertyId: { $in: propertyIds } }),
+      fetchTenantsActiveOnDay<TenantDoc>(db, propertyIds, today),
+      fetchTenantsOverlappingRange<TenantDoc>(db, propertyIds, startOfMonth, endOfMonth),
+    ]);
+
+    const totalUnits = totalUnitsResult[0]?.totalUnits || 0;
 
     const activeTenants = activeTenantsForOccupancy.length;
     const occupiedUnits = activeTenantsForOccupancy.reduce(

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { getOwnerPaymentGateway, maskSecret } from "@/lib/owner-integrations";
+import { getOwnerInvoicePaymentProvider, getOwnerPaymentGateway, maskSecret } from "@/lib/owner-integrations";
 import { decryptTumaApiKey, encryptTumaApiKey, isLikelyEncryptedTumaApiKey } from "@/lib/tuma-crypto";
 
 type OwnerContext = {
@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
 
     const tuma = record?.tuma || {};
     const paymentGateway = await getOwnerPaymentGateway(db, context.ownerId);
+    const invoicePaymentProvider = await getOwnerInvoicePaymentProvider(db, context.ownerId);
     const email = String(tuma.email || "").trim();
     const storedApiKey = String(tuma.apiKey || "").trim();
     const businessId = String(tuma.businessId || "").trim();
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
       success: true,
       integrations: {
         paymentGateway,
+        invoicePaymentProvider,
         tuma: {
           enabled,
           email,
@@ -118,20 +120,46 @@ export async function PUT(request: NextRequest) {
     if (selectedGateway !== undefined && selectedGateway !== "tuma" && selectedGateway !== "daraja") {
       return NextResponse.json({ success: false, message: "Invalid payment gateway." }, { status: 400 });
     }
+    const selectedInvoiceProvider = payload?.invoicePaymentProvider;
+    if (selectedInvoiceProvider !== undefined && !["kopokopo", "daraja"].includes(selectedInvoiceProvider)) {
+      return NextResponse.json({ success: false, message: "Invalid invoice payment provider." }, { status: 400 });
+    }
 
     const hasTumaPayload = payload?.tuma && typeof payload.tuma === "object";
-    if (!hasTumaPayload && selectedGateway) {
+    if (!hasTumaPayload && (selectedGateway || selectedInvoiceProvider)) {
       const { db } = await connectToDatabase();
       const now = new Date().toISOString();
+      const current = await db.collection("ownerIntegrations").findOne({ ownerId: new ObjectId(context.ownerId) });
       await db.collection("ownerIntegrations").updateOne(
         { ownerId: new ObjectId(context.ownerId) },
         {
-          $set: { ownerId: new ObjectId(context.ownerId), paymentGateway: selectedGateway, updatedAt: now },
+          $set: {
+            ownerId: new ObjectId(context.ownerId),
+            ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
+            ...(selectedInvoiceProvider ? { invoicePaymentProvider: selectedInvoiceProvider } : {}),
+            updatedAt: now,
+          },
           $setOnInsert: { createdAt: now },
         },
         { upsert: true }
       );
-      return NextResponse.json({ success: true, integrations: { paymentGateway: selectedGateway } });
+      if (selectedInvoiceProvider && selectedInvoiceProvider !== current?.invoicePaymentProvider) {
+        await db.collection("integrationAuditLog").insertOne({
+          type: "property_owner_invoice_payment_provider_changed",
+          ownerId: new ObjectId(context.ownerId),
+          from: current?.invoicePaymentProvider || "kopokopo",
+          to: selectedInvoiceProvider,
+          changedAt: now,
+          changedBy: context.ownerId,
+        });
+      }
+      return NextResponse.json({
+        success: true,
+        integrations: {
+          ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
+          ...(selectedInvoiceProvider ? { invoicePaymentProvider: selectedInvoiceProvider } : {}),
+        },
+      });
     }
 
     const tumaPayload = payload?.tuma || {};

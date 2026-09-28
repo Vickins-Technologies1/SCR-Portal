@@ -213,6 +213,8 @@ export default function OwnerIntegrationsPage() {
   const [showDarajaSecrets, setShowDarajaSecrets] = useState(false);
   const [paymentGateway, setPaymentGateway] = useState<PaymentGateway>("daraja");
   const [gatewaySaving, setGatewaySaving] = useState(false);
+  const [invoicePaymentProvider, setInvoicePaymentProvider] = useState<"kopokopo" | "daraja">("kopokopo");
+  const [invoiceProviderSaving, setInvoiceProviderSaving] = useState(false);
 
   useEffect(() => {
     const id = Cookies.get("userId");
@@ -250,6 +252,9 @@ export default function OwnerIntegrationsPage() {
           const nextTuma = tumaData.integrations?.tuma || {};
           if (tumaData.integrations?.paymentGateway === "tuma" || tumaData.integrations?.paymentGateway === "daraja") {
             setPaymentGateway(tumaData.integrations.paymentGateway);
+          }
+          if (tumaData.integrations?.invoicePaymentProvider === "daraja" || tumaData.integrations?.invoicePaymentProvider === "kopokopo") {
+            setInvoicePaymentProvider(tumaData.integrations.invoicePaymentProvider);
           }
           setTuma({
             enabled: nextTuma.enabled !== false,
@@ -518,6 +523,23 @@ export default function OwnerIntegrationsPage() {
       toast.error(error instanceof Error ? error.message : "Failed to switch payment gateway.");
     } finally {
       setGatewaySaving(false);
+    }
+  };
+
+  const handleSelectInvoiceProvider = async (provider: "kopokopo" | "daraja") => {
+    if (isReadOnly || !csrfToken || provider === invoicePaymentProvider) return;
+    if (!window.confirm(`Switch property owner invoice payments to ${provider === "daraja" ? "M-Pesa PayBill" : "Kopokopo"}? Existing transactions will not be modified.`)) return;
+    setInvoiceProviderSaving(true);
+    try {
+      const res = await fetch("/api/owner/integrations", { method: "PUT", headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken }, credentials: "include", body: JSON.stringify({ invoicePaymentProvider: provider }) });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to switch invoice provider.");
+      setInvoicePaymentProvider(provider);
+      toast.success("Property Owner invoice payment provider updated.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to switch invoice provider.");
+    } finally {
+      setInvoiceProviderSaving(false);
     }
   };
 
@@ -1112,6 +1134,20 @@ export default function OwnerIntegrationsPage() {
                       {gateway === "tuma" ? "Tuma" : "Daraja"}{active ? " · Active" : ""}
                     </button>
                   );
+                })}
+              </div>
+            </div>
+          </section>
+          <section className="surface-card rounded-3xl p-5 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Property Owner Invoice Payments</p>
+                <p className="mt-1 text-sm text-muted-foreground">Choose how Sorana receives payments for new owner invoices. Tenant payment routing is unaffected.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:min-w-72">
+                {(["kopokopo", "daraja"] as const).map((provider) => {
+                  const active = invoicePaymentProvider === provider;
+                  return <button key={provider} type="button" disabled={isReadOnly || invoiceProviderSaving || active} onClick={() => handleSelectInvoiceProvider(provider)} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white text-foreground hover:bg-muted"} disabled:cursor-not-allowed disabled:opacity-70`}>{provider === "daraja" ? "M-Pesa PayBill" : "Kopokopo"}{active ? " · Active" : ""}</button>;
                 })}
               </div>
             </div>

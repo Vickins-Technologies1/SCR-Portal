@@ -10,6 +10,7 @@ export type OwnerTumaIntegration = {
 };
 
 export type OwnerPaymentGateway = "tuma" | "daraja" | "kopokopo";
+export type OwnerInvoicePaymentProvider = "kopokopo" | "daraja";
 
 export function maskSecret(secret?: string): string {
   const value = (secret || "").trim();
@@ -62,4 +63,14 @@ export async function getOwnerPaymentGateway(db: Db, ownerId: string): Promise<O
   return tuma.enabled !== false && Boolean(String(tuma.email || "").trim() && String(tuma.apiKey || "").trim())
     ? "tuma"
     : "daraja";
+}
+
+/** Provider for new Sorana invoice payments only. Kept separate from tenant routing. */
+export async function getOwnerInvoicePaymentProvider(db: Db, ownerId: string): Promise<OwnerInvoicePaymentProvider> {
+  if (!ObjectId.isValid(ownerId)) return "kopokopo";
+  const doc = await db.collection("ownerIntegrations").findOne(
+    { ownerId: new ObjectId(ownerId) },
+    { projection: { invoicePaymentProvider: 1 } }
+  );
+  return String(doc?.invoicePaymentProvider || "kopokopo").toLowerCase() === "daraja" ? "daraja" : "kopokopo";
 }

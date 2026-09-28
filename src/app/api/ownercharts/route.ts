@@ -159,89 +159,43 @@ export async function GET(request: NextRequest) {
       const startOfMonthISO = startOfMonth.toISOString();
       const endOfMonthISO = endOfMonth.toISOString();
 
-      // Aggregate rent payments
-      const rentPaymentsResult = await db
-        .collection("payments")
-        .aggregate<{ total: number; count: number }>([
-          {
-            $match: {
-              tenantId: { $in: tenantIds },
-              propertyId: { $in: propertyIds },
-              status: "completed",
-              type: "Rent",
-              $or: [
-                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-              ],
+      const buildPaymentAggregation = (type: "Rent" | "Utility" | "Deposit") =>
+        db
+          .collection("payments")
+          .aggregate<{ total: number; count: number }>([
+            {
+              $match: {
+                tenantId: { $in: tenantIds },
+                propertyId: { $in: propertyIds },
+                status: "completed",
+                type,
+                $or: [
+                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
+                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+                ],
+              },
             },
-          },
-          {
-            $group: {
-              _id: null,
-              total: { $sum: "$amount" },
-              count: { $sum: 1 },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: "$amount" },
+                count: { $sum: 1 },
+              },
             },
-          },
-        ])
-        .toArray();
-      const rentTotal = rentPaymentsResult[0]?.total || 0;
-      rentPayments.unshift(rentTotal);
+          ])
+          .toArray();
 
-      // Aggregate utility payments
-      const utilityPaymentsResult = await db
-        .collection("payments")
-        .aggregate<{ total: number; count: number }>([
-          {
-            $match: {
-              tenantId: { $in: tenantIds },
-              propertyId: { $in: propertyIds },
-              status: "completed",
-              type: "Utility",
-              $or: [
-                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-              ],
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              total: { $sum: "$amount" },
-              count: { $sum: 1 },
-            },
-          },
-        ])
-        .toArray();
-      const utilityTotal = utilityPaymentsResult[0]?.total || 0;
-      utilityPayments.unshift(utilityTotal);
+      // These aggregations are independent; keep their predicates and result handling
+      // unchanged while allowing MongoDB/network work to overlap per month.
+      const [rentPaymentsResult, utilityPaymentsResult, depositPaymentsResult] = await Promise.all([
+        buildPaymentAggregation("Rent"),
+        buildPaymentAggregation("Utility"),
+        buildPaymentAggregation("Deposit"),
+      ]);
 
-      // Aggregate deposit payments
-      const depositPaymentsResult = await db
-        .collection("payments")
-        .aggregate<{ total: number; count: number }>([
-          {
-            $match: {
-              tenantId: { $in: tenantIds },
-              propertyId: { $in: propertyIds },
-              status: "completed",
-              type: "Deposit",
-              $or: [
-                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-              ],
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              total: { $sum: "$amount" },
-              count: { $sum: 1 },
-            },
-          },
-        ])
-        .toArray();
-      const depositTotal = depositPaymentsResult[0]?.total || 0;
-      depositPayments.unshift(depositTotal);
+      rentPayments.unshift(rentPaymentsResult[0]?.total || 0);
+      utilityPayments.unshift(utilityPaymentsResult[0]?.total || 0);
+      depositPayments.unshift(depositPaymentsResult[0]?.total || 0);
     }
 
     const chartData: ChartData = {

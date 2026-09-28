@@ -16,6 +16,7 @@ interface Invoice {
   items?: Array<{ description: string; qty: number; rate: number }>;
   discount?: number;
   tax?: number;
+  billingPlan?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -41,6 +42,11 @@ export async function POST(request: NextRequest) {
 
     const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(invoice.userId) });
     const property = await db.collection("properties").findOne({ _id: new ObjectId(invoice.propertyId) });
+    const payments = await db.collection("payments").find({
+      invoiceId: invoice._id.toString(),
+      status: "completed",
+    }).project({ amount: 1 }).toArray();
+    const amountPaid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
 
     const { pdfBytes, invoiceNumber } = await generateInvoicePdf({
       invoice: {
@@ -50,15 +56,22 @@ export async function POST(request: NextRequest) {
         items: invoice.items,
         discount: invoice.discount,
         tax: invoice.tax,
+        dueDate: invoice.expiresAt,
+        amountPaid,
       },
       owner: {
         name: owner?.name,
         email: owner?.email,
         phone: owner?.phone,
       },
-      property: { name: property?.name },
+      property: { name: property?.name, address: property?.address },
       now: new Date(),
-      kopokopoTillNumber: process.env.KOPOKOPO_TILL_NUMBER || "",
+      paymentDetails: {
+        tillNumber: process.env.KOPOKOPO_TILL_NUMBER || "",
+        paybillNumber: process.env.INVOICE_MPESA_PAYBILL_NUMBER || "",
+        bankName: process.env.INVOICE_BANK_NAME || "",
+        bankAccount: process.env.INVOICE_BANK_ACCOUNT || "",
+      },
     });
     return NextResponse.json({
       success: true,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -10,7 +11,7 @@ import { useCsrfToken } from "@/hooks/useCsrfToken";
 type Plan = { currency: string; active: boolean; features: Record<string, boolean>; limits: Record<string, number | string>; pricing: { minimumUnits: number; maximumUnits: number | null; currency: string; tiers: Array<{ minUnits: number; maxUnits: number | null; price: number; currency: string; active: boolean }> } };
 type Quote = { units: number; amount: number; currency: string; tier: { minUnits: number; maxUnits: number | null } };
 
-export default function LifetimeCheckoutPage() {
+function LifetimeCheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { csrfToken, ensureCsrf } = useCsrfToken();
@@ -139,5 +140,13 @@ export default function LifetimeCheckoutPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function LifetimeCheckoutPage() {
+  return (
+    <Suspense fallback={<main className="min-h-[100svh] bg-background" />}>
+      <LifetimeCheckoutContent />
+    </Suspense>
   );
 }

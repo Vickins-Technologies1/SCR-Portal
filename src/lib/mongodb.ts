@@ -7,13 +7,46 @@ declare global {
 }
 
 const uri = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/rentaldb';
+const performanceProfilingEnabled = process.env.SORANA_PERFORMANCE_PROFILING === 'true';
+const slowQueryThresholdMs = Number(process.env.SORANA_PERFORMANCE_SLOW_QUERY_MS ?? 100);
 
 let client: MongoClient | undefined;
+
+function attachPerformanceProfiling(nextClient: MongoClient) {
+  if (!performanceProfilingEnabled) return;
+
+  nextClient.on('commandSucceeded', (event) => {
+    if (event.duration < slowQueryThresholdMs) return;
+    console.info('[sorana-performance][mongodb]', JSON.stringify({
+      command: event.commandName,
+      durationMs: event.duration,
+      requestId: event.requestId,
+    }));
+  });
+
+  nextClient.on('commandFailed', (event) => {
+    console.warn('[sorana-performance][mongodb]', JSON.stringify({
+      command: event.commandName,
+      durationMs: event.duration,
+      requestId: event.requestId,
+      failed: true,
+    }));
+  });
+}
+
+function createClient(options: ConstructorParameters<typeof MongoClient>[1]) {
+  const nextClient = new MongoClient(uri, {
+    ...options,
+    monitorCommands: performanceProfilingEnabled,
+  });
+  attachPerformanceProfiling(nextClient);
+  return nextClient;
+}
 
 const getClientPromise = (): Promise<MongoClient> => {
   if (process.env.NODE_ENV === 'development') {
     if (!global._mongoClientPromise) {
-      client = new MongoClient(uri, {
+      client = createClient({
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 10000,
@@ -24,7 +57,7 @@ const getClientPromise = (): Promise<MongoClient> => {
   }
 
   if (!global._mongoClientPromise) {
-    client = new MongoClient(uri, {
+    client = createClient({
       maxPoolSize: 20,
       serverSelectionTimeoutMS: 5000,
     });

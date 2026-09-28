@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
       ? `${baseUrl}/property-owner-dashboard/reports`
       : "http://localhost:3000/property-owner-dashboard/reports";
 
-    const kopokopoTillNumber = (process.env.KOPOKOPO_TILL_NUMBER || "").trim();
+    const payments = await db.collection("payments").find({ invoiceId, status: "completed" }).project({ amount: 1 }).toArray();
+    const amountPaid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
     const { pdfBytes, invoiceNumber } = await generateInvoicePdf({
       invoice: {
         reference: invoice.reference,
@@ -92,6 +93,8 @@ export async function POST(request: NextRequest) {
         items: invoice.items,
         discount: invoice.discount,
         tax: invoice.tax,
+        dueDate: invoice.expiresAt,
+        amountPaid,
       },
       owner: {
         name: owner?.name,
@@ -100,7 +103,12 @@ export async function POST(request: NextRequest) {
       },
       property: { name: propertyName },
       now: new Date(),
-      kopokopoTillNumber,
+      paymentDetails: {
+        tillNumber: process.env.KOPOKOPO_TILL_NUMBER || "",
+        paybillNumber: process.env.INVOICE_MPESA_PAYBILL_NUMBER || "",
+        bankName: process.env.INVOICE_BANK_NAME || "",
+        bankAccount: process.env.INVOICE_BANK_ACCOUNT || "",
+      },
     });
 
     await sendInvoiceEmail({

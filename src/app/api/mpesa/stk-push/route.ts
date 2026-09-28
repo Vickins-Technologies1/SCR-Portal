@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
-import { getOwnerPaymentGateway, getOwnerTumaIntegration } from "@/lib/owner-integrations";
+import { getOwnerInvoicePaymentProvider, getOwnerPaymentGateway, getOwnerTumaIntegration } from "@/lib/owner-integrations";
 import { createIncomingPayment, getKopokopoTillNumber } from "@/lib/kopokopo";
 import {
   getKopokopoPasskey,
@@ -269,7 +269,10 @@ export async function POST(request: NextRequest) {
     let shortcode = "";
     let passkey = "";
     let resolvedMpesaRouting: Awaited<ReturnType<typeof resolveOwnerTenantMpesaRouting>> | null = null;
-    const paymentGateway = await getOwnerPaymentGateway(db, derivedLandlordId);
+    // Invoice provider is deliberately separate. Tenant requests retain the existing gateway path.
+    const paymentGateway = isPlatformInvoicePayment
+      ? await getOwnerInvoicePaymentProvider(db, derivedLandlordId)
+      : await getOwnerPaymentGateway(db, derivedLandlordId);
 
     if (isPlatformInvoicePayment && paymentGateway === "kopokopo") {
       tillNumber = safeGetKopokopoTillNumber();

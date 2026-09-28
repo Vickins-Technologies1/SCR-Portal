@@ -227,6 +227,8 @@ const ADMIN_API_PATHS = [
   "/api/users",
 ];
 
+const performanceProfilingEnabled = process.env.SORANA_PERFORMANCE_PROFILING === "true";
+
 export async function proxy(request: NextRequest) {
   const fullPath = request.nextUrl.pathname;
   const path = fullPath.split("?")[0];
@@ -447,7 +449,17 @@ export async function proxy(request: NextRequest) {
         handler = rateLimitMiddleware(handler);
       }
 
-      return handler(request);
+      const response = await handler(request);
+      if (performanceProfilingEnabled) {
+        logger.info("[sorana-performance][api]", {
+          path,
+          method,
+          status: response.status,
+          durationMs: Date.now() - startTime,
+          responseBytes: response.headers.get("content-length"),
+        });
+      }
+      return response;
     }
 
     logger.info("Request authorized", {

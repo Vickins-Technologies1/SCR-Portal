@@ -88,8 +88,6 @@ export async function sendInvoiceReminders(params: { today?: Date } = {}) {
   const baseUrl = (process.env.APP_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
   const dashboardUrl = baseUrl ? `${baseUrl}/property-owner-dashboard/reports` : "http://localhost:3000/property-owner-dashboard/reports";
 
-  const kopokopoTillNumber = (process.env.KOPOKOPO_TILL_NUMBER || "").trim();
-
   let sent = 0;
   let skipped = 0;
 
@@ -151,6 +149,11 @@ export async function sendInvoiceReminders(params: { today?: Date } = {}) {
     });
 
     try {
+      const payments = await db.collection("payments").find({
+        invoiceId: invoice._id.toString(),
+        status: "completed",
+      }).project({ amount: 1 }).toArray();
+      const amountPaid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
       const { pdfBytes, invoiceNumber } = await generateInvoicePdf({
         invoice: {
           reference: invoice.reference,
@@ -159,6 +162,8 @@ export async function sendInvoiceReminders(params: { today?: Date } = {}) {
           items: invoice.items,
           discount: invoice.discount,
           tax: invoice.tax,
+          dueDate: invoice.expiresAt,
+          amountPaid,
         },
         owner: {
           name: owner?.name,
@@ -167,7 +172,12 @@ export async function sendInvoiceReminders(params: { today?: Date } = {}) {
         },
         property: { name: propertyName },
         now: new Date(),
-        kopokopoTillNumber,
+        paymentDetails: {
+          tillNumber: process.env.KOPOKOPO_TILL_NUMBER || "",
+          paybillNumber: process.env.INVOICE_MPESA_PAYBILL_NUMBER || "",
+          bankName: process.env.INVOICE_BANK_NAME || "",
+          bankAccount: process.env.INVOICE_BANK_ACCOUNT || "",
+        },
       });
 
       await sendInvoiceEmail({
