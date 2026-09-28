@@ -244,6 +244,42 @@ export async function qualifyReferralForUser(params: {
   return { qualified: true, rewards };
 }
 
+/**
+ * Qualify a referral only when the referred owner has paid their first
+ * Sorana invoice. This is called by verified payment-provider callbacks,
+ * never by a browser-controlled invoice status update.
+ */
+export async function qualifyReferralFromFirstPaidInvoice(params: {
+  db: Db;
+  invoiceId: string;
+  eventId: string;
+}) {
+  if (!ObjectId.isValid(params.invoiceId)) return { qualified: false, reason: "invalid_invoice" as const };
+
+  const invoice = await params.db.collection("invoices").findOne({ _id: new ObjectId(params.invoiceId), status: "completed" });
+  if (!invoice || typeof invoice.userId !== "string" || !ObjectId.isValid(invoice.userId)) {
+    return { qualified: false, reason: "invoice_not_paid" as const };
+  }
+
+  const firstInvoice = await params.db
+    .collection("invoices")
+    .find({ userId: invoice.userId })
+    .sort({ createdAt: 1, _id: 1 })
+    .limit(1)
+    .next();
+
+  if (!firstInvoice || firstInvoice._id.toString() !== invoice._id.toString()) {
+    return { qualified: false, reason: "not_first_invoice" as const };
+  }
+
+  return qualifyReferralForUser({
+    db: params.db,
+    referredUserId: invoice.userId,
+    eventId: params.eventId,
+    eventType: "first_invoice_paid",
+  });
+}
+
 export async function getReferralWallet(db: Db, userId: string) {
   const [commissionTotals, pendingTotals, ledgerTotals, payoutTotals] = await Promise.all([
     db.collection("referralCommissions").aggregate([{ $match: { userId } }, { $group: { _id: null, total: { $sum: "$amount" } } }]).toArray(),

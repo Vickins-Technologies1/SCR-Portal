@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       planId: "lifetime",
       planType: "lifetime",
       billingType: "one_time",
-      amount: quote.amount,
+      amount: plan.price,
       currency: quote.currency,
       purchasedUnits: quote.units,
       pricingSnapshot: quote,

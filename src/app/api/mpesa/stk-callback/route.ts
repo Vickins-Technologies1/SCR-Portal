@@ -14,6 +14,7 @@ import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocatio
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
 import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
+import { qualifyReferralFromFirstPaidInvoice } from "@/lib/referrals";
 
 function parseMpesaDate(value?: string | number): Date {
   if (!value) return new Date();
@@ -106,8 +107,13 @@ export async function POST(request: NextRequest) {
     if (status === "completed" && payment.invoiceId && ObjectId.isValid(payment.invoiceId)) {
       await db.collection("invoices").updateOne(
         { _id: new ObjectId(payment.invoiceId) },
-        { $set: { status: "completed", updatedAt: new Date().toISOString() } }
+        { $set: { status: "completed", paidAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }
       );
+      await qualifyReferralFromFirstPaidInvoice({
+        db,
+        invoiceId: payment.invoiceId,
+        eventId: String(metadata.receipt || callback.CheckoutRequestID),
+      }).catch((error) => logger.error("Referral qualification failed", { invoiceId: payment.invoiceId, error }));
     }
 
     // Handle Airbnb direct booking payments

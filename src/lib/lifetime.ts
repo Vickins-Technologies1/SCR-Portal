@@ -103,8 +103,6 @@ export type LifetimeEntitlement = {
   providerReference?: string | null;
   amountPaid: number;
   currency: string;
-  purchasedUnits?: number;
-  pricingSnapshot?: LifetimePriceQuote | null;
   limits: LifetimeLimits;
   features: Record<LifetimeFeature, boolean>;
   createdAt: Date | string;
@@ -161,7 +159,7 @@ function normalizeTier(tier: Partial<LifetimePricingTier>, fallbackCurrency: str
     minUnits: Number(tier.minUnits),
     maxUnits: maxUnits === null ? null : Number(maxUnits),
     price: Number(tier.price),
-    currency: tier.currency === undefined ? fallbackCurrency : String(tier.currency).trim().toUpperCase(),
+    currency: validCurrency(tier.currency) ? tier.currency.trim().toUpperCase() : fallbackCurrency,
     active: tier.active !== false,
   };
 }
@@ -209,7 +207,6 @@ export function validateLifetimePricing(config: {
     }
     const last = activeTiers[activeTiers.length - 1];
     if (maximumUnits !== null && last.maxUnits !== null && last.maxUnits < maximumUnits) warnings.push(`Pricing configuration has a gap between ${last.maxUnits} and ${maximumUnits} units.`);
-    if (maximumUnits === null && last.maxUnits !== null) warnings.push(`Pricing configuration has no open-ended tier after ${last.maxUnits} units.`);
   }
 
   return { errors, warnings, minimumUnits, maximumUnits, currency, tiers };
@@ -279,6 +276,7 @@ export function publicLifetimePlan(plan: LifetimePlan) {
     type: plan.planType,
     billingType: plan.billingType,
     subscriptionPeriod: plan.subscriptionPeriod,
+    price: plan.price,
     currency: plan.currency,
     recurring: false,
     autoRenew: false,
@@ -403,7 +401,7 @@ export async function activateLifetimeFromVerifiedPayment(params: {
     paymentId,
     providerReference: params.providerReference || payment.mpesaCode || payment.providerReference || null,
     amountPaid: Number(payment.amount),
-    currency: snapshot?.currency || payment.currency || plan.currency,
+    currency: plan.currency,
     limits: { ...plan.limits, ...(hasPurchasedUnits ? { unitLimit: purchasedUnits } : {}) },
     features: plan.features,
     purchasedUnits,

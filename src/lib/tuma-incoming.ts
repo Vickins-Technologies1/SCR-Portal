@@ -9,6 +9,7 @@ import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/ema
 import { sendWelcomeSms } from "@/lib/sms";
 import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import { qualifyReferralFromFirstPaidInvoice } from "@/lib/referrals";
 
 export type TumaIncomingUpdate = {
   id: string;
@@ -147,10 +148,18 @@ export async function applyTumaPaymentUpdate(params: {
       {
         $set: {
           status: normalizedStatus === "completed" ? "completed" : "failed",
+          ...(normalizedStatus === "completed" ? { paidAt: new Date().toISOString() } : {}),
           updatedAt: new Date().toISOString(),
         },
       }
     );
+    if (normalizedStatus === "completed") {
+      await qualifyReferralFromFirstPaidInvoice({
+        db,
+        invoiceId: String(updatedPayment.invoiceId),
+        eventId: String(update.id),
+      }).catch((error) => logger.error("Referral qualification failed", { invoiceId: updatedPayment.invoiceId, error }));
+    }
   }
 
   if (updatedPayment.airbnbBookingId) {

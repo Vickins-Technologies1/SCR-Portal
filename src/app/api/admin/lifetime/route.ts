@@ -56,10 +56,10 @@ export async function PATCH(request: NextRequest) {
       const { db: pricingDb } = await connectToDatabase();
       const existingPlan = await getLifetimePlan(pricingDb);
       pricingValidation = validateLifetimePricing({
-        minimumUnits: "minimumUnits" in pricingInput ? pricingInput.minimumUnits : existingPlan.minimumUnits,
-        maximumUnits: "maximumUnits" in pricingInput ? pricingInput.maximumUnits : existingPlan.maximumUnits,
-        currency: "currency" in pricingInput ? pricingInput.currency : existingPlan.currency,
-        tiers: "tiers" in pricingInput ? pricingInput.tiers : pricingInput.pricingTiers,
+        minimumUnits: pricingInput.minimumUnits ?? existingPlan.minimumUnits,
+        maximumUnits: pricingInput.maximumUnits ?? existingPlan.maximumUnits,
+        currency: pricingInput.currency ?? existingPlan.currency,
+        tiers: pricingInput.tiers ?? pricingInput.pricingTiers,
       });
       if (pricingValidation.errors.length) return NextResponse.json({ success: false, message: pricingValidation.errors[0], errors: pricingValidation.errors, warnings: pricingValidation.warnings }, { status: 400 });
       if (body.active === true && !pricingValidation.tiers.some((tier) => tier.active)) return NextResponse.json({ success: false, message: "Activate at least one pricing tier before enabling Lifetime checkout." }, { status: 400 });

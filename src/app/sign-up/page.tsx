@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createPortal } from "react-dom";
@@ -73,7 +73,6 @@ export default function SignUp() {
   const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
   const [lifetimePricing, setLifetimePricing] = useState<{ minimumUnits: number; maximumUnits: number | null; currency: string; tiers: Array<{ minUnits: number; maxUnits: number | null; price: number; currency: string; active: boolean }> } | null>(null);
   const [lifetimeUnits, setLifetimeUnits] = useState(1);
-  const [lifetimeQuote, setLifetimeQuote] = useState<{ minUnits: number; maxUnits: number | null; price: number; currency: string } | null>(null);
   const [referralOnly, setReferralOnly] = useState(false);
   const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: () => undefined });
   const derivedTier: "free" | "premium" | null =
@@ -95,7 +94,7 @@ export default function SignUp() {
   ];
 
   useEffect(() => {
-    if (!packageTier && !success) setIsPackageModalOpen(true);
+    setIsPackageModalOpen(!packageTier && !success);
   }, [packageTier, success]);
 
   useEffect(() => {
@@ -132,21 +131,10 @@ export default function SignUp() {
   const isPhoneValid = /^\+\d{8,15}$/.test(fullPhone);
   const isPasswordValid = score === 5;
   const isPasswordMatch = password.length > 0 && password === confirmPassword;
-  useEffect(() => {
-    if (packageTier !== "lifetime" || !lifetimePricing || !Number.isSafeInteger(lifetimeUnits)) {
-      setLifetimeQuote(null);
-      return;
-    }
-    let cancelled = false;
-    fetch("/api/lifetime/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ units: lifetimeUnits }) })
-      .then(async (response) => {
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) throw new Error(result.message || "No price is available for this unit count.");
-        if (!cancelled) setLifetimeQuote(result.tier);
-      })
-      .catch(() => { if (!cancelled) setLifetimeQuote(null); });
-    return () => { cancelled = true; };
-  }, [lifetimePricing, lifetimeUnits, packageTier]);
+  const lifetimeQuote = useMemo(() => {
+    if (!lifetimePricing || !Number.isSafeInteger(lifetimeUnits)) return null;
+    return lifetimePricing.tiers.find((tier) => tier.active && tier.minUnits <= lifetimeUnits && (tier.maxUnits === null || lifetimeUnits <= tier.maxUnits)) || null;
+  }, [lifetimePricing, lifetimeUnits]);
 
   const canProceed =
     step === 0

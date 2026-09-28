@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { findC2BInvoice, findLandlordC2BConnection, normalizeC2BReference, normalizeC2BShortcode, type C2BPayload } from "@/lib/c2b";
+import { qualifyReferralFromFirstPaidInvoice } from "@/lib/referrals";
 
 const ConfirmationSchema = z.object({
   TransID: z.string().trim().min(1),
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
       } },
       { upsert: true },
     );
-    await db.collection("invoices").updateOne({ _id: invoice._id }, { $set: { status: "completed", updatedAt: now } });
+    await db.collection("invoices").updateOne({ _id: invoice._id }, { $set: { status: "completed", paidAt: now, updatedAt: now } });
+    await qualifyReferralFromFirstPaidInvoice({ db, invoiceId: invoice._id.toString(), eventId: payload.TransID }).catch(() => undefined);
     return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
   } catch {
     return NextResponse.json({ ResultCode: 1, ResultDesc: "Confirmation unavailable" }, { status: 500 });
