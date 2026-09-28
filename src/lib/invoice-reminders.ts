@@ -157,6 +157,7 @@ export async function sendInvoiceReminders(params: { today?: Date } = {}) {
       const { pdfBytes, invoiceNumber } = await generateInvoicePdf({
         invoice: {
           reference: invoice.reference,
+          billingPlan: invoice.billingPlan,
           amount: Number(invoice.amount) || 0,
           description: invoice.description,
           items: invoice.items,

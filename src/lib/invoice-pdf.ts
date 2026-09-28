@@ -9,6 +9,7 @@ export type InvoicePdfOwner = { name?: string | null; email?: string | null; pho
 export type InvoicePdfProperty = { name?: string | null; address?: string | null };
 export type InvoicePdfInvoice = {
   reference?: string | null; amount: number; description?: string | null;
+  billingPlan?: string | null;
   items?: Array<{ description: string; qty: number; rate: number }> | null;
   discount?: number | null; tax?: number | null; dueDate?: Date | string | null; amountPaid?: number | null;
 };
@@ -18,6 +19,14 @@ const green = rgb(0.08, 0.48, 0.28), amber = rgb(0.65, 0.39, 0.04), red = rgb(0.
 const money = (value: number) => `Ksh ${value.toFixed(2)}`;
 const safeText = (value: unknown, fallback = "—") => String(value ?? "").trim() || fallback;
 const truncate = (text: string, max: number) => text.length > max ? `${text.slice(0, Math.max(1, max - 1)).trimEnd()}…` : text;
+function resolveInvoicePrefix(invoice: InvoicePdfInvoice): string {
+  const plan = String(invoice.billingPlan || "").toLowerCase();
+  if (plan === "fullmanagement" || plan.includes("full management")) return "FM";
+  if (plan === "rentcollection" || plan.includes("software") || plan.includes("lease")) return "SL";
+  if (plan.includes("lifetime") || plan === "lifetimepurchase") return "LT";
+  const referencePrefix = String(invoice.reference || "").match(/(?:^|[-_])(FM|SL|LT)(?:[-_]|$)/i)?.[1];
+  return referencePrefix?.toUpperCase() || "INV";
+}
 
 function drawRight(page: PDFPage, text: string, right: number, y: number, size: number, font: any, color = navy) {
   page.drawText(text, { x: right - font.widthOfTextAtSize(text, size), y, size, font, color });
@@ -34,7 +43,7 @@ export async function generateInvoicePdf(params: {
   const calculation = calculateInvoiceTotals({ ...invoice, now });
   const invoiceNumber = safeText(invoice.reference, "INV");
   const invoiceIdDigits = invoiceNumber.replace(/\D/g, "");
-  const displayInvoiceId = (invoiceIdDigits.slice(-8) || "0").padStart(8, "0");
+  const displayInvoiceId = `${resolveInvoicePrefix(invoice)}-${(invoiceIdDigits.slice(-8) || "0").padStart(8, "0")}`;
   const pdfDoc = await PDFDocument.create();
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica), bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const page = pdfDoc.addPage(A4_PAGE_SIZE);

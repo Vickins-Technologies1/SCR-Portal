@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     const { pdfBytes, invoiceNumber } = await generateInvoicePdf({
       invoice: {
         reference: invoice.reference,
+        billingPlan: invoice.billingPlan,
         amount: invoice.amount,
         description: invoice.description,
         items: invoice.items,

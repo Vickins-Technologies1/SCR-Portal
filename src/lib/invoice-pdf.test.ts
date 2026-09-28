@@ -10,6 +10,7 @@ describe("generateInvoicePdf", () => {
     const result = await generateInvoicePdf({
       invoice: {
         reference: `INV-${status.replaceAll(" ", "-")}`,
+        billingPlan: "FullManagement",
         amount: 950,
         description: "Monthly property management fee",
         dueDate: "2026-09-30T00:00:00.000Z",
