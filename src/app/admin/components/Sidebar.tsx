@@ -18,7 +18,6 @@ import {
   MessageCircle,
   Wallet,
   Plug,
-  Activity,
   Shield,
   Star,
   Store,
@@ -190,20 +189,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       label: "Market Place",
       icon: <Store size={20} />,
       requiredPermission: "admin:marketplace:view",
-    },
-    {
-      key: "tuma-webhooks",
-      href: "/admin/tuma-webhooks",
-      label: "Tuma Webhooks",
-      icon: <Activity size={20} />,
-      requiredPermission: "admin:webhooks:view",
-    },
-    {
-      key: "airbnb-integrations",
-      href: "/admin/airbnb/integrations",
-      label: "Airbnb Integrations",
-      icon: <Plug size={20} />,
-      requiredPermission: "admin:airbnb:view",
     },
     {
       key: "integrations",
