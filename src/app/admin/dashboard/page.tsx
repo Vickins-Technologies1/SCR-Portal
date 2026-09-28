@@ -24,7 +24,6 @@ import {
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
-import PendingApprovals from "../components/PendingApprovals";
 import { cn } from "@/lib/cn";
 
 interface Counts {
@@ -362,7 +361,7 @@ export default function AdminDashboard() {
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
                   <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Overview</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Monitor rentals activity, approvals, billing, and short-term stays.
+                    Monitor rentals activity, billing, and short-term stays.
                   </p>
                 </div>
               </div>
@@ -439,10 +438,6 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              {/* Pending Approvals */}
-              <div className="mt-6">
-                <PendingApprovals />
-              </div>
             </>
           )}
 
