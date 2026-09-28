@@ -7,7 +7,6 @@ import { calculateInvoiceTotals, type InvoiceCalculation } from "@/lib/invoice-c
 
 export type InvoicePdfOwner = { name?: string | null; email?: string | null; phone?: string | null };
 export type InvoicePdfProperty = { name?: string | null; address?: string | null };
-export type InvoicePdfPaymentDetails = { tillNumber?: string | null; paybillNumber?: string | null; bankName?: string | null; bankAccount?: string | null };
 export type InvoicePdfInvoice = {
   reference?: string | null; amount: number; description?: string | null;
   items?: Array<{ description: string; qty: number; rate: number }> | null;
@@ -28,7 +27,7 @@ function drawLabel(page: PDFPage, text: string, x: number, y: number, font: any)
 }
 
 export async function generateInvoicePdf(params: {
-  invoice: InvoicePdfInvoice; owner: InvoicePdfOwner; property: InvoicePdfProperty | null; now?: Date; paymentDetails?: InvoicePdfPaymentDetails;
+  invoice: InvoicePdfInvoice; owner: InvoicePdfOwner; property: InvoicePdfProperty | null; now?: Date;
 }): Promise<{ pdfBytes: Uint8Array; invoiceNumber: string; calculation: InvoiceCalculation }> {
   const { invoice, owner, property } = params;
   const now = params.now ?? new Date();
@@ -89,18 +88,6 @@ export async function generateInvoicePdf(params: {
   summaryRow("Subtotal", calculation.subtotal); summaryRow("Discount", calculation.discount); summaryRow("Tax", calculation.tax);
   page.drawLine({ start: { x: summaryX, y: y + 6 }, end: { x: right, y: y + 6 }, thickness: 1.1, color: navy });
   summaryRow("TOTAL", calculation.total, true); summaryRow("Amount Paid", calculation.amountPaid); summaryRow("Balance Due", calculation.balanceDue, true);
-
-  y -= 6; const details = params.paymentDetails ?? {};
-  const paymentLines = [
-    details.tillNumber ? ["M-PESA BUY GOODS TILL", details.tillNumber] : null,
-    details.paybillNumber ? ["M-PESA PAYBILL", details.paybillNumber] : null,
-    details.bankName ? ["BANK", details.bankName] : null,
-    details.bankAccount ? ["ACCOUNT", details.bankAccount] : null,
-  ].filter(Boolean) as string[][];
-  page.drawRectangle({ x: left, y: y - 61, width: 260, height: 70, color: light, opacity: 0.55 });
-  drawLabel(page, "PAYMENT INFORMATION", left + 12, y - 6, bold); let paymentY = y - 21;
-  paymentLines.slice(0, 4).forEach(([label, value]) => { page.drawText(label, { x: left + 12, y: paymentY, size: 6.5, font: bold, color: slate }); page.drawText(truncate(value, 27), { x: left + 116, y: paymentY, size: 8, font: regular, color: navy }); paymentY -= 12; });
-  page.drawText(`Reference: ${truncate(invoiceNumber, 24)}`, { x: left + 12, y: y - 60, size: 7.5, font: regular, color: slate });
 
   const footerY = safeArea.bottom + 10;
   page.drawText("Thank you for your business.", { x: left, y: footerY + 12, size: 9, font: bold, color: navy });

@@ -120,44 +120,27 @@ export async function PUT(request: NextRequest) {
     if (selectedGateway !== undefined && selectedGateway !== "tuma" && selectedGateway !== "daraja") {
       return NextResponse.json({ success: false, message: "Invalid payment gateway." }, { status: 400 });
     }
-    const selectedInvoiceProvider = payload?.invoicePaymentProvider;
-    if (selectedInvoiceProvider !== undefined && !["kopokopo", "daraja"].includes(selectedInvoiceProvider)) {
-      return NextResponse.json({ success: false, message: "Invalid invoice payment provider." }, { status: 400 });
-    }
 
     const hasTumaPayload = payload?.tuma && typeof payload.tuma === "object";
-    if (!hasTumaPayload && (selectedGateway || selectedInvoiceProvider)) {
+    if (!hasTumaPayload && selectedGateway) {
       const { db } = await connectToDatabase();
       const now = new Date().toISOString();
-      const current = await db.collection("ownerIntegrations").findOne({ ownerId: new ObjectId(context.ownerId) });
       await db.collection("ownerIntegrations").updateOne(
         { ownerId: new ObjectId(context.ownerId) },
         {
           $set: {
             ownerId: new ObjectId(context.ownerId),
             ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
-            ...(selectedInvoiceProvider ? { invoicePaymentProvider: selectedInvoiceProvider } : {}),
             updatedAt: now,
           },
           $setOnInsert: { createdAt: now },
         },
         { upsert: true }
       );
-      if (selectedInvoiceProvider && selectedInvoiceProvider !== current?.invoicePaymentProvider) {
-        await db.collection("integrationAuditLog").insertOne({
-          type: "property_owner_invoice_payment_provider_changed",
-          ownerId: new ObjectId(context.ownerId),
-          from: current?.invoicePaymentProvider || "kopokopo",
-          to: selectedInvoiceProvider,
-          changedAt: now,
-          changedBy: context.ownerId,
-        });
-      }
       return NextResponse.json({
         success: true,
         integrations: {
           ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
-          ...(selectedInvoiceProvider ? { invoicePaymentProvider: selectedInvoiceProvider } : {}),
         },
       });
     }

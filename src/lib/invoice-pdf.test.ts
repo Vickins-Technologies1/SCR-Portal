@@ -18,7 +18,6 @@ describe("generateInvoicePdf", () => {
       owner: { name: "Anthony Murimi", email: "anthony@example.com", phone: "+254 721 685 286" },
       property: { name: "KARATINA B161", address: "Karatina" },
       now: new Date("2026-09-28T00:00:00.000Z"),
-      paymentDetails: { tillNumber: "K973446", bankName: "KCB", bankAccount: "7726486" },
     });
 
     expect(result.calculation.status).toBe(status);

@@ -188,6 +188,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/lifetime/checkout": { roles: ["propertyOwner"], isApi: true },
   "/api/lifetime/checkout/status": { roles: ["propertyOwner"], isApi: true },
   "/api/admin/lifetime": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/invoice-payment-provider": { roles: ["admin"], isApi: true },
   "/api/owner/activities": { roles: ["propertyOwner", "teamMember"], isApi: true },
 
   // Impersonation
@@ -223,6 +224,7 @@ const ADMIN_API_PATHS = [
   "/api/admin/reviews",
   "/api/admin/team-members",
   "/api/admin/lifetime",
+  "/api/admin/invoice-payment-provider",
   "/api/admins",
   "/api/users",
 ];

@@ -201,9 +201,16 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     {
       key: "airbnb-integrations",
       href: "/admin/airbnb/integrations",
-      label: "Integrations",
+      label: "Airbnb Integrations",
       icon: <Plug size={20} />,
       requiredPermission: "admin:airbnb:view",
+    },
+    {
+      key: "integrations",
+      href: "/admin/integrations",
+      label: "Integrations",
+      icon: <Plug size={20} />,
+      requiredPermission: "admin:payments:view",
     },
     {
       key: "support",

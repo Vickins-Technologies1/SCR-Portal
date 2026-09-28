@@ -67,10 +67,10 @@ export async function getOwnerPaymentGateway(db: Db, ownerId: string): Promise<O
 
 /** Provider for new Sorana invoice payments only. Kept separate from tenant routing. */
 export async function getOwnerInvoicePaymentProvider(db: Db, ownerId: string): Promise<OwnerInvoicePaymentProvider> {
-  if (!ObjectId.isValid(ownerId)) return "kopokopo";
-  const doc = await db.collection("ownerIntegrations").findOne(
-    { ownerId: new ObjectId(ownerId) },
-    { projection: { invoicePaymentProvider: 1 } }
+  void ownerId;
+  const doc = await db.collection<any>("platformSettings").findOne(
+    { _id: "property_owner_invoice_payments" },
+    { projection: { provider: 1 } }
   );
   return String(doc?.invoicePaymentProvider || "kopokopo").toLowerCase() === "daraja" ? "daraja" : "kopokopo";
 }

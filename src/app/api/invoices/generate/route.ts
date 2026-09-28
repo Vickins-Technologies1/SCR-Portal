@@ -66,12 +66,6 @@ export async function POST(request: NextRequest) {
       },
       property: { name: property?.name, address: property?.address },
       now: new Date(),
-      paymentDetails: {
-        tillNumber: process.env.KOPOKOPO_TILL_NUMBER || "",
-        paybillNumber: process.env.INVOICE_MPESA_PAYBILL_NUMBER || "",
-        bankName: process.env.INVOICE_BANK_NAME || "",
-        bankAccount: process.env.INVOICE_BANK_ACCOUNT || "",
-      },
     });
     return NextResponse.json({
       success: true,
