@@ -47,6 +47,7 @@ interface Invoice {
   updatedAt: string;
   expiresAt: string;
   description: string;
+  paymentProvider?: "daraja" | "kopokopo";
 }
 
 interface PaymentModalProps {
@@ -475,7 +476,7 @@ export default function PaymentModal({
         }
         const invoice: Invoice = invoiceData.invoices[0];
 
-        const useInvoiceDaraja = invoicePaymentProvider === "daraja";
+        const useInvoiceDaraja = invoice.paymentProvider === "daraja";
         const requestBody = useInvoiceDaraja
           ? { invoiceId: invoice._id, phone: paymentPhone }
           : {

@@ -70,7 +70,8 @@ export async function getOwnerInvoicePaymentProvider(db: Db, ownerId: string): P
   void ownerId;
   const doc = await db.collection<any>("platformSettings").findOne(
     { _id: "property_owner_invoice_payments" },
-    { projection: { provider: 1 } }
+    { projection: { provider: 1, invoicePaymentProvider: 1 } }
   );
-  return String(doc?.invoicePaymentProvider || "kopokopo").toLowerCase() === "daraja" ? "daraja" : "kopokopo";
+  const selected = String(doc?.provider || doc?.invoicePaymentProvider || "kopokopo").toLowerCase();
+  return selected === "daraja" ? "daraja" : "kopokopo";
 }

@@ -12,4 +12,5 @@ import { ObjectId } from "mongodb";
      updatedAt: Date;
      expiresAt: Date;
      description: string;
+     paymentProvider?: "daraja" | "kopokopo";
    }

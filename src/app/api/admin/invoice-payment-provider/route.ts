@@ -23,7 +23,7 @@ export async function PUT(request: NextRequest) {
   const now = new Date().toISOString();
   await db.collection<any>("platformSettings").updateOne(
     { _id: "property_owner_invoice_payments" },
-    { $set: { provider, updatedAt: now, updatedBy: request.cookies.get("userId")?.value || null }, $setOnInsert: { createdAt: now } },
+    { $set: { provider, invoicePaymentProvider: provider, updatedAt: now, updatedBy: request.cookies.get("userId")?.value || null }, $setOnInsert: { createdAt: now } },
     { upsert: true }
   );
   if (String(existing?.provider || "kopokopo") !== provider) {

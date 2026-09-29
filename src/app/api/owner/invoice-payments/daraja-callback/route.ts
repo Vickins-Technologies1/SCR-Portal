@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { DarajaCallbackSchema, classifyDarajaResult, extractDarajaMetadata } from "@/lib/daraja-callback";
+import logger from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => null);
@@ -29,7 +30,8 @@ export async function POST(request: NextRequest) {
       }
     }
     return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
-  } catch {
+  } catch (error) {
+    logger.error("Owner invoice Daraja callback processing error", { message: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
   }
 }

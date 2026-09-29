@@ -5,9 +5,8 @@ import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
 import { getOwnerInvoicePaymentProvider, getOwnerPaymentGateway, getOwnerTumaIntegration } from "@/lib/owner-integrations";
-import { createIncomingPayment, getKopokopoTillNumber } from "@/lib/kopokopo";
+import { createIncomingPayment, getKopokopoTillNumber, KopokopoApiError } from "@/lib/kopokopo";
 import {
-  getKopokopoPasskey,
   initiateStkPush,
   isValidKenyanMsisdn,
   normalizePhoneNumber,
@@ -37,14 +36,6 @@ const rateLimitMap = new Map<string, RateLimitState>();
 function safeGetKopokopoTillNumber(): string {
   try {
     return getKopokopoTillNumber();
-  } catch {
-    return "";
-  }
-}
-
-function safeGetKopokopoPasskey(): string {
-  try {
-    return getKopokopoPasskey();
   } catch {
     return "";
   }
@@ -112,6 +103,7 @@ export async function POST(request: NextRequest) {
     let tenantId: string | null = null;
     let derivedLandlordId: string | null = null;
     let isPlatformInvoicePayment = false;
+    let invoicePaymentProvider: "daraja" | "kopokopo" | null = null;
 
     // Resolve tenant + landlord context
     if (role === "tenant" || (role === "propertyOwner" && isImpersonating)) {
@@ -192,6 +184,10 @@ export async function POST(request: NextRequest) {
       propertyId = invoice.propertyId || null;
       derivedLandlordId = userId;
       isPlatformInvoicePayment = true;
+      invoicePaymentProvider = invoice.paymentProvider === "daraja" ? "daraja" : invoice.paymentProvider === "kopokopo" ? "kopokopo" : await getOwnerInvoicePaymentProvider(db, userId);
+      if (!invoice.paymentProvider && invoicePaymentProvider) {
+        await db.collection("invoices").updateOne({ _id: invoice._id }, { $set: { paymentProvider: invoicePaymentProvider, updatedAt: new Date() } });
+      }
     }
 
     if (!isPlatformInvoicePayment && !isValidKenyanMsisdn(payerPhone)) {
@@ -271,7 +267,7 @@ export async function POST(request: NextRequest) {
     let resolvedMpesaRouting: Awaited<ReturnType<typeof resolveOwnerTenantMpesaRouting>> | null = null;
     // Invoice provider is deliberately separate. Tenant requests retain the existing gateway path.
     const paymentGateway = isPlatformInvoicePayment
-      ? await getOwnerInvoicePaymentProvider(db, derivedLandlordId)
+      ? invoicePaymentProvider || "kopokopo"
       : await getOwnerPaymentGateway(db, derivedLandlordId);
 
     if (isPlatformInvoicePayment && paymentGateway === "kopokopo") {
@@ -353,10 +349,12 @@ export async function POST(request: NextRequest) {
         const message = error instanceof Error ? error.message : String(error);
         logger.error("KopoKopo invoice payment initiation failed", {
           message,
+          status: error instanceof KopokopoApiError ? error.status : undefined,
+          providerError: error instanceof KopokopoApiError ? error.providerError : undefined,
           userId,
           invoiceId: parsed.data.invoiceId,
         });
-        if (/invalid_client/i.test(message) || /access token/i.test(message)) {
+        if (error instanceof KopokopoApiError && error.status === 401) {
           return NextResponse.json(
             {
               success: false,

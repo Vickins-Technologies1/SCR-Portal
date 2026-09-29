@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
   try {
     const { db } = await connectToDatabase();
     const paymentQuery = {
+      provider: "kopokopo",
       $or: [
         { kopokopoPaymentRequestId: requestId },
         { checkoutRequestId: requestId },
@@ -95,6 +96,9 @@ export async function POST(request: NextRequest) {
     }
 
     const nextStatus = status === "completed" ? "completed" : status === "failed" ? "failed" : "pending";
+    if (String(payment.status).toLowerCase() === "completed" && nextStatus !== "completed") {
+      return NextResponse.json({ success: true, message: "Accepted" }, { status: 200 });
+    }
     await db.collection("payments").updateOne(
       { _id: payment._id },
       {

@@ -3,6 +3,7 @@ import { resolveTenantMonthlyRentForDate } from "./utils";
 import { Tenant } from "../types/tenant";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 import type { AccountTier } from "./tier";
+import { getOwnerInvoicePaymentProvider } from "./owner-integrations";
 
 export type BillingPlan = "RentCollection" | "FullManagement" | "Airbnb";
 
@@ -220,6 +221,8 @@ export async function upsertPercentageInvoice(params: {
     return { action: "updated" as const, amount, billingMonth, invoiceId: existingPending._id.toString() };
   }
 
+  const paymentProvider = await getOwnerInvoicePaymentProvider(db, userId);
+
   const referencePrefix =
     billingPlan === "FullManagement"
       ? "FM"
@@ -243,6 +246,7 @@ export async function upsertPercentageInvoice(params: {
     billingPlan,
     percentage,
     expectedIncome,
+    paymentProvider,
     ...metadata,
   } as any);
 

@@ -31,6 +31,24 @@ type CachedToken = {
   expiresAt: number;
 };
 
+export class KopokopoApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly providerError: unknown = null) {
+    super(message);
+    this.name = "KopokopoApiError";
+  }
+}
+
+function safeProviderError(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return typeof raw === "string" ? raw.slice(0, 500) : null;
+  const value = raw as Record<string, unknown>;
+  return {
+    error: typeof value.error === "string" ? value.error : undefined,
+    error_message: typeof value.error_message === "string" ? value.error_message : undefined,
+    message: typeof value.message === "string" ? value.message : undefined,
+    code: typeof value.code === "string" || typeof value.code === "number" ? value.code : undefined,
+  };
+}
+
 let cachedToken: CachedToken | null = null;
 
 function requireEnv(name: string, value: string) {
@@ -100,11 +118,9 @@ async function getAccessToken(): Promise<string> {
     const text = await res.text().catch(() => "");
     const suffix = text ? `: ${text}` : "";
     if (res.status === 401 && /invalid_client/i.test(text)) {
-      throw new Error(
-        `Failed to fetch KopoKopo access token (HTTP 401): invalid_client. Check KOPOKOPO_OAUTH_BASE_URL, KOPOKOPO_CLIENT_ID, and KOPOKOPO_CLIENT_SECRET (or KOPOKOPO_PASSKEY if you are using the legacy alias) for the same KopoKopo app.`
-      );
+      throw new KopokopoApiError("KopoKopo authentication failed", res.status, safeProviderError(text));
     }
-    throw new Error(`Failed to fetch KopoKopo access token (HTTP ${res.status})${suffix}`);
+    throw new KopokopoApiError(`Failed to fetch KopoKopo access token (HTTP ${res.status})`, res.status, safeProviderError(text || suffix));
   }
 
   const data = (await res.json()) as { access_token?: string; expires_in?: number | string };
@@ -167,7 +183,11 @@ export async function createIncomingPayment(input: KopokopoIncomingPaymentInput)
     },
   };
 
-  const res = await fetch(`${KOPOKOPO_API_BASE_URL}/api/v2/incoming_payments`, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  let res: Response;
+  try {
+    res = await fetch(`${KOPOKOPO_API_BASE_URL}/api/v2/incoming_payments`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -175,8 +195,16 @@ export async function createIncomingPayment(input: KopokopoIncomingPaymentInput)
       Accept: "application/json",
       "User-Agent": "Sorana Rentals/1.0",
     },
-    body: JSON.stringify(payload),
-  });
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw new Error("KopoKopo payment request timed out");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const text = await res.text();
   let raw: unknown = null;
@@ -187,11 +215,7 @@ export async function createIncomingPayment(input: KopokopoIncomingPaymentInput)
   }
 
   if (!res.ok && res.status !== 201) {
-    const message =
-      typeof raw === "object" && raw && "error_message" in raw
-        ? String((raw as { error_message?: string }).error_message || "KopoKopo payment initiation failed")
-        : "KopoKopo payment initiation failed";
-    throw new Error(message);
+    throw new KopokopoApiError("KopoKopo payment initiation failed", res.status, safeProviderError(raw));
   }
 
   const location = res.headers.get("location") || "";
