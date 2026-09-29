@@ -476,7 +476,9 @@ export default function PaymentModal({
         }
         const invoice: Invoice = invoiceData.invoices[0];
 
-        const useInvoiceDaraja = invoice.paymentProvider === "daraja";
+        // Legacy invoices may not have a snapshot yet; use the backend-reported active
+        // provider only for those records. Stored invoice providers always win.
+        const useInvoiceDaraja = (invoice.paymentProvider || invoicePaymentProvider) === "daraja";
         const requestBody = useInvoiceDaraja
           ? { invoiceId: invoice._id, phone: paymentPhone }
           : {

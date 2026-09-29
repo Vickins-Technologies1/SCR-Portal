@@ -4,6 +4,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { getMpesaCallbackUrl, initiateStkPush, isStkPushAccepted, isValidKenyanMsisdn, normalizePhoneNumber, resolveDarajaPlatformStkCredentials } from "@/lib/mpesa";
+import { getOwnerInvoicePaymentProvider } from "@/lib/owner-integrations";
 
 const Schema = z.object({ invoiceId: z.string().trim().refine(ObjectId.isValid), phone: z.string().trim().min(7) });
 
@@ -20,7 +21,9 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
     const invoice = await db.collection("invoices").findOne({ _id: new ObjectId(parsed.data.invoiceId), userId: ownerId });
     if (!invoice) return NextResponse.json({ success: false, message: "Invoice not found" }, { status: 404 });
-    if (String(invoice.paymentProvider || "").toLowerCase() !== "daraja") return NextResponse.json({ success: false, message: "Daraja is not the provider assigned to this invoice", provider: invoice.paymentProvider || null }, { status: 409 });
+    const assignedProvider = invoice.paymentProvider || await getOwnerInvoicePaymentProvider(db, ownerId);
+    if (String(assignedProvider).toLowerCase() !== "daraja") return NextResponse.json({ success: false, message: "Daraja is not the provider assigned to this invoice", provider: assignedProvider }, { status: 409 });
+    if (!invoice.paymentProvider) await db.collection("invoices").updateOne({ _id: invoice._id }, { $set: { paymentProvider: assignedProvider, updatedAt: new Date() } });
     const amount = Number(invoice?.amount || 0);
     if (invoice.status !== "pending") return NextResponse.json({ success: false, message: "Invoice is no longer payable" }, { status: 409 });
     if (!Number.isSafeInteger(amount) || amount <= 0) return NextResponse.json({ success: false, message: "Invoice amount is invalid" }, { status: 400 });

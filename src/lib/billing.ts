@@ -203,6 +203,7 @@ export async function upsertPercentageInvoice(params: {
   });
 
   if (existingPending) {
+    const legacyProvider = existingPending.paymentProvider ? {} : { paymentProvider: await getOwnerInvoicePaymentProvider(db, userId) };
     await db.collection("invoices").updateOne(
       { _id: existingPending._id },
       {
@@ -214,6 +215,7 @@ export async function upsertPercentageInvoice(params: {
           percentage,
           billingPlan,
           expiresAt,
+          ...legacyProvider,
           ...metadata,
         },
       }
