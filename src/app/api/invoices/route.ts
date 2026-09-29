@@ -19,6 +19,7 @@ interface Invoice {
   billingPlan?: string;
   percentage?: number;
   expectedIncome?: number;
+  paymentProvider?: "daraja" | "kopokopo";
 }
 
 export async function GET(request: NextRequest) {
