@@ -7,12 +7,14 @@ export const DarajaCallbackSchema = z.object({
     stkCallback: z.object({
       MerchantRequestID: z.string().trim().min(1),
       CheckoutRequestID: z.string().trim().min(1),
-      ResultCode: z.number().int(),
-      ResultDesc: z.string(),
+      // Safaricom normally sends a number, but some gateway/proxy payloads serialize it.
+      ResultCode: z.coerce.number().int(),
+      ResultDesc: z.coerce.string(),
       CallbackMetadata: z.object({
         Item: z.array(z.object({
           Name: z.string().trim().min(1),
-          Value: z.union([z.string(), z.number()]).optional(),
+          // Metadata values may be strings, numbers, null, or omitted depending on the result.
+          Value: z.union([z.string(), z.number(), z.null()]).optional(),
         })),
       }).optional(),
     }),
@@ -21,7 +23,7 @@ export const DarajaCallbackSchema = z.object({
 
 export type DarajaCallback = z.infer<typeof DarajaCallbackSchema>["Body"]["stkCallback"];
 export type DarajaCallbackStatus = "completed" | "cancelled" | "expired" | "timeout" | "failed";
-type DarajaMetadataItem = { Name: string; Value?: string | number };
+type DarajaMetadataItem = { Name: string; Value?: string | number | null };
 
 export function classifyDarajaResult(resultCode: number, resultDesc: string): DarajaCallbackStatus {
   if (resultCode === 0) return "completed";

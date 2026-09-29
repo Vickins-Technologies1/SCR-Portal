@@ -7,7 +7,10 @@ import logger from "@/lib/logger";
 export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => null);
   const parsed = DarajaCallbackSchema.safeParse(payload);
-  if (!parsed.success) return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid payload" }, { status: 400 });
+  if (!parsed.success) {
+    logger.warn("Invalid owner invoice Daraja callback payload", { issues: parsed.error.issues });
+    return NextResponse.json({ ResultCode: 1, ResultDesc: "Invalid payload" }, { status: 400 });
+  }
   try {
     const callback = parsed.data.Body.stkCallback;
     const metadata = extractDarajaMetadata(callback.CallbackMetadata?.Item);
