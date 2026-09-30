@@ -3,6 +3,7 @@ import "./globals.css";
 import NativeBootstrap from "@/components/native/NativeBootstrap";
 import ThemeInitScript from "@/components/theme/ThemeInitScript";
 import OfflineFallback from "@/components/network/OfflineFallback";
+import GlobalErrorMonitor from "@/components/GlobalErrorMonitor";
 
 const siteUrl = "https://app.soranapropertymanagers.com";
 const siteName = "Sorana";
@@ -86,6 +87,7 @@ export default function RootLayout({
         <ThemeInitScript />
       </head>
       <body className="antialiased">
+        <GlobalErrorMonitor />
         <NativeBootstrap />
         <OfflineFallback>{children}</OfflineFallback>
       </body>

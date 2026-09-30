@@ -141,6 +141,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   ];
 
   const generalLinks: NavLink[] = [
+    { key: "system-errors", href: "/admin/system-errors", label: "System Errors", icon: <AlertCircle size={20} />, requiredPermission: "admin:dashboard:view" },
     {
       key: "users",
       href: "/admin/users",

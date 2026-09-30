@@ -253,6 +253,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const startTime = Date.now();
+  const requestId = request.headers.get("x-request-id") || `REQ-${Date.now().toString(36).toUpperCase()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   logger.debug("Proxy request", { path, method });
 
   try {
@@ -291,7 +292,12 @@ export async function proxy(request: NextRequest) {
       requestHeaders.delete("cookie");
     }
 
-    const nextWithAuth = () => NextResponse.next({ request: { headers: requestHeaders } });
+    requestHeaders.set("x-request-id", requestId);
+    const nextWithAuth = () => {
+      const response = NextResponse.next({ request: { headers: requestHeaders } });
+      response.headers.set("x-request-id", requestId);
+      return response;
+    };
 
     // CSRF token generation (always allowed)
     if (path === "/api/csrf-token") {

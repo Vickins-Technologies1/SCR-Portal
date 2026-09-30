@@ -8,6 +8,14 @@ declare global {
 
 const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = [
   {
+    collection: "systemErrorLogs",
+    indexes: [
+      { key: { fingerprint: 1 }, name: "systemErrorLogs_fingerprint_unique", unique: true },
+      { key: { resolved: 1, severity: 1, lastOccurred: -1 }, name: "systemErrorLogs_admin_status" },
+      { key: { lastOccurred: -1 }, name: "systemErrorLogs_lastOccurred" },
+    ],
+  },
+  {
     collection: "propertyOwners",
     indexes: [
       { key: { email: 1 }, name: "propertyOwners_email" },

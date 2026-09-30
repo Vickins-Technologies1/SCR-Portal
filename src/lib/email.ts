@@ -157,6 +157,19 @@ interface AirbnbReminderEmailOptions {
   type: "checkin" | "checkout";
 }
 
+export interface SystemErrorAlertOptions {
+  errorId: string;
+  occurrenceCount: number;
+  firstOccurred: Date;
+  lastOccurred: Date;
+  errorName: string;
+  message: string;
+  stack: string;
+  severity: string;
+  environment: string;
+  context: Record<string, unknown>;
+}
+
 // Reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -1015,5 +1028,21 @@ export async function sendTenantDeletionRequestEmail({
     console.error(`Error sending tenant deletion request email to ${to}:`, error);
     throw new Error("Failed to send tenant deletion request email");
   }
+}
+
+export async function sendSystemErrorAlert(options: SystemErrorAlertOptions): Promise<void> {
+  if (process.env.ERROR_ALERTS_ENABLED !== "true") return;
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) throw new Error("SMTP credentials are missing");
+  const to = process.env.ERROR_ALERT_EMAIL || "techvickins@gmail.com";
+  const safe = (value: unknown) => escapeHtml(String(value ?? "—"));
+  const context = options.context || {};
+  const rows = [
+    ["Severity", options.severity], ["Environment", options.environment], ["Route", context.route], ["API", context.endpoint],
+    ["HTTP Method", context.method], ["Status", context.statusCode], ["User ID", context.userId], ["User email", context.userEmail],
+    ["Account", context.accountId || context.propertyOwnerId], ["Request ID", context.requestId], ["Occurrences", options.occurrenceCount],
+    ["First seen", options.firstOccurred.toISOString()], ["Last seen", options.lastOccurred.toISOString()], ["Error ID", options.errorId],
+  ].map(([label, value]) => `<tr><td style="padding:5px 10px;font-weight:600;color:#475569">${safe(label)}</td><td style="padding:5px 10px">${safe(value)}</td></tr>`).join("");
+  const html = `<div style="font-family:Arial,sans-serif;max-width:720px;color:#0f172a"><h2 style="color:#b91c1c">SORANA SYSTEM ALERT</h2><h3>🚨 ${safe(options.environment)} Error: ${safe(options.errorName)}</h3><table style="border-collapse:collapse;width:100%;background:#f8fafc">${rows}</table><h4>Error message</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px">${safe(options.message)}</pre><h4>Stack trace</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px;overflow:auto">${safe(options.stack)}</pre><h4>Safe metadata</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px">${safe(JSON.stringify(context.metadata || {}, null, 2))}</pre></div>`;
+  await transporter.sendMail({ from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`, to, subject: `🚨 Sorana ${options.environment} Error: ${options.errorName}`, html });
 }
 

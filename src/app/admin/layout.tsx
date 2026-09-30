@@ -42,6 +42,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     const resolveRequiredPermission = (path: string): AdminPermission | null => {
       if (path === "/admin" || path.startsWith("/admin/dashboard")) return "admin:dashboard:view";
+      if (path.startsWith("/admin/system-errors")) return "admin:dashboard:view";
       if (path.startsWith("/admin/properties")) return "admin:properties:view";
       if (path.startsWith("/admin/users")) return "admin:owners:view";
       if (path.startsWith("/admin/team-members")) return "admin:team-members:view";
