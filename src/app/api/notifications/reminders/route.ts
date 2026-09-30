@@ -12,8 +12,8 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csr
 import logger from "../../../../lib/logger";
 import { Tenant } from "../../../../types/tenant";
 import { getUpcomingPaymentReminders, sendPaymentReminders } from "../../../../lib/reminders";
-import { resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { calculateTenantFinancialState } from "../../../../lib/tenant-payment-allocation";
 
 interface Notification {
   _id: string;
@@ -335,13 +335,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       if (type === "payment") {
-        const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
-          tenant: tenant as any,
-          date: today,
-          rentOverrideMap,
-        });
-        finalMessage = effectiveMonthlyRent
-          ? `Payment of Ksh. ${effectiveMonthlyRent.toFixed(2)} is due for ${tenant.name}`
+        const state = await calculateTenantFinancialState(db, tenant, { asOf: today, rentOverrideMap });
+        finalMessage = state.totalOutstanding > 0
+          ? `Payment of Ksh. ${state.totalOutstanding.toFixed(2)} is due for ${tenant.name}`
           : `Payment reminder for ${tenant.name}`;
       } else if (type === "maintenance") {
         finalMessage = finalMessage || "Scheduled maintenance for your property";

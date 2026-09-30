@@ -7,21 +7,10 @@ import { sendReminderEmail } from "./email";
 import logger from "./logger";
 import { Property } from "../types/property";
 import { Tenant } from "../types/tenant";
-import { calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "./utils";
-import { calculateReminderDueAmounts } from "./reminder-calculations";
+import { calculateTenantFinancialState } from "./tenant-payment-allocation";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
-import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "./property-utilities";
 
 type ReminderType = "fiveDaysBefore" | "paymentDate";
-
-interface Payment {
-  tenantId: string;
-  type: "Rent" | "Utility" | "Deposit" | string;
-  status: "completed" | "pending" | "failed" | string;
-  amount: number;
-  paymentDate?: string;
-  createdAt?: string;
-}
 
 interface ReminderNotification {
   _id: ObjectId;
@@ -44,21 +33,6 @@ interface ReminderNotification {
     totalDue: number;
   };
 }
-
-const resolveReminderUtilityAmount = async (
-  db: Db,
-  tenant: Tenant,
-  property: Property,
-  referenceDate: Date
-): Promise<number> => {
-  return (
-    calculateFixedUtilityDue({
-      utilities: (property as any).utilities,
-      tenant: tenant as any,
-      today: referenceDate,
-    }) + (await getPostedMeteredUtilityTotal(db, tenant._id))
-  );
-};
 
 interface ReminderResult {
   sent: number;
@@ -118,22 +92,6 @@ const parseDate = (value?: string) => {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const resolvePaymentDate = (payment: Payment): Date | null => {
-  const direct = parseDate(payment.paymentDate);
-  if (direct) return direct;
-  return parseDate(payment.createdAt);
-};
-
-const sumPaid = (payments: Payment[], type: Payment["type"], paidBeforeOrOn: Date): number => {
-  return payments
-    .filter((payment) => payment.type === type)
-    .filter((payment) => {
-      const paidAt = resolvePaymentDate(payment);
-      return !!paidAt && paidAt <= paidBeforeOrOn;
-    })
-    .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
 };
 
 const isLeaseActiveOn = (tenant: Tenant, date: Date): boolean => {
@@ -216,7 +174,6 @@ export const buildReminderMessages = (
 export async function sendPaymentReminders(params: { ownerId?: string; today?: Date }): Promise<ReminderResult> {
   const { ownerId, today = new Date() } = params;
   const todayStart = startOfDay(today);
-  const paidCutoff = endOfDay(todayStart);
 
   const { db } = await connectToDatabase();
 
@@ -260,20 +217,6 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     db,
     Array.from(propertyMap.keys())
   );
-  const payments = await db.collection<Payment>("payments").find({
-    tenantId: { $in: tenantIds },
-    status: "completed",
-  }).toArray();
-
-  const paymentsByTenant = new Map<string, Payment[]>();
-  for (const payment of payments) {
-    const key = (payment.tenantId as any)?.toString?.() ?? payment.tenantId;
-    if (!key) continue;
-    const list = paymentsByTenant.get(key) ?? [];
-    list.push(payment);
-    paymentsByTenant.set(key, list);
-  }
-
   let sent = 0;
   let skipped = 0;
   const createdNotifications: ReminderNotification[] = [];
@@ -319,28 +262,15 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       continue;
     }
 
-    const tenantPayments = paymentsByTenant.get(tenantId) ?? [];
-
-    const rentPaid = sumPaid(tenantPayments, "Rent", paidCutoff);
-    const utilityPaid = sumPaid(tenantPayments, "Utility", paidCutoff);
-    const depositPaid = sumPaid(tenantPayments, "Deposit", paidCutoff);
-
-    const { rentDue: rentAmountDueToDueDate } = calculateTenantRentDueToDate({
-      tenant,
-      today: dueDate,
+    const state = await calculateTenantFinancialState(db, tenant, {
+      asOf: dueDate,
+      property,
       rentOverrideMap,
     });
-    const depositAmount = resolveTenantRequiredDeposit({ tenant, unitTypes: property.unitTypes });
-
-    const utilityAmount = await resolveReminderUtilityAmount(db, tenant, property, dueDate);
-    const { rentDue, utilityDue, depositDue, totalDue } = calculateReminderDueAmounts({
-      rentAmount: rentAmountDueToDueDate,
-      rentPaid,
-      depositAmount,
-      depositPaid,
-      utilityAmount,
-      utilityPaid,
-    });
+    const rentDue = state.rentOutstanding;
+    const utilityDue = state.utilitiesOutstanding;
+    const depositDue = state.depositOutstanding;
+    const totalDue = state.totalOutstanding;
 
     if (totalDue <= 0) {
       skipped += 1;
@@ -475,7 +405,6 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
 export async function getUpcomingPaymentReminders(params: { ownerId?: string; today?: Date }): Promise<UpcomingReminder[]> {
   const { ownerId, today = new Date() } = params;
   const todayStart = startOfDay(today);
-  const paidCutoff = endOfDay(todayStart);
 
   const { db } = await connectToDatabase();
 
@@ -519,20 +448,6 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     db,
     Array.from(propertyMap.keys())
   );
-  const payments = await db.collection<Payment>("payments").find({
-    tenantId: { $in: tenantIds },
-    status: "completed",
-  }).toArray();
-
-  const paymentsByTenant = new Map<string, Payment[]>();
-  for (const payment of payments) {
-    const key = (payment.tenantId as any)?.toString?.() ?? payment.tenantId;
-    if (!key) continue;
-    const list = paymentsByTenant.get(key) ?? [];
-    list.push(payment);
-    paymentsByTenant.set(key, list);
-  }
-
   const reminders: UpcomingReminder[] = [];
 
   for (const tenant of tenants) {
@@ -575,28 +490,15 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
       continue;
     }
 
-    const tenantPayments = paymentsByTenant.get(tenantId) ?? [];
-
-    const rentPaid = sumPaid(tenantPayments, "Rent", paidCutoff);
-    const utilityPaid = sumPaid(tenantPayments, "Utility", paidCutoff);
-    const depositPaid = sumPaid(tenantPayments, "Deposit", paidCutoff);
-
-    const { rentDue: rentAmountDueToDueDate } = calculateTenantRentDueToDate({
-      tenant,
-      today: dueDate,
+    const state = await calculateTenantFinancialState(db, tenant, {
+      asOf: dueDate,
+      property,
       rentOverrideMap,
     });
-    const depositAmount = resolveTenantRequiredDeposit({ tenant, unitTypes: property.unitTypes });
-
-    const utilityAmount = await resolveReminderUtilityAmount(db, tenant, property, dueDate);
-    const { rentDue, utilityDue, depositDue, totalDue } = calculateReminderDueAmounts({
-      rentAmount: rentAmountDueToDueDate,
-      rentPaid,
-      depositAmount,
-      depositPaid,
-      utilityAmount,
-      utilityPaid,
-    });
+    const rentDue = state.rentOutstanding;
+    const utilityDue = state.utilitiesOutstanding;
+    const depositDue = state.depositOutstanding;
+    const totalDue = state.totalOutstanding;
 
     if (totalDue <= 0) {
       continue;

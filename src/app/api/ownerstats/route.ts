@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "@/lib/utils";
+import { calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { getPaymentTotalsByTenantIds } from "@/lib/payment-totals";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 
 interface Property {
@@ -351,47 +351,20 @@ export async function GET(request: NextRequest) {
     // === Overdue Logic ===
     const activeTenantsForDues = activeTenantsForOccupancy;
 
-    const paymentTotalsByTenant = await getPaymentTotalsByTenantIds(
-      db,
-      activeTenantsForDues.map((tenant) => tenant._id)
-    );
-
     let overduePayments = 0;
     let totalOverdueAmount = 0;
     let totalPenaltyAmount = 0;
     let totalDepositDue = 0;
 
-    const bulkOps = activeTenantsForDues.map((tenant) => {
+    const tenantStates = await Promise.all(activeTenantsForDues.map(async (tenant) => ({
+      tenant,
+      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(tenant.propertyId), asOf: today }),
+    })));
+    const bulkOps = tenantStates.map(({ tenant, state }) => {
       const property = propertyMap.get(tenant.propertyId);
-      const { rentDue } = calculateTenantRentDueToDate({
-        tenant: tenant as any,
-        today,
-        rentOverrideMap,
-      });
-      const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString()) || {
-        rentPaid: 0,
-        depositPaid: 0,
-        utilityPaid: 0,
-        totalPaid: 0,
-      };
-      const rentDues = Math.max(0, rentDue - tenantTotals.rentPaid);
-      const penaltyDues = calculateOverduePenalty({
-        rentDues,
-        today,
-        rentPaymentDate: property?.rentPaymentDate,
-        leaseStartDate: tenant.leaseStartDate ?? undefined,
-        penaltyAmount: property?.penaltyAmount,
-        penaltyFrequency: property?.penaltyFrequency,
-      });
-      totalPenaltyAmount += penaltyDues;
-      const totalDeposit = resolveTenantRequiredDeposit({
-        tenant: tenant as any,
-        unitTypes: property?.unitTypes as any,
-      });
-      const depositDues = Math.max(0, totalDeposit - tenantTotals.depositPaid);
-      totalDepositDue += roundMoney(depositDues);
-      const totalOverdueAmountForTenant = roundMoney(rentDues + depositDues + penaltyDues);
-      const roundedOverdue = roundMoney(totalOverdueAmountForTenant);
+      totalPenaltyAmount += state.penalties;
+      totalDepositDue += state.depositOutstanding;
+      const roundedOverdue = state.overdueAmount;
 
       if (roundedOverdue > 0) {
         overduePayments += 1;

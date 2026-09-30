@@ -8,6 +8,7 @@ import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateTenantD
 import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
 import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
 import { calculateFixedUtilityDue } from "@/lib/property-utilities";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 
 interface Property {
   _id: ObjectId;
@@ -256,40 +257,14 @@ export async function GET(request: NextRequest) {
       utilityChargeRows.map((row) => [row._id, Math.round(row.total || 0)])
     );
 
-    const bulkOps = activeTenants.map((tenant) => {
+    const bulkStates = await Promise.all(activeTenants.map(async (tenant) => ({
+      tenant,
+      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(tenant.propertyId), asOf: today, rentOverrideMap }),
+    })));
+    const bulkOps = bulkStates.map(({ tenant, state }) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
       const property = propertyMap.get(tenant.propertyId);
-      const { rentDue } = calculateTenantRentDueToDate({
-        tenant: tenant as any,
-        today,
-        rentOverrideMap,
-      });
-      const rentDues = Math.max(0, rentDue - (paymentTotalsByTenant.get(tenantObjectId.toString())?.rentPaid || 0));
-      const penaltyDues = calculateOverduePenalty({
-        rentDues,
-        today,
-        rentPaymentDate: property?.rentPaymentDate,
-        leaseStartDate: tenant.leaseStartDate,
-        penaltyAmount: property?.penaltyAmount,
-        penaltyFrequency: property?.penaltyFrequency,
-      });
-      const totalDeposit = resolveTenantRequiredDeposit({
-        tenant: tenant as any,
-        unitTypes: property?.unitTypes as any,
-      });
-      const totalUtilityDue =
-        calculateFixedUtilityDue({ utilities: property?.utilities as any, tenant: tenant as any, today }) +
-        (meteredUtilityDueByTenant.get(tenantObjectId.toString()) || 0);
-      const totalDue = rentDue + totalDeposit + penaltyDues + totalUtilityDue;
-      const tenantTotals = paymentTotalsByTenant.get(tenantObjectId.toString()) || {
-        rentPaid: 0,
-        depositPaid: 0,
-        utilityPaid: 0,
-        totalPaid: 0,
-      };
-      const totalPaid =
-        tenantTotals.rentPaid + tenantTotals.utilityPaid + tenantTotals.depositPaid;
-      const totalOverdue = Math.max(0, totalDue - totalPaid);
+      const totalOverdue = state.overdueAmount;
 
       if (totalOverdue > 0) {
         overduePayments += 1;
@@ -399,21 +374,28 @@ export async function POST(request: NextRequest) {
     const overridesOrMap = tenant.leasedUnits && tenant.leasedUnits.length > 0
       ? rentOverrideMap
       : overrides;
-    const dues = await calculateTenantDues(db, tenantWithTotals as any, today, overridesOrMap, {
-      penaltyAmount: property?.penaltyAmount,
-      penaltyFrequency: property?.penaltyFrequency,
-      rentPaymentDate: property?.rentPaymentDate,
-      propertyUnitTypes: (property as any)?.unitTypes,
-      propertyUtilities: (property as any)?.utilities,
-    });
+    const state = await calculateTenantFinancialState(db, tenant, { asOf: today, property, rentOverrideMap });
+    const dues = {
+      rentDues: state.rentOutstanding + state.penalties,
+      penaltyDues: state.penalties,
+      depositDues: state.depositOutstanding,
+      utilityDues: state.utilitiesOutstanding,
+      totalRemainingDues: state.totalOutstanding,
+      paymentStatus: state.totalOutstanding > 0 ? "overdue" : "up-to-date",
+      monthsStayed: calculateTenantRentDueToDate({ tenant: tenant as any, today, rentOverrideMap }).monthsStayed,
+      walletApplied: 0,
+      walletRemaining: state.walletBalance,
+      walletCoverageMonths: 0,
+      walletCoverageRemainder: state.walletBalance,
+    };
 
     await db.collection("tenants").updateOne(
       { _id: new ObjectId(tenantId) },
       {
         $set: {
-          totalRentPaid: paymentTotals.rentPaid,
-          totalDepositPaid: paymentTotals.depositPaid,
-          totalUtilityPaid: paymentTotals.utilityPaid,
+          totalRentPaid: state.rentPaid,
+          totalDepositPaid: state.depositPaid,
+          totalUtilityPaid: state.utilitiesPaid,
           paymentStatus: dues.totalRemainingDues > 0 ? "overdue" : "up-to-date",
           updatedAt: today.toISOString(),
         },

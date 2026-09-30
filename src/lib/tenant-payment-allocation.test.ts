@@ -72,4 +72,33 @@ describe("tenant payment allocation", () => {
     expect(result.depositPaid).toBe(20_000);
     expect(result.walletBalance).toBe(2_000);
   });
+
+  it("allocates a later payment across the remaining deposit and next balance", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 20_000,
+      utilityDue: 0,
+      payments: [payment(12_000), payment(15_000)],
+    });
+    const rows = [...result.allocations.values()];
+    expect(rows[0]).toMatchObject({ deposit: 12_000, rent: 0 });
+    expect(rows[1]).toMatchObject({ deposit: 8_000, rent: 7_000 });
+    expect(result.depositPaid).toBe(20_000);
+    expect(result.rentPaid).toBe(7_000);
+  });
+
+  it("does not let failed, cancelled, or reversed payments reduce balances", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 20_000,
+      utilityDue: 0,
+      payments: [
+        { ...payment(5_000), status: "failed" },
+        { ...payment(5_000), status: "cancelled" },
+        { ...payment(5_000), status: "reversed" },
+      ],
+    });
+    expect(result.depositPaid).toBe(0);
+    expect(result.rentPaid).toBe(0);
+  });
 });

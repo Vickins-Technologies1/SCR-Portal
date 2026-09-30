@@ -1,7 +1,7 @@
 import { Db, ObjectId } from "mongodb";
 import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
+import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 
 export type PaymentAllocation = {
   deposit: number;
@@ -20,6 +20,23 @@ type LedgerPayment = {
   paymentDate?: string;
   createdAt?: string;
   allocation?: Partial<PaymentAllocation>;
+};
+
+export type TenantFinancialState = {
+  depositRequired: number;
+  depositPaid: number;
+  depositOutstanding: number;
+  rentCharged: number;
+  rentPaid: number;
+  rentOutstanding: number;
+  utilitiesCharged: number;
+  utilitiesPaid: number;
+  utilitiesOutstanding: number;
+  penalties: number;
+  overdueAmount: number;
+  totalOutstanding: number;
+  walletBalance: number;
+  paymentAllocations: Map<string, PaymentAllocation>;
 };
 
 const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
@@ -46,14 +63,14 @@ export function allocatePaymentLedger(params: {
   let depositPaid = 0;
   let utilitiesPaid = 0;
   let otherPaid = 0;
-  let wallet = 0;
+  let wallet = amountOf(params.walletBalance);
   const allocations = new Map<string, PaymentAllocation>();
   const rentDue = amountOf(params.rentDue);
   const depositDue = amountOf(params.depositDue);
   const utilityDue = amountOf(params.utilityDue);
   const otherDue = amountOf(params.otherDue);
 
-  for (const payment of params.payments) {
+  for (const payment of params.payments.filter((entry) => entry.status === "completed")) {
     const paymentAmount = amountOf(payment.amount);
     const previousWallet = wallet;
     // Deposit is funded only by this payment. Existing wallet credit is never
@@ -84,6 +101,73 @@ export function allocatePaymentLedger(params: {
   return { depositPaid: money(depositPaid), rentPaid: money(rentPaid), utilitiesPaid: money(utilitiesPaid), otherPaid: money(otherPaid), walletBalance: wallet, allocations };
 }
 
+/**
+ * The single financial source of truth. Consumers should aggregate this state
+ * instead of subtracting payment-type totals from raw lease values.
+ */
+export async function calculateTenantFinancialState(
+  db: Db,
+  tenant: any,
+  options: { asOf?: Date; property?: any; rentOverrideMap?: Map<string, any> } = {}
+): Promise<TenantFinancialState> {
+  const asOf = options.asOf ?? new Date();
+  const property = options.property ?? (ObjectId.isValid(String(tenant.propertyId))
+    ? await db.collection("properties").findOne({ _id: new ObjectId(String(tenant.propertyId)) })
+    : null);
+  const overrides = options.rentOverrideMap ?? await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)]);
+  const { rentDue } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides });
+  const utilityDue = money(
+    calculateFixedUtilityDue({ utilities: property?.utilities, tenant, today: asOf }) +
+      (await getPostedMeteredUtilityTotal(db, String(tenant._id)))
+  );
+  const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
+  const cutoff = asOf.getTime();
+  const payments = await db.collection<LedgerPayment>("payments")
+    .find({ tenantId: { $in: [String(tenant._id), tenant._id] }, status: "completed" })
+    .toArray();
+  const eligiblePayments = payments
+    .filter((payment) => {
+      const date = payment.paymentDate ?? payment.createdAt;
+      return !date || Number.isNaN(new Date(date).getTime()) || new Date(date).getTime() <= cutoff;
+    })
+    .sort((a, b) => new Date(a.paymentDate ?? a.createdAt ?? 0).getTime() - new Date(b.paymentDate ?? b.createdAt ?? 0).getTime());
+  const ledger = allocatePaymentLedger({
+    depositDue,
+    rentDue,
+    utilityDue,
+    otherDue: 0,
+    walletBalance: 0,
+    payments: eligiblePayments,
+  });
+  const penalties = money(calculateOverduePenalty({
+    rentDues: money(Math.max(0, rentDue - ledger.rentPaid)),
+    today: asOf,
+    rentPaymentDate: property?.rentPaymentDate,
+    leaseStartDate: tenant.leaseStartDate,
+    penaltyAmount: property?.penaltyAmount,
+    penaltyFrequency: property?.penaltyFrequency,
+  }));
+  const depositOutstanding = money(Math.max(0, depositDue - ledger.depositPaid));
+  const rentOutstanding = money(Math.max(0, rentDue - ledger.rentPaid));
+  const utilitiesOutstanding = money(Math.max(0, utilityDue - ledger.utilitiesPaid));
+  return {
+    depositRequired: depositDue,
+    depositPaid: ledger.depositPaid,
+    depositOutstanding,
+    rentCharged: money(rentDue),
+    rentPaid: ledger.rentPaid,
+    rentOutstanding,
+    utilitiesCharged: utilityDue,
+    utilitiesPaid: ledger.utilitiesPaid,
+    utilitiesOutstanding,
+    penalties,
+    overdueAmount: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + penalties),
+    totalOutstanding: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + penalties),
+    walletBalance: ledger.walletBalance,
+    paymentAllocations: ledger.allocations,
+  };
+}
+
 export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string) {
   if (!ObjectId.isValid(tenantId)) return null;
   const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(tenantId) });
@@ -93,40 +177,25 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     ? await db.collection("properties").findOne({ _id: new ObjectId(String(tenant.propertyId)) })
     : null;
   const today = new Date();
-  const overrides = await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)]);
-  const { rentDue } = calculateTenantRentDueToDate({ tenant: tenant as any, today, rentOverrideMap: overrides });
-  const utilityDue = money(
-    calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenant as any, today }) +
-      (await getPostedMeteredUtilityTotal(db, tenantId))
-  );
-  const depositDue = money(resolveTenantRequiredDeposit({ tenant: tenant as any, unitTypes: (property as any)?.unitTypes }));
+  const state = await calculateTenantFinancialState(db, tenant, { asOf: today, property });
+  const allocations = state.paymentAllocations;
+  const depositPaid = state.depositPaid;
+  const rentPaid = state.rentPaid;
+  const utilitiesPaid = state.utilitiesPaid;
+  const otherPaid = 0;
+  const wallet = state.walletBalance;
 
-  const payments = await db.collection<LedgerPayment>("payments")
-    .find({ tenantId, status: "completed" })
-    .sort({ paymentDate: 1, createdAt: 1, _id: 1 })
-    .toArray();
-
-  const allocations = new Map<string, PaymentAllocation>();
-  const ledger = allocatePaymentLedger({ depositDue, rentDue, utilityDue, otherDue: 0, walletBalance: 0, payments });
-  const depositPaid = ledger.depositPaid;
-  const rentPaid = ledger.rentPaid;
-  const utilitiesPaid = ledger.utilitiesPaid;
-  const otherPaid = ledger.otherPaid;
-  const wallet = ledger.walletBalance;
-  for (const [id, allocation] of ledger.allocations) allocations.set(id, allocation);
-
-  for (const payment of payments) {
-    const allocation = allocations.get(payment._id.toString());
-    if (allocation) {
-      await db.collection("payments").updateOne({ _id: payment._id }, { $set: { allocation } });
+  for (const [paymentId, allocation] of allocations) {
+    if (ObjectId.isValid(paymentId)) {
+      await db.collection("payments").updateOne({ _id: new ObjectId(paymentId) }, { $set: { allocation } });
     }
   }
 
-  const rentOutstanding = money(Math.max(0, rentDue - rentPaid));
-  const utilitiesOutstanding = money(Math.max(0, utilityDue - utilitiesPaid));
-  const depositOutstanding = money(Math.max(0, depositDue - depositPaid));
+  const rentOutstanding = state.rentOutstanding;
+  const utilitiesOutstanding = state.utilitiesOutstanding;
+  const depositOutstanding = state.depositOutstanding;
   const otherOutstanding = 0;
-  const totalOutstanding = money(depositOutstanding + rentOutstanding + utilitiesOutstanding + otherOutstanding);
+  const totalOutstanding = state.totalOutstanding;
   await db.collection("tenants").updateOne(
     { _id: new ObjectId(tenantId) },
     { $set: {
@@ -145,9 +214,9 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     depositPaid: money(depositPaid),
     otherPaid: money(otherPaid),
     walletBalance: money(wallet),
-    rentDue: money(rentDue),
-    utilityDue,
-    depositDue,
+    rentDue: state.rentCharged,
+    utilityDue: state.utilitiesCharged,
+    depositDue: state.depositRequired,
     rentOutstanding,
     utilitiesOutstanding,
     depositOutstanding,

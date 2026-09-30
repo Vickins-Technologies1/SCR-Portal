@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantMonthlyRentForDate, resolveTenantRequiredDeposit } from "../../../../lib/utils";
+import { calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 
 interface Tenant {
   _id: ObjectId;
@@ -217,58 +217,19 @@ export async function GET(request: NextRequest) {
       const property = ObjectId.isValid(tenantDoc.propertyId)
         ? await db.collection<PropertyPenaltyConfig>("properties").findOne({ _id: new ObjectId(tenantDoc.propertyId) })
         : null;
-      const { rentDue, monthsStayed } = calculateTenantRentDueToDate({
-        tenant: tenantDoc as any,
-        today,
-        rentOverrideMap,
-      });
+      const { monthsStayed } = calculateTenantRentDueToDate({ tenant: tenantDoc as any, today, rentOverrideMap });
+      const state = await calculateTenantFinancialState(db, tenantDoc, { asOf: today, property, rentOverrideMap });
 
-      const payments = await db
-        .collection<Payment>("payments")
-        .find({ tenantId: targetTenantId, status: "completed" })
-        .toArray();
-
-      let rentPaid = 0,
-        depositPaid = 0,
-        utilityPaid = 0;
-
-      for (const p of payments) {
-        if (p.type === "Rent") rentPaid += p.amount;
-        else if (p.type === "Deposit") depositPaid += p.amount;
-        else if (p.type === "Utility") utilityPaid += p.amount;
-      }
-
-      const depositDue = resolveTenantRequiredDeposit({
-        tenant: tenantDoc as any,
-        unitTypes: (property as any)?.unitTypes,
-      });
-      const totalUtilityDue =
-        calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenantDoc as any, today }) +
-        (await getPostedMeteredUtilityTotal(db, targetTenantId));
-
+      const rentPaid = state.rentPaid;
+      const depositPaid = state.depositPaid;
+      const utilityPaid = state.utilitiesPaid;
       const updatedTotalRentPaid = rentPaid;
-      const updatedWalletBalance = calculateWalletBalanceFromPayments({
-        rentPaid,
-        depositPaid,
-        utilityPaid,
-        rentDue,
-        depositDue,
-        utilityDue: totalUtilityDue,
-      });
-
-      const baseRentDues = Math.max(0, rentDue - updatedTotalRentPaid);
-      const penaltyDues = calculateOverduePenalty({
-        rentDues: baseRentDues,
-        today,
-        rentPaymentDate: property?.rentPaymentDate,
-        leaseStartDate: tenantDoc.leaseStartDate,
-        penaltyAmount: property?.penaltyAmount,
-        penaltyFrequency: property?.penaltyFrequency,
-      });
-      const rentDues = Math.max(0, baseRentDues + penaltyDues);
-      const depositDues = Math.max(0, depositDue - depositPaid);
-      const utilityDues = Math.max(0, totalUtilityDue - utilityPaid);
-      const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
+      const updatedWalletBalance = state.walletBalance;
+      const penaltyDues = state.penalties;
+      const rentDues = state.rentOutstanding + penaltyDues;
+      const depositDues = state.depositOutstanding;
+      const utilityDues = state.utilitiesOutstanding;
+      const totalRemainingDues = state.totalOutstanding;
 
       const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
 
