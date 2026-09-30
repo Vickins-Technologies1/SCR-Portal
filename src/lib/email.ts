@@ -1031,7 +1031,10 @@ export async function sendTenantDeletionRequestEmail({
 }
 
 export async function sendSystemErrorAlert(options: SystemErrorAlertOptions): Promise<void> {
-  if (process.env.ERROR_ALERTS_ENABLED !== "true") return;
+  const alertsDisabled = process.env.ERROR_ALERTS_ENABLED === "false";
+  const alertsEnabled = process.env.ERROR_ALERTS_ENABLED === "true" ||
+    (process.env.NODE_ENV === "production" && !alertsDisabled);
+  if (!alertsEnabled) return;
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) throw new Error("SMTP credentials are missing");
   const to = process.env.ERROR_ALERT_EMAIL || "techvickins@gmail.com";
   const safe = (value: unknown) => escapeHtml(String(value ?? "—"));
