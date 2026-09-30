@@ -39,6 +39,17 @@ export type TenantFinancialState = {
   paymentAllocations: Map<string, PaymentAllocation>;
 };
 
+/**
+ * Aggregates the deposit contribution of already-calculated tenant states.
+ * Keeping this small operation separate makes dashboard/report consumers use
+ * the ledger result rather than reinterpreting raw payment types.
+ */
+export function sumTenantDepositPaid(states: Iterable<Pick<TenantFinancialState, "depositPaid">>) {
+  let total = 0;
+  for (const state of states) total += amountOf(state.depositPaid);
+  return money(total);
+}
+
 const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
 const amountOf = (value: unknown) => (Number.isFinite(Number(value)) ? money(Number(value)) : 0);
 

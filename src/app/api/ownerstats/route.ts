@@ -4,7 +4,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, sumTenantDepositPaid } from "@/lib/tenant-payment-allocation";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 
 interface Property {
@@ -306,27 +306,6 @@ export async function GET(request: NextRequest) {
       .toArray();
     const totalPayments = roundMoney(paymentsResult[0]?.totalPayments || 0);
 
-    // Deposits
-    const depositPaymentsResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            type: "Deposit",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalDepositPaid: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalDepositPaid = roundMoney(depositPaymentsResult[0]?.totalDepositPaid || 0);
-
     // Utilities
     const utilityPaymentsResult = await db
       .collection("payments")
@@ -383,6 +362,11 @@ export async function GET(request: NextRequest) {
         },
       };
     });
+
+    // Deposits must come from the same tenant ledger used for dues. Summing
+    // raw payments with type "Deposit" incorrectly counts overpayments and
+    // ignores payments whose allocation was split across charges.
+    const totalDepositPaid = roundMoney(sumTenantDepositPaid(tenantStates.map(({ state }) => state)));
 
     if (bulkOps.length > 0) {
       await tenantCollection.bulkWrite(bulkOps);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { allocatePaymentLedger } from "./tenant-payment-allocation";
+import { allocatePaymentLedger, sumTenantDepositPaid } from "./tenant-payment-allocation";
 
 const payment = (amount: number, id = new ObjectId()) => ({ _id: id, amount, status: "completed" });
 describe("tenant payment allocation", () => {
@@ -100,5 +100,35 @@ describe("tenant payment allocation", () => {
     });
     expect(result.depositPaid).toBe(0);
     expect(result.rentPaid).toBe(0);
+  });
+
+  it("aggregates dashboard deposits from tenant ledger results, not raw payment totals", () => {
+    const tenantA = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 20_000,
+      utilityDue: 0,
+      payments: [payment(30_000), payment(10_000)],
+    });
+    const tenantB = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 20_000,
+      utilityDue: 0,
+      payments: [payment(10_000)],
+    });
+
+    expect(tenantA.depositPaid).toBe(20_000);
+    expect(tenantA.rentPaid).toBe(20_000);
+    expect(sumTenantDepositPaid([tenantA, tenantB])).toBe(30_000);
+  });
+
+  it("does not double count a tenant state when aggregating deposits", () => {
+    const tenant = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 0,
+      utilityDue: 0,
+      payments: [payment(30_000)],
+    });
+
+    expect(sumTenantDepositPaid([tenant])).toBe(20_000);
   });
 });
