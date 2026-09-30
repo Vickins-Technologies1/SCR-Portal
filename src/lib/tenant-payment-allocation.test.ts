@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { allocatePaymentLedger, sumTenantDepositPaid } from "./tenant-payment-allocation";
+import { allocatePaymentLedger, sumTenantDepositPaid, sumTenantOverdueAmount } from "./tenant-payment-allocation";
 
 const payment = (amount: number, id = new ObjectId()) => ({ _id: id, amount, status: "completed" });
 describe("tenant payment allocation", () => {
@@ -130,5 +130,21 @@ describe("tenant payment allocation", () => {
     });
 
     expect(sumTenantDepositPaid([tenant])).toBe(20_000);
+  });
+
+  it("keeps deposit due and penalties out of overdue amount", () => {
+    const depositOnly = { overdueRent: 0, overdueUtilities: 0, depositOutstanding: 20_000, penalties: 5_000 };
+    const rentAndUtilities = { overdueRent: 10_000, overdueUtilities: 5_000, depositOutstanding: 20_000, penalties: 5_000 };
+
+    expect(sumTenantOverdueAmount([depositOnly])).toBe(0);
+    expect(sumTenantOverdueAmount([rentAndUtilities])).toBe(15_000);
+  });
+
+  it("aggregates overdue rent and utilities across tenants without deposits", () => {
+    expect(sumTenantOverdueAmount([
+      { overdueRent: 15_000, overdueUtilities: 3_000 },
+      { overdueRent: 0, overdueUtilities: 0 },
+      { overdueRent: 10_000, overdueUtilities: 5_000 },
+    ])).toBe(33_000);
   });
 });

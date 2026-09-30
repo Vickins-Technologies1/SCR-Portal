@@ -32,6 +32,8 @@ export type TenantFinancialState = {
   utilitiesCharged: number;
   utilitiesPaid: number;
   utilitiesOutstanding: number;
+  overdueRent: number;
+  overdueUtilities: number;
   penalties: number;
   overdueAmount: number;
   totalOutstanding: number;
@@ -47,6 +49,14 @@ export type TenantFinancialState = {
 export function sumTenantDepositPaid(states: Iterable<Pick<TenantFinancialState, "depositPaid">>) {
   let total = 0;
   for (const state of states) total += amountOf(state.depositPaid);
+  return money(total);
+}
+
+export function sumTenantOverdueAmount(
+  states: Iterable<Pick<TenantFinancialState, "overdueRent" | "overdueUtilities">>
+) {
+  let total = 0;
+  for (const state of states) total += amountOf(state.overdueRent) + amountOf(state.overdueUtilities);
   return money(total);
 }
 
@@ -161,6 +171,12 @@ export async function calculateTenantFinancialState(
   const depositOutstanding = money(Math.max(0, depositDue - ledger.depositPaid));
   const rentOutstanding = money(Math.max(0, rentDue - ledger.rentPaid));
   const utilitiesOutstanding = money(Math.max(0, utilityDue - ledger.utilitiesPaid));
+  // Rent and utilities are calculated through today's due-date rules above,
+  // so their outstanding balances are the genuinely overdue components.
+  // Deposits and penalties remain part of totalOutstanding, but are not part
+  // of the dashboard's overdue-amount metric.
+  const overdueRent = rentOutstanding;
+  const overdueUtilities = utilitiesOutstanding;
   return {
     depositRequired: depositDue,
     depositPaid: ledger.depositPaid,
@@ -171,8 +187,10 @@ export async function calculateTenantFinancialState(
     utilitiesCharged: utilityDue,
     utilitiesPaid: ledger.utilitiesPaid,
     utilitiesOutstanding,
+    overdueRent,
+    overdueUtilities,
     penalties,
-    overdueAmount: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + penalties),
+    overdueAmount: money(overdueRent + overdueUtilities),
     totalOutstanding: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + penalties),
     walletBalance: ledger.walletBalance,
     paymentAllocations: ledger.allocations,
