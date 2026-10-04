@@ -42,6 +42,8 @@ interface Payment {
   type: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference: string;
+  utilityChargeId?: string;
+  utilityBillingPeriod?: string;
 }
 
 interface User {
@@ -223,6 +225,22 @@ export async function POST(request: NextRequest) {
     // Generate a unique transaction ID
    const transactionId = `MANUAL-${nanoid(12)}`;
 
+    let utilityChargeId: string | undefined;
+    let utilityBillingPeriod: string | undefined;
+    if (type === "Utility") {
+      const oldestCharge = await db.collection("utilityCharges").findOne(
+        { tenantId, status: "posted" },
+        { sort: { billingPeriod: 1, _id: 1 }, projection: { _id: 1, billingPeriod: 1 } }
+      );
+      utilityChargeId = oldestCharge?._id?.toString();
+      utilityBillingPeriod = String(oldestCharge?.billingPeriod || new Date(paymentDate).toISOString().slice(0, 7));
+    }
+
+    const existingReference = await db.collection("payments").findOne({ tenantId, reference, status: { $in: ["completed", "pending", "pending_stk"] } });
+    if (existingReference) {
+      return NextResponse.json({ success: false, message: "A payment with this reference already exists" }, { status: 409 });
+    }
+
     // Create payment record
     const payment: Payment = {
       _id: new ObjectId(),
@@ -235,6 +253,8 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
       type,
       reference,
+      utilityChargeId,
+      utilityBillingPeriod,
     };
 
     await db.collection<Payment>("payments").insertOne(payment);

@@ -20,6 +20,11 @@ try {
     { $match: { count: { $gt: 1 } } },
     { $count: "duplicates" },
   ]).toArray();
+  const utilityPaymentsMissingContext = await db.collection("payments").countDocuments({
+    status: "completed",
+    type: "Utility",
+    $or: [{ utilityChargeId: { $exists: false } }, { utilityBillingPeriod: { $exists: false } }],
+  });
   const findings = [];
   for (const payment of payments) {
     const allocation = payment.allocation;
@@ -60,6 +65,7 @@ try {
     suspiciousRecords: findings.length,
     byCode,
     duplicatePaymentReferences: duplicatePaymentReferences[0]?.duplicates || 0,
+    utilityPaymentsMissingContext,
     scannedUtilityCharges: charges.length,
     suspiciousUtilityCharges: chargeFindings.length,
     utilityChargeSample: chargeFindings.slice(0, 20),

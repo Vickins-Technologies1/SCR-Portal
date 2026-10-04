@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateFixedUtilityBreakdown,
   calculateMeteredUtilityAmount,
+  calculateUtilityOutstanding,
   getUtilityDueDate,
 } from "./property-utilities";
 
@@ -10,6 +11,11 @@ describe("property utility lifecycle calculations", () => {
 
   it("calculates recorded utility usage from units and rate", () => {
     expect(calculateMeteredUtilityAmount(50, 20)).toBe(1_000);
+  });
+
+  it("sums multiple valid utility payments and never produces a negative balance", () => {
+    expect(calculateUtilityOutstanding({ charge: 1_000, validPayments: [200, 300] })).toEqual({ paid: 500, outstanding: 500 });
+    expect(calculateUtilityOutstanding({ charge: 1_000, validPayments: [1_200] })).toEqual({ paid: 1_200, outstanding: 0 });
   });
 
   it("keeps a fixed monthly charge separate from prior arrears", () => {

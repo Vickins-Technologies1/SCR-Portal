@@ -98,6 +98,20 @@ const cleanNumber = (value: unknown): number => {
 export const calculateMeteredUtilityAmount = (unitsUsed: number, ratePerUnit: number): number =>
   Math.round(Math.max(0, Number(unitsUsed) || 0) * Math.max(0, Number(ratePerUnit) || 0));
 
+export const calculateUtilityOutstanding = ({
+  charge,
+  validPayments,
+  credits = 0,
+}: {
+  charge: number;
+  validPayments: number[];
+  credits?: number;
+}) => {
+  const paid = validPayments.reduce((sum, amount) => sum + Math.max(0, Number(amount) || 0), 0);
+  const outstanding = Math.max(0, Math.round((Math.max(0, Number(charge) || 0) - paid - Math.max(0, Number(credits) || 0)) * 100) / 100);
+  return { paid: Math.round(paid * 100) / 100, outstanding };
+};
+
 const slug = (value: string): string =>
   value
     .trim()
