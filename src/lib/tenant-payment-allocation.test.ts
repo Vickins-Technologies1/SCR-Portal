@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import { allocatePaymentLedger, sumTenantDepositPaid, sumTenantOverdueAmount } from "./tenant-payment-allocation";
 
-const payment = (amount: number, id = new ObjectId()) => ({ _id: id, amount, status: "completed" });
+const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type });
 describe("tenant payment allocation", () => {
   it("allocates partial, exact, and excess rent in rent-first order", () => {
     const partial = allocatePaymentLedger({ rentDue: 20_000, utilityDue: 3_000, payments: [payment(10_000)] });
@@ -18,6 +18,59 @@ describe("tenant payment allocation", () => {
     expect(excess.utilitiesPaid).toBe(2_000);
     expect(excess.walletBalance).toBe(0);
     expect([...excess.allocations.values()][0]).toMatchObject({ rent: 20_000, utilities: 2_000, walletCredit: 0 });
+  });
+
+  it("keeps explicit rent payments out of utilities", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 20_000,
+      utilityDue: 3_000,
+      payments: [payment(10_000, new ObjectId(), "Rent")],
+    });
+    expect(result.rentPaid).toBe(10_000);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 10_000, utilities: 0 });
+  });
+
+  it("keeps explicit utility payments out of rent", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 20_000,
+      utilityDue: 3_000,
+      payments: [payment(2_000, new ObjectId(), "Utility")],
+    });
+    expect(result.rentPaid).toBe(0);
+    expect(result.utilitiesPaid).toBe(2_000);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 0, utilities: 2_000 });
+  });
+
+  it("keeps rent and utility arrears in their original categories", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 25_000,
+      utilityDue: 3_000,
+      payments: [payment(5_000, new ObjectId(), "Rent")],
+    });
+    expect(result.rentPaid).toBe(5_000);
+    expect(result.utilitiesPaid).toBe(0);
+  });
+
+  it("uses the legacy rent-first policy only for untyped/general payments", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 20_000,
+      utilityDue: 3_000,
+      payments: [payment(22_000, new ObjectId(), "General")],
+    });
+    expect(result.rentPaid).toBe(20_000);
+    expect(result.utilitiesPaid).toBe(2_000);
+  });
+
+  it("does not redirect an overpaid typed payment into another category", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 20_000,
+      utilityDue: 3_000,
+      payments: [payment(22_000, new ObjectId(), "Rent")],
+    });
+    expect(result.rentPaid).toBe(20_000);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.walletBalance).toBe(2_000);
   });
 
   it("moves only genuine excess to wallet and spends it on later balances", () => {

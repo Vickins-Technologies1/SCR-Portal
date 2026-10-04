@@ -12,10 +12,12 @@ export type PaymentAllocation = {
   walletApplied: number;
 };
 
+export type PaymentCategory = "Rent" | "Utility" | "Deposit" | "Other" | "General";
+
 type LedgerPayment = {
   _id: ObjectId;
   amount: number;
-  type?: "Rent" | "Utility" | "Deposit" | "Other";
+  type?: PaymentCategory;
   status?: string;
   paymentDate?: string;
   createdAt?: string;
@@ -63,15 +65,6 @@ export function sumTenantOverdueAmount(
 const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
 const amountOf = (value: unknown) => (Number.isFinite(Number(value)) ? money(Number(value)) : 0);
 
-const emptyAllocation = (): PaymentAllocation => ({
-  deposit: 0,
-  rent: 0,
-  utilities: 0,
-  other: 0,
-  walletCredit: 0,
-  walletApplied: 0,
-});
-
 export function allocatePaymentLedger(params: {
   depositDue?: number;
   rentDue: number;
@@ -94,17 +87,44 @@ export function allocatePaymentLedger(params: {
   for (const payment of params.payments.filter((entry) => entry.status === "completed")) {
     const paymentAmount = amountOf(payment.amount);
     const previousWallet = wallet;
-    // Deposit is funded only by this payment. Existing wallet credit is never
-    // borrowed to settle, reduce, or rewrite the one-time deposit.
-    const deposit = Math.min(Math.max(0, depositDue - depositPaid), paymentAmount);
-    let funds = previousWallet + paymentAmount - deposit;
-    const rent = Math.min(Math.max(0, rentDue - rentPaid), funds);
-    funds -= rent;
-    const utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
-    funds -= utilities;
-    const other = Math.min(Math.max(0, otherDue - otherPaid), funds);
-    funds -= other;
-    const walletApplied = Math.min(previousWallet, rent + utilities + other);
+    const category = payment.type;
+    let deposit = 0;
+    let rent = 0;
+    let utilities = 0;
+    let other = 0;
+    let funds = paymentAmount;
+    let walletApplied = 0;
+
+    // Explicit categories are authoritative. They may create wallet credit
+    // when overpaid, but they must never be silently redirected to another
+    // obligation. Missing type is retained as the legacy/general policy so
+    // historical records are not reinterpreted without evidence.
+    if (category === "Deposit") {
+      deposit = Math.min(Math.max(0, depositDue - depositPaid), funds);
+    } else if (category === "Rent") {
+      rent = Math.min(Math.max(0, rentDue - rentPaid), funds);
+    } else if (category === "Utility") {
+      utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
+    } else if (category === "Other") {
+      other = Math.min(Math.max(0, otherDue - otherPaid), funds);
+    } else {
+      // General/legacy payments follow the established deterministic order.
+      deposit = Math.min(Math.max(0, depositDue - depositPaid), funds);
+      funds = previousWallet + paymentAmount - deposit;
+      rent = Math.min(Math.max(0, rentDue - rentPaid), funds);
+      funds -= rent;
+      utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
+      funds -= utilities;
+      other = Math.min(Math.max(0, otherDue - otherPaid), funds);
+      funds -= other;
+      walletApplied = Math.min(previousWallet, rent + utilities + other);
+    }
+    if (category === "Deposit" || category === "Rent" || category === "Utility" || category === "Other") {
+      funds = paymentAmount - deposit - rent - utilities - other;
+      wallet = money(previousWallet + Math.max(0, funds));
+    } else {
+      wallet = money(funds);
+    }
     depositPaid += deposit;
     rentPaid += rent;
     utilitiesPaid += utilities;
@@ -115,7 +135,7 @@ export function allocatePaymentLedger(params: {
       rent: money(rent),
       utilities: money(utilities),
       other: money(other),
-      walletCredit: money(Math.max(0, paymentAmount - deposit - rent - utilities - other)),
+      walletCredit: money(Math.max(0, paymentAmount - deposit - rent - utilities - other + walletApplied)),
       walletApplied: money(walletApplied),
     });
   }
