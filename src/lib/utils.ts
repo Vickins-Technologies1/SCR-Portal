@@ -138,6 +138,9 @@ export interface TenantDues {
   penaltyDues?: number;
   depositDues: number;
   utilityDues: number;
+  utilityCurrentDues?: number;
+  utilityOverdueDues?: number;
+  utilityStatus?: 'CURRENT' | 'OVERDUE' | 'PAID';
   totalRemainingDues: number;
   paymentStatus: 'overdue' | 'up-to-date';
   monthsStayed: number;

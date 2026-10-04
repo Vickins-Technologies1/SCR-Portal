@@ -1,5 +1,5 @@
 import { Db, ObjectId } from "mongodb";
-import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
+import { calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown } from "@/lib/property-utilities";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 
@@ -34,6 +34,9 @@ export type TenantFinancialState = {
   utilitiesCharged: number;
   utilitiesPaid: number;
   utilitiesOutstanding: number;
+  utilitiesCurrentOutstanding: number;
+  utilitiesOverdueOutstanding: number;
+  utilityStatus: "CURRENT" | "OVERDUE" | "PAID";
   overdueRent: number;
   overdueUtilities: number;
   penalties: number;
@@ -157,10 +160,20 @@ export async function calculateTenantFinancialState(
     : null);
   const overrides = options.rentOverrideMap ?? await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)]);
   const { rentDue } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides });
-  const utilityDue = money(
-    calculateFixedUtilityDue({ utilities: property?.utilities, tenant, today: asOf }) +
-      (await getPostedMeteredUtilityTotal(db, String(tenant._id)))
+  const fixedUtilities = calculateFixedUtilityBreakdown({
+    utilities: property?.utilities,
+    tenant,
+    today: asOf,
+    paymentDay: property?.rentPaymentDate,
+  });
+  const meteredUtilities = await getPostedMeteredUtilityBreakdown(
+    db,
+    String(tenant._id),
+    asOf,
+    property?.rentPaymentDate
   );
+  const utilityDue = money(fixedUtilities.charged + meteredUtilities.charged);
+  const utilityOverdueCharged = money(fixedUtilities.overdueCharged + meteredUtilities.overdueCharged);
   const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
   const cutoff = asOf.getTime();
   const payments = await db.collection<LedgerPayment>("payments")
@@ -191,12 +204,14 @@ export async function calculateTenantFinancialState(
   const depositOutstanding = money(Math.max(0, depositDue - ledger.depositPaid));
   const rentOutstanding = money(Math.max(0, rentDue - ledger.rentPaid));
   const utilitiesOutstanding = money(Math.max(0, utilityDue - ledger.utilitiesPaid));
+  const utilitiesOverdueOutstanding = money(Math.min(utilitiesOutstanding, Math.max(0, utilityOverdueCharged - ledger.utilitiesPaid)));
+  const utilitiesCurrentOutstanding = money(Math.max(0, utilitiesOutstanding - utilitiesOverdueOutstanding));
   // Rent and utilities are calculated through today's due-date rules above,
   // so their outstanding balances are the genuinely overdue components.
   // Deposits and penalties remain part of totalOutstanding, but are not part
   // of the dashboard's overdue-amount metric.
   const overdueRent = rentOutstanding;
-  const overdueUtilities = utilitiesOutstanding;
+  const overdueUtilities = utilitiesOverdueOutstanding;
   return {
     depositRequired: depositDue,
     depositPaid: ledger.depositPaid,
@@ -207,6 +222,9 @@ export async function calculateTenantFinancialState(
     utilitiesCharged: utilityDue,
     utilitiesPaid: ledger.utilitiesPaid,
     utilitiesOutstanding,
+    utilitiesCurrentOutstanding,
+    utilitiesOverdueOutstanding,
+    utilityStatus: utilitiesOutstanding <= 0 ? "PAID" : utilitiesOverdueOutstanding > 0 ? "OVERDUE" : "CURRENT",
     overdueRent,
     overdueUtilities,
     penalties,
@@ -268,6 +286,9 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     depositDue: state.depositRequired,
     rentOutstanding,
     utilitiesOutstanding,
+    utilitiesCurrentOutstanding: state.utilitiesCurrentOutstanding,
+    utilitiesOverdueOutstanding: state.utilitiesOverdueOutstanding,
+    utilityStatus: state.utilityStatus,
     depositOutstanding,
     otherOutstanding,
     totalOutstanding,

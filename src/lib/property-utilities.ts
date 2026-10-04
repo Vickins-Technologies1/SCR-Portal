@@ -9,6 +9,7 @@ export interface UtilityCharge {
   utilityId: string;
   utilityName: string;
   billingPeriod: string;
+  dueDate?: string;
   previousReading?: number;
   currentReading?: number;
   unitsUsed: number;
@@ -41,6 +42,15 @@ export const toBillingPeriod = (date: Date): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
+};
+
+export const getUtilityDueDate = (billingPeriod: string, paymentDay = 1): Date | null => {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(billingPeriod || ""));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  return new Date(year, month, Math.min(Math.max(1, Math.trunc(paymentDay || 1)), daysInMonth));
 };
 
 export const defaultUtilityStartDate = (date: Date = new Date()): string =>
@@ -84,6 +94,9 @@ const cleanNumber = (value: unknown): number => {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
 };
+
+export const calculateMeteredUtilityAmount = (unitsUsed: number, ratePerUnit: number): number =>
+  Math.round(Math.max(0, Number(unitsUsed) || 0) * Math.max(0, Number(ratePerUnit) || 0));
 
 const slug = (value: string): string =>
   value
@@ -176,6 +189,66 @@ export const calculateFixedUtilityDue = ({
   );
 };
 
+export type UtilityDueBreakdown = {
+  charged: number;
+  currentCharged: number;
+  overdueCharged: number;
+};
+
+const emptyUtilityBreakdown = (): UtilityDueBreakdown => ({ charged: 0, currentCharged: 0, overdueCharged: 0 });
+
+const addUtilityAmount = (breakdown: UtilityDueBreakdown, amount: number, dueDate: Date | null, today: Date) => {
+  const safeAmount = Math.max(0, Math.round(amount || 0));
+  if (!safeAmount) return;
+  breakdown.charged += safeAmount;
+  if (dueDate && dueDate.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) {
+    breakdown.overdueCharged += safeAmount;
+  } else {
+    breakdown.currentCharged += safeAmount;
+  }
+};
+
+export const calculateFixedUtilityBreakdown = ({
+  utilities,
+  tenant,
+  today = new Date(),
+  paymentDay = 1,
+}: {
+  utilities?: PropertyUtility[] | null;
+  tenant: {
+    leaseStartDate?: string | Date | null;
+    leasedUnits?: unknown[];
+    unitIdentifier?: string;
+    unitType?: string;
+    houseNumber?: string;
+  };
+  today?: Date;
+  paymentDay?: number;
+}): UtilityDueBreakdown => {
+  const breakdown = emptyUtilityBreakdown();
+  if (!Array.isArray(utilities)) return breakdown;
+  const unitCount = getTenantUtilityUnitCount(tenant);
+  if (unitCount <= 0) return breakdown;
+
+  for (const utility of utilities) {
+    if (!utility || utility.active === false || utility.billingMode !== "fixed") continue;
+    const leaseStart = parseDate(tenant.leaseStartDate);
+    if (!leaseStart) continue;
+    const configuredStart = parseDate(utility.startsAt);
+    const start = monthStart(configuredStart && configuredStart > leaseStart ? configuredStart : leaseStart);
+    const end = monthStart(today);
+    for (let cursor = new Date(start); cursor <= end; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)) {
+      addUtilityAmount(
+        breakdown,
+        Math.max(0, Number(utility.amount) || 0) * unitCount,
+        getUtilityDueDate(toBillingPeriod(cursor), paymentDay),
+        today
+      );
+    }
+  }
+  return breakdown;
+};
+
 export const getPostedMeteredUtilityTotal = async (
   db: Db,
   tenantId: string | ObjectId
@@ -190,4 +263,27 @@ export const getPostedMeteredUtilityTotal = async (
     .toArray();
 
   return Math.round(rows[0]?.total || 0);
+};
+
+export const getPostedMeteredUtilityBreakdown = async (
+  db: Db,
+  tenantId: string | ObjectId,
+  today = new Date(),
+  paymentDay = 1
+): Promise<UtilityDueBreakdown> => {
+  const rows = await db.collection<UtilityCharge>("utilityCharges")
+    .find({ tenantId: tenantId.toString(), status: "posted" })
+    .toArray();
+  const breakdown = emptyUtilityBreakdown();
+  const currentPeriod = toBillingPeriod(today);
+  for (const charge of rows) {
+    if (!charge.billingPeriod || charge.billingPeriod > currentPeriod) continue;
+    addUtilityAmount(
+      breakdown,
+      Number(charge.amount) || 0,
+      charge.dueDate ? parseDate(charge.dueDate) : getUtilityDueDate(charge.billingPeriod, paymentDay),
+      today
+    );
+  }
+  return breakdown;
 };

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { UtilityCharge } from "@/lib/property-utilities";
+import { calculateMeteredUtilityAmount, getUtilityDueDate, UtilityCharge } from "@/lib/property-utilities";
 import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
 import { PropertyUtility } from "@/types/property";
 
@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
   }
 
   const nowIso = new Date().toISOString();
-  const amount = Math.round(unitsUsed * ratePerUnit);
+  const amount = calculateMeteredUtilityAmount(unitsUsed, ratePerUnit);
   const charge: Omit<UtilityCharge, "_id" | "createdAt"> = {
     ownerId: context.ownerId,
     propertyId: property._id.toString(),
@@ -207,6 +207,7 @@ export async function POST(request: NextRequest) {
     utilityId: utility.id,
     utilityName: utility.name,
     billingPeriod,
+    dueDate: getUtilityDueDate(billingPeriod, property.rentPaymentDate)?.toISOString(),
     previousReading: previousReading ?? undefined,
     currentReading: currentReading ?? undefined,
     unitsUsed,

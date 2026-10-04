@@ -127,6 +127,13 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "utilityCharges",
+    indexes: [
+      { key: { tenantId: 1, utilityId: 1, billingPeriod: 1, status: 1 }, name: "utilityCharges_tenant_utility_period_unique", unique: true, partialFilterExpression: { status: "posted" } },
+      { key: { propertyId: 1, billingPeriod: -1, status: 1 }, name: "utilityCharges_property_period" },
+    ],
+  },
+  {
     collection: "planDefinitions",
     indexes: [
       { key: { planType: 1 }, name: "planDefinitions_planType_unique", unique: true },
