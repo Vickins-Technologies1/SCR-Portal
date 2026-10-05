@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
 import { generateInvoicePdf } from "@/lib/invoice-pdf";
+import { getInvoicePostedAmount } from "@/lib/financial-reporting";
 
 interface Invoice {
   _id: ObjectId;
@@ -42,11 +43,7 @@ export async function POST(request: NextRequest) {
 
     const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(invoice.userId) });
     const property = await db.collection("properties").findOne({ _id: new ObjectId(invoice.propertyId) });
-    const payments = await db.collection("payments").find({
-      invoiceId: invoice._id.toString(),
-      status: "completed",
-    }).project({ amount: 1 }).toArray();
-    const amountPaid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    const amountPaid = await getInvoicePostedAmount(db, invoice._id.toString());
 
     const { pdfBytes, invoiceNumber } = await generateInvoicePdf({
       invoice: {

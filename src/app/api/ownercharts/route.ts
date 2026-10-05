@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
+import { getFinancialReportSummary } from "@/lib/financial-reporting";
 
 interface ChartData {
   months: string[];
@@ -156,46 +157,10 @@ export async function GET(request: NextRequest) {
 
       const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
       const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
-      const startOfMonthISO = startOfMonth.toISOString();
-      const endOfMonthISO = endOfMonth.toISOString();
-
-      const buildPaymentAggregation = (type: "Rent" | "Utility" | "Deposit") =>
-        db
-          .collection("payments")
-          .aggregate<{ total: number; count: number }>([
-            {
-              $match: {
-                tenantId: { $in: tenantIds },
-                propertyId: { $in: propertyIds },
-                status: "completed",
-                type,
-                $or: [
-                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-                ],
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                total: { $sum: "$amount" },
-                count: { $sum: 1 },
-              },
-            },
-          ])
-          .toArray();
-
-      // These aggregations are independent; keep their predicates and result handling
-      // unchanged while allowing MongoDB/network work to overlap per month.
-      const [rentPaymentsResult, utilityPaymentsResult, depositPaymentsResult] = await Promise.all([
-        buildPaymentAggregation("Rent"),
-        buildPaymentAggregation("Utility"),
-        buildPaymentAggregation("Deposit"),
-      ]);
-
-      rentPayments.unshift(rentPaymentsResult[0]?.total || 0);
-      utilityPayments.unshift(utilityPaymentsResult[0]?.total || 0);
-      depositPayments.unshift(depositPaymentsResult[0]?.total || 0);
+      const summary = await getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth });
+      rentPayments.unshift(summary.rentReceived);
+      utilityPayments.unshift(summary.utilityReceived);
+      depositPayments.unshift(summary.depositReceived);
     }
 
     const chartData: ChartData = {

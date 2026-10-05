@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Db, ObjectId } from "mongodb";
-import { calculateInvoiceTotals } from "@/lib/invoice-calculations";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import { recordPostedPaymentLedger } from "@/lib/financial-ledger";
+import { reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
 
 export type VerifiedPaymentPostingResult =
   | { outcome: "posted"; payment: any; tenantState?: any; invoice?: any }
@@ -36,38 +37,7 @@ async function quarantine(db: Db, payment: any, reason: string): Promise<Verifie
 
 async function reconcileInvoice(db: Db, invoiceId: string) {
   if (!ObjectId.isValid(invoiceId)) return null;
-  const invoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
-  if (!invoice) return null;
-  const payments = await db.collection("payments").find({
-    invoiceId,
-    status: "completed",
-    $or: [
-      { financialPostingStatus: { $in: ["posted", "processing"] } },
-      { financialPostingStatus: { $exists: false } },
-    ],
-  }).project({ amount: 1 }).toArray();
-  const amountPaid = payments.reduce((sum, payment) => sum + (numeric(payment.amount) || 0), 0);
-  const calculation = calculateInvoiceTotals({
-    amount: Number(invoice.amount || 0),
-    items: invoice.items,
-    discount: invoice.discount,
-    tax: invoice.tax,
-    amountPaid,
-    dueDate: invoice.dueDate || invoice.expiresAt,
-  });
-  await db.collection("invoices").updateOne(
-    { _id: invoice._id },
-    {
-      $set: {
-        amountPaid: calculation.amountPaid,
-        balanceDue: calculation.balanceDue,
-        status: calculation.status,
-        paidAt: calculation.status === "PAID" ? new Date().toISOString() : null,
-        updatedAt: new Date().toISOString(),
-      },
-    },
-  );
-  return { ...invoice, ...calculation };
+  return reconcileInvoiceFinancialState(db, invoiceId);
 }
 
 /**
@@ -89,6 +59,20 @@ export async function postVerifiedPayment(params: {
 
   if (payment.financialPostingStatus === "posted" || payment.financialEffectsApplied === true) {
     return { outcome: "duplicate", payment };
+  }
+
+  if (payment.financialPostingStatus === "processing") {
+    const postingEvent = await params.db.collection("financialLedger").findOne({ eventKey: `payment:${String(payment._id)}:posted` });
+    if (postingEvent) {
+      const finalized = await params.db.collection("payments").findOneAndUpdate(
+        { _id: paymentObjectId, financialPostingStatus: "processing" },
+        { $set: { financialPostingStatus: "posted", financialEffectsApplied: true, postedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } },
+        { returnDocument: "after" },
+      );
+      return { outcome: "duplicate", payment: finalized?.value || payment };
+    }
+    const claimAge = payment.financialPostingClaimAt ? Date.now() - new Date(payment.financialPostingClaimAt).getTime() : 0;
+    if (claimAge >= 0 && claimAge < 5 * 60 * 1000) return { outcome: "duplicate", payment };
   }
 
   const providerAmount = numeric(params.providerConfirmedAmount ?? payment.providerConfirmedAmount ?? payment.amount);
@@ -128,11 +112,16 @@ export async function postVerifiedPayment(params: {
   }
 
   const claimToken = randomUUID();
+  const staleClaimBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const claimed = await params.db.collection("payments").findOneAndUpdate(
     {
       _id: payment._id,
       status: "completed",
-      financialPostingStatus: { $nin: ["posted", "processing"] },
+      $or: [
+        { financialPostingStatus: { $nin: ["posted", "processing"] } },
+        { financialPostingStatus: "processing", financialPostingClaimAt: { $lt: staleClaimBefore } },
+        { financialPostingStatus: "processing", financialPostingClaimAt: { $exists: false } },
+      ],
       financialEffectsApplied: { $ne: true },
     },
     {
@@ -143,6 +132,7 @@ export async function postVerifiedPayment(params: {
         ...(providerReceipt ? { mpesaCode: providerReceipt } : {}),
         financialPostingStatus: "processing",
         financialPostingClaim: claimToken,
+        financialPostingClaimAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
     },
@@ -155,7 +145,11 @@ export async function postVerifiedPayment(params: {
   if (claimedPayment.tenantId) {
     tenantState = await reconcileTenantPaymentAllocation(params.db, String(claimedPayment.tenantId));
   }
+  const refreshedPayment = await params.db.collection("payments").findOne({ _id: paymentObjectId }) || claimedPayment;
   const invoice = claimedPayment.invoiceId ? await reconcileInvoice(params.db, String(claimedPayment.invoiceId)) : null;
+
+  const finalPaymentBeforeLedger = await params.db.collection("payments").findOne({ _id: paymentObjectId }) || claimedPayment;
+  await recordPostedPaymentLedger(params.db, finalPaymentBeforeLedger);
 
   const posted = await params.db.collection("payments").findOneAndUpdate(
     { _id: paymentObjectId, financialPostingClaim: claimToken, financialPostingStatus: "processing" },
@@ -169,5 +163,6 @@ export async function postVerifiedPayment(params: {
     },
     { returnDocument: "after" },
   );
-  return { outcome: "posted", payment: posted?.value || claimedPayment, tenantState, invoice };
+  const finalPayment = { ...refreshedPayment, ...(posted?.value || {}) };
+  return { outcome: "posted", payment: finalPayment, tenantState, invoice };
 }

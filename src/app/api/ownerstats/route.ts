@@ -6,6 +6,7 @@ import { calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "@
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount } from "@/lib/tenant-payment-allocation";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
+import { getFinancialReportSummary } from "@/lib/financial-reporting";
 
 interface Property {
   _id: string;
@@ -236,96 +237,16 @@ export async function GET(request: NextRequest) {
       0
     );
 
-    const rentPaidThisMonthResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            type: "Rent",
-            $or: [
-              { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-              { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-            ],
-          },
-        },
-        {
-          $group: {
-            _id: "$tenantId",
-            total: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-
-    const rentCollectedThisMonth = roundMoney(
-      rentPaidThisMonthResult.reduce((sum: number, row: any) => sum + Number(row.total || 0), 0)
-    );
+    const monthlySummary = await getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth });
+    const rentCollectedThisMonth = roundMoney(monthlySummary.rentReceived);
 
     const totalMonthlyRent = rentCollectedThisMonth;
 
     // Total rent paid (all time)
-    const totalRentPaidResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            type: "Rent",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalRentPaid: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalRentPaid = roundMoney(totalRentPaidResult[0]?.totalRentPaid || 0);
-
-    // Total payments (all time)
-    const paymentsResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalPayments: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalPayments = roundMoney(paymentsResult[0]?.totalPayments || 0);
-
-    // Utilities
-    const utilityPaymentsResult = await db
-      .collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            type: "Utility",
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalUtilityPaid: { $sum: "$amount" },
-          },
-        },
-      ])
-      .toArray();
-    const totalUtilityPaid = roundMoney(utilityPaymentsResult[0]?.totalUtilityPaid || 0);
+    const lifetimeSummary = await getFinancialReportSummary({ db, propertyIds });
+    const totalRentPaid = roundMoney(lifetimeSummary.rentReceived);
+    const totalPayments = roundMoney(lifetimeSummary.netReceived);
+    const totalUtilityPaid = roundMoney(lifetimeSummary.utilityReceived);
 
     // === Overdue Logic ===
     const activeTenantsForDues = activeTenantsForOccupancy;

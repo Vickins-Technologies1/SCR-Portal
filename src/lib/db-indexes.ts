@@ -124,6 +124,8 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
       { key: { provider: 1, mpesaCode: 1 }, name: "payments_daraja_receipt_unique", unique: true, partialFilterExpression: { provider: "daraja", mpesaCode: { $type: "string" } } },
       { key: { ownerId: 1, planType: 1, status: 1 }, name: "payments_owner_plan_status" },
       { key: { provider: 1, providerTransactionId: 1 }, name: "payments_provider_transaction_unique", unique: true, partialFilterExpression: { providerTransactionId: { $type: "string" } } },
+      { key: { financialPostingStatus: 1, updatedAt: -1 }, name: "payments_financial_posting_status" },
+      { key: { tenantId: 1, financialPostingStatus: 1, status: 1 }, name: "payments_tenant_financial_status" },
     ],
   },
   {
@@ -162,6 +164,23 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
       { key: { checkoutRequestId: 1 }, name: "unmatched_mpesa_checkout_unique", unique: true },
       { key: { provider: 1, transactionId: 1 }, name: "unmatched_mpesa_transaction_unique", unique: true, partialFilterExpression: { transactionId: { $type: "string" } } },
       { key: { resolved: 1, receivedAt: -1 }, name: "unmatched_mpesa_resolution" },
+    ],
+  },
+  {
+    collection: "financialLedger",
+    indexes: [
+      { key: { eventKey: 1 }, name: "financialLedger_eventKey_unique", unique: true },
+      { key: { sourcePaymentId: 1, kind: 1, status: 1 }, name: "financialLedger_source_kind_status" },
+      { key: { tenantId: 1, propertyId: 1, createdAt: -1 }, name: "financialLedger_tenant_property_created" },
+      { key: { providerReference: 1 }, name: "financialLedger_providerReference" },
+    ],
+  },
+  {
+    collection: "walletTransactions",
+    indexes: [
+      { key: { eventKey: 1 }, name: "walletTransactions_eventKey_unique", unique: true },
+      { key: { tenantId: 1, createdAt: 1 }, name: "walletTransactions_tenant_created" },
+      { key: { sourcePaymentId: 1 }, name: "walletTransactions_sourcePayment" },
     ],
   },
   {

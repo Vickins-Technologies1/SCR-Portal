@@ -19,6 +19,10 @@ interface Payment {
   _id: ObjectId;
   tenantId: string;
   amount: number;
+  requestedAmount?: number;
+  providerConfirmedAmount?: number | null;
+  postedAmount?: number | null;
+  financialPostingStatus?: string;
   propertyId: string;
   paymentDate: string;
   transactionId: string;

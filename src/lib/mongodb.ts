@@ -6,7 +6,7 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-const uri = process.env.MONGODB_URI ?? 'mongodb://localhost:27017/rentaldb';
+const uri = process.env.MONGODB_URI ?? (process.env.NODE_ENV === 'production' ? '' : 'mongodb://localhost:27017/rentaldb');
 const performanceProfilingEnabled = process.env.SORANA_PERFORMANCE_PROFILING === 'true';
 const slowQueryThresholdMs = Number(process.env.SORANA_PERFORMANCE_SLOW_QUERY_MS ?? 100);
 
@@ -75,6 +75,7 @@ export interface DBConnection {
 
 export async function connectToDatabase(): Promise<DBConnection> {
   try {
+    if (!uri) throw new Error('MONGODB_URI is required in production');
     const connectedClient = await getClientPromise();
 
     // Optional: log only in dev

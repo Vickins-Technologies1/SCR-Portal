@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { generateInvoicePdf } from "@/lib/invoice-pdf";
+import { getInvoicePostedAmount } from "@/lib/financial-reporting";
 import { sendInvoiceEmail } from "@/lib/email";
 import logger from "@/lib/logger";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -83,8 +84,7 @@ export async function POST(request: NextRequest) {
       ? `${baseUrl}/property-owner-dashboard/reports`
       : "http://localhost:3000/property-owner-dashboard/reports";
 
-    const payments = await db.collection("payments").find({ invoiceId, status: "completed" }).project({ amount: 1 }).toArray();
-    const amountPaid = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    const amountPaid = await getInvoicePostedAmount(db, invoiceId);
     const { pdfBytes, invoiceNumber } = await generateInvoicePdf({
       invoice: {
         reference: invoice.reference,

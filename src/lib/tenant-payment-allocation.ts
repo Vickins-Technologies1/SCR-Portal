@@ -18,6 +18,7 @@ export type PaymentCategory = "Rent" | "Utility" | "Deposit" | "Other" | "Genera
 type LedgerPayment = {
   _id: ObjectId;
   amount: number;
+  postedAmount?: number;
   type?: PaymentCategory;
   status?: string;
   paymentDate?: string;
@@ -178,14 +179,30 @@ export async function calculateTenantFinancialState(
   const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
   const cutoff = asOf.getTime();
   const payments = await db.collection<LedgerPayment>("payments")
-    .find({ tenantId: { $in: [String(tenant._id), tenant._id] }, status: "completed" })
+    .find({
+      tenantId: { $in: [String(tenant._id), tenant._id] },
+      status: "completed",
+      financialPostingStatus: { $ne: "quarantined" },
+    })
     .toArray();
+  const paymentIds = payments.map((payment) => payment._id);
+  const reversalRows = paymentIds.length
+    ? await db.collection("financialLedger").aggregate<{ _id: ObjectId; total: number }>([
+        { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: paymentIds } } },
+        { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
+      ]).toArray()
+    : [];
+  const reversedByPayment = new Map(reversalRows.map((row) => [String(row._id), money(Number(row.total) || 0)]));
   const eligiblePayments = payments
     .filter((payment) => {
       const date = payment.paymentDate ?? payment.createdAt;
       return !date || Number.isNaN(new Date(date).getTime()) || new Date(date).getTime() <= cutoff;
     })
-    .sort((a, b) => new Date(a.paymentDate ?? a.createdAt ?? 0).getTime() - new Date(b.paymentDate ?? b.createdAt ?? 0).getTime());
+    .sort((a, b) => new Date(a.paymentDate ?? a.createdAt ?? 0).getTime() - new Date(b.paymentDate ?? b.createdAt ?? 0).getTime())
+    .map((payment) => ({
+      ...payment,
+      amount: money(Math.max(0, Number(payment.postedAmount ?? payment.amount) - (reversedByPayment.get(String(payment._id)) || 0))),
+    }));
   const ledger = allocatePaymentLedger({
     depositDue,
     rentDue,
@@ -256,6 +273,27 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
   for (const [paymentId, allocation] of allocations) {
     if (ObjectId.isValid(paymentId)) {
       await db.collection("payments").updateOne({ _id: new ObjectId(paymentId) }, { $set: { allocation } });
+      if (allocation.walletApplied && allocation.walletApplied > 0) {
+        const payment = await db.collection("payments").findOne({ _id: new ObjectId(paymentId) }, { projection: { tenantId: 1, propertyId: 1 } });
+        if (payment) {
+          await db.collection("walletTransactions").updateOne(
+            { eventKey: `payment:${paymentId}:credit-consumed` },
+            { $setOnInsert: {
+              eventKey: `payment:${paymentId}:credit-consumed`,
+              kind: "CREDIT_CONSUMED",
+              direction: "DEBIT",
+              amount: money(allocation.walletApplied),
+              tenantId: payment.tenantId,
+              propertyId: payment.propertyId || null,
+              sourcePaymentId: new ObjectId(paymentId),
+              reason: "Credit applied to a later obligation",
+              actorRole: "system",
+              createdAt: new Date().toISOString(),
+            } },
+            { upsert: true },
+          );
+        }
+      }
     }
   }
 
