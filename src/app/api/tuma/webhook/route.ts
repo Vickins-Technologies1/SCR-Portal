@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { applyTumaPaymentUpdate } from "@/lib/tuma-incoming";
 import logger from "@/lib/logger";
 import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 function parseNumber(value: unknown): number | undefined {
   if (value == null) return undefined;
@@ -166,6 +167,16 @@ export async function POST(request: NextRequest) {
         timestamp: normalized.timestamp,
       },
     });
+
+    if (result.normalizedStatus === "completed" && result.payment?.tenantId) {
+      await postVerifiedPayment({
+        db,
+        paymentId: result.payment._id,
+        providerConfirmedAmount: normalized.amount ?? result.payment.providerConfirmedAmount ?? result.payment.amount,
+        providerTransactionId: normalized.paymentId || normalized.checkoutRequestId || normalized.merchantRequestId || null,
+        providerReceipt: normalized.mpesaReceiptNumber || null,
+      });
+    }
 
     if (result.normalizedStatus === "completed" && result.payment?.planType === "lifetime" && result.payment?.billingType === "one_time") {
       await activateLifetimeFromVerifiedPayment({

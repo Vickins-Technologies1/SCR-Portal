@@ -105,7 +105,7 @@ export async function claimDarajaCallback(db: Db, callback: DarajaCallback) {
         updatedAt: now.toISOString(),
         callbackReceivedAt: now.toISOString(),
         darajaProcessingClaim: randomUUID(),
-        ...(metadata.amount > 0 ? { amount: metadata.amount } : {}),
+        ...(metadata.amount > 0 ? { providerConfirmedAmount: metadata.amount } : {}),
         ...(metadata.receipt ? { mpesaCode: metadata.receipt } : {}),
         ...(metadata.phone ? { phoneNumber: metadata.phone } : {}),
         ...(status === "completed" ? { completedAt: now.toISOString() } : {}),

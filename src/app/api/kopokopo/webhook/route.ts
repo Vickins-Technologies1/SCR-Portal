@@ -5,6 +5,7 @@ import logger from "@/lib/logger";
 import { normalizeKopokopoPaymentStatus, verifyKopokopoWebhookSignature } from "@/lib/kopokopo";
 import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 import { qualifyReferralFromFirstPaidInvoice } from "@/lib/referrals";
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 type KopokopoWebhookPayload = {
   data?: {
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
       {
         $set: {
           status: nextStatus,
-          amount: Number.isFinite(amount) && amount > 0 ? amount : payment.amount,
+          providerConfirmedAmount: Number.isFinite(amount) && amount > 0 ? amount : payment.providerConfirmedAmount || payment.amount,
           phoneNumber: phone || payment.phoneNumber,
           paymentDate,
           mpesaCode: resource?.id || resource?.reference || payment.mpesaCode || null,
@@ -119,11 +120,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (nextStatus === "completed" && payment.invoiceId && ObjectId.isValid(String(payment.invoiceId))) {
-      await db.collection("invoices").updateOne(
-        { _id: new ObjectId(String(payment.invoiceId)) },
-        { $set: { status: "completed", paidAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }
-      );
       await qualifyReferralFromFirstPaidInvoice({ db, invoiceId: String(payment.invoiceId), eventId: requestId }).catch(() => undefined);
+    }
+
+    if (nextStatus === "completed") {
+      await postVerifiedPayment({
+        db,
+        paymentId: payment._id,
+        providerConfirmedAmount: Number.isFinite(amount) && amount > 0 ? amount : payment.amount,
+        providerTransactionId: requestId,
+        providerReceipt: resource?.id || resource?.reference || null,
+      });
     }
 
     return NextResponse.json({ success: true, message: "Accepted" }, { status: 200 });

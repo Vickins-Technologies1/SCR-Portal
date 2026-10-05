@@ -303,7 +303,10 @@ export async function POST(request: NextRequest) {
       targetTenantId = tenantContext.tenantId;
     }
 
-    const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(targetTenantId) });
+    const tenant = await db.collection<Tenant>("tenants").findOne({
+      _id: new ObjectId(targetTenantId),
+      propertyId,
+    });
     if (!tenant) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
@@ -378,6 +381,10 @@ export async function POST(request: NextRequest) {
       paymentId: new ObjectId().toString(),
       tenantId: targetTenantId,
       amount: Number(amount),
+      requestedAmount: Number(amount),
+      providerConfirmedAmount: null,
+      postedAmount: null,
+      financialPostingStatus: "pending",
       propertyId,
       paymentDate: nowIso,
       transactionId,

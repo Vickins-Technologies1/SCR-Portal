@@ -7,6 +7,7 @@ import logger from "../../../../../lib/logger";
 import { sendConfirmationEmail } from "../../../../../lib/email";
 import { sendWelcomeSms } from "../../../../../lib/sms";
 import { nanoid } from 'nanoid';
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 interface Tenant {
   _id: ObjectId;
@@ -34,6 +35,10 @@ interface Payment {
   _id: ObjectId;
   tenantId: string;
   amount: number;
+  requestedAmount?: number;
+  providerConfirmedAmount?: number | null;
+  postedAmount?: number;
+  financialPostingStatus?: string;
   propertyId: string;
   paymentDate: string;
   transactionId: string;
@@ -44,6 +49,8 @@ interface Payment {
   reference: string;
   utilityChargeId?: string;
   utilityBillingPeriod?: string;
+  operatorId?: string;
+  operatorRole?: string;
 }
 
 interface User {
@@ -246,6 +253,10 @@ export async function POST(request: NextRequest) {
       _id: new ObjectId(),
       tenantId,
       amount,
+      requestedAmount: amount,
+      providerConfirmedAmount: amount,
+      postedAmount: amount,
+      financialPostingStatus: "pending",
       propertyId,
       paymentDate: new Date(paymentDate).toISOString(),
       transactionId,
@@ -255,9 +266,18 @@ export async function POST(request: NextRequest) {
       reference,
       utilityChargeId,
       utilityBillingPeriod,
+      operatorId: userId,
+      operatorRole: role,
     };
 
     await db.collection<Payment>("payments").insertOne(payment);
+    await postVerifiedPayment({
+      db,
+      paymentId: payment._id,
+      providerConfirmedAmount: amount,
+      providerTransactionId: transactionId,
+      allowRequestedAmountMismatch: true,
+    });
 
     // Retrieve CSRF token from cookies for the internal fetch
     const fetchedCsrfToken = request.cookies.get("csrf-token")?.value;

@@ -13,6 +13,7 @@ import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 import { qualifyReferralFromFirstPaidInvoice } from "@/lib/referrals";
 
@@ -84,6 +85,27 @@ export async function POST(request: NextRequest) {
         status: payment.status,
         resultCode: callback.ResultCode,
       });
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+    }
+
+    // Ordinary tenant payments use the shared financial posting boundary.
+    // Product-specific payments retain their existing entitlement/booking flow.
+    if (status === "completed" && payment.tenantId && !payment.airbnbBookingId && !(payment.planType === "lifetime" && payment.billingType === "one_time")) {
+      const posting = await postVerifiedPayment({
+        db,
+        paymentId: payment._id,
+        providerConfirmedAmount: metadata.amount || payment.providerConfirmedAmount || payment.amount,
+        providerTransactionId: callback.CheckoutRequestID,
+        providerReceipt: metadata.receipt || null,
+      });
+      if (posting.outcome === "quarantined") {
+        await markDarajaEffectsApplied(db, payment._id);
+        return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted for reconciliation" }, { status: 200 });
+      }
+      if (posting.outcome === "posted") {
+        await markDarajaEffectsApplied(db, payment._id);
+        return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+      }
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
 

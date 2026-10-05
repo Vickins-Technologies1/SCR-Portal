@@ -116,7 +116,7 @@ export async function applyTumaPaymentUpdate(params: {
   if (update.amount != null) {
     const amount = Number(update.amount);
     if (Number.isFinite(amount) && amount > 0) {
-      patch.amount = amount;
+      patch.providerConfirmedAmount = amount;
     }
   }
 
@@ -143,16 +143,6 @@ export async function applyTumaPaymentUpdate(params: {
   }
 
   if (updatedPayment.invoiceId && ObjectId.isValid(updatedPayment.invoiceId)) {
-    await db.collection("invoices").updateOne(
-      { _id: new ObjectId(updatedPayment.invoiceId) },
-      {
-        $set: {
-          status: normalizedStatus === "completed" ? "completed" : "failed",
-          ...(normalizedStatus === "completed" ? { paidAt: new Date().toISOString() } : {}),
-          updatedAt: new Date().toISOString(),
-        },
-      }
-    );
     if (normalizedStatus === "completed") {
       await qualifyReferralFromFirstPaidInvoice({
         db,

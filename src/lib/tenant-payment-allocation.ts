@@ -10,6 +10,7 @@ export type PaymentAllocation = {
   other: number;
   walletCredit: number;
   walletApplied: number;
+  utilityAllocations?: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }>;
 };
 
 export type PaymentCategory = "Rent" | "Utility" | "Deposit" | "Other" | "General";
@@ -256,6 +257,34 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     if (ObjectId.isValid(paymentId)) {
       await db.collection("payments").updateOne({ _id: new ObjectId(paymentId) }, { $set: { allocation } });
     }
+  }
+
+  // Metered utility payments are also projected onto concrete posted charges,
+  // oldest billing period first. The category allocation above remains the
+  // authoritative tenant total; this mapping makes the period-level audit
+  // trail deterministic without changing fixed-utility behaviour.
+  const utilityCharges = await db.collection("utilityCharges")
+    .find({ tenantId, status: "posted" })
+    .sort({ billingPeriod: 1, createdAt: 1, _id: 1 })
+    .toArray();
+  const chargeRemaining = new Map(utilityCharges.map((charge: any) => [String(charge._id), Math.max(0, Number(charge.amount) || 0)]));
+  for (const payment of await db.collection("payments")
+    .find({ tenantId: { $in: [tenantId, new ObjectId(tenantId)] }, status: "completed", type: "Utility" })
+    .sort({ paymentDate: 1, createdAt: 1, _id: 1 })
+    .toArray()) {
+    let remaining = Math.max(0, Number(allocations.get(String(payment._id))?.utilities || 0));
+    const utilityAllocations: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }> = [];
+    for (const charge of utilityCharges) {
+      if (remaining <= 0) break;
+      const chargeId = String(charge._id);
+      const available = chargeRemaining.get(chargeId) || 0;
+      if (available <= 0) continue;
+      const applied = money(Math.min(available, remaining));
+      chargeRemaining.set(chargeId, money(available - applied));
+      remaining = money(remaining - applied);
+      utilityAllocations.push({ utilityChargeId: chargeId, billingPeriod: String(charge.billingPeriod || ""), amount: applied });
+    }
+    await db.collection("payments").updateOne({ _id: payment._id }, { $set: { utilityAllocations } });
   }
 
   const rentOutstanding = state.rentOutstanding;
