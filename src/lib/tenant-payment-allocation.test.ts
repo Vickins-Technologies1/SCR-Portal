@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { allocatePaymentLedger, sumTenantDepositPaid, sumTenantOverdueAmount } from "./tenant-payment-allocation";
+import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, sumTenantDepositPaid, sumTenantOverdueAmount } from "./tenant-payment-allocation";
 
 const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type });
 describe("tenant payment allocation", () => {
@@ -20,15 +20,29 @@ describe("tenant payment allocation", () => {
     expect([...excess.allocations.values()][0]).toMatchObject({ rent: 20_000, utilities: 2_000, walletCredit: 0 });
   });
 
-  it("keeps explicit rent payments out of utilities", () => {
+  it("cascades an overpaid explicit rent payment into utility", () => {
     const result = allocatePaymentLedger({
-      rentDue: 20_000,
+      rentDue: 10_000,
       utilityDue: 3_000,
-      payments: [payment(10_000, new ObjectId(), "Rent")],
+      payments: [payment(13_000, new ObjectId(), "Rent")],
     });
     expect(result.rentPaid).toBe(10_000);
+    expect(result.utilitiesPaid).toBe(3_000);
+    expect(result.walletBalance).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 10_000, utilities: 3_000, walletCredit: 0 });
+  });
+
+  it("uses deposit priority even when the selected category is rent", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 20_000,
+      rentDue: 10_000,
+      utilityDue: 3_000,
+      payments: [payment(13_000, new ObjectId(), "Rent")],
+    });
+    expect(result.depositPaid).toBe(13_000);
+    expect(result.rentPaid).toBe(0);
     expect(result.utilitiesPaid).toBe(0);
-    expect(result.allocations.values().next().value).toMatchObject({ rent: 10_000, utilities: 0 });
+    expect(result.walletBalance).toBe(0);
   });
 
   it("keeps explicit utility payments out of rent", () => {
@@ -42,7 +56,7 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ rent: 0, utilities: 2_000 });
   });
 
-  it("keeps rent and utility arrears in their original categories", () => {
+  it("does not cascade before rent is fully satisfied", () => {
     const result = allocatePaymentLedger({
       rentDue: 25_000,
       utilityDue: 3_000,
@@ -50,6 +64,17 @@ describe("tenant payment allocation", () => {
     });
     expect(result.rentPaid).toBe(5_000);
     expect(result.utilitiesPaid).toBe(0);
+  });
+
+  it("cascades into the oldest utility charges before wallet credit", () => {
+    const allocations = allocateUtilityPaymentAcrossCharges(4_000, [
+      { utilityChargeId: "sep", billingPeriod: "2026-09", amount: 2_000 },
+      { utilityChargeId: "oct", billingPeriod: "2026-10", amount: 3_000 },
+    ]);
+    expect(allocations).toEqual([
+      { utilityChargeId: "sep", billingPeriod: "2026-09", amount: 2_000 },
+      { utilityChargeId: "oct", billingPeriod: "2026-10", amount: 2_000 },
+    ]);
   });
 
   it("uses the legacy rent-first policy only for untyped/general payments", () => {
@@ -62,15 +87,27 @@ describe("tenant payment allocation", () => {
     expect(result.utilitiesPaid).toBe(2_000);
   });
 
-  it("does not redirect an overpaid typed payment into another category", () => {
+  it("sends only the remainder to wallet after all rent and utility dues", () => {
     const result = allocatePaymentLedger({
       rentDue: 20_000,
       utilityDue: 3_000,
       payments: [payment(22_000, new ObjectId(), "Rent")],
     });
     expect(result.rentPaid).toBe(20_000);
-    expect(result.utilitiesPaid).toBe(0);
+    expect(result.utilitiesPaid).toBe(2_000);
+    expect(result.walletBalance).toBe(0);
+  });
+
+  it("creates wallet credit only after rent and utility are fully satisfied", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 10_000,
+      utilityDue: 3_000,
+      payments: [payment(15_000, new ObjectId(), "Rent")],
+    });
+    expect(result.rentPaid).toBe(10_000);
+    expect(result.utilitiesPaid).toBe(3_000);
     expect(result.walletBalance).toBe(2_000);
+    expect(result.allocations.values().next().value).toMatchObject({ walletCredit: 2_000 });
   });
 
   it("moves only genuine excess to wallet and spends it on later balances", () => {

@@ -48,6 +48,29 @@ export type TenantFinancialState = {
   paymentAllocations: Map<string, PaymentAllocation>;
 };
 
+export type UtilityChargeAllocationTarget = {
+  utilityChargeId: string;
+  billingPeriod: string;
+  amount: number;
+  outstandingAmount?: number;
+};
+
+/** Allocate utility funds oldest-first across concrete posted charges. */
+export function allocateUtilityPaymentAcrossCharges(
+  amount: number,
+  charges: UtilityChargeAllocationTarget[],
+) {
+  let remaining = money(amount);
+  return charges.flatMap((charge) => {
+    if (remaining <= 0) return [];
+    const available = money(charge.outstandingAmount ?? charge.amount);
+    if (available <= 0) return [];
+    const applied = money(Math.min(available, remaining));
+    remaining = money(remaining - applied);
+    return [{ utilityChargeId: charge.utilityChargeId, billingPeriod: charge.billingPeriod, amount: applied }];
+  });
+}
+
 /**
  * Aggregates the deposit contribution of already-calculated tenant states.
  * Keeping this small operation separate makes dashboard/report consumers use
@@ -100,14 +123,19 @@ export function allocatePaymentLedger(params: {
     let funds = paymentAmount;
     let walletApplied = 0;
 
-    // Explicit categories are authoritative. They may create wallet credit
-    // when overpaid, but they must never be silently redirected to another
-    // obligation. Missing type is retained as the legacy/general policy so
-    // historical records are not reinterpreted without evidence.
+    // Rent-selected payments cascade through the tenant's real obligations.
+    // Explicit Utility/Deposit/Other payments remain category-isolated.
     if (category === "Deposit") {
       deposit = Math.min(Math.max(0, depositDue - depositPaid), funds);
     } else if (category === "Rent") {
+      deposit = Math.min(Math.max(0, depositDue - depositPaid), funds);
+      funds -= deposit;
       rent = Math.min(Math.max(0, rentDue - rentPaid), funds);
+      funds -= rent;
+      utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
+      funds -= utilities;
+      other = Math.min(Math.max(0, otherDue - otherPaid), funds);
+      funds -= other;
     } else if (category === "Utility") {
       utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
     } else if (category === "Other") {
@@ -307,20 +335,20 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     .toArray();
   const chargeRemaining = new Map(utilityCharges.map((charge: any) => [String(charge._id), Math.max(0, Number(charge.amount) || 0)]));
   for (const payment of await db.collection("payments")
-    .find({ tenantId: { $in: [tenantId, new ObjectId(tenantId)] }, status: "completed", type: "Utility" })
+    .find({ tenantId: { $in: [tenantId, new ObjectId(tenantId)] }, status: "completed" })
     .sort({ paymentDate: 1, createdAt: 1, _id: 1 })
     .toArray()) {
     let remaining = Math.max(0, Number(allocations.get(String(payment._id))?.utilities || 0));
     const utilityAllocations: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }> = [];
-    for (const charge of utilityCharges) {
-      if (remaining <= 0) break;
-      const chargeId = String(charge._id);
-      const available = chargeRemaining.get(chargeId) || 0;
-      if (available <= 0) continue;
-      const applied = money(Math.min(available, remaining));
-      chargeRemaining.set(chargeId, money(available - applied));
-      remaining = money(remaining - applied);
-      utilityAllocations.push({ utilityChargeId: chargeId, billingPeriod: String(charge.billingPeriod || ""), amount: applied });
+    utilityAllocations.push(...allocateUtilityPaymentAcrossCharges(remaining, utilityCharges.map((charge: any) => ({
+      utilityChargeId: String(charge._id),
+      billingPeriod: String(charge.billingPeriod || ""),
+      amount: chargeRemaining.get(String(charge._id)) || 0,
+    }))));
+    for (const allocation of utilityAllocations) {
+      const available = chargeRemaining.get(allocation.utilityChargeId) || 0;
+      chargeRemaining.set(allocation.utilityChargeId, money(available - allocation.amount));
+      remaining = money(remaining - allocation.amount);
     }
     await db.collection("payments").updateOne({ _id: payment._id }, { $set: { utilityAllocations } });
   }
