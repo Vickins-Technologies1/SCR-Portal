@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   },
   description: "Your trusted partner in rental success",
   applicationName: "My Accurate Rent",
+  manifest: "/manifest.webmanifest",
   keywords: [
     "property management",
     "rental management",
@@ -64,10 +65,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.ico", type: "image/x-icon" },
-      { url: "/icon.png", type: "image/png" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
     ],
     shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

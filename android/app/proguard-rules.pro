@@ -20,6 +20,6 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# Capacitor + plugins (defense-in-depth for release minification)
--keep public class * extends com.getcapacitor.Plugin
--keep class com.getcapacitor.** { *; }
+# Custom Capacitor plugins are registered and discovered through annotations/reflection.
+# Keep the plugin classes and members while allowing unused Capacitor internals to shrink.
+-keep public class * extends com.getcapacitor.Plugin { *; }

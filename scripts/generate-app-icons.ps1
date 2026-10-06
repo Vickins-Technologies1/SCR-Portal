@@ -1,6 +1,7 @@
 param(
-  [string]$Source = "public\\brand\\my-accurate-rent-logo.png",
-  [string]$Background = "#ffffff"
+  [string]$Source = "public\\brand\\my-accurate-rent-launcher.png",
+  [string]$Background = "#ffffff",
+  [switch]$AndroidOnly
 )
 
 Set-StrictMode -Version Latest
@@ -116,9 +117,12 @@ function Write-IcoFromPngSquareIcon {
 }
 
 $bg = New-Color $Background
-$launcherContentScale = 1.12
-$androidRoundContentScale = 1.08
-$androidAdaptiveContentScale = 0.98
+# Keep the mark comfortably inside launcher masks at every density. Adaptive icons
+# use a 108dp foreground canvas with a much smaller safe zone, so the foreground
+# needs a dedicated scale instead of filling the whole source canvas.
+$launcherContentScale = 0.78
+$androidRoundContentScale = 0.78
+$androidAdaptiveContentScale = 0.72
 
 if (-not (Test-Path $Source)) {
   throw "Icon source not found: $Source"
@@ -133,18 +137,20 @@ if ((Test-Path "assets\\app-icon-source.png") -and -not (Test-Path $fullSourceBa
 Write-PngSquareIcon -InPath $Source -OutPath "assets\\app-icon-source.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg
 Write-PngSquareIcon -InPath $Source -OutPath "assets\\icon.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg
 
-# Web/PWA
-Write-PngSquareIcon -InPath $Source -OutPath "public\\icon.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg
-Write-PngSquareIcon -InPath $Source -OutPath "public\\apple-touch-icon.png" -Size 180 -ContentScale $launcherContentScale -Bg $bg
-Write-IcoFromPngSquareIcon -InPath $Source -OutPath "public\\favicon.ico" -Size 32 -ContentScale 0.82 -Bg $bg
+if (-not $AndroidOnly) {
+  # Web/PWA
+  Write-PngSquareIcon -InPath $Source -OutPath "public\\icon.png" -Size 512 -ContentScale $launcherContentScale -Bg $bg
+  Write-PngSquareIcon -InPath $Source -OutPath "public\\apple-touch-icon.png" -Size 180 -ContentScale $launcherContentScale -Bg $bg
+  Write-IcoFromPngSquareIcon -InPath $Source -OutPath "public\\favicon.ico" -Size 32 -ContentScale 0.82 -Bg $bg
 
-$pwaSizes = @(48, 72, 96, 128, 192, 256, 512)
-foreach ($s in $pwaSizes) {
-  Write-PngSquareIcon -InPath $Source -OutPath ("public\\icons\\icon-{0}.png" -f $s) -Size $s -ContentScale $launcherContentScale -Bg $bg
+  $pwaSizes = @(48, 72, 96, 128, 192, 256, 512)
+  foreach ($s in $pwaSizes) {
+    Write-PngSquareIcon -InPath $Source -OutPath ("public\\icons\\icon-{0}.png" -f $s) -Size $s -ContentScale $launcherContentScale -Bg $bg
+  }
+
+  # iOS (marketing icon is 1024x1024)
+  Write-PngSquareIcon -InPath $Source -OutPath "ios\\App\\App\\Assets.xcassets\\AppIcon.appiconset\\AppIcon-512@2x.png" -Size 1024 -ContentScale $launcherContentScale -Bg $bg
 }
-
-# iOS (marketing icon is 1024x1024)
-Write-PngSquareIcon -InPath $Source -OutPath "ios\\App\\App\\Assets.xcassets\\AppIcon.appiconset\\AppIcon-512@2x.png" -Size 1024 -ContentScale $launcherContentScale -Bg $bg
 
 # Android legacy launcher icons
 $androidLegacy = @(

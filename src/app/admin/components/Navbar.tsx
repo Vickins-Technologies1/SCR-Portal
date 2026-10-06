@@ -19,7 +19,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
             alt="My Accurate Rent logo"
             width={180}
             height={64}
-            className="h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none"
+            className="h-9 w-auto max-w-[140px] rounded-md object-contain drop-shadow-sm sm:h-10 sm:max-w-[160px] lg:h-11 lg:max-w-none"
             priority
           />
           <NavbarDateTime />

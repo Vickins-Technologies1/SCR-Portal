@@ -30,7 +30,7 @@ export default function PublicNavbar() {
                 alt="My Accurate Rent"
                 width={56}
                 height={56}
-                className="h-12 w-12 object-contain"
+                className="h-14 w-14 object-contain"
                 priority
               />
               <div className="hidden sm:block">
@@ -103,7 +103,7 @@ export default function PublicNavbar() {
                 alt="My Accurate Rent"
                 width={56}
                 height={56}
-                className="h-12 w-12 object-contain"
+                className="h-14 w-14 object-contain"
               />
               <div>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">My Accurate</p>
