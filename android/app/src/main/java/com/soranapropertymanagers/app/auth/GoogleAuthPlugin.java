@@ -12,6 +12,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.tasks.Task;
 
 @CapacitorPlugin(name = "GoogleAuth")
@@ -33,7 +34,14 @@ public class GoogleAuthPlugin extends Plugin {
             .build();
         GoogleSignInClient client = GoogleSignIn.getClient(getContext(), options);
         pendingCall = call;
-        startActivityForResult(call, client.getSignInIntent(), REQUEST_CODE);
+        client.signOut().addOnCompleteListener(unused -> {
+            try {
+                startActivityForResult(call, client.getSignInIntent(), REQUEST_CODE);
+            } catch (Exception error) {
+                pendingCall = null;
+                call.reject("Unable to open Google sign-in: " + error.getMessage(), error);
+            }
+        });
     }
 
     @Override
@@ -57,7 +65,8 @@ public class GoogleAuthPlugin extends Plugin {
             result.put("name", account.getDisplayName());
             call.resolve(result);
         } catch (ApiException error) {
-            call.reject("Google sign-in failed.", error);
+            String status = CommonStatusCodes.getStatusCodeString(error.getStatusCode());
+            call.reject("Google sign-in failed (" + status + "). Check the Android package name and SHA-1 in Google Cloud.", error);
         }
     }
 }

@@ -272,8 +272,8 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
       } as const;
       if (await signInWithGoogleNative(params)) return;
       window.location.href = await buildGoogleAuthStartUrl(params);
-    } catch {
-      setError("Unable to start Google sign-in.");
+    } catch (error) {
+      setError(error instanceof Error && error.message ? error.message : "Unable to start Google sign-in.");
     }
   };
 
