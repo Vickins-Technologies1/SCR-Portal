@@ -36,7 +36,9 @@ function Write-CroppedSquarePng {
 
     $cropW = $maxX - $minX + 1
     $cropH = $maxY - $minY + 1
-    $margin = [Math]::Ceiling([Math]::Max($cropW, $cropH) * 0.07)
+    # The source has substantial transparent padding. Keep only a small safe
+    # margin so the mark fills the favicon without touching the canvas edge.
+    $margin = [Math]::Ceiling([Math]::Max($cropW, $cropH) * 0.03)
     $square = [Math]::Max($cropW, $cropH) + ($margin * 2)
     $canvas = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     try {
