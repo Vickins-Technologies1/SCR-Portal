@@ -46,6 +46,7 @@ export type GoogleProfile = {
 
 export const GOOGLE_STATE_MAX_AGE_SECONDS = 10 * 60;
 export const GOOGLE_PENDING_MAX_AGE_SECONDS = 15 * 60;
+const GOOGLE_NATIVE_HANDOFF_MAX_AGE_SECONDS = 2 * 60;
 
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -194,6 +195,9 @@ export async function exchangeGoogleCodeForProfile(params: {
   code: string;
   redirectUri: string;
 }): Promise<GoogleProfile> {
+  const nativeProfile = await verifyGoogleNativeHandoffToken(params.code);
+  if (nativeProfile) return nativeProfile;
+
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
 
@@ -246,5 +250,45 @@ export async function exchangeGoogleCodeForProfile(params: {
     name,
     picture: typeof profileJson.picture === "string" ? profileJson.picture : undefined,
     emailVerified: Boolean(profileJson.verified_email ?? profileJson.email_verified),
+  };
+}
+
+export async function verifyGoogleIdToken(idToken: string): Promise<GoogleProfile> {
+  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error("Invalid Google ID token.");
+
+  const expectedAudience = process.env.GOOGLE_CLIENT_ID?.trim();
+  const issuer = String(payload.iss || "");
+  const email = String(payload.email || "").trim().toLowerCase();
+  if (!expectedAudience || String(payload.aud || "") !== expectedAudience ||
+      (issuer !== "accounts.google.com" && issuer !== "https://accounts.google.com") ||
+      String(payload.email_verified).toLowerCase() !== "true" || !email || !payload.sub) {
+    throw new Error("Google ID token is not valid for this application.");
+  }
+
+  return {
+    id: String(payload.sub),
+    email,
+    name: String(payload.name || payload.given_name || email).trim(),
+    picture: typeof payload.picture === "string" ? payload.picture : undefined,
+    emailVerified: true,
+  };
+}
+
+export async function createGoogleNativeHandoffToken(profile: GoogleProfile): Promise<string> {
+  return signToken({ ...profile, kind: "google-native-handoff" }, GOOGLE_NATIVE_HANDOFF_MAX_AGE_SECONDS);
+}
+
+async function verifyGoogleNativeHandoffToken(token: string): Promise<GoogleProfile | null> {
+  const payload = await verifyToken<Record<string, unknown>>(token);
+  if (!payload || payload.kind !== "google-native-handoff") return null;
+  if (typeof payload.id !== "string" || typeof payload.email !== "string") return null;
+  return {
+    id: payload.id,
+    email: payload.email,
+    name: typeof payload.name === "string" ? payload.name : payload.email,
+    picture: typeof payload.picture === "string" ? payload.picture : undefined,
+    emailVerified: true,
   };
 }

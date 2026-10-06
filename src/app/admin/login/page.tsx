@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import OtpCodeField from "@/components/auth/OtpCodeField";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
-import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
+import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
 import {
   getBiometricCredentials,
   getPinCredentials,
@@ -213,11 +213,13 @@ export default function AdminLogin() {
   const handleGoogleLogin = async () => {
     if (isLoading) return;
     try {
-      window.location.href = await buildGoogleAuthStartUrl({
+      const params = {
         portal: "admin",
         action: "login",
         appHash,
-      });
+      } as const;
+      if (await signInWithGoogleNative(params)) return;
+      window.location.href = await buildGoogleAuthStartUrl(params);
     } catch {
       setError("Unable to start Google sign-in.");
     }

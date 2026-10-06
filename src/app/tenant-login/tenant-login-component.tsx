@@ -9,7 +9,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
-import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
+import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
 import {
   getBiometricCredentials,
   getPinCredentials,
@@ -264,12 +264,14 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
   const handleGoogleLogin = async () => {
     if (isSubmitting) return;
     try {
-      window.location.href = await buildGoogleAuthStartUrl({
+      const params = {
         portal: "tenant",
         action: "login",
         tenantPortal: isAirbnbGuestPortal ? "airbnb" : "rental",
         appHash,
-      });
+      } as const;
+      if (await signInWithGoogleNative(params)) return;
+      window.location.href = await buildGoogleAuthStartUrl(params);
     } catch {
       setError("Unable to start Google sign-in.");
     }

@@ -34,3 +34,23 @@ export async function buildGoogleAuthStartUrl(params: GoogleAuthStartParams): Pr
 
   return url.toString();
 }
+
+export async function signInWithGoogleNative(params: GoogleAuthStartParams): Promise<boolean> {
+  if (!(await isNativeCapacitor())) return false;
+  const configResponse = await fetch("/api/auth/google/config", { cache: "no-store" });
+  const config = await configResponse.json().catch(() => null);
+  if (!configResponse.ok || !config?.clientId) throw new Error("Google login is not configured.");
+
+  const { GoogleAuth } = await import("@/lib/google-auth-native");
+  const result = await GoogleAuth.signIn({ serverClientId: config.clientId });
+  const response = await fetch("/api/auth/google", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ ...params, idToken: result.idToken, platform: "app" }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.callbackUrl) throw new Error(data?.message || "Unable to complete Google sign-in.");
+  window.location.assign(data.callbackUrl);
+  return true;
+}

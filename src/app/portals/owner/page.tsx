@@ -10,7 +10,7 @@ import Link from "next/link";
 import OtpCodeField from "@/components/auth/OtpCodeField";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
-import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
+import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
 import {
   getBiometricCredentials,
   getPinCredentials,
@@ -205,11 +205,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     if (isLoading) return;
     try {
-      window.location.href = await buildGoogleAuthStartUrl({
+      const params = {
         portal: "owner",
         action: "login",
         appHash,
-      });
+      } as const;
+      if (await signInWithGoogleNative(params)) return;
+      window.location.href = await buildGoogleAuthStartUrl(params);
     } catch {
       setError("Unable to start Google sign-in.");
     }

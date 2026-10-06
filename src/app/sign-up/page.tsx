@@ -20,7 +20,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { countries } from "countries-list";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
-import { buildGoogleAuthStartUrl } from "@/lib/google-auth-client";
+import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
 
 interface CountryData {
   name: string;
@@ -224,14 +224,16 @@ export default function SignUp() {
   const handleGoogleLogin = async () => {
     if (isLoading) return;
     try {
-      window.location.href = await buildGoogleAuthStartUrl({
+      const params = {
         portal: "owner",
         action: "signup",
         managementType: managementType || "rentals",
         tier: derivedTier || "premium",
           packageTier: packageTier || "one_percent",
           appHash,
-      });
+      } as const;
+      if (await signInWithGoogleNative(params)) return;
+      window.location.href = await buildGoogleAuthStartUrl(params);
     } catch {
       setError("Unable to start Google sign-in.");
     }
