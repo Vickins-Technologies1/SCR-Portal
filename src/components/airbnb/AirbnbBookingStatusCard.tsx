@@ -79,7 +79,7 @@ function AirbnbBookingStatusCardInner({
     const lines = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//Sorana Property Managers//Airbnb Booking//EN",
+      "PRODID:-//My Accurate Rent//Airbnb Booking//EN",
       "CALSCALE:GREGORIAN",
       "METHOD:PUBLISH",
       "BEGIN:VEVENT",

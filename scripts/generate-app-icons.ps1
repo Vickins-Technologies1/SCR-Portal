@@ -1,5 +1,5 @@
 param(
-  [string]$Source = "assets\\sorana-icon-source.png",
+  [string]$Source = "public\\brand\\my-accurate-rent-logo.jpg",
   [string]$Background = "#ffffff"
 )
 
@@ -90,7 +90,7 @@ function Write-IcoFromPngSquareIcon {
 
   Ensure-Dir $OutPath
 
-  $tmpPng = Join-Path $env:TEMP ("sorana-favicon-{0}.png" -f ([Guid]::NewGuid().ToString("N")))
+  $tmpPng = Join-Path $env:TEMP ("my-accurate-rent-favicon-{0}.png" -f ([Guid]::NewGuid().ToString("N")))
   try {
     Write-PngSquareIcon -InPath $InPath -OutPath $tmpPng -Size $Size -ContentScale $ContentScale -Bg $Bg
     $bmp = [System.Drawing.Bitmap]::FromFile($tmpPng)

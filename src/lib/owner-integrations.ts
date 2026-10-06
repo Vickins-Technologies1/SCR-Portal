@@ -65,7 +65,7 @@ export async function getOwnerPaymentGateway(db: Db, ownerId: string): Promise<O
     : "daraja";
 }
 
-/** Provider for new Sorana invoice payments only. Kept separate from tenant routing. */
+/** Provider for new My Accurate Rent invoice payments only. Kept separate from tenant routing. */
 export async function getOwnerInvoicePaymentProvider(db: Db, ownerId: string): Promise<OwnerInvoicePaymentProvider> {
   void ownerId;
   const doc = await db.collection<any>("platformSettings").findOne(

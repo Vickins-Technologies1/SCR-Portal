@@ -16,7 +16,7 @@ export default function PropertyModal({ property, onClose }: PropertyModalProps)
 
   if (!property) return null;
 
-  const images = property.images?.length ? property.images : ["/logo.png"];
+  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.jpg"];
   const isSingleImage = images.length === 1;
 
   const handlePrevImage = () => {
@@ -68,7 +68,7 @@ export default function PropertyModal({ property, onClose }: PropertyModalProps)
                   height={600}
                   priority={currentImageIndex === 0}
                   placeholder="blur"
-                  blurDataURL="/logo.png"
+                  blurDataURL="/brand/my-accurate-rent-logo.jpg"
                 />
                 <button
                   onClick={() => setIsFullScreen(true)}

@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
         tillNumber: getKopokopoTillNumber(),
         phoneNumber: phone,
         amount: quote.amount,
-        firstName: "Sorana",
+        firstName: "My Accurate Rent",
         lastName: "Lifetime",
         reference: accountReference,
-        notes: `Sorana Lifetime package - ${quote.units} units`,
+        notes: `My Accurate Rent Lifetime package - ${quote.units} units`,
         callbackUrl: `${callbackBase}/api/kopokopo/webhook`,
         customerId: ownerId,
       });
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         amount: quote.amount,
         phone,
         accountReference,
-        transactionDesc: "Sorana Lifetime package",
+        transactionDesc: "My Accurate Rent Lifetime package",
         callbackUrl,
         transactionType: "CustomerPayBillOnline",
       });

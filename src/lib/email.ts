@@ -248,7 +248,7 @@ export async function sendWelcomeEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: "Welcome to Your New Home!",
       html,
@@ -299,7 +299,7 @@ export async function sendPasswordResetEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: "Set / Reset Your Tenant Password",
       html,
@@ -337,7 +337,7 @@ export async function sendUpdateEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: "Your Account Details Have Been Updated",
       html,
@@ -398,7 +398,7 @@ export async function sendReminderEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: title,
       html,
@@ -452,7 +452,7 @@ export async function sendContactLeadEmail({
   });
 
   await transporter.sendMail({
-    from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
     to,
     subject: safeSubject ? `Contact: ${safeSubject}` : "New contact form submission",
     replyTo: email ? `${name} <${email}>` : undefined,
@@ -508,7 +508,7 @@ export async function sendInvoiceEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: `${title} • ${propertyName}`,
       html,
@@ -576,7 +576,7 @@ export async function sendConfirmationEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: title,
       html,
@@ -621,7 +621,7 @@ export async function sendOwnerPasswordResetEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: "Reset Your Owner Portal Password",
       html,
@@ -661,7 +661,7 @@ export async function sendOtpEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: "Your OTP Code",
       html,
@@ -711,7 +711,7 @@ export async function sendAirbnbGuestMessageEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: subject || `Message from ${listingName}`,
       html,
@@ -784,7 +784,7 @@ export async function sendAirbnbBookingConfirmationEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: `${title}: ${listingName}`,
       html,
@@ -832,7 +832,7 @@ export async function sendAirbnbPaymentReceivedEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: `Payment received: ${listingName}`,
       html,
@@ -879,7 +879,7 @@ export async function sendAirbnbPaymentPortalInviteEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: `Guest portal access (${listingName})`,
       html,
@@ -922,7 +922,7 @@ export async function sendAirbnbReminderEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: `${title}: ${listingName}`,
       html,
@@ -970,7 +970,7 @@ export async function sendVacateRequestEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: "Tenant Vacate Request Submitted",
       html,
@@ -1018,7 +1018,7 @@ export async function sendTenantDeletionRequestEmail({
     });
 
     await transporter.sendMail({
-      from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+      from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
       to,
       subject: "Tenant Deletion Request Submitted",
       html,
@@ -1045,7 +1045,7 @@ export async function sendSystemErrorAlert(options: SystemErrorAlertOptions): Pr
     ["Account", context.accountId || context.propertyOwnerId], ["Request ID", context.requestId], ["Occurrences", options.occurrenceCount],
     ["First seen", options.firstOccurred.toISOString()], ["Last seen", options.lastOccurred.toISOString()], ["Error ID", options.errorId],
   ].map(([label, value]) => `<tr><td style="padding:5px 10px;font-weight:600;color:#475569">${safe(label)}</td><td style="padding:5px 10px">${safe(value)}</td></tr>`).join("");
-  const html = `<div style="font-family:Arial,sans-serif;max-width:720px;color:#0f172a"><h2 style="color:#b91c1c">SORANA SYSTEM ALERT</h2><h3>🚨 ${safe(options.environment)} Error: ${safe(options.errorName)}</h3><table style="border-collapse:collapse;width:100%;background:#f8fafc">${rows}</table><h4>Error message</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px">${safe(options.message)}</pre><h4>Stack trace</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px;overflow:auto">${safe(options.stack)}</pre><h4>Safe metadata</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px">${safe(JSON.stringify(context.metadata || {}, null, 2))}</pre></div>`;
-  await transporter.sendMail({ from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`, to, subject: `🚨 Sorana ${options.environment} Error: ${options.errorName}`, html });
+  const html = `<div style="font-family:Arial,sans-serif;max-width:720px;color:#0f172a"><h2 style="color:#b91c1c">MY ACCURATE RENT SYSTEM ALERT</h2><h3>🚨 ${safe(options.environment)} Error: ${safe(options.errorName)}</h3><table style="border-collapse:collapse;width:100%;background:#f8fafc">${rows}</table><h4>Error message</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px">${safe(options.message)}</pre><h4>Stack trace</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px;overflow:auto">${safe(options.stack)}</pre><h4>Safe metadata</h4><pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px">${safe(JSON.stringify(context.metadata || {}, null, 2))}</pre></div>`;
+  await transporter.sendMail({ from: `"My Accurate Rent" <${process.env.SMTP_USER}>`, to, subject: `🚨 My Accurate Rent ${options.environment} Error: ${options.errorName}`, html });
 }
 

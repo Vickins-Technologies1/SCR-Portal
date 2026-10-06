@@ -44,9 +44,9 @@ export const generateStyledTemplate = ({ intro, details, title }: EmailTemplateO
     <body>
       <div class="container">
         <div class="header">
-          <img class="logo" src="https://app.soranapropertymanagers.com/logo.png" alt="Sorana Property Managers Logo">
+          <img class="logo" src="https://app.soranapropertymanagers.com/brand/my-accurate-rent-logo.jpg" alt="My Accurate Rent logo">
           <h1 class="title">${title}</h1>
-          <div class="subtle">Sorana Property Managers Ltd.</div>
+          <div class="subtle">My Accurate Rent</div>
         </div>
         <div class="content">
           <p class="intro">${intro}</p>
@@ -56,8 +56,8 @@ export const generateStyledTemplate = ({ intro, details, title }: EmailTemplateO
         </div>
         <div class="footer">
           <p>If you have any questions, please <a href="mailto:support@soranapropertymanagers.com">contact our support team</a>.</p>
-          <p>Thank you for choosing Sorana Property Managers Ltd.</p>
-          <p>&mdash; Sorana Property Managers Team</p>
+          <p>Thank you for choosing My Accurate Rent.</p>
+          <p>&mdash; My Accurate Rent Team</p>
         </div>
       </div>
     </body>

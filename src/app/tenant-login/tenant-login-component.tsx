@@ -263,6 +263,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
 
   const handleGoogleLogin = async () => {
     if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const params = {
         portal: "tenant",
@@ -273,6 +274,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
       if (await signInWithGoogleNative(params)) return;
       window.location.href = await buildGoogleAuthStartUrl(params);
     } catch (error) {
+      setIsSubmitting(false);
       setError(error instanceof Error && error.message ? error.message : "Unable to start Google sign-in.");
     }
   };
@@ -399,8 +401,8 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
         <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
             <Image
-              src="/logo.png"
-              alt="Sorana Property Managers Limited"
+              src="/brand/my-accurate-rent-logo.jpg"
+              alt="My Accurate Rent"
               width={400}
               height={140}
               className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
@@ -448,8 +450,8 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
             <Image
-              src="/logo.png"
-              alt="Sorana"
+              src="/brand/my-accurate-rent-logo.jpg"
+              alt="My Accurate Rent"
               width={240}
               height={80}
               className="drop-shadow-lg max-w-[180px] xs:max-w-[200px]"

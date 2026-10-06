@@ -1,4 +1,7 @@
 {
+  "name": "My Accurate Rent",
+  "short_name": "My Accurate Rent",
+  "description": "Rental management made accurate and simple.",
   "background_color": "#ffffff",
   "icons": [
     {

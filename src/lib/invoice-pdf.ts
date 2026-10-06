@@ -101,6 +101,6 @@ export async function generateInvoicePdf(params: {
 
   const footerY = safeArea.bottom + 10;
   page.drawText("Thank you for your business.", { x: left, y: footerY + 12, size: 9, font: bold, color: navy });
-  page.drawText("Sorana Property Managers Ltd  ·  soranapropertymanagers@gmail.com  ·  soranapropertymanagers.com", { x: left, y: footerY, size: 6.5, font: regular, color: slate });
+  page.drawText("My Accurate Rent  ·  support@soranapropertymanagers.com", { x: left, y: footerY, size: 6.5, font: regular, color: slate });
   return { pdfBytes: await pdfDoc.save(), invoiceNumber, calculation };
 }

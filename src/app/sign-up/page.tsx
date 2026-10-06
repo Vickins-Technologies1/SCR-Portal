@@ -223,6 +223,7 @@ export default function SignUp() {
 
   const handleGoogleLogin = async () => {
     if (isLoading) return;
+    setIsLoading(true);
     try {
       const params = {
         portal: "owner",
@@ -235,6 +236,7 @@ export default function SignUp() {
       if (await signInWithGoogleNative(params)) return;
       window.location.href = await buildGoogleAuthStartUrl(params);
     } catch (error) {
+      setIsLoading(false);
       setError(error instanceof Error && error.message ? error.message : "Unable to start Google sign-in.");
     }
   };
@@ -438,8 +440,8 @@ export default function SignUp() {
         <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
             <Image
-              src="/logo.png"
-              alt="Sorana Property Managers Limited"
+              src="/brand/my-accurate-rent-logo.jpg"
+              alt="My Accurate Rent"
               width={400}
               height={140}
               className="mx-auto drop-shadow-xl max-w-[260px] sm:max-w-[300px] xl:max-w-[360px]"
@@ -487,8 +489,8 @@ export default function SignUp() {
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
             <Image
-              src="/logo.png"
-              alt="Sorana"
+              src="/brand/my-accurate-rent-logo.jpg"
+              alt="My Accurate Rent"
               width={240}
               height={80}
               className="drop-shadow-lg max-w-[180px] xs:max-w-[200px]"
@@ -639,7 +641,7 @@ export default function SignUp() {
                         >
                           <p className="text-[10px] uppercase tracking-[0.25em] text-primary">Referral program</p>
                           <h3 className="mt-2 text-lg font-semibold text-foreground">I’m joining to earn referral rewards</h3>
-                          <p className="mt-2 max-w-2xl text-xs text-muted-foreground">No property is required. Start with a Sorana account, share your referral link, and earn cash commissions when qualified customers join.</p>
+                          <p className="mt-2 max-w-2xl text-xs text-muted-foreground">No property is required. Start with a My Accurate Rent account, share your referral link, and earn cash commissions when qualified customers join.</p>
                         </button>
                          {/* Lifetime */}
                          <button
@@ -660,7 +662,7 @@ export default function SignUp() {
                              <div>
                                <div className="flex flex-wrap items-center gap-2"><h3 className="text-xl font-semibold text-foreground">Lifetime</h3><span className="rounded-full bg-primary px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary-foreground">One-time</span><span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">Lifetime access</span></div>
                                <p className="mt-2 text-sm font-semibold text-foreground">Pay once. No recurring subscription.</p>
-                               <p className="mt-2 max-w-2xl text-xs text-muted-foreground">Your configured Sorana property-management features and limits, with no monthly fees or annual renewal.</p>
+                               <p className="mt-2 max-w-2xl text-xs text-muted-foreground">Your configured My Accurate Rent property-management features and limits, with no monthly fees or annual renewal.</p>
                              </div>
                              <span className="shrink-0 rounded-full border border-primary/25 bg-card px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">{lifetimeQuote ? `${lifetimeQuote.currency} ${lifetimeQuote.price.toLocaleString("en-KE")}` : "Configure units"}</span>
                            </div>
@@ -854,7 +856,7 @@ export default function SignUp() {
                             <div>
                               <p className="text-[10px] uppercase tracking-[0.28em] text-primary">Lifetime package calculator</p>
                               <h3 className="mt-2 text-xl font-semibold text-foreground">How many units do you manage?</h3>
-                              <p className="mt-2 text-xs text-muted-foreground">Your one-time price is calculated from the active Sorana pricing tiers.</p>
+                              <p className="mt-2 text-xs text-muted-foreground">Your one-time price is calculated from the active My Accurate Rent pricing tiers.</p>
                             </div>
                             <label className="text-xs font-semibold text-muted-foreground">Number of units
                               <input type="number" min={lifetimePricing?.minimumUnits ?? 1} max={lifetimePricing?.maximumUnits ?? undefined} step="1" value={lifetimeUnits} onChange={(event) => setLifetimeUnits(Math.max(lifetimePricing?.minimumUnits ?? 1, Number(event.target.value) || 0))} className="mt-2 block w-full rounded-xl border border-border bg-background px-4 py-3 text-lg font-semibold text-foreground outline-none focus:border-primary sm:w-40" />
@@ -863,9 +865,9 @@ export default function SignUp() {
                           <div className="mt-6 grid gap-4 sm:grid-cols-3">
                             <div className="rounded-xl bg-primary/10 p-4"><p className="text-xs text-muted-foreground">Selected units</p><p className="mt-1 text-2xl font-semibold text-foreground">{lifetimeUnits || "—"}</p></div>
                             <div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">Pricing tier</p><p className="mt-1 font-semibold text-foreground">{lifetimeQuote ? `${lifetimeQuote.minUnits}–${lifetimeQuote.maxUnits ?? "∞"} units` : "Unavailable"}</p></div>
-                            <div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">One-time price</p><p className="mt-1 text-2xl font-semibold text-foreground">{lifetimeQuote ? `${lifetimeQuote.currency} ${lifetimeQuote.price.toLocaleString("en-KE")}` : "Contact Sorana"}</p></div>
+                            <div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">One-time price</p><p className="mt-1 text-2xl font-semibold text-foreground">{lifetimeQuote ? `${lifetimeQuote.currency} ${lifetimeQuote.price.toLocaleString("en-KE")}` : "Contact My Accurate Rent"}</p></div>
                           </div>
-                          {!lifetimeQuote && <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700">No active tier covers this unit count. Select another count or contact Sorana for a custom package.</p>}
+                          {!lifetimeQuote && <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-700">No active tier covers this unit count. Select another count or contact My Accurate Rent for a custom package.</p>}
                           <button type="button" onClick={() => setIsPackageModalOpen(false)} disabled={!lifetimeQuote} className="mt-6 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50">Continue with Lifetime</button>
                         </section>
                       )}

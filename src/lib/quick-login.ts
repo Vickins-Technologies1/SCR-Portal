@@ -206,7 +206,7 @@ export async function getBiometricCredentials(kind: LoginKind): Promise<StoredCr
 
   const res = await (NativeBiometric as any).getSecureCredentials({
     server: getBiometricServerKey(kind),
-    reason: "Sign in to Sorana",
+    reason: "Sign in to My Accurate Rent",
     title: "Biometric Sign-In",
   } as any);
 

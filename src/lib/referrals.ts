@@ -229,7 +229,7 @@ export async function qualifyReferralForUser(params: {
           currency: "MONTHS",
           direction: "credit",
           status: "posted",
-          description: "Sorana subscription credit",
+          description: "My Accurate Rent subscription credit",
           createdAt: now,
         },
       },
@@ -246,7 +246,7 @@ export async function qualifyReferralForUser(params: {
 
 /**
  * Qualify a referral only when the referred owner has paid their first
- * Sorana invoice. This is called by verified payment-provider callbacks,
+ * My Accurate Rent invoice. This is called by verified payment-provider callbacks,
  * never by a browser-controlled invoice status update.
  */
 export async function qualifyReferralFromFirstPaidInvoice(params: {

@@ -15,8 +15,8 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
       <div className="flex h-full w-full min-w-0 items-center gap-3 px-3 sm:px-6 lg:px-10">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Image
-            src="/logo.png"
-            alt="Sorana Property Managers Logo"
+            src="/brand/my-accurate-rent-logo.jpg"
+            alt="My Accurate Rent logo"
             width={180}
             height={64}
             className="h-8 w-auto max-w-[120px] rounded-md object-contain drop-shadow-sm sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none"

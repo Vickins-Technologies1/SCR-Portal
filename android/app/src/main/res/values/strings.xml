@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Sorana</string>
-    <string name="title_activity_main">Sorana</string>
+    <string name="app_name">My Accurate Rent</string>
+    <string name="title_activity_main">My Accurate Rent</string>
     <string name="package_name">com.soranapropertymanagers.app</string>
     <string name="custom_url_scheme">com.soranapropertymanagers.app</string>
 </resources>

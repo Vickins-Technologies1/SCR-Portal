@@ -212,6 +212,7 @@ export default function AdminLogin() {
 
   const handleGoogleLogin = async () => {
     if (isLoading) return;
+    setIsLoading(true);
     try {
       const params = {
         portal: "admin",
@@ -221,6 +222,7 @@ export default function AdminLogin() {
       if (await signInWithGoogleNative(params)) return;
       window.location.href = await buildGoogleAuthStartUrl(params);
     } catch (error) {
+      setIsLoading(false);
       setError(error instanceof Error && error.message ? error.message : "Unable to start Google sign-in.");
     }
   };
@@ -444,8 +446,8 @@ export default function AdminLogin() {
           <div className="relative z-10 max-w-lg text-center space-y-4 xl:space-y-6">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
               <Image
-                src="/logo.png"
-                alt="Sorana Admin Portal"
+                src="/brand/my-accurate-rent-logo.jpg"
+                alt="My Accurate Rent Admin Portal"
                 width={400}
                 height={140}
                 className="mx-auto drop-shadow-xl max-w-[240px] sm:max-w-[280px] xl:max-w-[320px]"
@@ -493,8 +495,8 @@ export default function AdminLogin() {
             {/* Mobile logo */}
             <div className="lg:hidden flex justify-center pt-4 pb-3">
               <Image
-                src="/logo.png"
-                alt="Sorana"
+                src="/brand/my-accurate-rent-logo.jpg"
+                alt="My Accurate Rent"
                 width={240}
                 height={80}
                 className="drop-shadow-lg max-w-[160px] xs:max-w-[180px]"

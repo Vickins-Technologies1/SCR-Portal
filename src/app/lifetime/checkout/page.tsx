@@ -105,9 +105,9 @@ function LifetimeCheckoutContent() {
     <main className="min-h-[100svh] bg-background px-4 py-10 text-foreground sm:px-6">
       <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1.05fr_.95fr] lg:items-start">
         <section className="rounded-[2rem] border border-primary/20 bg-card p-7 shadow-2xl sm:p-10">
-          <p className="text-xs font-semibold uppercase tracking-[.28em] text-primary">Sorana Lifetime</p>
+          <p className="text-xs font-semibold uppercase tracking-[.28em] text-primary">My Accurate Rent Lifetime</p>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-5xl">Own your property management experience — pay once.</h1>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">A permanent product entitlement with no monthly subscription and no annual renewal. Access remains tied to your Sorana account.</p>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">A permanent product entitlement with no monthly subscription and no annual renewal. Access remains tied to your My Accurate Rent account.</p>
           <div className="mt-8 flex flex-wrap items-end gap-3">
             <span className="text-4xl font-semibold">{money}</span>
             <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary">One-time payment</span>

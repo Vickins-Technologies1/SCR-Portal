@@ -105,7 +105,7 @@ export async function POST(
 
     sheet.mergeCells(`A1:${lastColumn}1`);
     const companyRow = sheet.getCell("A1");
-    companyRow.value = "Sorana Property Managers";
+    companyRow.value = "My Accurate Rent";
     companyRow.font = { bold: true, size: 20, color: { argb: "FF00334D" } };
     companyRow.alignment = { horizontal: "center", vertical: "middle" };
 

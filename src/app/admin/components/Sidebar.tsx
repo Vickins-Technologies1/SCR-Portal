@@ -410,7 +410,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 </button>
               </div>
             </div>
-            <p>© {new Date().getFullYear()} Sorana Property Managers Limited</p>
+            <p>© {new Date().getFullYear()} My Accurate Rent</p>
             {!isCollapsed && (
               <p className="mt-2">
                 Developed by{" "}

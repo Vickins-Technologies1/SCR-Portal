@@ -178,7 +178,7 @@ const buildPrintableQrSvg = async (propertyName: string, publicUrl: string) => {
   <rect x="170" y="1084" width="860" height="224" rx="32" fill="#ffffff" stroke="#cbd5e1" stroke-width="3" />
   <text x="600" y="1166" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#0f172a">Public availability page</text>
   <text x="600" y="1216" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#475569">${escapedUrl}</text>
-  <text x="600" y="1468" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#64748b">Sorana Property Managers</text>
+  <text x="600" y="1468" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#64748b">My Accurate Rent</text>
 </svg>`;
 };
 

@@ -54,8 +54,8 @@ export default function ReferralsPage() {
 
   const share = async () => {
     if (!data) return;
-    const text = `I’m using Sorana Property Managers to manage properties, tenants and payments.\n\nTry Sorana here:\n${data.profile.referralLink}`;
-    if (navigator.share) await navigator.share({ title: "Try Sorana", text, url: data.profile.referralLink });
+    const text = `I’m using My Accurate Rent to manage properties, tenants and payments.\n\nTry My Accurate Rent here:\n${data.profile.referralLink}`;
+    if (navigator.share) await navigator.share({ title: "Try My Accurate Rent", text, url: data.profile.referralLink });
     else window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   };
 
@@ -93,9 +93,9 @@ export default function ReferralsPage() {
     <OwnerPageShell><main className="mx-auto min-h-screen max-w-7xl space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.28em] text-primary">Sorana referral program</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Share Sorana. Earn rewards.</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Your referral program is part of your Sorana account. You can refer customers whether or not you manage properties.</p>
+          <p className="text-[10px] uppercase tracking-[0.28em] text-primary">My Accurate Rent referral program</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Share My Accurate Rent. Earn rewards.</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Your referral program is part of your My Accurate Rent account. You can refer customers whether or not you manage properties.</p>
         </div>
         <div className="flex gap-2">
           <button onClick={copyLink} className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground transition hover:border-primary/40"><Copy size={15} />{copied ? "Copied" : "Copy link"}</button>
@@ -115,7 +115,7 @@ export default function ReferralsPage() {
 
       <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-          <div className="flex items-center gap-3"><Gift className="text-primary" size={20} /><div><h2 className="font-semibold text-foreground">{isCash ? "Your referral earnings" : "Your referral reward"}</h2><p className="text-xs text-muted-foreground">{isCash ? `Earn ${money(data.settings.cashCommissionAmount)} per qualified referral. Minimum payout: ${money(data.settings.minimumPayoutAmount)}.` : `Earn ${data.settings.subscriptionRewardMonths} month${data.settings.subscriptionRewardMonths === 1 ? "" : "s"} of Sorana subscription credit per qualified referral.`}</p></div></div>
+          <div className="flex items-center gap-3"><Gift className="text-primary" size={20} /><div><h2 className="font-semibold text-foreground">{isCash ? "Your referral earnings" : "Your referral reward"}</h2><p className="text-xs text-muted-foreground">{isCash ? `Earn ${money(data.settings.cashCommissionAmount)} per qualified referral. Minimum payout: ${money(data.settings.minimumPayoutAmount)}.` : `Earn ${data.settings.subscriptionRewardMonths} month${data.settings.subscriptionRewardMonths === 1 ? "" : "s"} of My Accurate Rent subscription credit per qualified referral.`}</p></div></div>
           {isCash ? <div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-primary/10 p-4"><p className="text-xs text-muted-foreground">Available</p><p className="mt-1 text-2xl font-semibold text-foreground">{money(data.wallet.available)}</p></div><div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">Total earned</p><p className="mt-1 text-2xl font-semibold text-foreground">{money(data.wallet.totalEarned)}</p></div><div className="rounded-xl border border-border p-4"><p className="text-xs text-muted-foreground">Pending</p><p className="mt-1 font-semibold text-foreground">{money(data.wallet.pending)}</p></div><div className="rounded-xl border border-border p-4"><p className="text-xs text-muted-foreground">Paid out</p><p className="mt-1 font-semibold text-foreground">{money(data.wallet.paidOut)}</p></div></div> : <div className="mt-6 rounded-xl bg-primary/10 p-4 text-sm text-foreground">Subscription credits are recorded against your qualified referrals and remain on this account if you later start managing properties.</div>}
         </section>
         <section className="rounded-2xl border border-border bg-card p-5 sm:p-6"><div className="flex items-center gap-3"><WalletCards className="text-primary" size={20} /><h2 className="font-semibold text-foreground">Payouts</h2></div>{isCash ? <><p className="mt-4 text-sm text-muted-foreground">Available: <span className="font-semibold text-foreground">{money(data.wallet.available)}</span></p><p className="mt-1 text-xs text-muted-foreground">Minimum payout: {money(data.settings.minimumPayoutAmount)}</p>{canPayout ? <button onClick={() => setShowPayout(true)} className="mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary-hover">Request payout</button> : <p className="mt-5 rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground">You need {money(moreNeeded)} more to request a payout.</p>}</> : <p className="mt-4 text-sm text-muted-foreground">Your current reward mode is subscription credit. Cash payout options will appear when your account is configured for cash commissions.</p>}</section>

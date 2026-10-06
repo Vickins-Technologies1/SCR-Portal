@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Sorana</string>
+        <string>My Accurate Rent</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -48,7 +48,7 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Use Face ID / Touch ID to quickly sign in to Sorana.</string>
+	<string>Use Face ID / Touch ID to quickly sign in to My Accurate Rent.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

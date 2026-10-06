@@ -217,10 +217,10 @@ export function calculateLifetimePriceFromPlan(plan: LifetimePlan, unitsInput: u
     throw new LifetimePricingError(`Enter at least ${plan.minimumUnits} whole unit${plan.minimumUnits === 1 ? "" : "s"}.`, "INVALID_UNITS");
   }
   if (plan.maximumUnits !== null && unitsInput > plan.maximumUnits) {
-    throw new LifetimePricingError(`For properties above ${plan.maximumUnits} units, please contact Sorana for a custom Lifetime package.`, "NO_PRICE");
+    throw new LifetimePricingError(`For properties above ${plan.maximumUnits} units, please contact My Accurate Rent for a custom Lifetime package.`, "NO_PRICE");
   }
   const tier = plan.pricingTiers.find((candidate) => candidate.active && candidate.minUnits <= unitsInput && (candidate.maxUnits === null || unitsInput <= candidate.maxUnits));
-  if (!tier) throw new LifetimePricingError(`No Lifetime pricing is configured for ${unitsInput} units. Please contact Sorana.`, "NO_PRICE");
+  if (!tier) throw new LifetimePricingError(`No Lifetime pricing is configured for ${unitsInput} units. Please contact My Accurate Rent.`, "NO_PRICE");
   return {
     units: unitsInput,
     tier: { minUnits: tier.minUnits, maxUnits: tier.maxUnits, price: tier.price, currency: tier.currency },

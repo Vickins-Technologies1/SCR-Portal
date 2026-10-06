@@ -4,22 +4,22 @@ import Script from "next/script";
 import PublicNavbar from "./components/PublicNavbar";
 
 export const metadata: Metadata = {
-  title: "Sorana Market Place | Sorana Property Managers",
+  title: "My Accurate Rent Marketplace",
   description:
     "Browse verified long-term rentals, short-term stays, and properties for sale across Kenya. Transparent terms, verified inventory, and professional support.",
   openGraph: {
-    title: "Sorana Market Place | Sorana Property Managers",
+    title: "My Accurate Rent Marketplace",
     description:
       "Browse verified long-term rentals, short-term stays, and properties for sale across Kenya. Transparent terms, verified inventory, and professional support.",
     type: "website",
-    images: ["/logo.png"],
+    images: ["/brand/my-accurate-rent-logo.jpg"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Sorana Market Place | Sorana Property Managers",
+    title: "My Accurate Rent Marketplace",
     description:
       "Browse verified long-term rentals, short-term stays, and properties for sale across Kenya. Transparent terms, verified inventory, and professional support.",
-    images: ["/logo.png"],
+    images: ["/brand/my-accurate-rent-logo.jpg"],
   },
 };
 

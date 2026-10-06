@@ -303,7 +303,7 @@ export default function Sidebar() {
                 </div>
               )}
               <p className="text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
-                © {new Date().getFullYear()} Sorana Property Managers Limited
+                © {new Date().getFullYear()} My Accurate Rent
               </p>
               <p className="text-[9px] text-muted-foreground font-light opacity-70">
                 Developed by{" "}

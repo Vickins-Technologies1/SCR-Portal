@@ -8,7 +8,7 @@ import SectionHeader from "../components/SectionHeader";
 import { useAirbnbAccess } from "../components/useAirbnbAccess";
 
 const defaultSettings = {
-  brandName: "Sorana Short-Stays",
+  brandName: "My Accurate Rent Short-Stays",
   supportEmail: "",
   supportPhone: "",
   currency: "KES",

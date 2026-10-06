@@ -54,7 +54,7 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
     const requestedGuests = Number(guests || 1);
     const parts = [
       `Hello, I am interested in booking ${propertyName}.`,
-      `I found the property on Sorana and would like to know its availability and booking requirements.`,
+      `I found the property on My Accurate Rent and would like to know its availability and booking requirements.`,
       "",
       `Name: ${fullName.trim()}`,
       `Check-in: ${checkIn}`,

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     if (existing) return NextResponse.json({ success: true, checkoutRequestId: existing.checkoutRequestId, merchantRequestId: existing.merchantRequestId, status: existing.status, message: "A payment request is already pending." });
     const credentials = resolveDarajaPlatformStkCredentials();
     const callbackUrl = getMpesaCallbackUrl("/api/owner/invoice-payments/daraja-callback");
-    const response = await initiateStkPush({ ...credentials, environment: undefined, amount, phone, accountReference: reference, transactionDesc: `Sorana invoice ${reference}`, callbackUrl, transactionType: "CustomerPayBillOnline", partyB: credentials.shortcode });
+    const response = await initiateStkPush({ ...credentials, environment: undefined, amount, phone, accountReference: reference, transactionDesc: `My Accurate Rent invoice ${reference}`, callbackUrl, transactionType: "CustomerPayBillOnline", partyB: credentials.shortcode });
     if (!isStkPushAccepted(response)) return NextResponse.json({ success: false, message: response.ResponseDescription || "Payment initiation failed" }, { status: 502 });
     const now = new Date().toISOString();
     await db.collection("payments").insertOne({ invoiceId: invoice._id.toString(), ownerId, propertyOwnerId: ownerId, amount, currency: "KES", provider: "daraja", paymentRail: "property_owner_invoice_daraja", phoneNumber: phone, accountReference: reference, transactionId: response.CheckoutRequestID, checkoutRequestId: response.CheckoutRequestID, merchantRequestId: response.MerchantRequestID, status: "pending", resultCode: null, rawCallbackData: null, createdAt: now, updatedAt: now });

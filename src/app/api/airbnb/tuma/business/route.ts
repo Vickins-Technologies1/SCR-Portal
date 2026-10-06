@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       /\/$/,
       ""
     );
-    const logoUrl = parsed.data.logo || `${baseUrl}/logo.png`;
+    const logoUrl = parsed.data.logo || `${baseUrl}/brand/my-accurate-rent-logo.jpg`;
 
     const created = await createTumaBusiness({
       credentials: {

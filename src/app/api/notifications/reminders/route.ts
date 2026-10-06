@@ -395,7 +395,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             });
 
             await transporter.sendMail({
-              from: `"Sorana Property Managers Ltd" <${process.env.SMTP_USER}>`,
+              from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
               to: tenant.email,
               subject: emailTitle,
               html,

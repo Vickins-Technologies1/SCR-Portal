@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     wallet,
     referrals: referrals.map((referral) => ({
       ...serialize(referral),
-      referredUser: referredMap.get(referral.referredUserId)?.name || "Sorana customer",
+      referredUser: referredMap.get(referral.referredUserId)?.name || "My Accurate Rent customer",
       commission: serialize(commissionMap.get(referral._id.toString()) || null),
       subscriptionReward: serialize(subscriptionMap.get(referral._id.toString()) || null),
     })),

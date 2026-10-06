@@ -35,16 +35,16 @@ export default function PublicNavbar() {
           <div className="flex items-center justify-between rounded-full border border-border bg-card backdrop-blur-xl shadow-[0_20px_50px_-35px_rgba(0,0,0,0.35)] px-4 py-2">
             <Link href={MAIN_SITE} aria-label="Home" className="flex items-center gap-3">
               <Image
-                src="/logo.png"
-                alt="Sorana"
+                src="/brand/my-accurate-rent-logo.jpg"
+                alt="My Accurate Rent"
                 width={56}
                 height={56}
                 className="h-12 w-12 object-contain"
                 priority
               />
               <div className="hidden sm:block">
-                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Sorana</p>
-                <p className="text-xs font-semibold text-foreground">Property Managers</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">My Accurate</p>
+                <p className="text-xs font-semibold text-foreground">Rent</p>
               </div>
             </Link>
 
@@ -107,15 +107,15 @@ export default function PublicNavbar() {
           <div className="flex items-center justify-between">
             <Link href={MAIN_SITE} className="flex items-center gap-3">
               <Image
-                src="/logo.png"
-                alt="Sorana"
+                src="/brand/my-accurate-rent-logo.jpg"
+                alt="My Accurate Rent"
                 width={56}
                 height={56}
                 className="h-12 w-12 object-contain"
               />
               <div>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Sorana</p>
-                <p className="text-xs font-semibold text-foreground">Property Managers</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">My Accurate</p>
+                <p className="text-xs font-semibold text-foreground">Rent</p>
               </div>
             </Link>
             <button

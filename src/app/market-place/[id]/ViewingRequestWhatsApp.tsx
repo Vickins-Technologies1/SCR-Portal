@@ -16,7 +16,7 @@ export default function ViewingRequestWhatsApp({ propertyName, contactPhone }: V
 
   const normalizedPhone = useMemo(() => normalizeWhatsAppPhone(contactPhone), [contactPhone]);
   const message = useMemo(
-    () => `Hello, I am interested in viewing ${propertyName} listed on Sorana. I would like to arrange a suitable viewing time.`,
+    () => `Hello, I am interested in viewing ${propertyName} listed on My Accurate Rent. I would like to arrange a suitable viewing time.`,
     [propertyName]
   );
 

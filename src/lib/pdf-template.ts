@@ -2,7 +2,7 @@ import type { PDFDocument, PDFImage, PDFPage } from "pdf-lib";
 
 export const A4_PAGE_SIZE: [number, number] = [595.28, 841.89];
 
-export const PDF_TEMPLATE_PUBLIC_PATH = "/pdf/sorana-letterhead.jpeg";
+export const PDF_TEMPLATE_PUBLIC_PATH = "/brand/my-accurate-rent-logo.jpg";
 
 // Margins (in PDF points) that keep content away from the background logo/header/footer.
 export const PDF_TEMPLATE_SAFE_AREA = {
@@ -32,7 +32,14 @@ export async function applyPdfTemplate(params: {
   const { width, height } = params.page.getSize();
 
   const image = params.backgroundImage ?? (await embedTemplateImage(params.pdfDoc, params.backgroundBytes));
-  params.page.drawImage(image, { x: 0, y: 0, width, height });
+  const logoWidth = Math.min(190, width - safeArea.left - safeArea.right);
+  const logoHeight = logoWidth * (image.height / image.width);
+  params.page.drawImage(image, {
+    x: (width - logoWidth) / 2,
+    y: height - logoHeight - 28,
+    width: logoWidth,
+    height: logoHeight,
+  });
 
   const contentX = safeArea.left;
   const contentWidth = width - safeArea.left - safeArea.right;

@@ -158,8 +158,8 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
             <div className="sorana-sidebar-header p-6 border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent">
               <div className="flex justify-center mb-5">
               <Image
-                src="/logo.png"
-                alt="Sorana Property Managers Logo"
+                src="/brand/my-accurate-rent-logo.jpg"
+                alt="My Accurate Rent logo"
                 width={180}
                 height={64}
                 className="h-12 w-auto drop-shadow-md"
@@ -201,7 +201,7 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
                 <ShellFooterActions onSignOut={handleLogout} />
               </div>
               <p className="text-center text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
-                © {new Date().getFullYear()} Sorana Property Managers Limited
+                © {new Date().getFullYear()} My Accurate Rent
               </p>
             </div>
           </div>

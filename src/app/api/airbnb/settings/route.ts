@@ -26,7 +26,7 @@ const SettingsSchema = z.object({
 });
 
 const defaultSettings = {
-  brandName: "Sorana Short-Stays",
+  brandName: "My Accurate Rent Short-Stays",
   supportEmail: "bookings@soranapropertymanagers.com",
   supportPhone: "",
   currency: "KES",

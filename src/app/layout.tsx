@@ -6,7 +6,7 @@ import OfflineFallback from "@/components/network/OfflineFallback";
 import GlobalErrorMonitor from "@/components/GlobalErrorMonitor";
 
 const siteUrl = "https://app.soranapropertymanagers.com";
-const siteName = "Sorana";
+const siteName = "My Accurate Rent";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     template: `%s | ${siteName}`,
   },
   description: "Your trusted partner in rental success",
-  applicationName: "Sorana",
+  applicationName: "My Accurate Rent",
   keywords: [
     "property management",
     "rental management",
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     "property owner dashboard",
     "rent collection",
     "Kenya property management",
-    "Sorana Property Managers",
+    "My Accurate Rent",
   ],
   alternates: {
     canonical: "/",
@@ -37,10 +37,10 @@ export const metadata: Metadata = {
     locale: "en_US",
     images: [
       {
-        url: "/logo.png",
+        url: "/brand/my-accurate-rent-logo.jpg",
         width: 512,
         height: 512,
-        alt: "Sorana Logo",
+        alt: "My Accurate Rent logo",
       },
     ],
   },
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: siteName,
     description: "Your trusted partner in rental success",
-    images: ["/logo.png"],
+    images: ["/brand/my-accurate-rent-logo.jpg"],
   },
   robots: {
     index: true,

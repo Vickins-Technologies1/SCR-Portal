@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 
   page.drawRectangle({ x: 0, y: 780, width: 595, height: 62, color: rgb(0.07, 0.13, 0.29) });
   draw("Booking Receipt", 40, 800, 22, true, rgb(1, 1, 1));
-  draw("Sorana Property Managers", 40, 780, 11, false, rgb(0.93, 0.96, 1));
+  draw("My Accurate Rent", 40, 780, 11, false, rgb(0.93, 0.96, 1));
 
   const checkIn = booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("en-KE", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "—";
   const checkOut = booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("en-KE", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "—";

@@ -46,8 +46,8 @@ export default function PortalsPage() {
           >
             <div className="px-6 sm:px-10 pt-10 pb-8 text-center space-y-3">
               <Image
-                src="/logo.png"
-                alt="Sorana Property Managers"
+                src="/brand/my-accurate-rent-logo.jpg"
+                alt="My Accurate Rent"
                 width={320}
                 height={112}
                 className="mx-auto drop-shadow-xl max-w-[220px] sm:max-w-[260px]"
@@ -100,4 +100,3 @@ export default function PortalsPage() {
     </PublicThemeWrapper>
   );
 }
-

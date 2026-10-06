@@ -116,11 +116,11 @@ export async function generateMetadata({
 
   const description =
     property.description ||
-    `Explore ${property.name} in ${property.address}. ${property.listingType === "airbnb" ? "Short-term stay" : property.listingType === "sale" ? "Property for sale" : "Long-term rental"} managed by Sorana.`;
-  const images = property.images?.length ? property.images : ["/logo.png"];
+    `Explore ${property.name} in ${property.address}. ${property.listingType === "airbnb" ? "Short-term stay" : property.listingType === "sale" ? "Property for sale" : "Long-term rental"} managed by My Accurate Rent.`;
+  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.jpg"];
 
   return {
-    title: `${property.name} | Sorana Property Managers`,
+    title: `${property.name} | My Accurate Rent`,
     description,
     openGraph: {
       title: property.name,
@@ -155,7 +155,7 @@ export default async function PropertyDetailPage({
       `Property availability enquiry: ${property.name}`
     )}&body=${encodeURIComponent(
       [
-        "Hello Sorana team,",
+        "Hello My Accurate Rent team,",
         "",
         `I scanned the QR code for ${property.name}.`,
         `Location: ${property.address}`,
@@ -319,7 +319,7 @@ export default async function PropertyDetailPage({
                 </div>
 
                 <p className="mt-4 text-sm leading-relaxed text-slate-600">
-                  Send a general enquiry to Sorana Property Managers for the latest availability,
+                  Send a general enquiry to My Accurate Rent for the latest availability,
                   viewing guidance, or next steps.
                 </p>
 
@@ -372,7 +372,7 @@ export default async function PropertyDetailPage({
   const isSale = property.listingType === "sale";
   const isRental = property.listingType === "rentals";
   const availability = isAirbnb || isSale ? null : ensureAvailability(property);
-  const images = property.images?.length ? property.images : ["/logo.png"];
+  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.jpg"];
 
   const unitTypes = !isAirbnb && !isSale ? property.unitTypes ?? [] : [];
   const minPrice = unitTypes.length ? Math.min(...unitTypes.map((u) => Number(u.price) || 0)) : 0;

@@ -54,8 +54,8 @@ export default function Navbar() {
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Image
-              src="/logo.png"
-              alt="Sorana Property Managers Logo"
+              src="/brand/my-accurate-rent-logo.jpg"
+              alt="My Accurate Rent logo"
               width={200}
               height={80}
               className="h-8 w-auto max-w-[120px] sm:h-9 sm:max-w-[140px] lg:h-10 lg:max-w-none rounded-md object-contain drop-shadow-sm"

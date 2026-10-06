@@ -295,7 +295,7 @@ export async function sendOtpSms({
 }): Promise<void> {
   const trimmedHash = appHash?.trim();
   const message = trimmedHash
-    ? `<#> Your Sorana verification code is ${code}\n${trimmedHash}`
-    : `Your Sorana verification code is ${code}`;
+    ? `<#> Your My Accurate Rent verification code is ${code}\n${trimmedHash}`
+    : `Your My Accurate Rent verification code is ${code}`;
   await sendWelcomeSms({ phone, message, senderId });
 }

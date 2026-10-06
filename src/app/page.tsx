@@ -58,8 +58,8 @@ export default function EntryPage() {
         >
           <div className="flex justify-center pt-10 pb-6">
             <Image
-              src="/logo.png"
-              alt="Sorana Property Managers"
+              src="/brand/my-accurate-rent-logo.jpg"
+              alt="My Accurate Rent"
               width={320}
               height={112}
               className="drop-shadow-xl max-w-[220px] sm:max-w-[260px]"

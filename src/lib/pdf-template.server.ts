@@ -7,8 +7,7 @@ let cachedBytes: Uint8Array | null = null;
 
 export function getPdfTemplateBytes(): Uint8Array {
   if (cachedBytes) return cachedBytes;
-  const filePath = path.join(process.cwd(), "public", "pdf", "sorana-letterhead.jpeg");
+  const filePath = path.join(process.cwd(), "public", "brand", "my-accurate-rent-logo.jpg");
   cachedBytes = new Uint8Array(fs.readFileSync(filePath));
   return cachedBytes;
 }
-

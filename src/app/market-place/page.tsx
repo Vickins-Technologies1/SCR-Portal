@@ -269,7 +269,7 @@ export default function PropertyListings() {
         <div className="relative max-w-7xl mx-auto px-6">
           <div className="max-w-2xl">
             <h1 className="mt-4 text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 font-[var(--font-cormorant)]">
-              Sorana Market Place.
+              My Accurate Rent Marketplace.
             </h1>
             <p className="mt-4 text-sm text-slate-600 max-w-xl">
               Browse verified listings across Kenya.
@@ -674,7 +674,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
         ? "bg-emerald-100 text-emerald-700"
         : "bg-slate-100 text-slate-600";
 
-  const images = property.images?.length ? property.images : ["/logo.png"];
+  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.jpg"];
   const heroImage = images[0];
 
   const featuredLabel = isAirbnb
