@@ -117,7 +117,7 @@ export async function generateMetadata({
   const description =
     property.description ||
     `Explore ${property.name} in ${property.address}. ${property.listingType === "airbnb" ? "Short-term stay" : property.listingType === "sale" ? "Property for sale" : "Long-term rental"} managed by My Accurate Rent.`;
-  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.jpg"];
+  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.png"];
 
   return {
     title: `${property.name} | My Accurate Rent`,
@@ -372,7 +372,7 @@ export default async function PropertyDetailPage({
   const isSale = property.listingType === "sale";
   const isRental = property.listingType === "rentals";
   const availability = isAirbnb || isSale ? null : ensureAvailability(property);
-  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.jpg"];
+  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.png"];
 
   const unitTypes = !isAirbnb && !isSale ? property.unitTypes ?? [] : [];
   const minPrice = unitTypes.length ? Math.min(...unitTypes.map((u) => Number(u.price) || 0)) : 0;

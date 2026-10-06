@@ -15,7 +15,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
       <div className="flex h-full w-full min-w-0 items-center gap-3 px-3 sm:px-6 lg:px-10">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Image
-            src="/brand/my-accurate-rent-logo.jpg"
+            src="/brand/my-accurate-rent-logo.png"
             alt="My Accurate Rent logo"
             width={180}
             height={64}

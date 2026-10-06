@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     images: [
       {
-        url: "/brand/my-accurate-rent-logo.jpg",
+        url: "/brand/my-accurate-rent-logo.png",
         width: 512,
         height: 512,
         alt: "My Accurate Rent logo",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: siteName,
     description: "Your trusted partner in rental success",
-    images: ["/brand/my-accurate-rent-logo.jpg"],
+    images: ["/brand/my-accurate-rent-logo.png"],
   },
   robots: {
     index: true,

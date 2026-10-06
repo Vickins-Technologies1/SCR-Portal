@@ -54,7 +54,7 @@ export default function Navbar() {
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Image
-              src="/brand/my-accurate-rent-logo.jpg"
+              src="/brand/my-accurate-rent-logo.png"
               alt="My Accurate Rent logo"
               width={200}
               height={80}

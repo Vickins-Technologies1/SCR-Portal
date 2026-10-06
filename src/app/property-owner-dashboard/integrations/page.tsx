@@ -1893,7 +1893,7 @@ export default function OwnerIntegrationsPage() {
                             className={`mt-2 w-full rounded-xl border bg-white/80 px-3 py-2 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors ${
                               tumaFormErrors.logo ? "border-rose-300" : "border-border"
                             }`}
-                            placeholder="https://yourdomain.com/brand/my-accurate-rent-logo.jpg"
+                            placeholder="https://yourdomain.com/brand/my-accurate-rent-logo.png"
                           />
                           {tumaFormErrors.logo && (
                             <p className="text-[11px] text-rose-600 mt-1">{tumaFormErrors.logo}</p>

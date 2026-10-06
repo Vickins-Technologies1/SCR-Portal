@@ -2,7 +2,7 @@ import type { PDFDocument, PDFImage, PDFPage } from "pdf-lib";
 
 export const A4_PAGE_SIZE: [number, number] = [595.28, 841.89];
 
-export const PDF_TEMPLATE_PUBLIC_PATH = "/brand/my-accurate-rent-logo.jpg";
+export const PDF_TEMPLATE_PUBLIC_PATH = "/brand/my-accurate-rent-logo.png";
 
 // Margins (in PDF points) that keep content away from the background logo/header/footer.
 export const PDF_TEMPLATE_SAFE_AREA = {

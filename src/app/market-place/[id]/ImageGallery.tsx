@@ -10,7 +10,7 @@ interface ImageGalleryProps {
 }
 
 export default function ImageGallery({ images, title }: ImageGalleryProps) {
-  const safeImages = useMemo(() => (images.length ? images : ["/brand/my-accurate-rent-logo.jpg"]), [images]);
+  const safeImages = useMemo(() => (images.length ? images : ["/brand/my-accurate-rent-logo.png"]), [images]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);

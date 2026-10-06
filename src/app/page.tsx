@@ -58,7 +58,7 @@ export default function EntryPage() {
         >
           <div className="flex justify-center pt-10 pb-6">
             <Image
-              src="/brand/my-accurate-rent-logo.jpg"
+              src="/brand/my-accurate-rent-logo.png"
               alt="My Accurate Rent"
               width={320}
               height={112}

@@ -1,5 +1,5 @@
 param(
-  [string]$Source = "public\\brand\\my-accurate-rent-logo.jpg",
+  [string]$Source = "public\\brand\\my-accurate-rent-logo.png",
   [string]$Background = "#ffffff"
 )
 
@@ -116,9 +116,9 @@ function Write-IcoFromPngSquareIcon {
 }
 
 $bg = New-Color $Background
-$launcherContentScale = 0.72
-$androidRoundContentScale = 0.70
-$androidAdaptiveContentScale = 0.58
+$launcherContentScale = 1.12
+$androidRoundContentScale = 1.08
+$androidAdaptiveContentScale = 0.98
 
 if (-not (Test-Path $Source)) {
   throw "Icon source not found: $Source"

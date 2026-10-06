@@ -401,7 +401,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
         <div className="relative z-10 max-w-lg text-center space-y-6 xl:space-y-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
             <Image
-              src="/brand/my-accurate-rent-logo.jpg"
+              src="/brand/my-accurate-rent-logo.png"
               alt="My Accurate Rent"
               width={400}
               height={140}
@@ -450,7 +450,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center pt-6 pb-4">
             <Image
-              src="/brand/my-accurate-rent-logo.jpg"
+              src="/brand/my-accurate-rent-logo.png"
               alt="My Accurate Rent"
               width={240}
               height={80}

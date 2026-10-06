@@ -12,14 +12,14 @@ export const metadata: Metadata = {
     description:
       "Browse verified long-term rentals, short-term stays, and properties for sale across Kenya. Transparent terms, verified inventory, and professional support.",
     type: "website",
-    images: ["/brand/my-accurate-rent-logo.jpg"],
+    images: ["/brand/my-accurate-rent-logo.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "My Accurate Rent Marketplace",
     description:
       "Browse verified long-term rentals, short-term stays, and properties for sale across Kenya. Transparent terms, verified inventory, and professional support.",
-    images: ["/brand/my-accurate-rent-logo.jpg"],
+    images: ["/brand/my-accurate-rent-logo.png"],
   },
 };
 

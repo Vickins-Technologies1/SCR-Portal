@@ -46,7 +46,7 @@ export default function PortalsPage() {
           >
             <div className="px-6 sm:px-10 pt-10 pb-8 text-center space-y-3">
               <Image
-                src="/brand/my-accurate-rent-logo.jpg"
+                src="/brand/my-accurate-rent-logo.png"
                 alt="My Accurate Rent"
                 width={320}
                 height={112}

@@ -84,7 +84,7 @@ function OfflineCard() {
 
             <div className="space-y-3">
               <Image
-                src="/brand/my-accurate-rent-logo.jpg"
+                src="/brand/my-accurate-rent-logo.png"
                 alt="My Accurate Rent"
                 width={180}
                 height={64}
@@ -202,7 +202,7 @@ export default function OfflineFallback({
           <div className="relative z-10 w-full max-w-2xl text-center lg:hidden">
             <div className="mb-5 flex justify-center">
               <Image
-                src="/brand/my-accurate-rent-logo.jpg"
+                src="/brand/my-accurate-rent-logo.png"
                 alt="My Accurate Rent"
                 width={168}
                 height={60}

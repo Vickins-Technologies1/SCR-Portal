@@ -331,7 +331,7 @@ export default function TenantDashboardLayout({
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <Image
-                src="/brand/my-accurate-rent-logo.jpg"
+                src="/brand/my-accurate-rent-logo.png"
                 alt="My Accurate Rent logo"
                 width={180}
                 height={64}
@@ -374,7 +374,7 @@ export default function TenantDashboardLayout({
           <div className="sorana-sidebar-header p-6 border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent">
             <div className="flex justify-center mb-5">
               <Image
-                src="/brand/my-accurate-rent-logo.jpg"
+                src="/brand/my-accurate-rent-logo.png"
                 alt="My Accurate Rent logo"
                 width={180}
                 height={64}

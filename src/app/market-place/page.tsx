@@ -674,7 +674,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
         ? "bg-emerald-100 text-emerald-700"
         : "bg-slate-100 text-slate-600";
 
-  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.jpg"];
+  const images = property.images?.length ? property.images : ["/brand/my-accurate-rent-logo.png"];
   const heroImage = images[0];
 
   const featuredLabel = isAirbnb

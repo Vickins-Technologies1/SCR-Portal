@@ -446,7 +446,7 @@ export default function AdminLogin() {
           <div className="relative z-10 max-w-lg text-center space-y-4 xl:space-y-6">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
               <Image
-                src="/brand/my-accurate-rent-logo.jpg"
+                src="/brand/my-accurate-rent-logo.png"
                 alt="My Accurate Rent Admin Portal"
                 width={400}
                 height={140}
@@ -495,7 +495,7 @@ export default function AdminLogin() {
             {/* Mobile logo */}
             <div className="lg:hidden flex justify-center pt-4 pb-3">
               <Image
-                src="/brand/my-accurate-rent-logo.jpg"
+                src="/brand/my-accurate-rent-logo.png"
                 alt="My Accurate Rent"
                 width={240}
                 height={80}
