@@ -181,6 +181,17 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+export async function sendAdminNotificationEmail({ to, name, title, message }: { to: string; name?: string; title: string; message: string }): Promise<void> {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) throw new Error("SMTP credentials are missing");
+  const html = generateStyledTemplate({
+    name: name || "Property Owner",
+    title,
+    intro: "You have received a message from a My Accurate Rent administrator.",
+    details: `<p>${message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br />")}</p>`,
+  });
+  await transporter.sendMail({ from: `"My Accurate Rent" <${process.env.SMTP_USER}>`, to, subject: title, html });
+}
+
 interface ContactLeadEmailOptions {
   to: string;
   name: string;
