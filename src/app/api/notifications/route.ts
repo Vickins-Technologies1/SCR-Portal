@@ -146,21 +146,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const { db } = await connectToDatabase();
 
     const featureGate = await assertOwnerNotificationsEnabled(db, effectiveOwnerId);
-    if (!featureGate.enabled) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Notifications are locked on the Free tier. Upgrade to Premium to enable notifications.",
-          code: "FREE_TIER_NOTIFICATIONS_LOCKED",
-        },
-        { status: 403 }
-      );
-    }
+    const notificationFilter = featureGate.enabled ? { ownerId: effectiveOwnerId } : { ownerId: effectiveOwnerId, source: "admin" };
 
     if (unreadCountOnly) {
       const unreadCount = await db
         .collection<Notification>("notifications")
-        .countDocuments({ ownerId: effectiveOwnerId, status: "unread" });
+        .countDocuments({ ...notificationFilter, status: "unread" });
       return NextResponse.json({ success: true, unreadCount });
     }
 
@@ -168,12 +159,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const [notifications, total] = await Promise.all([
       db.collection<Notification>("notifications")
-        .find({ ownerId: effectiveOwnerId })
+        .find(notificationFilter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .toArray(),
-      db.collection<Notification>("notifications").countDocuments({ ownerId: effectiveOwnerId }),
+      db.collection<Notification>("notifications").countDocuments(notificationFilter),
     ]);
 
     const formatted = notifications.map(n => ({

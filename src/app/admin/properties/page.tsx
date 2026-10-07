@@ -650,7 +650,7 @@ export default function PropertiesPage() {
                                       Current billing plan: Rent Collection
                                     </p>
                                     <p className="mt-2 text-[10px] text-muted-foreground">
-                                      Software leasing invoices are 1% of expected monthly income and are auto-generated monthly based on the last invoice date.
+                                      Software leasing invoices use the current admin-configured percentage of expected monthly income and are auto-generated monthly based on the last invoice date.
                                     </p>
                                     <div className="mt-3 flex flex-col sm:flex-row sm:items-end gap-2.5">
                                       <div className="flex-1">

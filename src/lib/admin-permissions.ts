@@ -18,7 +18,10 @@ export type AdminPermission =
   | "admin:team-members:view"
   | "admin:team-members:manage"
   | "admin:referrals:view"
-  | "admin:referrals:manage";
+  | "admin:referrals:manage"
+  | "admin:owners:suspend"
+  | "admin:notifications:send"
+  | "admin:settings:manage";
 
 export const ALL_ADMIN_PERMISSIONS: AdminPermission[] = [
   "admin:dashboard:view",
@@ -41,6 +44,9 @@ export const ALL_ADMIN_PERMISSIONS: AdminPermission[] = [
   "admin:team-members:manage",
   "admin:referrals:view",
   "admin:referrals:manage",
+  "admin:owners:suspend",
+  "admin:notifications:send",
+  "admin:settings:manage",
 ];
 
 export type AdminPermissionGroup = {
@@ -90,6 +96,11 @@ export const ADMIN_PERMISSION_GROUPS: AdminPermissionGroup[] = [
         description: "Approve, create, edit, or delete owner accounts.",
       },
       {
+        key: "admin:owners:suspend",
+        label: "Suspend property owners",
+        description: "Suspend and restore owner access.",
+      },
+      {
         key: "admin:impersonation:manage",
         label: "Impersonate owners",
         description: "Impersonate or revert impersonation for troubleshooting.",
@@ -100,6 +111,11 @@ export const ADMIN_PERMISSION_GROUPS: AdminPermissionGroup[] = [
     key: "billing",
     title: "Billing",
     items: [
+      {
+        key: "admin:settings:manage",
+        label: "Manage billing settings",
+        description: "Change the software leasing percentage.",
+      },
       {
         key: "admin:payments:view",
         label: "View payments",
@@ -121,6 +137,11 @@ export const ADMIN_PERMISSION_GROUPS: AdminPermissionGroup[] = [
     key: "channels",
     title: "Channels",
     items: [
+      {
+        key: "admin:notifications:send",
+        label: "Send owner notifications",
+        description: "Send custom in-app messages to property owners.",
+      },
       {
         key: "admin:airbnb:view",
         label: "Airbnb console",

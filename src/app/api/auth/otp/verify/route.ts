@@ -109,6 +109,16 @@ export async function POST(request: Request) {
       );
     }
 
+    if (otp.role === "propertyOwner" && user.accountStatus === "suspended") {
+      return NextResponse.json({
+        success: false,
+        code: "ACCOUNT_SUSPENDED",
+        message: "Account Suspended",
+        detail: "Your account has been suspended by an administrator. Please contact support for assistance.",
+        reason: typeof user.suspensionReason === "string" ? user.suspensionReason : undefined,
+      }, { status: 403 });
+    }
+
     // Note: Property owners are no longer gated behind admin approval.
 
     const isTeamMember = otp.collection === "teamMembers" || otp.isTeamMember;

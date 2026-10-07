@@ -2,6 +2,7 @@
 export interface Notification {
   _id: string;
   message: string;
+  title?: string;
   type: "payment" | "maintenance" | "tenant" | "other";
   createdAt: string;
   status: "unread" | "read";

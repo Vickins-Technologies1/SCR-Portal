@@ -965,7 +965,7 @@ export default function PropertiesPage() {
                           onChange={(e) => setBillingType(e.target.value as "RentCollection" | "FullManagement")}
                           className={fieldBase}
                         >
-                          <option value="RentCollection">Software Leasing (1% of expected income)</option>
+                          <option value="RentCollection">Software Leasing (% of expected income)</option>
                           <option value="FullManagement">Full Property Management</option>
                         </select>
                       </div>
@@ -1269,7 +1269,7 @@ export default function PropertiesPage() {
                         <p>
                           <span className="text-foreground font-semibold">Billing Plan:</span>{" "}
                           {billingType === "RentCollection"
-                            ? "Software leasing (1% of expected income)"
+                            ? "Software leasing (% of expected income)"
                             : "Full management (admin-set % of expected income)"}
                         </p>
                       </div>

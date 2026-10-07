@@ -23,6 +23,7 @@ import {
   Store,
   LogOut,
   Gift,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
@@ -205,6 +206,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       icon: <Headphones size={20} />,
       requiredPermission: "admin:support:view",
     },
+    { key: "communications", href: "/admin/communications", label: "Owner Communications", icon: <Bell size={20} />, requiredPermission: "admin:notifications:send" },
   ];
 
   const navSections = [

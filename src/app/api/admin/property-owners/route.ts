@@ -105,6 +105,8 @@ export async function GET(request: NextRequest) {
             phone: 1,
             role: 1,
             managementType: 1,
+            accountStatus: 1,
+            suspensionReason: 1,
             createdAt: {
               $switch: {
                 branches: [
@@ -223,6 +225,7 @@ export async function POST(request: NextRequest) {
       phone,
       password: hashedPassword,
       role: "propertyOwner",
+      accountStatus: "active",
       managementType: "rentals",
       tier: "premium",
       isApproved: false,

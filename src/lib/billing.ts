@@ -9,6 +9,12 @@ export type BillingPlan = "RentCollection" | "FullManagement" | "Airbnb";
 
 export const SOFTWARE_LEASING_PERCENT = 1;
 
+export async function getSoftwareLeasingPercentage(db: Db): Promise<number> {
+  const setting = await db.collection<any>("systemSettings").findOne({ _id: "softwareLeasingPercentage" } as any);
+  const value = Number(setting?.value);
+  return Number.isFinite(value) && value >= 0 && value <= 100 ? value : SOFTWARE_LEASING_PERCENT;
+}
+
 export function resolveBillingPlan(input: { billingType?: BillingPlan; unitTypes?: { managementType?: string }[] }): BillingPlan {
   if (input.billingType && (input.billingType === "RentCollection" || input.billingType === "FullManagement")) {
     return input.billingType;

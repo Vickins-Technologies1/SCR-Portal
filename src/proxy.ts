@@ -1,8 +1,10 @@
 // src/proxy.ts (or middleware.ts)
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import logger from "./lib/logger";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./lib/session";
 import { resolveAccountTier } from "./lib/tier";
+import { connectToDatabase } from "./lib/mongodb";
 import {
   buildInvalidCsrfResponse,
   CSRF_COOKIE_NAME,
@@ -155,6 +157,9 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/api/admin/market-place-sale-listings": { roles: ["admin", "adminTeamMember"], isApi: true },
   "/api/admin/reviews": { roles: ["admin", "adminTeamMember"], isApi: true },
   "/api/admin/property-owners": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/property-owners/:id/status": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/owner-notifications": { roles: ["admin", "adminTeamMember"], isApi: true },
+  "/api/admin/settings": { roles: ["admin", "adminTeamMember"], isApi: true },
   "/api/admin/team-members": { roles: ["admin", "adminTeamMember"], isApi: true },
   "/api/admin/impersonate-owner": { roles: ["admin", "adminTeamMember"], isApi: true },
   "/api/admin/revert-impersonation": { roles: ["admin", "propertyOwner"], isApi: true },
@@ -207,6 +212,7 @@ const routeAccessMap: { [key: string]: RouteAccess } = {
   "/airbnb-dashboard": { roles: ["propertyOwner", "teamMember"], isApi: false },
   "/admin/support": { roles: ["admin"], isApi: false },
   "/admin/reviews": { roles: ["admin"], isApi: false },
+  "/admin/communications": { roles: ["admin", "adminTeamMember"], isApi: false },
   "/tenant-dashboard": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/tenant-dashboard/vacate": { roles: ["tenant", "propertyOwner"], isApi: false },
   "/airbnb-tenant-dashboard": { roles: ["tenant"], isApi: false },
@@ -370,6 +376,29 @@ export async function proxy(request: NextRequest) {
       return config.isApi
         ? NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
         : NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if ((role === "propertyOwner" || role === "teamMember") && userId) {
+      try {
+        const { db } = await connectToDatabase();
+        const ownerIdToCheck = role === "teamMember" ? ownerId : userId;
+        if (ownerIdToCheck) {
+          if (!ObjectId.isValid(ownerIdToCheck)) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+          const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(ownerIdToCheck), role: "propertyOwner" }, { projection: { accountStatus: 1 } });
+          if (owner?.accountStatus === "suspended") {
+            const response = config.isApi
+              ? NextResponse.json({ success: false, code: "ACCOUNT_SUSPENDED", message: "Your account has been suspended by an administrator. Please contact support for assistance." }, { status: 403 })
+              : NextResponse.redirect(new URL("/account-suspended", request.url));
+            response.cookies.delete(SESSION_COOKIE_NAME);
+            return response;
+          }
+        }
+      } catch (error) {
+        logger.warn("Unable to verify owner account status", { error });
+        return config.isApi
+          ? NextResponse.json({ success: false, message: "Account status could not be verified" }, { status: 503 })
+          : NextResponse.redirect(new URL("/", request.url));
+      }
     }
 
     // Owner portal separation: Airbnb owners must stay in Airbnb portal, rentals owners must stay in rentals portal.

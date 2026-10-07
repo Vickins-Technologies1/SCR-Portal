@@ -1,6 +1,6 @@
 // cron/generate-monthly-invoices.ts
 import { connectToDatabase } from "@/lib/mongodb";
-import { computeExpectedMonthlyIncome, getBillingMonth, getGracePeriodEndDate, resolveBillingPlan, SOFTWARE_LEASING_PERCENT, upsertPercentageInvoice } from "@/lib/billing";
+import { computeExpectedMonthlyIncome, getBillingMonth, getGracePeriodEndDate, resolveBillingPlan, SOFTWARE_LEASING_PERCENT, upsertPercentageInvoice, getSoftwareLeasingPercentage } from "@/lib/billing";
 import { AIRBNB_BOOKING_INVOICE_PERCENT } from "@/lib/airbnb-billing";
 import { parseDate, startOfDay } from "@/lib/airbnb-utils";
 import { Property } from "@/types/property";
@@ -196,6 +196,8 @@ export default async function generateMonthlyInvoices() {
   console.log("Starting monthly invoice generation job...", now.toISOString());
 
   try {
+    const { db: settingsDb } = await connectToDatabase();
+    const currentSoftwareLeasingPercentage = await getSoftwareLeasingPercentage(settingsDb);
     const { db } = await connectToDatabase();
     const invoicesCollection = db.collection<Invoice>("invoices");
     const properties = await db.collection<Property>("properties").find({}).toArray();
@@ -263,14 +265,14 @@ export default async function generateMonthlyInvoices() {
 
         const expectedIncome = await computeExpectedMonthlyIncome(db, propertyId, targetDate);
         const dueDate = getGracePeriodEndDate(property.createdAt ? new Date(property.createdAt) : targetDate, targetDate);
-        const description = `Software leasing fee (${SOFTWARE_LEASING_PERCENT}% of expected monthly income Ksh ${expectedIncome.toFixed(2)}) for ${targetDate.toLocaleString("default", { month: "long", year: "numeric" })}`;
+        const description = `Software leasing fee (${currentSoftwareLeasingPercentage}% of expected monthly income Ksh ${expectedIncome.toFixed(2)}) for ${targetDate.toLocaleString("default", { month: "long", year: "numeric" })}`;
 
         const result = await upsertPercentageInvoice({
           db,
           userId: ownerId,
           propertyId,
           billingPlan: "RentCollection",
-          percentage: SOFTWARE_LEASING_PERCENT,
+          percentage: currentSoftwareLeasingPercentage,
           expectedIncome,
           description,
           expiresAt: dueDate,

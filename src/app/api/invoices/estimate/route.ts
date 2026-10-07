@@ -7,6 +7,7 @@ import {
   roundCurrency,
   SOFTWARE_LEASING_PERCENT,
   getBillingMonth,
+  getSoftwareLeasingPercentage,
 } from "../../../../lib/billing";
 import { Property } from "../../../../types/property";
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
+    const softwareLeasingPercentage = await getSoftwareLeasingPercentage(db);
 
     const ownerFilter = ObjectId.isValid(ownerId)
       ? { $in: [ownerId, new ObjectId(ownerId)] }
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
         const percentage =
           billingPlan === "FullManagement"
             ? Math.max(0, property.managementFeePercent ?? 0)
-            : SOFTWARE_LEASING_PERCENT;
+            : softwareLeasingPercentage;
         const expectedIncome = await computeExpectedMonthlyIncome(db, propertyId, targetDate);
         const estimatedAmount = roundCurrency((expectedIncome * percentage) / 100);
 

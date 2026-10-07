@@ -38,6 +38,8 @@ interface PropertyOwner {
   managementType?: "rentals" | "airbnb" | string;
   createdAt: string;
   isApproved?: boolean | string;
+  accountStatus?: "active" | "suspended";
+  suspensionReason?: string | null;
   approvedAt?: string | null;
   propertiesCount: number;
   paymentsCount: number;
@@ -135,6 +137,9 @@ export default function PropertyOwnersPage() {
   const [deleteTarget, setDeleteTarget] = useState<PropertyOwner | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<PropertyOwner | null>(null);
+  const [suspensionReason, setSuspensionReason] = useState("");
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const hasHydratedFiltersRef = useRef(false);
 
   // ── Session check ───────────────────────────────────────────────────────────
@@ -354,6 +359,23 @@ export default function PropertyOwnersPage() {
       : "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200";
   const isOwnerApproved = (owner: PropertyOwner) =>
     owner.isApproved === true || owner.isApproved === "true";
+
+  const handleAccountStatus = async () => {
+    if (!statusTarget) return;
+    setIsUpdatingStatus(true);
+    try {
+      const token = await ensureCsrfToken();
+      const nextStatus = statusTarget.accountStatus === "suspended" ? "active" : "suspended";
+      const res = await fetch(`/api/admin/property-owners/${statusTarget._id}/status`, {
+        method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json", "x-csrf-token": token || "" },
+        body: JSON.stringify({ status: nextStatus, reason: suspensionReason }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Unable to update account status");
+      setStatusTarget(null); setSuspensionReason(""); setRefreshKey((value) => value + 1);
+    } catch (error) { setError(error instanceof Error ? error.message : "Unable to update account status"); }
+    finally { setIsUpdatingStatus(false); }
+  };
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const startCount = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
@@ -813,6 +835,9 @@ export default function PropertyOwnersPage() {
                         Status
                       </th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Account
+                      </th>
+                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Actions
                       </th>
                     </tr>
@@ -820,7 +845,7 @@ export default function PropertyOwnersPage() {
                   <tbody>
                     {propertyOwners.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-10 text-center text-xs text-muted-foreground">
+                        <td colSpan={8} className="py-10 text-center text-xs text-muted-foreground">
                           No property owners found.
                         </td>
                       </tr>
@@ -860,7 +885,18 @@ export default function PropertyOwnersPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4 text-xs">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${owner.accountStatus === "suspended" ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}>
+                                {owner.accountStatus === "suspended" ? "Suspended" : "Active"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-xs">
                               <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => { setStatusTarget(owner); setSuspensionReason(owner.suspensionReason || ""); }}
+                                  className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${owner.accountStatus === "suspended" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}
+                                >
+                                  {owner.accountStatus === "suspended" ? "Restore" : "Suspend"}
+                                </button>
                                 <button
                                   onClick={() => openImpersonateModal(owner)}
                                   className="text-primary hover:text-primary-hover transition-colors disabled:opacity-50"
@@ -1204,6 +1240,19 @@ export default function PropertyOwnersPage() {
                       {isImpersonating ? "Switching..." : "Impersonate Owner"}
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {statusTarget && (
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-3">
+              <div className="modal-panel max-w-md w-full overflow-hidden">
+                <div className="modal-header px-4 sm:px-5 py-3"><h2 className="text-base font-semibold text-foreground">{statusTarget.accountStatus === "suspended" ? "Restore Account" : "Suspend Account"}</h2></div>
+                <div className="modal-body space-y-4">
+                  <p className="text-sm text-muted-foreground">{statusTarget.accountStatus === "suspended" ? "Restore access for this property owner?" : "This property owner will temporarily lose access to the platform. Their data will not be deleted."}</p>
+                  {statusTarget.accountStatus !== "suspended" && <textarea value={suspensionReason} onChange={(event) => setSuspensionReason(event.target.value)} maxLength={300} placeholder="Optional suspension reason" className="w-full rounded-md border border-border bg-background p-3 text-sm" />}
+                  <div className="flex justify-end gap-3"><button type="button" onClick={() => setStatusTarget(null)} className="rounded-md border border-border px-4 py-2 text-xs">Cancel</button><button type="button" onClick={handleAccountStatus} disabled={isUpdatingStatus} className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-white">{isUpdatingStatus ? "Saving…" : statusTarget.accountStatus === "suspended" ? "Restore Account" : "Suspend Account"}</button></div>
                 </div>
               </div>
             </div>

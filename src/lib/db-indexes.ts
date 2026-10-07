@@ -194,6 +194,13 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     indexes: [
       { key: { ownerId: 1, status: 1, createdAt: -1 }, name: "notifications_owner_status_createdAt" },
       { key: { tenantId: 1, status: 1, createdAt: -1 }, name: "notifications_tenant_status_createdAt" },
+      { key: { audience: 1, source: 1, createdAt: -1 }, name: "notifications_audience_source_createdAt" },
+    ],
+  },
+  {
+    collection: "systemSettings",
+    indexes: [
+      { key: { key: 1 }, name: "systemSettings_key" },
     ],
   },
 ];
