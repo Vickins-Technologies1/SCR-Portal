@@ -26,6 +26,7 @@ import NavbarDateTime from "@/components/NavbarDateTime";
 import BottomTabs from "@/components/mobile/BottomTabs";
 import ShellFooterActions from "@/components/portal/ShellFooterActions";
 import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -345,6 +346,10 @@ export default function TenantDashboardLayout({
           {/* Right side – actions */}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <DashboardNavbarActions onSignOut={handleLogout} desktopBreakpoint="lg" />
+            <ThemeToggle
+              variant="icon"
+              className="h-10 w-10 rounded-[10px] lg:hidden"
+            />
             <button
               onClick={() => window.dispatchEvent(new Event("start-tenant-tour"))}
               className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"

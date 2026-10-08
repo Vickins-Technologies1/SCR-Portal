@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import NavbarDateTime from "@/components/NavbarDateTime";
 import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 type NavbarProps = {
   isSidebarOpen: boolean;
@@ -59,6 +60,10 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <DashboardNavbarActions onSignOut={handleSignOut} />
+          <ThemeToggle
+            variant="icon"
+            className="h-10 w-10 rounded-[10px] md:hidden"
+          />
           <button
             onClick={onToggleSidebar}
             aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}

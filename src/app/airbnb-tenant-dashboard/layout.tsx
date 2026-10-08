@@ -20,6 +20,7 @@ import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
 import ShellFooterActions from "@/components/portal/ShellFooterActions";
 import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 export default function AirbnbGuestPortalLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -140,6 +141,10 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
             </div>
 
             <DashboardNavbarActions onSignOut={handleLogout} desktopBreakpoint="lg" />
+            <ThemeToggle
+              variant="icon"
+              className="h-10 w-10 rounded-[10px] lg:hidden"
+            />
             <button
               onClick={() => setIsSidebarOpen((v) => !v)}
               aria-label={isSidebarOpen ? "Close menu" : "Open menu"}

@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useSidebar } from "./SidebarContext";
 import NavbarDateTime from "@/components/NavbarDateTime";
 import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 export default function Navbar() {
   const router = useRouter();
@@ -101,7 +102,7 @@ export default function Navbar() {
               <span className="sm:hidden">Return</span>
             </button>
           )}
-          <DashboardNavbarActions onSignOut={handleSignOut} />
+          <DashboardNavbarActions onSignOut={handleSignOut} desktopBreakpoint="lg" />
           <button
             onClick={() => window.dispatchEvent(new Event("start-owner-tour"))}
               className="group flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
@@ -110,7 +111,11 @@ export default function Navbar() {
               <Sparkles size={16} className="transition-transform group-hover:rotate-6 sm:size-[18px]" />
               <span className="hidden sm:inline">Tour</span>
             </button>
-            <button
+          <ThemeToggle
+            variant="icon"
+            className="h-10 w-10 rounded-[10px] lg:hidden"
+          />
+          <button
               onClick={toggle}
               aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
               aria-expanded={isOpen}
