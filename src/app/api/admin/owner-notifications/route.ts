@@ -7,7 +7,7 @@ import { sendWelcomeSms } from "../../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
 import { sendAdminNotificationEmail } from "../../../../lib/email";
 
-const clean = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) : "";
+const clean = (value: unknown) => typeof value === "string" ? value.trim() : "";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request, "admin:notifications:send");
@@ -23,8 +23,8 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) return buildInvalidCsrfResponse(request);
   const body = await request.json().catch(() => ({}));
-  const title = clean(body?.title, 120);
-  const message = clean(body?.message, 2000);
+  const title = clean(body?.title);
+  const message = clean(body?.message);
   if (!title || !message) return NextResponse.json({ success: false, message: "Title and message are required" }, { status: 400 });
   const channels = Array.isArray(body?.channels) ? body.channels.filter((channel: unknown) => ["app", "sms", "whatsapp", "email"].includes(String(channel))) : ["app", "sms", "whatsapp", "email"];
   if (channels.length === 0) return NextResponse.json({ success: false, message: "Select at least one delivery channel" }, { status: 400 });

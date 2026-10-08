@@ -19,11 +19,14 @@ public class MainActivity extends BridgeActivity {
         initialPlugins.add(GoogleAuthPlugin.class);
 
         EdgeToEdge.enable(this);
+        super.onCreate(savedInstanceState);
+
+        // Apply this after Capacitor creates the bridge because SystemBars may
+        // otherwise restore the default light-status-bar appearance.
         getWindow().setStatusBarColor(Color.rgb(15, 23, 42));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
                 .setAppearanceLightStatusBars(false);
         }
-        super.onCreate(savedInstanceState);
     }
 }

@@ -5,6 +5,9 @@ const config: CapacitorConfig = {
   appName: "My Accurate Rent",
   webDir: "www",
   server: {
+    // Load the deployed app as Capacitor's primary origin so the native bridge
+    // and custom plugins remain available after startup.
+    url: "https://www.myaccuraterent.com",
     allowNavigation: ["myaccuraterent.com", "www.myaccuraterent.com"],
   },
   plugins: {

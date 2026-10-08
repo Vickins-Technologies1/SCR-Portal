@@ -22,31 +22,8 @@ interface SendSmsOptions {
   senderId?: string; // Must be approved in BlessedTexts dashboard
 }
 
-const MAX_SMS_LENGTH = 160;
 const DEFAULT_SMS_ENDPOINT = "https://sms.blessedtexts.com/api/sms/v1/sendsms";
 const SMS_REQUEST_TIMEOUT_MS = Number(process.env.BLESSEDTEXTS_TIMEOUT_MS || "8000");
-
-const splitSmsMessage = (message: string, maxLength = MAX_SMS_LENGTH): string[] => {
-  const normalized = message.replace(/\r\n/g, "\n").trim();
-  if (!normalized) return [];
-  if (normalized.length <= maxLength) return [normalized];
-
-  const parts: string[] = [];
-  let remaining = normalized;
-
-  while (remaining.length > maxLength) {
-    let cut = remaining.lastIndexOf("\n", maxLength);
-    if (cut < Math.floor(maxLength * 0.6)) {
-      cut = remaining.lastIndexOf(" ", maxLength);
-    }
-    if (cut <= 0) cut = maxLength;
-    parts.push(remaining.slice(0, cut).trim());
-    remaining = remaining.slice(cut).trim();
-  }
-
-  if (remaining.length) parts.push(remaining);
-  return parts;
-};
 
 type SmsRequestVariant = {
   label: string;
@@ -137,7 +114,7 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
   const payload = {
     api_key: apiKey,
     sender_id: resolvedSenderId,
-    message: message.trim(),
+    message,
     phone: recipient,
   };
 
@@ -163,7 +140,7 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
         logger.info("BlessedTexts SMS Request", {
           to: recipient,
           sender: resolvedSenderId,
-          message: message.trim(),
+          message,
           status: res.status,
           variant: variant.label,
         });
@@ -272,14 +249,9 @@ export async function sendWelcomeSms({
   if (!phone?.trim()) throw new Error("Phone number is required");
   if (!message?.trim()) throw new Error("Message is required");
 
-  const parts = splitSmsMessage(message.trim());
-  if (parts.length === 0) {
-    throw new Error("Message is required");
-  }
-
-  for (const part of parts) {
-    await sendSingleSms({ phone, message: part, senderId });
-  }
+  // BlessedTexts now accepts the complete message in one request. Do not
+  // apply the retired application-side segmentation rule here.
+  await sendSingleSms({ phone, message, senderId });
 }
 
 export async function sendOtpSms({

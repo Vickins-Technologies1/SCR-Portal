@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildReminderMessages } from "./reminders";
 
 describe("buildReminderMessages (SMS)", () => {
-  it("includes core info and stays within 160 characters", () => {
+  it("includes the complete reminder content", () => {
     const { smsMessage } = buildReminderMessages(
       "fiveDaysBefore",
       "Jane Doe",
@@ -16,13 +16,12 @@ describe("buildReminderMessages (SMS)", () => {
       25000
     );
 
-    expect(smsMessage.length).toBeLessThanOrEqual(160);
     expect(smsMessage).toContain("Ksh");
     expect(smsMessage).toContain("03 May");
     expect(smsMessage).toContain("(A12)");
   });
 
-  it("drops the footer or truncates when the message would exceed 160 characters", () => {
+  it("preserves long property names and the complete reminder footer", () => {
     const { smsMessage } = buildReminderMessages(
       "paymentDate",
       "Jane Doe",
@@ -36,10 +35,11 @@ describe("buildReminderMessages (SMS)", () => {
       123456.78
     );
 
-    expect(smsMessage.length).toBeLessThanOrEqual(160);
     expect(smsMessage).toContain("Rent reminder:");
     expect(smsMessage).toContain("03 May");
     expect(smsMessage).toContain("(B-1002)");
+    expect(smsMessage).toContain("A Very Very Very Very Very Very Very Long Property Name That Will Not Fit In A Single SMS");
+    expect(smsMessage).toContain("Pay portal. If paid, ignore.");
   });
 });
 

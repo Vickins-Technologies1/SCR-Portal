@@ -125,12 +125,7 @@ export const buildReminderMessages = (
   const whenText = reminderType === "fiveDaysBefore" ? `by ${formattedDueDate}` : `today (${formattedDueDate})`;
   const shortTotal = totalDue.toFixed(2);
 
-  const MAX_SMS_CHARS = 160;
   const normalizeSms = (value: string) => value.replace(/\s+/g, " ").trim();
-  const truncate = (value: string, max: number) =>
-    value.length <= max ? value : value.slice(0, Math.max(0, max - 1)).trimEnd() + "…";
-
-  const propertyShort = truncate(propertyName, 28);
 
   const shortBreakdown = [
     rentDue > 0 ? `R${rentDue.toFixed(0)}` : null,
@@ -140,16 +135,10 @@ export const buildReminderMessages = (
 
   const smsTotal = totalDue.toFixed(0);
   const smsWhen = reminderType === "fiveDaysBefore" ? smsDueDate : `${smsDueDate} (today)`;
-  const smsCore = `Rent reminder: Ksh ${smsTotal} due ${smsWhen} ${propertyShort} (${houseNumber}).`;
+  const smsCore = `Rent reminder: Ksh ${smsTotal} due ${smsWhen} ${propertyName} (${houseNumber}).`;
   const smsWithBreakdown = shortBreakdown ? `${smsCore} [${shortBreakdown}]` : smsCore;
   const smsWithFooter = `${smsWithBreakdown} Pay portal. If paid, ignore.`;
-
-  const smsCandidate = normalizeSms(smsWithFooter);
-  const smsMessage = smsCandidate.length <= MAX_SMS_CHARS
-    ? smsCandidate
-    : normalizeSms(smsWithBreakdown).length <= MAX_SMS_CHARS
-      ? normalizeSms(smsWithBreakdown)
-      : normalizeSms(truncate(smsWithBreakdown, MAX_SMS_CHARS));
+  const smsMessage = normalizeSms(smsWithFooter);
 
   const breakdownLines = [
     rentDue > 0 ? `Rent: Ksh ${rentDue.toFixed(2)}` : null,
