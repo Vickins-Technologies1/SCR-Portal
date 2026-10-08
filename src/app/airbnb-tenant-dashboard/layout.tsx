@@ -19,6 +19,7 @@ import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
 import ShellFooterActions from "@/components/portal/ShellFooterActions";
+import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
 
 export default function AirbnbGuestPortalLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -138,6 +139,7 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
               </div>
             </div>
 
+            <DashboardNavbarActions onSignOut={handleLogout} desktopBreakpoint="lg" />
             <button
               onClick={() => setIsSidebarOpen((v) => !v)}
               aria-label={isSidebarOpen ? "Close menu" : "Open menu"}
@@ -197,8 +199,8 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
             </nav>
 
             <div className="sorana-sidebar-footer mt-auto border-t border-border px-6 py-4 footer-fade">
-              <div className="flex justify-center pb-3">
-                <ShellFooterActions onSignOut={handleLogout} />
+              <div className="flex justify-center pb-3 lg:hidden">
+                <ShellFooterActions onSignOut={handleLogout} mobileBreakpoint="lg" />
               </div>
               <p className="text-center text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
                 © {new Date().getFullYear()} My Accurate Rent

@@ -289,7 +289,7 @@ export default function Sidebar() {
 
           <div className="sorana-sidebar-footer mt-auto border-t border-border px-6 py-4 footer-fade">
             <div className="text-center space-y-1">
-              <div className="flex justify-center pb-3">
+              <div className="flex justify-center pb-3 md:hidden">
                 <ShellFooterActions onSignOut={handleSignOut} />
               </div>
               {isFreeTier && (

@@ -25,6 +25,7 @@ import { useIdleLogout } from "@/hooks/useIdleLogout";
 import NavbarDateTime from "@/components/NavbarDateTime";
 import BottomTabs from "@/components/mobile/BottomTabs";
 import ShellFooterActions from "@/components/portal/ShellFooterActions";
+import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -343,6 +344,7 @@ export default function TenantDashboardLayout({
 
           {/* Right side – actions */}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <DashboardNavbarActions onSignOut={handleLogout} desktopBreakpoint="lg" />
             <button
               onClick={() => window.dispatchEvent(new Event("start-tenant-tour"))}
               className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
@@ -415,8 +417,8 @@ export default function TenantDashboardLayout({
           </nav>
 
           <div className="sorana-sidebar-footer mt-auto border-t border-border px-6 py-4 footer-fade">
-            <div className="flex justify-center pb-3">
-              <ShellFooterActions onSignOut={handleLogout} />
+            <div className="flex justify-center pb-3 lg:hidden">
+              <ShellFooterActions onSignOut={handleLogout} mobileBreakpoint="lg" />
             </div>
             <p className="text-center text-[10px] text-muted-foreground font-light tracking-wide opacity-80">
               © {new Date().getFullYear()} My Accurate Rent

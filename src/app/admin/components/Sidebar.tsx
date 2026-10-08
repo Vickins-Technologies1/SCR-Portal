@@ -21,14 +21,13 @@ import {
   Shield,
   Star,
   Store,
-  LogOut,
   Gift,
   Bell,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
 import type { AdminPermission } from "@/lib/admin-permissions";
-import ThemeToggle from "@/components/theme/ThemeToggle";
+import ShellFooterActions from "@/components/portal/ShellFooterActions";
 
 type NavLink = {
   key: string;
@@ -399,18 +398,8 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
           {/* Footer */}
           <div className="sorana-sidebar-footer mt-auto border-t border-border footer-fade px-6 py-4 text-center text-[10px] text-muted-foreground">
-            <div className="mb-3 flex justify-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/75 p-2 shadow-sm backdrop-blur">
-                <ThemeToggle variant="icon" />
-                <button
-                  onClick={handleSignOut}
-                  className="group inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95"
-                  title="Sign out"
-                  aria-label="Sign out"
-                >
-                  <LogOut size={16} className="transition-transform group-hover:translate-x-0.5" />
-                </button>
-              </div>
+            <div className="mb-3 flex justify-center md:hidden">
+              <ShellFooterActions onSignOut={handleSignOut} />
             </div>
             <p>© {new Date().getFullYear()} My Accurate Rent</p>
             {!isCollapsed && (

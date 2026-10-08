@@ -7,6 +7,7 @@ import Cookies from "js-cookie";
 import { useEffect, useState } from "react";
 import { useSidebar } from "./SidebarContext";
 import NavbarDateTime from "@/components/NavbarDateTime";
+import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
 
 export default function Navbar() {
   const router = useRouter();
@@ -14,6 +15,27 @@ export default function Navbar() {
   const [isAdminImpersonating, setIsAdminImpersonating] = useState(false);
   const [impersonatedOwnerName, setImpersonatedOwnerName] = useState("");
   const [isReverting, setIsReverting] = useState(false);
+
+  const handleSignOut = async () => {
+    try {
+      await fetch("/api/signout", { method: "POST", credentials: "include" });
+    } catch {
+      // The client-side cleanup below still signs the user out locally.
+    } finally {
+      Cookies.remove("userId", { path: "/" });
+      Cookies.remove("role", { path: "/" });
+      Cookies.remove("permissions", { path: "/" });
+      Cookies.remove("ownerId", { path: "/" });
+      Cookies.remove("managementType", { path: "/" });
+      Cookies.remove("tier", { path: "/" });
+      Cookies.remove("csrf-token", { path: "/" });
+      Cookies.remove("impersonatingTenantId", { path: "/" });
+      Cookies.remove("isImpersonating", { path: "/" });
+      localStorage.removeItem("userId");
+      localStorage.removeItem("role");
+      router.replace("/");
+    }
+  };
 
   useEffect(() => {
     const isImpersonating = Cookies.get("adminImpersonating") === "true";
@@ -78,6 +100,7 @@ export default function Navbar() {
               <span className="sm:hidden">Return</span>
             </button>
           )}
+          <DashboardNavbarActions onSignOut={handleSignOut} />
           <button
             onClick={() => window.dispatchEvent(new Event("start-airbnb-tour"))}
             className="group flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
