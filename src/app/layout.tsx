@@ -5,7 +5,7 @@ import ThemeInitScript from "@/components/theme/ThemeInitScript";
 import OfflineFallback from "@/components/network/OfflineFallback";
 import GlobalErrorMonitor from "@/components/GlobalErrorMonitor";
 
-const siteUrl = "https://app.soranapropertymanagers.com";
+const siteUrl = "https://myaccuraterent.com";
 const siteName = "My Accurate Rent";
 
 export const metadata: Metadata = {

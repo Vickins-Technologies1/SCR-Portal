@@ -121,7 +121,7 @@ export function getGoogleRedirectUri(params: { origin: string; platform?: Google
   const webRedirect =
     process.env.GOOGLE_REDIRECT_URI_WEB?.trim() ||
     process.env.GOOGLE_REDIRECT_URI?.trim() ||
-    `${params.origin}/api/auth/google/callback`;
+    `https://myaccuraterent.com/api/auth/google/callback`;
 
   if (params.platform === "app") {
     return process.env.GOOGLE_REDIRECT_URI_APP?.trim() || GOOGLE_APP_REDIRECT_URI;
