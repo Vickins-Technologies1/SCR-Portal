@@ -43,12 +43,18 @@
     </style>
   </head>
   <body>
-    <div class="card">
+    <div class="card" role="status" aria-live="polite">
       <h1>Loading…</h1>
       <p>
-        This is the native wrapper for the My Accurate Rent web app.
-        If you are seeing this screen, ensure <code>CAP_SERVER_URL</code> is set or update <code>capacitor.config.ts</code>.
+        Opening My Accurate Rent…
       </p>
     </div>
+    <script>
+      // Let the native activity finish its first frame before loading the deployed app.
+      // This avoids an Android launch ANR while the remote WebView page is initializing.
+      window.setTimeout(function () {
+        window.location.replace("https://www.myaccuraterent.com/");
+      }, 150);
+    </script>
   </body>
 </html>

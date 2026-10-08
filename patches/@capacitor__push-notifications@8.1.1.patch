@@ -1,8 +1,38 @@
-diff --git a/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java b/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
-index f338f49..9469a13 100644
---- a/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
-+++ b/node_modules/@capacitor/push-notifications/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
-@@ -99,22 +99,38 @@
+diff --git a/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java b/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
+index 6d339d6dfb5105a20d2792a932c0e0edb1d7dbc5..c1457aca25ff05f48b0b6cb3d09a17f6a1b86f44 100644
+--- a/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
++++ b/android/src/main/java/com/capacitorjs/plugins/pushnotifications/PushNotificationsPlugin.java
+@@ -83,41 +83,67 @@ public class PushNotificationsPlugin extends Plugin {
+             permissionsResultJSON.put("receive", "granted");
+             call.resolve(permissionsResultJSON);
+         } else {
+-            super.checkPermissions(call);
++            JSObject permissionsResultJSON = new JSObject();
++            String permissionState = getContext().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
++                ? "granted"
++                : "denied";
++            permissionsResultJSON.put("receive", permissionState);
++            call.resolve(permissionsResultJSON);
+         }
+     }
+ 
+     @PluginMethod
+     public void requestPermissions(PluginCall call) {
+-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || getPermissionState(PUSH_NOTIFICATIONS) == PermissionState.GRANTED) {
++        if (
++            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
++            getContext().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
++        ) {
+             JSObject permissionsResultJSON = new JSObject();
+             permissionsResultJSON.put("receive", "granted");
+             call.resolve(permissionsResultJSON);
+         } else {
+-            requestPermissionForAlias(PUSH_NOTIFICATIONS, call, "permissionsCallback");
++            JSObject permissionsResultJSON = new JSObject();
++            permissionsResultJSON.put("receive", "denied");
++            call.resolve(permissionsResultJSON);
+         }
+     }
  
      @PluginMethod
      public void register(PluginCall call) {
@@ -55,3 +85,5 @@ index f338f49..9469a13 100644
 +            call.reject(msg);
 +        }
      }
+ 
+     @PluginMethod

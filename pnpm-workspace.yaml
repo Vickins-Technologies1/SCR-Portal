@@ -3,3 +3,6 @@ ignoredBuiltDependencies:
   - postinstall-postinstall
   - sharp
   - unrs-resolver
+
+patchedDependencies:
+  '@capacitor/push-notifications@8.1.1': patches/@capacitor__push-notifications@8.1.1.patch

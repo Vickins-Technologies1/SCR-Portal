@@ -1,17 +1,11 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const serverUrl = (process.env.CAP_SERVER_URL || "https://app.soranapropertymanagers.com").replace(/\/$/, "");
-const allowCleartext = serverUrl.startsWith("http://");
-
 const config: CapacitorConfig = {
   appId: "com.soranapropertymanagers.app",
   appName: "My Accurate Rent",
   webDir: "www",
   server: {
-    // This project uses Next.js middleware, API route handlers, cookies, and CSRF.
-    // Those require a running Next.js server, so the Capacitor wrapper loads the deployed site.
-    url: serverUrl,
-    cleartext: allowCleartext,
+    allowNavigation: ["myaccuraterent.com", "www.myaccuraterent.com"],
   },
   plugins: {
     CapacitorCookies: {
@@ -23,7 +17,14 @@ const config: CapacitorConfig = {
       backgroundColor: "#0f172a",
       androidScaleType: "CENTER_CROP",
       showSpinner: false,
-      splashImmersive: true,
+      splashImmersive: false,
+    },
+    SystemBars: {
+      // Keep normal Android system indicators visible while retaining
+      // Capacitor's Android 15-safe CSS inset handling.
+      hidden: false,
+      style: "DEFAULT",
+      insetsHandling: "css",
     },
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"],

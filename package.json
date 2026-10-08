@@ -22,7 +22,7 @@
   "dependencies": {
     "@auth/core": "^0.41.1",
     "@capacitor/app": "^8.1.0",
-    "@capacitor/camera": "^8.2.0",
+    "@capacitor/camera": "8.2.5",
     "@capacitor/core": "^8.3.3",
     "@capacitor/device": "^8.0.2",
     "@capacitor/filesystem": "^8.1.2",
@@ -31,7 +31,7 @@
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/push-notifications": "^8.0.4",
     "@capacitor/splash-screen": "^8.0.1",
-    "@capacitor/status-bar": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
     "@capgo/capacitor-native-biometric": "^8.4.5",
     "@hcaptcha/react-hcaptcha": "^1.12.0",
     "@types/bcrypt": "^5.0.2",

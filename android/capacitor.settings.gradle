@@ -6,7 +6,7 @@ include ':capacitor-app'
 project(':capacitor-app').projectDir = new File('../node_modules/.pnpm/@capacitor+app@8.1.0_@capacitor+core@8.3.4/node_modules/@capacitor/app/android')
 
 include ':capacitor-camera'
-project(':capacitor-camera').projectDir = new File('../node_modules/.pnpm/@capacitor+camera@8.2.0_@capacitor+core@8.3.4/node_modules/@capacitor/camera/android')
+project(':capacitor-camera').projectDir = new File('../node_modules/.pnpm/@capacitor+camera@8.2.5_@capacitor+core@8.3.4/node_modules/@capacitor/camera/android')
 
 include ':capacitor-device'
 project(':capacitor-device').projectDir = new File('../node_modules/.pnpm/@capacitor+device@8.0.2_@capacitor+core@8.3.4/node_modules/@capacitor/device/android')
@@ -24,13 +24,13 @@ include ':capacitor-preferences'
 project(':capacitor-preferences').projectDir = new File('../node_modules/.pnpm/@capacitor+preferences@8.0.1_@capacitor+core@8.3.4/node_modules/@capacitor/preferences/android')
 
 include ':capacitor-push-notifications'
-project(':capacitor-push-notifications').projectDir = new File('../node_modules/.pnpm/@capacitor+push-notifications@8.1.1_@capacitor+core@8.3.4/node_modules/@capacitor/push-notifications/android')
+project(':capacitor-push-notifications').projectDir = new File('../node_modules/.pnpm/@capacitor+push-notificatio_4e4e4cb26cbbca2504af68229c147bd6/node_modules/@capacitor/push-notifications/android')
 
 include ':capacitor-splash-screen'
 project(':capacitor-splash-screen').projectDir = new File('../node_modules/.pnpm/@capacitor+splash-screen@8.0.1_@capacitor+core@8.3.4/node_modules/@capacitor/splash-screen/android')
 
 include ':capacitor-status-bar'
-project(':capacitor-status-bar').projectDir = new File('../node_modules/.pnpm/@capacitor+status-bar@8.0.2_@capacitor+core@8.3.4/node_modules/@capacitor/status-bar/android')
+project(':capacitor-status-bar').projectDir = new File('../node_modules/.pnpm/@capacitor+status-bar@8.0.4_@capacitor+core@8.3.4/node_modules/@capacitor/status-bar/android')
 
 include ':capgo-capacitor-native-biometric'
 project(':capgo-capacitor-native-biometric').projectDir = new File('../node_modules/.pnpm/@capgo+capacitor-native-bio_dd07739c2f92d2a1a07a89513a1751e6/node_modules/@capgo/capacitor-native-biometric/android')

@@ -81,6 +81,8 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans, Arial, Helvetica, sans-serif);
+  /* Capacitor SystemBars injects this on Android 15 edge-to-edge. */
+  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
 }
 
 /* Sorana public theme (scoped) */

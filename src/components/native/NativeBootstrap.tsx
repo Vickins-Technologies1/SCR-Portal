@@ -122,19 +122,27 @@ export default function NativeBootstrap() {
       // Keep server in sync once the userId/role cookies exist.
       await tryRestoreAndSync();
 
-      const permStatus = await PushNotifications.checkPermissions();
-      if (permStatus.receive === "prompt") {
-        await PushNotifications.requestPermissions();
-      }
+      // Capacitor Push Notifications 8.1.x can throw inside its native Android
+      // permission handler before a JavaScript catch can handle the rejection.
+      // Keep Android startup reliable; external notification channels (SMS,
+      // WhatsApp, and email) are delivered by the server independently.
+      if (platform === "android") return;
 
-      const afterPerm = await PushNotifications.checkPermissions();
-      if (afterPerm.receive !== "granted") return;
-
-      // Register with APNS/FCM. If Firebase isn't configured on Android (missing `google-services.json`),
-      // registration can fail — treat as best-effort so the app doesn't crash on permission grant.
       try {
+        const permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === "prompt") {
+          await PushNotifications.requestPermissions();
+        }
+
+        const afterPerm = await PushNotifications.checkPermissions();
+        if (afterPerm.receive !== "granted") return;
+
+        // Register with APNS/FCM. If Firebase isn't configured on Android (missing `google-services.json`),
+        // registration can fail — treat push setup as best-effort so it never blocks app startup.
         await PushNotifications.register();
       } catch {
+        // Some Android/plugin versions can throw while reading notification permissions.
+        // Push is optional; keep the web app usable even when native push setup fails.
         return;
       }
 
