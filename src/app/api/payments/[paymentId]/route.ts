@@ -20,6 +20,8 @@ type PaymentDoc = {
   transactionId?: string;
   mpesaCode?: string;
   status: "completed" | "pending" | "pending_stk" | "failed";
+  financialPostingStatus?: string;
+  financialEffectsApplied?: boolean;
   type?: "Rent" | "Utility" | "Deposit" | "Other";
 };
 
@@ -123,6 +125,13 @@ export async function DELETE(
     return NextResponse.json(
       { success: false, message: "Only manual payments can be deleted." },
       { status: 400 }
+    );
+  }
+
+  if (payment.status === "completed" || payment.financialPostingStatus === "posted" || payment.financialEffectsApplied === true) {
+    return NextResponse.json(
+      { success: false, message: "Posted payments are immutable. Use the payment reversal workflow instead." },
+      { status: 409 }
     );
   }
 

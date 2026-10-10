@@ -122,6 +122,7 @@ export function allocatePaymentLedger(params: {
     let other = 0;
     let funds = paymentAmount;
     let walletApplied = 0;
+    const isExplicitCategory = category === "Deposit" || category === "Rent" || category === "Utility" || category === "Other";
 
     // Rent-selected payments cascade through the tenant's real obligations.
     // Explicit Utility/Deposit/Other payments remain category-isolated.
@@ -150,25 +151,31 @@ export function allocatePaymentLedger(params: {
       funds -= utilities;
       other = Math.min(Math.max(0, otherDue - otherPaid), funds);
       funds -= other;
-      walletApplied = Math.min(previousWallet, rent + utilities + other);
+      // Treat the current payment as being used before older wallet credit.
+      // This makes the source payment's wallet credit auditable and avoids
+      // counting the same amount as both a credit and a consumption.
+      walletApplied = Math.min(previousWallet, Math.max(0, deposit + rent + utilities + other - paymentAmount));
     }
-    if (category === "Deposit" || category === "Rent" || category === "Utility" || category === "Other") {
-      funds = paymentAmount - deposit - rent - utilities - other;
+    const allocated = deposit + rent + utilities + other;
+    if (isExplicitCategory) {
+      funds = paymentAmount - allocated;
       wallet = money(previousWallet + Math.max(0, funds));
     } else {
-      wallet = money(funds);
+      wallet = money(previousWallet + paymentAmount - allocated);
     }
     depositPaid += deposit;
     rentPaid += rent;
     utilitiesPaid += utilities;
     otherPaid += other;
-    wallet = money(funds);
+    const walletCredit = !isExplicitCategory
+      ? Math.max(0, paymentAmount - Math.max(0, allocated - previousWallet))
+      : Math.max(0, paymentAmount - allocated);
     allocations.set(payment._id.toString(), {
       deposit: money(deposit),
       rent: money(rent),
       utilities: money(utilities),
       other: money(other),
-      walletCredit: money(Math.max(0, paymentAmount - deposit - rent - utilities - other + walletApplied)),
+      walletCredit: money(walletCredit),
       walletApplied: money(walletApplied),
     });
   }
@@ -210,7 +217,10 @@ export async function calculateTenantFinancialState(
     .find({
       tenantId: { $in: [String(tenant._id), tenant._id] },
       status: "completed",
-      financialPostingStatus: { $ne: "quarantined" },
+      $or: [
+        { financialPostingStatus: { $in: ["posted", "processing"] } },
+        { financialPostingStatus: { $exists: false } },
+      ],
     })
     .toArray();
   const paymentIds = payments.map((payment) => payment._id);
@@ -335,7 +345,14 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     .toArray();
   const chargeRemaining = new Map(utilityCharges.map((charge: any) => [String(charge._id), Math.max(0, Number(charge.amount) || 0)]));
   for (const payment of await db.collection("payments")
-    .find({ tenantId: { $in: [tenantId, new ObjectId(tenantId)] }, status: "completed" })
+    .find({
+      tenantId: { $in: [tenantId, new ObjectId(tenantId)] },
+      status: "completed",
+      $or: [
+        { financialPostingStatus: { $in: ["posted", "processing"] } },
+        { financialPostingStatus: { $exists: false } },
+      ],
+    })
     .sort({ paymentDate: 1, createdAt: 1, _id: 1 })
     .toArray()) {
     let remaining = Math.max(0, Number(allocations.get(String(payment._id))?.utilities || 0));

@@ -72,6 +72,7 @@ interface Payment {
 interface UpdatePaymentFieldsRequestBody {
   paymentId: string;
   userId: string;
+  csrfToken?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -85,9 +86,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: UpdatePaymentFieldsRequestBody = await request.json();
-    const { paymentId, userId: submittedUserId } = body;
+    const { paymentId, userId: submittedUserId, csrfToken } = body;
 
-    if (!validateCsrfToken(request, paymentId)) {
+    if (!validateCsrfToken(request, request.headers.get("x-csrf-token") || csrfToken || null)) {
       logger.error("Invalid CSRF token", { userId, paymentId });
       return buildInvalidCsrfResponse(request);
     }

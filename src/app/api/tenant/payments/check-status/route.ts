@@ -1,10 +1,11 @@
 // src/app/api/tenant/payments/check-status/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { Db } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { z } from "zod";
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 const StatusSchema = z.object({
   transaction_request_id: z.string().trim().min(1),
@@ -13,12 +14,13 @@ const StatusSchema = z.object({
   csrfToken: z.string().trim().min(1),
 });
 
-const normalizeStatus = (status: unknown): "initiated" | "pending" | "successful" | "failed" | "cancelled" | "expired" => {
+const normalizeStatus = (status: unknown): "initiated" | "pending" | "processing" | "successful" | "failed" | "cancelled" | "expired" | "review" => {
   const value = String(status || "").toLowerCase();
   if (["completed", "successful", "success", "paid"].includes(value)) return "successful";
   if (["failed", "error"].includes(value)) return "failed";
   if (["cancelled", "canceled", "reversed"].includes(value)) return "cancelled";
   if (["expired", "timeout", "timed_out"].includes(value)) return "expired";
+  if (["processing", "review", "quarantined"].includes(value)) return value as "processing" | "review";
   if (["pending", "pending_stk", "queued"].includes(value)) return "pending";
   return "initiated";
 };
@@ -70,7 +72,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
 
-    const publicStatus = normalizeStatus(payment.status);
+    if (role === "tenant" && tenantId !== userId) {
+      return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
+    }
+    if (role === "propertyOwner") {
+      if (!ObjectId.isValid(propertyId)) return NextResponse.json({ success: false, message: "Invalid property" }, { status: 400 });
+      const property = await db.collection("properties").findOne({
+        _id: new ObjectId(propertyId),
+        ownerId: { $in: [userId, ...(ObjectId.isValid(userId) ? [new ObjectId(userId)] : [])] },
+      });
+      if (!property) return NextResponse.json({ success: false, message: "Unauthorized property access" }, { status: 403 });
+    }
+
+    // Status polling is also a safe recovery trigger when a callback recorded
+    // provider success but the process crashed before financial posting.
+    if (payment.status === "completed" && payment.financialPostingStatus !== "posted" && payment.financialPostingStatus !== "quarantined") {
+      try {
+        const posting = await postVerifiedPayment({
+          db,
+          paymentId: payment._id,
+          providerConfirmedAmount: payment.providerConfirmedAmount,
+          providerTransactionId: payment.providerTransactionId || payment.transactionId,
+          providerReceipt: payment.mpesaCode,
+        });
+        if (posting.outcome === "posted" || posting.outcome === "duplicate") {
+          Object.assign(payment, posting.payment);
+        }
+      } catch (error) {
+        logger.warn("Payment posting recovery during status check failed", {
+          paymentId: String(payment._id),
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const publicStatus = payment.financialPostingStatus === "quarantined"
+      ? "review"
+      : payment.status === "completed" && ["pending", "processing"].includes(String(payment.financialPostingStatus || ""))
+        ? "processing"
+        : normalizeStatus(payment.status);
 
     return NextResponse.json({
       success: true,
@@ -78,7 +118,7 @@ export async function POST(request: NextRequest) {
       status: publicStatus,
       transaction: {
         mpesaCode: payment.mpesaCode,
-        amount: payment.amount,
+        amount: payment.providerConfirmedAmount ?? payment.postedAmount ?? payment.amount,
         status: publicStatus,
         resultCode: payment.resultCode ?? null,
         resultDesc: payment.resultDesc || null,

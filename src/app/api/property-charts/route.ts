@@ -84,14 +84,20 @@ export async function GET(request: NextRequest) {
             $match: {
               propertyId,
               status: "completed",
-              type: "Rent",
-              $or: [
-                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+              $and: [
+                { $or: [
+                  { financialPostingStatus: { $in: ["posted", "processing"] } },
+                  { financialPostingStatus: { $exists: false } },
+                ] },
+                { $or: [
+                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
+                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+                ] },
               ],
             },
           },
-          { $group: { _id: null, total: { $sum: "$amount" } } },
+          { $addFields: { reportAmount: { $ifNull: ["$allocation.rent", { $cond: [{ $eq: ["$type", "Rent"] }, { $ifNull: ["$postedAmount", "$amount"] }, 0] }] } } },
+          { $group: { _id: null, total: { $sum: "$reportAmount" } } },
         ])
         .toArray();
 
@@ -102,14 +108,20 @@ export async function GET(request: NextRequest) {
             $match: {
               propertyId,
               status: "completed",
-              type: "Utility",
-              $or: [
-                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+              $and: [
+                { $or: [
+                  { financialPostingStatus: { $in: ["posted", "processing"] } },
+                  { financialPostingStatus: { $exists: false } },
+                ] },
+                { $or: [
+                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
+                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+                ] },
               ],
             },
           },
-          { $group: { _id: null, total: { $sum: "$amount" } } },
+          { $addFields: { reportAmount: { $ifNull: ["$allocation.utilities", { $cond: [{ $eq: ["$type", "Utility"] }, { $ifNull: ["$postedAmount", "$amount"] }, 0] }] } } },
+          { $group: { _id: null, total: { $sum: "$reportAmount" } } },
         ])
         .toArray();
 
@@ -120,14 +132,20 @@ export async function GET(request: NextRequest) {
             $match: {
               propertyId,
               status: "completed",
-              type: "Deposit",
-              $or: [
-                { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+              $and: [
+                { $or: [
+                  { financialPostingStatus: { $in: ["posted", "processing"] } },
+                  { financialPostingStatus: { $exists: false } },
+                ] },
+                { $or: [
+                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
+                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
+                ] },
               ],
             },
           },
-          { $group: { _id: null, total: { $sum: "$amount" } } },
+          { $addFields: { reportAmount: { $ifNull: ["$allocation.deposit", { $cond: [{ $eq: ["$type", "Deposit"] }, { $ifNull: ["$postedAmount", "$amount"] }, 0] }] } } },
+          { $group: { _id: null, total: { $sum: "$reportAmount" } } },
         ])
         .toArray();
 

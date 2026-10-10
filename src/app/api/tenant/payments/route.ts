@@ -131,6 +131,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
+
     const skip = (page - 1) * limit;
 
     const query: { tenantId?: string; propertyId?: string | { $in: string[] } } = {};
@@ -206,7 +207,7 @@ export async function GET(request: NextRequest) {
           $project: {
             _id: { $toString: "$_id" },
             tenantId: 1,
-            amount: 1,
+            amount: { $ifNull: ["$postedAmount", "$amount"] },
             propertyId: 1,
             paymentDate: 1,
             transactionId: 1,
@@ -285,6 +286,10 @@ export async function POST(request: NextRequest) {
   try {
     const { db }: { db: Db } = await connectToDatabase();
 
+    if (!ObjectId.isValid(propertyId)) {
+      return NextResponse.json({ success: false, message: "Invalid property ID" }, { status: 400 });
+    }
+
     const property = await db.collection<Property>("properties").findOne({ _id: new ObjectId(propertyId) });
     if (!property) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
@@ -305,6 +310,10 @@ export async function POST(request: NextRequest) {
       }
 
       targetTenantId = tenantContext.tenantId;
+    }
+
+    if (!ObjectId.isValid(targetTenantId)) {
+      return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
     }
 
     const tenant = await db.collection<Tenant>("tenants").findOne({

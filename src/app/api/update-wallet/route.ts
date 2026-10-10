@@ -3,12 +3,14 @@ import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import logger from "../../../lib/logger";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   try {
     const { userId, amount, reference } = await request.json();
-    if (!userId || !ObjectId.isValid(userId) || typeof amount !== "number") {
+    const role = request.cookies.get("role")?.value;
+    if (!userId || !ObjectId.isValid(userId) || typeof amount !== "number" || !Number.isFinite(amount)) {
       logger.warn("Invalid request data", { userId, amount });
       return NextResponse.json(
         { success: false, message: "Invalid user ID or amount" },
@@ -24,6 +26,12 @@ export async function POST(request: NextRequest) {
         { success: false, message: "Unauthorized" },
         { status: 401 }
       );
+    }
+    if (role !== "propertyOwner") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
+      return buildInvalidCsrfResponse(request);
     }
 
     const { db }: { db: Db } = await connectToDatabase();
@@ -50,13 +58,9 @@ export async function POST(request: NextRequest) {
       { $set: { walletBalance: newBalance } }
     );
 
-    if (reference) {
-      await db.collection("invoices").updateOne(
-        { reference, userId },
-        { $set: { status: "completed", updatedAt: new Date() } }
-      );
-      logger.debug("Updated invoice status", { reference, status: "completed" });
-    }
+    // Wallet adjustments do not constitute a provider-verified invoice
+    // payment. Invoice status is derived from posted payment records.
+    if (reference) logger.debug("Wallet reference retained without changing invoice status", { reference });
 
     logger.info("Wallet updated successfully", { userId, newBalance, duration: Date.now() - startTime });
     return NextResponse.json(

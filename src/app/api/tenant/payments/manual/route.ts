@@ -271,95 +271,27 @@ export async function POST(request: NextRequest) {
     };
 
     await db.collection<Payment>("payments").insertOne(payment);
-    await postVerifiedPayment({
+    const posting = await postVerifiedPayment({
       db,
       paymentId: payment._id,
       providerConfirmedAmount: amount,
       providerTransactionId: transactionId,
-      allowRequestedAmountMismatch: true,
     });
-
-    // Retrieve CSRF token from cookies for the internal fetch
-    const fetchedCsrfToken = request.cookies.get("csrf-token")?.value;
-    if (!fetchedCsrfToken) {
-      logger.error("CSRF token not found in cookies for check-dues fetch", { tenantId, userId });
-      return NextResponse.json(
-        { success: false, message: "CSRF token not found for dues recalculation" },
-        { status: 403 }
-      );
+    if (posting.outcome === "quarantined") {
+      return NextResponse.json({ success: false, message: posting.reason }, { status: 409 });
     }
-
-    // Trigger dues recalculation via check-dues endpoint with timeout and retry
-    let checkDuesData: CheckDuesResponse = { success: false, message: "Dues recalculation not attempted" };
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-    const maxRetries = 3;
-    let retryCount = 0;
-
-    while (retryCount < maxRetries) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
-
-        const checkDuesResponse = await fetch(`${apiUrl}/api/tenants/check-dues`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": fetchedCsrfToken,
-          },
-          credentials: "include", // Let the browser handle cookies
-          signal: controller.signal,
-          body: JSON.stringify({
-            tenantId,
-            userId,
-          }),
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!checkDuesResponse.ok) {
-          throw new Error(`HTTP error ${checkDuesResponse.status}: ${checkDuesResponse.statusText}`);
-        }
-
-        checkDuesData = await checkDuesResponse.json() as CheckDuesResponse;
-        if (!checkDuesData.success) {
-          logger.error("Failed to update dues after manual payment", {
-            tenantId,
-            message: checkDuesData.message,
-            status: checkDuesResponse.status,
-          });
-        } else {
-          logger.info("Dues recalculated after manual payment", {
-            tenantId,
-            walletBalance: checkDuesData.tenant?.walletBalance,
-            totalRentPaid: checkDuesData.tenant?.totalRentPaid,
-            totalUtilityPaid: checkDuesData.tenant?.totalUtilityPaid,
-            totalDepositPaid: checkDuesData.tenant?.totalDepositPaid,
-            totalRemainingDues: checkDuesData.dues?.totalRemainingDues,
-          });
-        }
-        break; // Exit retry loop on success
-      } catch (fetchError) {
-        retryCount++;
-        logger.error("Error during check-dues fetch", {
-          tenantId,
-          userId,
-          attempt: retryCount,
-          error: fetchError instanceof Error ? fetchError.message : "Unknown error",
-        });
-
-        if (retryCount === maxRetries) {
-          logger.error("Max retries reached for check-dues fetch", {
-            tenantId,
-            userId,
-            maxRetries,
-          });
-          // Continue with notifications despite failure
-          checkDuesData = { success: false, message: "Failed to recalculate dues after maximum retries" };
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
-        }
-      }
-    }
+    const tenantState = posting.outcome === "posted" ? posting.tenantState : undefined;
+    const checkDuesData: CheckDuesResponse = {
+      success: true,
+      message: "Dues recalculated from the posted payment ledger",
+      tenant: tenantState ? {
+        walletBalance: tenantState.walletBalance,
+        totalRentPaid: tenantState.rentPaid,
+        totalUtilityPaid: tenantState.utilityPaid,
+        totalDepositPaid: tenantState.depositPaid,
+      } : undefined,
+      dues: tenantState ? { totalRemainingDues: tenantState.totalOutstanding } : undefined,
+    };
 
     // Fetch updated tenant data
     const updatedTenant = await db.collection<Tenant>("tenants").findOne({

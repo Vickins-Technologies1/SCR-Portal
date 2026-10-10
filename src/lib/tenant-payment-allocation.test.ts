@@ -110,6 +110,18 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ walletCredit: 2_000 });
   });
 
+  it("does not count a later general payment twice when wallet credit already exists", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 20_000,
+      utilityDue: 3_000,
+      payments: [payment(25_000), payment(1_000)],
+    });
+    const rows = [...result.allocations.values()];
+    expect(rows[0]).toMatchObject({ walletCredit: 2_000 });
+    expect(rows[1]).toMatchObject({ walletCredit: 1_000, walletApplied: 0 });
+    expect(result.walletBalance).toBe(3_000);
+  });
+
   it("moves only genuine excess to wallet and spends it on later balances", () => {
     const result = allocatePaymentLedger({ rentDue: 20_000, utilityDue: 3_000, payments: [payment(25_000)] });
     const rows = [...result.allocations.values()];

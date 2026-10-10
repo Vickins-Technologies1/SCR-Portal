@@ -51,7 +51,6 @@ export async function postVerifiedPayment(params: {
   providerConfirmedAmount?: number | string | null;
   providerTransactionId?: string | null;
   providerReceipt?: string | null;
-  allowRequestedAmountMismatch?: boolean;
 }): Promise<VerifiedPaymentPostingResult> {
   const paymentObjectId = params.paymentId instanceof ObjectId ? params.paymentId : new ObjectId(String(params.paymentId));
   const payment = await params.db.collection("payments").findOne({ _id: paymentObjectId });
@@ -75,10 +74,18 @@ export async function postVerifiedPayment(params: {
     if (claimAge >= 0 && claimAge < 5 * 60 * 1000) return { outcome: "duplicate", payment };
   }
 
-  const providerAmount = numeric(params.providerConfirmedAmount ?? payment.providerConfirmedAmount ?? payment.amount);
+  const provider = String(payment.provider || "").toLowerCase();
+  const suppliedProviderAmount = params.providerConfirmedAmount ?? payment.providerConfirmedAmount;
+  // A successful provider callback must carry its own amount. Falling back to
+  // the requested amount would turn an incomplete/malformed callback into a
+  // financial confirmation. Manual/operator entries are already verified at
+  // the application boundary and may use their stored amount.
+  const providerAmount = numeric(
+    suppliedProviderAmount ?? (provider && !["daraja", "tuma", "kopokopo"].includes(provider) ? payment.amount : null),
+  );
   if (providerAmount === null) return quarantine(params.db, payment, "Provider-confirmed amount is missing or invalid.");
 
-  if (!params.allowRequestedAmountMismatch && payment.requestedAmount != null && !sameAmount(payment.requestedAmount, providerAmount)) {
+  if (payment.requestedAmount != null && !sameAmount(payment.requestedAmount, providerAmount)) {
     return quarantine(params.db, payment, `Requested amount ${payment.requestedAmount} differs from provider amount ${providerAmount}.`);
   }
 
@@ -106,7 +113,6 @@ export async function postVerifiedPayment(params: {
       _id: { $ne: payment._id },
       provider: payment.provider,
       $or: duplicateIdentity,
-      financialPostingStatus: "posted",
     });
     if (duplicate) return { outcome: "duplicate", payment: duplicate };
   }
@@ -135,6 +141,7 @@ export async function postVerifiedPayment(params: {
         financialPostingClaimAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
+      $unset: { financialReviewReason: "" },
     },
     { returnDocument: "after" },
   );
@@ -163,6 +170,13 @@ export async function postVerifiedPayment(params: {
     },
     { returnDocument: "after" },
   );
-  const finalPayment = { ...refreshedPayment, ...(posted?.value || {}) };
+  if (!posted?.value) {
+    const current = await params.db.collection("payments").findOne({ _id: paymentObjectId });
+    if (current?.financialPostingStatus === "posted" || current?.financialEffectsApplied === true) {
+      return { outcome: "duplicate", payment: current };
+    }
+    throw new Error("Financial posting claim was lost before finalization");
+  }
+  const finalPayment = { ...refreshedPayment, ...posted.value };
   return { outcome: "posted", payment: finalPayment, tenantState, invoice };
 }

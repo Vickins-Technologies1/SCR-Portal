@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       {
         $set: {
           status: nextStatus,
-          providerConfirmedAmount: Number.isFinite(amount) && amount > 0 ? amount : payment.providerConfirmedAmount || payment.amount,
+          providerConfirmedAmount: Number.isFinite(amount) && amount > 0 ? amount : payment.providerConfirmedAmount || null,
           phoneNumber: phone || payment.phoneNumber,
           paymentDate,
           mpesaCode: resource?.id || resource?.reference || payment.mpesaCode || null,
@@ -115,22 +115,25 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    if (nextStatus === "completed" && payment.planType === "lifetime" && payment.billingType === "one_time") {
-      await activateLifetimeFromVerifiedPayment({ db, paymentId: payment._id, providerReference: resource?.id || resource?.reference || null, purchasedAt: new Date(paymentDate) });
-    }
-
-    if (nextStatus === "completed" && payment.invoiceId && ObjectId.isValid(String(payment.invoiceId))) {
-      await qualifyReferralFromFirstPaidInvoice({ db, invoiceId: String(payment.invoiceId), eventId: requestId }).catch(() => undefined);
-    }
-
+    let posting: Awaited<ReturnType<typeof postVerifiedPayment>> | null = null;
     if (nextStatus === "completed") {
-      await postVerifiedPayment({
+      posting = await postVerifiedPayment({
         db,
         paymentId: payment._id,
-        providerConfirmedAmount: Number.isFinite(amount) && amount > 0 ? amount : payment.amount,
+        providerConfirmedAmount: Number.isFinite(amount) && amount > 0 ? amount : payment.providerConfirmedAmount,
         providerTransactionId: requestId,
         providerReceipt: resource?.id || resource?.reference || null,
       });
+    }
+
+    if (posting && (posting.outcome === "posted" || (posting.outcome === "duplicate" && String(posting.payment?._id) === String(payment._id)))) {
+      if (nextStatus === "completed" && payment.planType === "lifetime" && payment.billingType === "one_time") {
+        await activateLifetimeFromVerifiedPayment({ db, paymentId: payment._id, providerReference: resource?.id || resource?.reference || null, purchasedAt: new Date(paymentDate) });
+      }
+
+      if (nextStatus === "completed" && payment.invoiceId && ObjectId.isValid(String(payment.invoiceId))) {
+        await qualifyReferralFromFirstPaidInvoice({ db, invoiceId: String(payment.invoiceId), eventId: requestId }).catch(() => undefined);
+      }
     }
 
     return NextResponse.json({ success: true, message: "Accepted" }, { status: 200 });

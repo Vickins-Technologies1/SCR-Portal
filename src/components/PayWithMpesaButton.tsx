@@ -42,7 +42,7 @@ export default function PayWithMpesaButton({
 
   const pollStatus = async (checkoutRequestId: string) => {
     let attempts = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 12;
     while (attempts < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, 5000));
       const statusRes = await fetch("/api/tenant/payments/check-status", {
@@ -71,7 +71,7 @@ export default function PayWithMpesaButton({
       }
 
       const status = String(statusData.status || "initiated").toLowerCase();
-      if (["initiated", "pending", "pending_stk"].includes(status)) {
+      if (["initiated", "pending", "pending_stk", "processing"].includes(status)) {
         attempts += 1;
         continue;
       }
@@ -82,12 +82,13 @@ export default function PayWithMpesaButton({
       };
     }
 
-    return { status: "timeout", message: "" };
+    return { status: "pending", message: "Payment is still being verified. You can safely refresh this page shortly." };
   };
 
   const handleClick = async () => {
     if (disabled || isLoading) return;
     setIsLoading(true);
+    let paymentInitiated = false;
 
     try {
       const res = await fetch("/api/mpesa/stk-push", {
@@ -115,6 +116,7 @@ export default function PayWithMpesaButton({
         return;
       }
 
+      paymentInitiated = true;
       toast.success(data.message || "STK Push initiated. Check your phone.");
       onStart?.();
 
@@ -137,12 +139,19 @@ export default function PayWithMpesaButton({
       } else if (status === "expired") {
         toast.error("Payment request expired.");
         onError?.("Payment request expired.");
+      } else if (status === "review") {
+        const reviewMessage = result.message || "Payment was received but needs reconciliation. Please contact support.";
+        toast.error(reviewMessage);
+        onError?.(reviewMessage);
       } else {
-        toast.error("Payment timed out. Please check again shortly.");
-        onError?.("Payment timed out. Please check again shortly.");
+        const pendingMessage = result.message || "Payment is still being verified. You can safely refresh this page shortly.";
+        toast(pendingMessage);
+        onError?.(pendingMessage);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Payment initiation failed";
+      const message = paymentInitiated
+        ? "Payment status is temporarily unavailable. Your payment remains pending; please refresh shortly."
+        : error instanceof Error ? error.message : "Payment initiation failed";
       toast.error(message);
       onError?.(message);
     } finally {

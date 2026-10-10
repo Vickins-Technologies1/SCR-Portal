@@ -6,6 +6,8 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { z } from "zod";
 import { getIncomingPaymentStatus } from "@/lib/kopokopo";
+import { ObjectId } from "mongodb";
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 const StatusSchema = z.object({
   transactionRequestId: z.string().trim().min(1),
@@ -54,6 +56,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
     }
 
+    if (role === "tenant" && String(payment.tenantId || "") !== userId) {
+      return NextResponse.json({ success: false, message: "Unauthorized payment access" }, { status: 403 });
+    }
+    if (role === "propertyOwner") {
+      const ownerMatch = String(payment.ownerId || payment.landlordId || "") === userId;
+      const propertyMatch = ObjectId.isValid(String(payment.propertyId))
+        ? await db.collection("properties").findOne({
+            _id: new ObjectId(String(payment.propertyId)),
+            ownerId: { $in: [userId, ...(ObjectId.isValid(userId) ? [new ObjectId(userId)] : [])] },
+          })
+        : null;
+      if (!ownerMatch && !propertyMatch) return NextResponse.json({ success: false, message: "Unauthorized payment access" }, { status: 403 });
+    }
+
     const paymentProvider = String(payment.provider || "").toLowerCase();
     const paymentStatus = String(payment.status || "").toLowerCase();
 
@@ -85,6 +101,15 @@ export async function POST(request: NextRequest) {
 
           payment.status = normalized === "completed" ? "completed" : "failed";
           payment.mpesaCode = kopokopoStatus.receipt || payment.mpesaCode || null;
+          if (payment.status === "completed") {
+            await postVerifiedPayment({
+              db,
+              paymentId: payment._id,
+              providerConfirmedAmount: payment.providerConfirmedAmount,
+              providerTransactionId: payment.providerTransactionId || kopokopoRequestId,
+              providerReceipt: payment.mpesaCode,
+            });
+          }
         }
       } catch (error) {
         logger.warn("KopoKopo status lookup failed", {
@@ -94,19 +119,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const resultStatus = payment.financialPostingStatus === "quarantined"
+      ? "review"
+      : payment.status === "completed" && ["pending", "processing"].includes(String(payment.financialPostingStatus || ""))
+        ? "processing"
+        : payment.status;
     const resultDesc =
-      payment.status === "completed"
+      resultStatus === "completed"
         ? "Completed"
-        : payment.status === "failed"
+        : resultStatus === "failed"
         ? "Failed"
-        : payment.status === "cancelled"
+        : resultStatus === "cancelled"
         ? "Cancelled"
+        : resultStatus === "review"
+        ? "Received and held for reconciliation"
         : "Pending";
 
     return NextResponse.json(
       {
         success: true,
-        TransactionStatus: payment.status,
+        TransactionStatus: resultStatus,
         ResultDesc: resultDesc,
       },
       { status: 200 }

@@ -54,9 +54,10 @@ export async function findLandlordC2BConnection(shortcode: string) {
 
 export async function findC2BInvoice(db: Db, landlordId: string, reference: string) {
   if (!ObjectId.isValid(landlordId) || !reference) return null;
+  const landlordIdentity = { $in: [landlordId, new ObjectId(landlordId)] };
   return db.collection("invoices").findOne({
-    userId: landlordId,
+    userId: landlordIdentity,
     reference,
-    status: { $nin: ["completed", "failed"] },
+    status: { $nin: ["completed", "failed", "PAID"] },
   });
 }

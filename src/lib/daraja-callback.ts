@@ -43,6 +43,21 @@ export function extractDarajaMetadata(items?: DarajaMetadataItem[]) {
   };
 }
 
+/** Daraja transaction timestamps are local Kenya time in YYYYMMDDHHmmss form. */
+export function parseDarajaTransactionDate(value?: string | number): Date | null {
+  if (!value) return null;
+  const text = String(value);
+  if (!/^\d{14}$/.test(text)) return null;
+  const year = Number(text.slice(0, 4));
+  const month = Number(text.slice(4, 6)) - 1;
+  const day = Number(text.slice(6, 8));
+  const hour = Number(text.slice(8, 10));
+  const minute = Number(text.slice(10, 12));
+  const second = Number(text.slice(12, 14));
+  const date = new Date(Date.UTC(year, month, day, hour - 3, minute, second));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function identifierQuery(callback: DarajaCallback) {
   return {
     $and: [
@@ -85,8 +100,22 @@ export async function claimDarajaCallback(db: Db, callback: DarajaCallback) {
     }
   }
 
-  if (existing.darajaEffectsApplied === true || String(existing.status).toLowerCase() === "completed") {
+  if (existing.darajaEffectsApplied === true) {
     return { payment: existing, metadata, status, shouldProcessEffects: false, reason: "already_finalized" as const };
+  }
+
+  // A callback can be retried after the provider status was recorded but
+  // before financial posting finished. Allow the durable posting boundary to
+  // retry that work instead of treating the completed status as a terminal
+  // callback claim.
+  if (String(existing.status).toLowerCase() === "completed") {
+    return {
+      payment: existing,
+      metadata,
+      status,
+      shouldProcessEffects: status === "completed" && existing.financialPostingStatus !== "posted" && existing.financialEffectsApplied !== true,
+      reason: "retry" as const,
+    };
   }
 
   const now = new Date();
@@ -105,6 +134,12 @@ export async function claimDarajaCallback(db: Db, callback: DarajaCallback) {
         updatedAt: now.toISOString(),
         callbackReceivedAt: now.toISOString(),
         darajaProcessingClaim: randomUUID(),
+        ...(parseDarajaTransactionDate(metadata.transactionDate as string | number | undefined)
+          ? { providerTransactionDate: parseDarajaTransactionDate(metadata.transactionDate as string | number | undefined)!.toISOString() }
+          : {}),
+        ...(status === "completed" && parseDarajaTransactionDate(metadata.transactionDate as string | number | undefined)
+          ? { paymentDate: parseDarajaTransactionDate(metadata.transactionDate as string | number | undefined)!.toISOString() }
+          : {}),
         ...(metadata.amount > 0 ? { providerConfirmedAmount: metadata.amount } : {}),
         ...(metadata.receipt ? { mpesaCode: metadata.receipt } : {}),
         ...(metadata.phone ? { phoneNumber: metadata.phone } : {}),

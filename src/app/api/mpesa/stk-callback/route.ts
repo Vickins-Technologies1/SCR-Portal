@@ -17,19 +17,6 @@ import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 import { qualifyReferralFromFirstPaidInvoice } from "@/lib/referrals";
 
-function parseMpesaDate(value?: string | number): Date {
-  if (!value) return new Date();
-  const str = String(value);
-  if (!/^\d{14}$/.test(str)) return new Date();
-  const year = str.slice(0, 4);
-  const month = str.slice(4, 6);
-  const day = str.slice(6, 8);
-  const hour = str.slice(8, 10);
-  const minute = str.slice(10, 12);
-  const second = str.slice(12, 14);
-  return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+03:00`);
-}
-
 export async function POST(request: NextRequest) {
   let payload: unknown;
   try {
@@ -78,6 +65,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (!claimed.shouldProcessEffects) {
+      if (claimed.reason === "receipt_replay") {
+        await db.collection("payments").updateOne(
+          { _id: payment._id, financialPostingStatus: { $ne: "posted" } },
+          { $set: { financialPostingStatus: "quarantined", financialReviewReason: "Provider receipt is already associated with another payment.", updatedAt: new Date().toISOString() } },
+        );
+      }
+      // The provider status may already be recorded while the financial
+      // posting marker was written by a previous attempt. Finalize only the
+      // callback marker in that case; never repeat financial side effects.
+      if (payment.financialPostingStatus === "posted" || payment.financialEffectsApplied === true) {
+        await markDarajaEffectsApplied(db, payment._id);
+      }
       logger.info("Daraja callback ignored as duplicate or finalized", {
         paymentId: payment.paymentId || String(payment._id),
         checkoutRequestId: callback.CheckoutRequestID,
@@ -94,17 +93,34 @@ export async function POST(request: NextRequest) {
       const posting = await postVerifiedPayment({
         db,
         paymentId: payment._id,
-        providerConfirmedAmount: metadata.amount || payment.providerConfirmedAmount || payment.amount,
+        providerConfirmedAmount: metadata.amount || payment.providerConfirmedAmount,
         providerTransactionId: callback.CheckoutRequestID,
         providerReceipt: metadata.receipt || null,
       });
       if (posting.outcome === "quarantined") {
-        await markDarajaEffectsApplied(db, payment._id);
         return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted for reconciliation" }, { status: 200 });
       }
       if (posting.outcome === "posted") {
         await markDarajaEffectsApplied(db, payment._id);
+        if (payment.invoiceId && ObjectId.isValid(String(payment.invoiceId))) {
+          await qualifyReferralFromFirstPaidInvoice({
+            db,
+            invoiceId: String(payment.invoiceId),
+            eventId: String(metadata.receipt || callback.CheckoutRequestID),
+          }).catch((error) => logger.error("Referral qualification failed", { invoiceId: payment.invoiceId, error }));
+        }
         return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+      }
+      if (String(posting.payment?._id) === String(payment._id)) {
+        const current = await db.collection("payments").findOne({ _id: payment._id }, { projection: { financialPostingStatus: 1, financialEffectsApplied: 1 } });
+        if (current?.financialPostingStatus === "posted" || current?.financialEffectsApplied === true) {
+          await markDarajaEffectsApplied(db, payment._id);
+        }
+      } else {
+        await db.collection("payments").updateOne(
+          { _id: payment._id, financialPostingStatus: { $ne: "posted" } },
+          { $set: { financialPostingStatus: "quarantined", financialReviewReason: "Provider transaction identity is already posted to another payment.", updatedAt: new Date().toISOString() } },
+        );
       }
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }

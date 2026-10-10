@@ -155,6 +155,7 @@ export async function POST(request: NextRequest) {
     const result = await applyTumaPaymentUpdate({
       db,
       payment,
+      skipFinancialEffects: Boolean(payment.tenantId && !payment.airbnbBookingId),
       update: {
         id: normalized.checkoutRequestId || normalized.merchantRequestId || normalized.paymentId || payment._id.toString(),
         status: normalized.status,
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
       await postVerifiedPayment({
         db,
         paymentId: result.payment._id,
-        providerConfirmedAmount: normalized.amount ?? result.payment.providerConfirmedAmount ?? result.payment.amount,
+        providerConfirmedAmount: normalized.amount ?? result.payment.providerConfirmedAmount,
         providerTransactionId: normalized.paymentId || normalized.checkoutRequestId || normalized.merchantRequestId || null,
         providerReceipt: normalized.mpesaReceiptNumber || null,
       });

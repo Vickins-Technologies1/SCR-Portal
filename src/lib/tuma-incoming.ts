@@ -92,11 +92,18 @@ export async function applyTumaPaymentUpdate(params: {
   payment: any;
   update: TumaIncomingUpdate;
   skipNonTerminalSideEffects?: boolean;
+  skipFinancialEffects?: boolean;
 }): Promise<{ payment: any; normalizedStatus: string }> {
   const { db, payment } = params;
   const update = params.update;
   const normalizedStatus = normalizeTumaStatus(update);
   const prevStatus = payment.status;
+
+  // Provider webhooks can arrive out of order. A terminal successful event
+  // must not be downgraded by a later stale failure/cancellation event.
+  if (prevStatus === "completed" && normalizedStatus !== "completed") {
+    return { payment, normalizedStatus: prevStatus };
+  }
 
   const patch: Record<string, any> = {};
   if (normalizedStatus && normalizedStatus !== payment.status) {
@@ -132,6 +139,14 @@ export async function applyTumaPaymentUpdate(params: {
       { returnDocument: "after" }
     );
     updatedPayment = refreshed?.value ?? payment;
+  }
+
+  // Provider status persistence is deliberately separate from financial
+  // posting. The webhook handler uses this mode for tenant payments so an
+  // unverified or amount-mismatched event cannot reconcile balances, invoices,
+  // wallet credit, or notifications before the shared posting boundary.
+  if (params.skipFinancialEffects) {
+    return { payment: updatedPayment, normalizedStatus };
   }
 
   if (prevStatus === "completed" && normalizedStatus === "completed") {
@@ -202,10 +217,6 @@ export async function applyTumaPaymentUpdate(params: {
       }
       await deactivateAirbnbGuestTenantsForBooking(db, { ownerId, bookingId, nowIso });
     }
-  }
-
-  if (prevStatus === "completed" && normalizedStatus !== "completed" && updatedPayment.tenantId) {
-    await reconcileTenantPaymentAllocation(db, String(updatedPayment.tenantId));
   }
 
   if (normalizedStatus !== "completed" || !updatedPayment.tenantId) {

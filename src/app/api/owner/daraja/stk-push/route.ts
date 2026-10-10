@@ -15,7 +15,7 @@ import { resolveOwnerDarajaStkConfig } from "@/lib/owner-daraja";
 
 const StkSchema = z.object({
   mode: z.enum(["shared_daraja", "user_paybill"]),
-  amount: z.preprocess((value) => Number(value), z.number().positive()),
+  amount: z.preprocess((value) => Number(value), z.number().int().positive()),
   phone: z.string().trim().min(7),
   accountReference: z.string().trim().min(1),
   transactionDesc: z.string().trim().min(1),
@@ -82,6 +82,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    let tenantPropertyId: string | null = null;
+    if (parsed.data.tenantId) {
+      if (!ObjectId.isValid(parsed.data.tenantId)) {
+        return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
+      }
+      const tenant = await db.collection("tenants").findOne({
+        _id: new ObjectId(parsed.data.tenantId),
+        ownerId: { $in: [context.ownerId, ...(ObjectId.isValid(context.ownerId) ? [new ObjectId(context.ownerId)] : [])] },
+      }, { projection: { propertyId: 1 } });
+      if (!tenant?.propertyId) {
+        return NextResponse.json({ success: false, message: "Tenant is not assigned to this property owner" }, { status: 403 });
+      }
+      tenantPropertyId = String(tenant.propertyId);
+    }
     const resolved = await resolveOwnerDarajaStkConfig(db, context.ownerId, parsed.data.mode);
     let callbackUrl: string;
     try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Invalid Daraja callback configuration." }, { status: 500 }); }
@@ -134,6 +148,12 @@ export async function POST(request: NextRequest) {
       ownerId: context.ownerId,
       tenantId: parsed.data.tenantId || null,
       amount: parsed.data.amount,
+      requestedAmount: parsed.data.amount,
+      providerConfirmedAmount: null,
+      postedAmount: null,
+      financialPostingStatus: "pending",
+      propertyId: tenantPropertyId,
+      landlordId: context.ownerId,
       paymentDate: nowIso,
       transactionId: stkResponse.CheckoutRequestID,
       status: "pending",

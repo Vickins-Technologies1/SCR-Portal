@@ -315,7 +315,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           $project: {
             _id: { $toString: "$_id" },
             tenantId: { $ifNull: ["$tenantId", null] },
-            amount: 1,
+            amount: { $ifNull: ["$postedAmount", "$amount"] },
             propertyId: 1,
             paymentDate: 1,
             transactionId: 1,

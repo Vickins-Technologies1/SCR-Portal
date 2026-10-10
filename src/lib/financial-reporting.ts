@@ -27,7 +27,10 @@ export async function getFinancialReportSummary(params: {
   const query: any = {
     propertyId: { $in: params.propertyIds },
     status: "completed",
-    financialPostingStatus: { $ne: "quarantined" },
+    $or: [
+      { financialPostingStatus: { $in: ["posted", "processing"] } },
+      { financialPostingStatus: { $exists: false } },
+    ],
   };
   if (params.start || params.end) {
     const stringRange: any = {};
@@ -80,7 +83,10 @@ export async function getInvoicePostedAmount(db: Db, invoiceId: string) {
   const payments = await db.collection("payments").find({
     invoiceId,
     status: "completed",
-    financialPostingStatus: { $ne: "quarantined" },
+    $or: [
+      { financialPostingStatus: { $in: ["posted", "processing"] } },
+      { financialPostingStatus: { $exists: false } },
+    ],
   }).project({ amount: 1, postedAmount: 1, _id: 1 }).toArray();
   if (!payments.length) return 0;
   const reversalRows = await db.collection("financialLedger").aggregate<{ _id: any; total: number }>([

@@ -177,13 +177,17 @@ export async function GET(request: NextRequest) {
           $match: {
             propertyId: { $in: propertyIds },
             status: "completed",
+            $or: [
+              { financialPostingStatus: { $in: ["posted", "processing"] } },
+              { financialPostingStatus: { $exists: false } },
+            ],
             paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
           },
         },
         {
           $group: {
             _id: null,
-            totalMonthlyRent: { $sum: "$amount" },
+            totalMonthlyRent: { $sum: { $ifNull: ["$postedAmount", "$amount"] } },
           },
         },
       ])
@@ -195,6 +199,10 @@ export async function GET(request: NextRequest) {
       .find({
         propertyId: { $in: propertyIds },
         status: "completed",
+        $or: [
+          { financialPostingStatus: { $in: ["posted", "processing"] } },
+          { financialPostingStatus: { $exists: false } },
+        ],
         paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
       })
       .toArray();
@@ -217,12 +225,16 @@ export async function GET(request: NextRequest) {
           $match: {
             propertyId: { $in: propertyIds },
             status: "completed",
+            $or: [
+              { financialPostingStatus: { $in: ["posted", "processing"] } },
+              { financialPostingStatus: { $exists: false } },
+            ],
           },
         },
         {
           $group: {
             _id: null,
-            totalPayments: { $sum: "$amount" },
+            totalPayments: { $sum: { $ifNull: ["$postedAmount", "$amount"] } },
           },
         },
       ])

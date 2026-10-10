@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 
 // Define Invoice interface for consistent typing
 interface Invoice {
@@ -45,6 +46,10 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
+      return buildInvalidCsrfResponse(request);
+    }
+
     const body = await request.json();
     const { invoiceId, amount, status, description } = body;
     console.log("Request body:", { invoiceId, amount, status, description });
@@ -70,6 +75,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: "Valid status (pending, completed, failed) is required" },
         { status: 400 }
+      );
+    }
+    if (status === "completed") {
+      return NextResponse.json(
+        { success: false, message: "Invoices are marked paid only from verified posted payments" },
+        { status: 409 }
       );
     }
 

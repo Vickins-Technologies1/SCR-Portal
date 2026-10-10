@@ -124,6 +124,10 @@ export async function POST(request: NextRequest) {
         targetTenantId = tenantContext.tenantId;
       }
 
+      if (!ObjectId.isValid(targetTenantId)) {
+        return NextResponse.json({ success: false, message: "Invalid tenant identity" }, { status: 400 });
+      }
+
       const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(targetTenantId) });
       if (!tenant) {
         return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
@@ -594,8 +598,10 @@ export async function POST(request: NextRequest) {
     // Store pending payment for callback reconciliation
     await db.collection("payments").findOneAndUpdate(
       {
+        tenantId,
         invoiceId: parsed.data.invoiceId,
         landlordId: parsed.data.landlordId,
+        propertyId,
         status: { $in: ["pending", "pending_stk"] },
       },
       {

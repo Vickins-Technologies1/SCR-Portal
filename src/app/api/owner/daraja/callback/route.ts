@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
 import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
 import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 export async function POST(request: NextRequest) {
   let payload: unknown;
@@ -44,6 +45,31 @@ export async function POST(request: NextRequest) {
         provider: "daraja",
       });
     } else {
+      let canMarkCallbackEffects = true;
+      if (claimed.shouldProcessEffects && claimed.status === "completed" && claimed.payment.tenantId && !claimed.payment.airbnbBookingId) {
+        const posting = await postVerifiedPayment({
+          db,
+          paymentId: claimed.payment._id,
+          providerConfirmedAmount: claimed.metadata.amount || claimed.payment.providerConfirmedAmount,
+          providerTransactionId: callback.CheckoutRequestID,
+          providerReceipt: claimed.metadata.receipt || null,
+        });
+        if (posting.outcome === "quarantined") {
+          return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted for reconciliation" }, { status: 200 });
+        }
+        if (posting.outcome === "duplicate") {
+          if (String(posting.payment?._id) !== String(claimed.payment._id)) {
+            await db.collection("payments").updateOne(
+              { _id: claimed.payment._id, financialPostingStatus: { $ne: "posted" } },
+              { $set: { financialPostingStatus: "quarantined", financialReviewReason: "Provider transaction identity is already posted to another payment.", updatedAt: new Date().toISOString() } },
+            );
+            canMarkCallbackEffects = false;
+          } else {
+            const current = await db.collection("payments").findOne({ _id: claimed.payment._id }, { projection: { financialPostingStatus: 1, financialEffectsApplied: 1 } });
+            canMarkCallbackEffects = current?.financialPostingStatus === "posted" || current?.financialEffectsApplied === true;
+          }
+        }
+      }
       if (claimed.shouldProcessEffects && claimed.status === "completed" && claimed.payment.planType === "lifetime" && claimed.payment.billingType === "one_time") {
         await activateLifetimeFromVerifiedPayment({
           db,
@@ -51,7 +77,7 @@ export async function POST(request: NextRequest) {
           providerReference: claimed.metadata.receipt || callback.CheckoutRequestID,
         });
       }
-      await markDarajaEffectsApplied(db, claimed.payment._id);
+      if (canMarkCallbackEffects) await markDarajaEffectsApplied(db, claimed.payment._id);
       logger.info("Owner Daraja callback processed", {
         paymentId: claimed.payment.paymentId || String(claimed.payment._id),
         checkoutRequestId: callback.CheckoutRequestID,
