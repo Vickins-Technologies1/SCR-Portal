@@ -1,5 +1,5 @@
 import { Db, ObjectId } from "mongodb";
-import { calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown } from "@/lib/property-utilities";
+import { calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown, UtilityDueBreakdown } from "@/lib/property-utilities";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 
@@ -15,7 +15,7 @@ export type PaymentAllocation = {
 
 export type PaymentCategory = "Rent" | "Utility" | "Deposit" | "Other" | "General";
 
-type LedgerPayment = {
+export type LedgerPayment = {
   _id: ObjectId;
   amount: number;
   postedAmount?: number;
@@ -27,6 +27,7 @@ type LedgerPayment = {
 };
 
 export type TenantFinancialState = {
+  monthsStayed: number;
   depositRequired: number;
   depositPaid: number;
   depositOutstanding: number;
@@ -92,6 +93,50 @@ export function sumTenantOverdueAmount(
 
 const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
 const amountOf = (value: unknown) => (Number.isFinite(Number(value)) ? money(Number(value)) : 0);
+
+const identityValues = (value: unknown): Array<string | ObjectId> => {
+  const stringValue = String(value || "").trim();
+  if (!stringValue) return [];
+  return ObjectId.isValid(stringValue) ? [stringValue, new ObjectId(stringValue)] : [stringValue];
+};
+
+const scopedPropertyFilter = (propertyId: unknown) => {
+  const identities = identityValues(propertyId);
+  if (!identities.length) return {};
+  return {
+    $or: [
+      { propertyId: { $in: identities } },
+      // Some historical payment/utility rows predate property linkage. Keep
+      // those rows eligible when tenantId is authoritative, but never admit a
+      // row explicitly linked to another property.
+      { propertyId: { $exists: false } },
+      { propertyId: null },
+    ],
+  };
+};
+
+const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdAt">) => {
+  for (const candidate of [payment.paymentDate, payment.createdAt]) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
+  }
+  return null;
+};
+
+const eligiblePaymentFilter = (tenant: any) => ({
+  $and: [
+    { tenantId: { $in: identityValues(tenant._id) } },
+    { status: "completed" },
+    {
+      $or: [
+        { financialPostingStatus: { $in: ["posted", "processing"] } },
+        { financialPostingStatus: { $exists: false } },
+      ],
+    },
+    scopedPropertyFilter(tenant.propertyId),
+  ],
+});
 
 export function allocatePaymentLedger(params: {
   depositDue?: number;
@@ -182,100 +227,63 @@ export function allocatePaymentLedger(params: {
   return { depositPaid: money(depositPaid), rentPaid: money(rentPaid), utilitiesPaid: money(utilitiesPaid), otherPaid: money(otherPaid), walletBalance: wallet, allocations };
 }
 
-/**
- * The single financial source of truth. Consumers should aggregate this state
- * instead of subtracting payment-type totals from raw lease values.
- */
-export async function calculateTenantFinancialState(
-  db: Db,
-  tenant: any,
-  options: { asOf?: Date; property?: any; rentOverrideMap?: Map<string, any> } = {}
-): Promise<TenantFinancialState> {
-  const asOf = options.asOf ?? new Date();
-  const property = options.property ?? (ObjectId.isValid(String(tenant.propertyId))
-    ? await db.collection("properties").findOne({ _id: new ObjectId(String(tenant.propertyId)) })
-    : null);
-  const overrides = options.rentOverrideMap ?? await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)]);
-  const { rentDue } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides });
-  const fixedUtilities = calculateFixedUtilityBreakdown({
-    utilities: property?.utilities,
-    tenant,
-    today: asOf,
-    paymentDay: property?.rentPaymentDate,
-  });
-  const meteredUtilities = await getPostedMeteredUtilityBreakdown(
-    db,
-    String(tenant._id),
-    asOf,
-    property?.rentPaymentDate
-  );
-  const utilityDue = money(fixedUtilities.charged + meteredUtilities.charged);
-  const utilityOverdueCharged = money(fixedUtilities.overdueCharged + meteredUtilities.overdueCharged);
-  const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
-  const cutoff = asOf.getTime();
-  const payments = await db.collection<LedgerPayment>("payments")
-    .find({
-      tenantId: { $in: [String(tenant._id), tenant._id] },
-      status: "completed",
-      $or: [
-        { financialPostingStatus: { $in: ["posted", "processing"] } },
-        { financialPostingStatus: { $exists: false } },
-      ],
-    })
-    .toArray();
-  const paymentIds = payments.map((payment) => payment._id);
-  const reversalRows = paymentIds.length
-    ? await db.collection("financialLedger").aggregate<{ _id: ObjectId; total: number }>([
-        { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: paymentIds } } },
-        { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
-      ]).toArray()
-    : [];
-  const reversedByPayment = new Map(reversalRows.map((row) => [String(row._id), money(Number(row.total) || 0)]));
-  const eligiblePayments = payments
+export function deriveTenantFinancialState(params: {
+  tenant: any;
+  asOf: Date;
+  rentDue: number;
+  monthsStayed: number;
+  utilityBreakdown: UtilityDueBreakdown;
+  depositDue: number;
+  payments: LedgerPayment[];
+  reversedByPayment?: ReadonlyMap<string, number>;
+  property?: any;
+}): TenantFinancialState {
+  const cutoff = params.asOf.getTime();
+  const reversedByPayment = params.reversedByPayment ?? new Map<string, number>();
+  const eligiblePayments = params.payments
     .filter((payment) => {
-      const date = payment.paymentDate ?? payment.createdAt;
-      return !date || Number.isNaN(new Date(date).getTime()) || new Date(date).getTime() <= cutoff;
+      if (payment.status !== "completed") return false;
+      const date = paymentDateValue(payment);
+      return date === null || date <= cutoff;
     })
-    .sort((a, b) => new Date(a.paymentDate ?? a.createdAt ?? 0).getTime() - new Date(b.paymentDate ?? b.createdAt ?? 0).getTime())
+    .sort((a, b) => (paymentDateValue(a) ?? 0) - (paymentDateValue(b) ?? 0) || String(a._id).localeCompare(String(b._id)))
     .map((payment) => ({
       ...payment,
       amount: money(Math.max(0, Number(payment.postedAmount ?? payment.amount) - (reversedByPayment.get(String(payment._id)) || 0))),
     }));
   const ledger = allocatePaymentLedger({
-    depositDue,
-    rentDue,
-    utilityDue,
+    depositDue: params.depositDue,
+    rentDue: params.rentDue,
+    utilityDue: params.utilityBreakdown.charged,
     otherDue: 0,
     walletBalance: 0,
     payments: eligiblePayments,
   });
+  const utilityOverdueCharged = money(params.utilityBreakdown.overdueCharged);
   const penalties = money(calculateOverduePenalty({
-    rentDues: money(Math.max(0, rentDue - ledger.rentPaid)),
-    today: asOf,
-    rentPaymentDate: property?.rentPaymentDate,
-    leaseStartDate: tenant.leaseStartDate,
-    penaltyAmount: property?.penaltyAmount,
-    penaltyFrequency: property?.penaltyFrequency,
+    rentDues: money(Math.max(0, params.rentDue - ledger.rentPaid)),
+    today: params.asOf,
+    rentPaymentDate: params.property?.rentPaymentDate,
+    leaseStartDate: params.tenant.leaseStartDate,
+    penaltyAmount: params.property?.penaltyAmount,
+    penaltyFrequency: params.property?.penaltyFrequency,
   }));
-  const depositOutstanding = money(Math.max(0, depositDue - ledger.depositPaid));
-  const rentOutstanding = money(Math.max(0, rentDue - ledger.rentPaid));
-  const utilitiesOutstanding = money(Math.max(0, utilityDue - ledger.utilitiesPaid));
+  const depositOutstanding = money(Math.max(0, params.depositDue - ledger.depositPaid));
+  const rentOutstanding = money(Math.max(0, params.rentDue - ledger.rentPaid));
+  const utilitiesOutstanding = money(Math.max(0, params.utilityBreakdown.charged - ledger.utilitiesPaid));
   const utilitiesOverdueOutstanding = money(Math.min(utilitiesOutstanding, Math.max(0, utilityOverdueCharged - ledger.utilitiesPaid)));
   const utilitiesCurrentOutstanding = money(Math.max(0, utilitiesOutstanding - utilitiesOverdueOutstanding));
-  // Rent and utilities are calculated through today's due-date rules above,
-  // so their outstanding balances are the genuinely overdue components.
-  // Deposits and penalties remain part of totalOutstanding, but are not part
-  // of the dashboard's overdue-amount metric.
   const overdueRent = rentOutstanding;
   const overdueUtilities = utilitiesOverdueOutstanding;
   return {
-    depositRequired: depositDue,
+    monthsStayed: params.monthsStayed,
+    depositRequired: money(params.depositDue),
     depositPaid: ledger.depositPaid,
     depositOutstanding,
-    rentCharged: money(rentDue),
+    rentCharged: money(params.rentDue),
     rentPaid: ledger.rentPaid,
     rentOutstanding,
-    utilitiesCharged: utilityDue,
+    utilitiesCharged: money(params.utilityBreakdown.charged),
     utilitiesPaid: ledger.utilitiesPaid,
     utilitiesOutstanding,
     utilitiesCurrentOutstanding,
@@ -289,6 +297,70 @@ export async function calculateTenantFinancialState(
     walletBalance: ledger.walletBalance,
     paymentAllocations: ledger.allocations,
   };
+}
+
+/**
+ * The single financial source of truth. Consumers should aggregate this state
+ * instead of subtracting payment-type totals from raw lease values.
+ */
+export async function calculateTenantFinancialState(
+  db: Db,
+  tenant: any,
+  options: { asOf?: Date; property?: any; rentOverrideMap?: Map<string, any> } = {}
+): Promise<TenantFinancialState> {
+  const asOf = options.asOf ?? new Date();
+  const propertyId = String(tenant.propertyId || "").trim();
+  const property = options.property ?? (propertyId
+    ? await db.collection("properties").findOne(
+        ObjectId.isValid(propertyId)
+          ? { $or: [{ _id: new ObjectId(propertyId) }, { _id: propertyId as any }] }
+          : { _id: propertyId as any },
+      )
+    : null);
+  const overrides = options.rentOverrideMap ?? await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)]);
+  const { rentDue, monthsStayed } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides });
+  const fixedUtilities = calculateFixedUtilityBreakdown({
+    utilities: property?.utilities,
+    tenant,
+    today: asOf,
+    paymentDay: property?.rentPaymentDate,
+  });
+  const meteredUtilities = await getPostedMeteredUtilityBreakdown(
+    db,
+    String(tenant._id),
+    asOf,
+    property?.rentPaymentDate,
+    tenant.propertyId,
+  );
+  const utilityBreakdown: UtilityDueBreakdown = {
+    charged: money(fixedUtilities.charged + meteredUtilities.charged),
+    currentCharged: money(fixedUtilities.currentCharged + meteredUtilities.currentCharged),
+    overdueCharged: money(fixedUtilities.overdueCharged + meteredUtilities.overdueCharged),
+  };
+  const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
+  const payments = await db.collection<LedgerPayment>("payments")
+    .find(eligiblePaymentFilter(tenant))
+    .toArray();
+  const paymentIds = payments.map((payment) => payment._id);
+  const reversalIds = [...paymentIds, ...paymentIds.map((paymentId) => paymentId.toString())];
+  const reversalRows = paymentIds.length
+    ? await db.collection("financialLedger").aggregate<{ _id: ObjectId; total: number }>([
+        { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: reversalIds } } },
+        { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
+      ]).toArray()
+    : [];
+  const reversedByPayment = new Map(reversalRows.map((row) => [String(row._id), money(Number(row.total) || 0)]));
+  return deriveTenantFinancialState({
+    tenant,
+    asOf,
+    rentDue,
+    monthsStayed,
+    utilityBreakdown,
+    depositDue,
+    payments,
+    reversedByPayment,
+    property,
+  });
 }
 
 export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string) {
@@ -340,21 +412,15 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
   // authoritative tenant total; this mapping makes the period-level audit
   // trail deterministic without changing fixed-utility behaviour.
   const utilityCharges = await db.collection("utilityCharges")
-    .find({ tenantId, status: "posted" })
+    .find({ tenantId: { $in: identityValues(tenantId) }, status: "posted", ...scopedPropertyFilter(tenant.propertyId) })
     .sort({ billingPeriod: 1, createdAt: 1, _id: 1 })
     .toArray();
   const chargeRemaining = new Map(utilityCharges.map((charge: any) => [String(charge._id), Math.max(0, Number(charge.amount) || 0)]));
   for (const payment of await db.collection("payments")
-    .find({
-      tenantId: { $in: [tenantId, new ObjectId(tenantId)] },
-      status: "completed",
-      $or: [
-        { financialPostingStatus: { $in: ["posted", "processing"] } },
-        { financialPostingStatus: { $exists: false } },
-      ],
-    })
+    .find({ ...eligiblePaymentFilter(tenant) })
     .sort({ paymentDate: 1, createdAt: 1, _id: 1 })
     .toArray()) {
+    if (!allocations.has(String(payment._id))) continue;
     let remaining = Math.max(0, Number(allocations.get(String(payment._id))?.utilities || 0));
     const utilityAllocations: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }> = [];
     utilityAllocations.push(...allocateUtilityPaymentAcrossCharges(remaining, utilityCharges.map((charge: any) => ({

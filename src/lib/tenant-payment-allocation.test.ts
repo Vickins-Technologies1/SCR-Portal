@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, sumTenantDepositPaid, sumTenantOverdueAmount } from "./tenant-payment-allocation";
+import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount } from "./tenant-payment-allocation";
 
 const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type });
 describe("tenant payment allocation", () => {
@@ -248,5 +248,88 @@ describe("tenant payment allocation", () => {
       { overdueRent: 0, overdueUtilities: 0 },
       { overdueRent: 10_000, overdueUtilities: 5_000 },
     ])).toBe(33_000);
+  });
+
+  it("derives a zero state when the tenant has no charges or payments", () => {
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-11T00:00:00.000Z"),
+      rentDue: 0,
+      monthsStayed: 0,
+      utilityBreakdown: { charged: 0, currentCharged: 0, overdueCharged: 0 },
+      depositDue: 0,
+      payments: [],
+    });
+    expect(state).toMatchObject({
+      rentOutstanding: 0,
+      utilitiesOutstanding: 0,
+      depositOutstanding: 0,
+      totalOutstanding: 0,
+      walletBalance: 0,
+      utilityStatus: "PAID",
+    });
+  });
+
+  it("keeps rent, deposit, and utility balances separate while classifying current utilities", () => {
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-11T00:00:00.000Z"),
+      rentDue: 20_000,
+      monthsStayed: 2,
+      utilityBreakdown: { charged: 3_000, currentCharged: 3_000, overdueCharged: 0 },
+      depositDue: 10_000,
+      payments: [payment(12_000, new ObjectId(), "Deposit")],
+    });
+    expect(state).toMatchObject({
+      monthsStayed: 2,
+      depositPaid: 10_000,
+      rentPaid: 0,
+      utilitiesPaid: 0,
+      depositOutstanding: 0,
+      rentOutstanding: 20_000,
+      utilitiesOutstanding: 3_000,
+      utilitiesCurrentOutstanding: 3_000,
+      utilitiesOverdueOutstanding: 0,
+      utilityStatus: "CURRENT",
+      totalOutstanding: 23_000,
+      walletBalance: 2_000,
+    });
+  });
+
+  it("reduces overdue utilities only by the amount actually allocated to utilities", () => {
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-11T00:00:00.000Z"),
+      rentDue: 0,
+      monthsStayed: 1,
+      utilityBreakdown: { charged: 5_000, currentCharged: 2_000, overdueCharged: 3_000 },
+      depositDue: 0,
+      payments: [payment(1_000, new ObjectId(), "Utility")],
+    });
+    expect(state.utilitiesPaid).toBe(1_000);
+    expect(state.utilitiesOverdueOutstanding).toBe(2_000);
+    expect(state.utilitiesCurrentOutstanding).toBe(2_000);
+    expect(state.utilityStatus).toBe("OVERDUE");
+    expect(state.overdueAmount).toBe(2_000);
+  });
+
+  it("excludes future-dated payments and applies posted reversals", () => {
+    const reversedId = new ObjectId();
+    const futureId = new ObjectId();
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-11T00:00:00.000Z"),
+      rentDue: 20_000,
+      monthsStayed: 1,
+      utilityBreakdown: { charged: 0, currentCharged: 0, overdueCharged: 0 },
+      depositDue: 0,
+      payments: [
+        payment(10_000, reversedId, "Rent"),
+        { ...payment(10_000, futureId, "Rent"), paymentDate: "2026-10-12T00:00:00.000Z" },
+      ],
+      reversedByPayment: new Map([[reversedId.toString(), 10_000]]),
+    });
+    expect(state.rentPaid).toBe(0);
+    expect(state.rentOutstanding).toBe(20_000);
   });
 });

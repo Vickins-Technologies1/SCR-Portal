@@ -4,10 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, calculateTenantDues, resolveTenantRequiredDeposit } from "@/lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
-import { getPaymentTotalsByTenantIds, getTenantPaymentTotals } from "@/lib/payment-totals";
-import { calculateFixedUtilityDue } from "@/lib/property-utilities";
+import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 
 interface Property {
@@ -253,29 +250,12 @@ export async function GET(request: NextRequest) {
     let overduePayments = 0;
     let totalOverdueAmount = 0;
 
-    const paymentTotalsByTenant = await getPaymentTotalsByTenantIds(
-      db,
-      activeTenants.map((tenant) => tenant._id)
-    );
-    const activeTenantIds = activeTenants.map((tenant) => tenant._id.toString());
-    const utilityChargeRows = await db
-      .collection("utilityCharges")
-      .aggregate<{ _id: string; total: number }>([
-        { $match: { tenantId: { $in: activeTenantIds }, status: "posted" } },
-        { $group: { _id: "$tenantId", total: { $sum: "$amount" } } },
-      ])
-      .toArray();
-    const meteredUtilityDueByTenant = new Map(
-      utilityChargeRows.map((row) => [row._id, Math.round(row.total || 0)])
-    );
-
     const bulkStates = await Promise.all(activeTenants.map(async (tenant) => ({
       tenant,
       state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(tenant.propertyId), asOf: today, rentOverrideMap }),
     })));
     const bulkOps = bulkStates.map(({ tenant, state }) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
-      const property = propertyMap.get(tenant.propertyId);
       const totalOverdue = state.overdueAmount;
 
       if (totalOverdue > 0) {
@@ -367,25 +347,10 @@ export async function POST(request: NextRequest) {
     }
 
     const today = new Date(); // Use current date
-    const paymentTotals = await getTenantPaymentTotals(db, tenantId);
-    const tenantWithTotals = {
-      ...tenant,
-      totalRentPaid: paymentTotals.rentPaid,
-      totalDepositPaid: paymentTotals.depositPaid,
-      totalUtilityPaid: paymentTotals.utilityPaid,
-    };
-
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const overrides = filterOverridesForUnit(
-      rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-      tenant.unitIdentifier
-    );
     const property = ObjectId.isValid(tenant.propertyId)
       ? await db.collection<Property>("properties").findOne({ _id: new ObjectId(tenant.propertyId) })
       : null;
-    const overridesOrMap = tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? rentOverrideMap
-      : overrides;
     const state = await calculateTenantFinancialState(db, tenant, { asOf: today, property, rentOverrideMap });
     const dues = {
       rentDues: state.rentOutstanding + state.penalties,
@@ -397,7 +362,7 @@ export async function POST(request: NextRequest) {
       utilityStatus: state.utilityStatus,
       totalRemainingDues: state.totalOutstanding,
       paymentStatus: state.totalOutstanding > 0 ? "overdue" : "up-to-date",
-      monthsStayed: calculateTenantRentDueToDate({ tenant: tenant as any, today, rentOverrideMap }).monthsStayed,
+      monthsStayed: state.monthsStayed,
       walletApplied: 0,
       walletRemaining: state.walletBalance,
       walletCoverageMonths: 0,
@@ -426,8 +391,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, dues, monthsStayed: dues.monthsStayed });
   } catch (error) {
     logger.error("Error processing tenant dues", {
-      tenantId: (await request.json())?.tenantId || "unknown",
-      userId: (await request.json())?.userId || "unknown",
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
     });

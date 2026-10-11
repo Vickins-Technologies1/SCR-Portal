@@ -1,10 +1,6 @@
 // src/lib/tuma-incoming.ts
 import { Db, ObjectId } from "mongodb";
 import logger from "@/lib/logger";
-import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments } from "@/lib/utils";
-import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { getTenantPaymentTotals } from "@/lib/payment-totals";
-import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { deactivateAirbnbGuestTenantsForBooking, syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
@@ -233,47 +229,11 @@ export async function applyTumaPaymentUpdate(params: {
     return { payment: updatedPayment, normalizedStatus };
   }
 
-  const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-  const { rentDue: totalRentDue } = calculateTenantRentDueToDate({
-    tenant: tenant as any,
-    today: new Date(),
-    rentOverrideMap,
-  });
-
-  const paymentTotals = await getTenantPaymentTotals(db, updatedPayment.tenantId);
   const amount = update.amount || updatedPayment.amount || 0;
-  const depositTotal =
-    tenant.leasedUnits && tenant.leasedUnits.length > 0
-      ? tenant.leasedUnits.reduce((sum: number, unit: any) => sum + (unit.deposit || 0), 0)
-      : (tenant.deposit ?? tenant.requiredDeposit ?? tenant.price ?? 0);
-  const rentDueAfter = Math.max(0, totalRentDue - paymentTotals.rentPaid);
-  const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
-  const utilityDueAfter =
-    calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenant as any, today: new Date() }) +
-    (await getPostedMeteredUtilityTotal(db, updatedPayment.tenantId));
-  const walletBalance = calculateWalletBalanceFromPayments({
-    rentPaid: paymentTotals.rentPaid,
-    depositPaid: paymentTotals.depositPaid,
-    utilityPaid: paymentTotals.utilityPaid,
-    rentDue: totalRentDue,
-    depositDue: depositTotal,
-    utilityDue: utilityDueAfter,
-  });
-  const totalRemainingDues = rentDueAfter + depositDueAfter + utilityDueAfter;
-
-  await db.collection("tenants").updateOne(
-    { _id: new ObjectId(updatedPayment.tenantId) },
-    {
-      $set: {
-        totalRentPaid: paymentTotals.rentPaid,
-        totalUtilityPaid: paymentTotals.utilityPaid,
-        totalDepositPaid: paymentTotals.depositPaid,
-        walletBalance,
-        paymentStatus: totalRemainingDues > 0 ? "overdue" : "up-to-date",
-        updatedAt: new Date().toISOString(),
-      },
-    }
-  );
+  // Recalculate once from the authoritative tenant ledger. The previous
+  // implementation first subtracted raw payment-type totals and then ran the
+  // allocator, which could produce a different balance during the same
+  // webhook and could count legacy payments twice.
   await reconcileTenantPaymentAllocation(db, updatedPayment.tenantId);
 
   const ownerId = typeof property.ownerId === "string" ? property.ownerId : property.ownerId?.toString?.();

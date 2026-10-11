@@ -265,13 +265,24 @@ export const calculateFixedUtilityBreakdown = ({
 
 export const getPostedMeteredUtilityTotal = async (
   db: Db,
-  tenantId: string | ObjectId
+  tenantId: string | ObjectId,
+  propertyId?: string | ObjectId,
 ): Promise<number> => {
-  const tenantIdString = tenantId.toString();
+  const tenantIdentities: Array<string | ObjectId> = [tenantId.toString()];
+  if (ObjectId.isValid(tenantId.toString())) tenantIdentities.push(new ObjectId(tenantId.toString()));
+  const propertyIdentities: Array<string | ObjectId> = propertyId ? [propertyId.toString()] : [];
+  if (propertyId && ObjectId.isValid(propertyId.toString())) propertyIdentities.push(new ObjectId(propertyId.toString()));
+  const scope = propertyId
+    ? { $or: [
+        { propertyId: { $in: propertyIdentities } },
+        { propertyId: { $exists: false } },
+        { propertyId: null },
+      ] }
+    : {};
   const rows = await db
     .collection("utilityCharges")
     .aggregate<{ total: number }>([
-      { $match: { tenantId: tenantIdString, status: "posted" } },
+      { $match: { tenantId: { $in: tenantIdentities } as any, status: "posted", ...scope } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ])
     .toArray();
@@ -283,10 +294,22 @@ export const getPostedMeteredUtilityBreakdown = async (
   db: Db,
   tenantId: string | ObjectId,
   today = new Date(),
-  paymentDay = 1
+  paymentDay = 1,
+  propertyId?: string | ObjectId,
 ): Promise<UtilityDueBreakdown> => {
+  const tenantIdentities: Array<string | ObjectId> = [tenantId.toString()];
+  if (ObjectId.isValid(tenantId.toString())) tenantIdentities.push(new ObjectId(tenantId.toString()));
+  const propertyIdentities: Array<string | ObjectId> = propertyId ? [propertyId.toString()] : [];
+  if (propertyId && ObjectId.isValid(propertyId.toString())) propertyIdentities.push(new ObjectId(propertyId.toString()));
+  const scope = propertyId
+    ? { $or: [
+        { propertyId: { $in: propertyIdentities } },
+        { propertyId: { $exists: false } },
+        { propertyId: null },
+      ] }
+    : {};
   const rows = await db.collection<UtilityCharge>("utilityCharges")
-    .find({ tenantId: tenantId.toString(), status: "posted" })
+    .find({ tenantId: { $in: tenantIdentities } as any, status: "posted", ...scope } as any)
     .toArray();
   const breakdown = emptyUtilityBreakdown();
   const currentPeriod = toBillingPeriod(today);

@@ -4,10 +4,6 @@ import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
-import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantRequiredDeposit } from "../../../../../lib/utils";
-import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { getTenantPaymentTotals } from "../../../../../lib/payment-totals";
-import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 
 interface Tenant {
@@ -144,83 +140,20 @@ export async function POST(request: NextRequest) {
       totalDepositPaid: tenant.totalDepositPaid,
     });
 
-    const today = new Date();
-    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const { rentDue: totalRentDue } = calculateTenantRentDueToDate({
-      tenant: tenant as any,
-      today,
-      rentOverrideMap,
-    });
-
-    const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);
-
-    const rentPaidBefore =
-      payment.type === "Rent"
-        ? Math.max(0, paymentTotals.rentPaid - payment.amount)
-        : paymentTotals.rentPaid;
-    const depositPaidBefore =
-      payment.type === "Deposit"
-        ? Math.max(0, paymentTotals.depositPaid - payment.amount)
-        : paymentTotals.depositPaid;
-    const rentDueBefore = Math.max(0, totalRentDue - rentPaidBefore);
-    const totalDeposit = resolveTenantRequiredDeposit({
-      tenant: tenant as any,
-      unitTypes: (property as any)?.unitTypes,
-    });
-    const depositDueBefore = Math.max(0, totalDeposit - depositPaidBefore);
-    const utilityDueBefore =
-      calculateFixedUtilityDue({ utilities: property.utilities, tenant: tenant as any, today }) +
-      (await getPostedMeteredUtilityTotal(db, tenant._id));
-
-    let remainingAmount = payment.amount;
-    if (payment.type === "Rent") {
-      const applied = Math.min(rentDueBefore, remainingAmount);
-      remainingAmount -= applied;
-    } else if (payment.type === "Deposit") {
-      const applied = Math.min(depositDueBefore, remainingAmount);
-      remainingAmount -= applied;
-    } else if (payment.type === "Utility") {
-      const applied = Math.min(utilityDueBefore, remainingAmount);
-      remainingAmount -= applied;
-    }
-
-    const depositTotal = totalDeposit;
-    const walletBalance = calculateWalletBalanceFromPayments({
-      rentPaid: paymentTotals.rentPaid,
-      depositPaid: paymentTotals.depositPaid,
-      utilityPaid: paymentTotals.utilityPaid,
-      rentDue: totalRentDue,
-      depositDue: depositTotal,
-      utilityDue: utilityDueBefore,
-    });
-    const updateFields: Partial<Tenant> = {
-      totalRentPaid: paymentTotals.rentPaid,
-      totalUtilityPaid: paymentTotals.utilityPaid,
-      totalDepositPaid: paymentTotals.depositPaid,
-      walletBalance,
-    };
-
-    const updateTime = new Date().toISOString();
-    await db.collection<Tenant>("tenants").updateOne(
-      { _id: new ObjectId(payment.tenantId) },
-      {
-        $set: {
-          ...updateFields,
-          updatedAt: updateTime,
-        },
-      }
-    );
+    // Payment totals and category balances are derived by the same allocator
+    // used by tenant dues, dashboards, and payment posting. Do not subtract
+    // the edited payment from raw type totals here; that was a second,
+    // conflicting calculation path.
     await reconcileTenantPaymentAllocation(db, payment.tenantId);
 
     const updatedTenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(payment.tenantId),
     });
 
-    logger.info("Tenant payment fields updated", {
+    logger.info("Tenant payment fields reconciled", {
       tenantId: payment.tenantId,
       paymentId: payment._id,
       paymentType: payment.type,
-      appliedAmount: payment.amount - remainingAmount,
       walletBalance: updatedTenant?.walletBalance,
     });
 

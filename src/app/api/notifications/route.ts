@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Db, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
-import { v4 as uuidv4 } from "uuid";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import { sendWelcomeSms } from "../../../lib/sms"; // Uses BlessedTexts
@@ -11,9 +10,9 @@ import { generateStyledTemplate } from "../../../lib/email-template";
 import nodemailer from "nodemailer";
 import logger from "../../../lib/logger";
 import { Tenant } from "../../../types/tenant";
-import { calculateTenantDues, TenantDues } from "../../../lib/utils";
-import { buildOverrideKey, fetchActiveRentOverridesByPropertyIds, filterOverridesForUnit } from "@/lib/rent-overrides";
-import { getPaymentTotalsByTenantIds } from "../../../lib/payment-totals";
+import { TenantDues } from "../../../lib/utils";
+import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { resolveAccountTier } from "@/lib/tier";
 
 interface Notification {
@@ -245,10 +244,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const notifications: Notification[] = [];
     const today = new Date();
-    const paymentTotalsByTenant = await getPaymentTotalsByTenantIds(
-      db,
-      tenants.map((tenant) => tenant._id)
-    );
     const propertyIds = Array.from(new Set(tenants.map((tenant) => tenant.propertyId)));
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
     const propertyObjectIds = propertyIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
@@ -268,26 +263,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // Generate payment message
       if (type === "payment") {
          const property = propertyMap.get(tenant.propertyId);
-         const tenantTotals = paymentTotalsByTenant.get(tenant._id.toString());
-         const tenantWithTotals = {
-           ...tenant,
-           totalRentPaid: tenantTotals?.rentPaid ?? 0,
-           totalDepositPaid: tenantTotals?.depositPaid ?? 0,
-           totalUtilityPaid: tenantTotals?.utilityPaid ?? 0,
-         };
-        const overrides = filterOverridesForUnit(
-          rentOverrideMap.get(buildOverrideKey(tenant.propertyId, tenant.unitType)) ?? [],
-          tenant.unitIdentifier
-        );
-        const overridesOrMap = tenantWithTotals.leasedUnits && tenantWithTotals.leasedUnits.length > 0
-          ? rentOverrideMap
-          : overrides;
-        dues = await calculateTenantDues(db, tenantWithTotals as Tenant, today, overridesOrMap, {
-          penaltyAmount: property?.penaltyAmount,
-          penaltyFrequency: property?.penaltyFrequency,
-          rentPaymentDate: property?.rentPaymentDate,
-          propertyUnitTypes: property?.unitTypes as any,
+        const state = await calculateTenantFinancialState(db, tenant, {
+          asOf: today,
+          property,
+          rentOverrideMap,
         });
+        dues = {
+          rentDues: state.rentOutstanding + state.penalties,
+          penaltyDues: state.penalties,
+          depositDues: state.depositOutstanding,
+          utilityDues: state.utilitiesOutstanding,
+          totalRemainingDues: state.totalOutstanding,
+          paymentStatus: state.totalOutstanding > 0 ? "overdue" : "up-to-date",
+          monthsStayed: state.monthsStayed,
+          walletApplied: 0,
+          walletRemaining: state.walletBalance,
+          walletCoverageMonths: 0,
+          walletCoverageRemainder: state.walletBalance,
+        };
         if (dues.paymentStatus === "up-to-date") {
           logger.info("Skipping up-to-date tenant", { tenantId: tenant._id.toString() });
           continue;

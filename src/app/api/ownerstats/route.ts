@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
-import { calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "@/lib/utils";
+import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount } from "@/lib/tenant-payment-allocation";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
@@ -196,8 +196,6 @@ export async function GET(request: NextRequest) {
     const todayISO = today.toISOString();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-    const startOfMonthISO = startOfMonth.toISOString();
-    const endOfMonthISO = endOfMonth.toISOString();
 
     const tenantCollection = db.collection<TenantDoc>("tenants");
     // These reads are independent after the property list is known. Keep the
@@ -260,7 +258,6 @@ export async function GET(request: NextRequest) {
       state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(tenant.propertyId), asOf: today }),
     })));
     const bulkOps = tenantStates.map(({ tenant, state }) => {
-      const property = propertyMap.get(tenant.propertyId);
       totalPenaltyAmount += state.penalties;
       totalDepositDue += state.depositOutstanding;
       const roundedOverdue = state.overdueAmount;
@@ -274,7 +271,11 @@ export async function GET(request: NextRequest) {
           filter: { _id: tenant._id },
           update: {
             $set: {
-              paymentStatus: roundedOverdue > 0 ? "overdue" : "up-to-date",
+              // Keep the persisted tenant status aligned with the full
+              // financial state. The overdue metric intentionally excludes
+              // deposits/penalties, but a tenant with any outstanding
+              // obligation is not up to date.
+              paymentStatus: state.totalOutstanding > 0 ? "overdue" : "up-to-date",
               updatedAt: todayISO,
             },
           },

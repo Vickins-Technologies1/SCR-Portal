@@ -47,9 +47,10 @@ export async function getFinancialReportSummary(params: {
   }
   const payments = await params.db.collection("payments").find(query).toArray();
   const paymentIds = payments.map((payment) => payment._id);
+  const reversalIds = [...paymentIds, ...paymentIds.map((paymentId) => paymentId.toString())];
   const reversalRows = paymentIds.length
     ? await params.db.collection("financialLedger").aggregate<{ _id: any; total: number }>([
-        { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: paymentIds } } },
+        { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: reversalIds } } },
         { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
       ]).toArray()
     : [];
@@ -65,7 +66,16 @@ export async function getFinancialReportSummary(params: {
     summary.netReceived += net;
     const allocation = payment.allocation;
     if (!allocation) {
-      summary.legacyUnallocatedPayments += net;
+      // Historical records predate allocation posting. Preserve them in
+      // reports using their recorded category instead of silently reporting
+      // all legacy rent/utility/deposit receipts as zero category totals.
+      if (payment.type === "Rent") summary.rentReceived += money(net);
+      else if (payment.type === "Utility") summary.utilityReceived += money(net);
+      else if (payment.type === "Deposit") summary.depositReceived += money(net);
+      else if (payment.type === "Other") summary.otherReceived += money(net);
+      else {
+        summary.legacyUnallocatedPayments += net;
+      }
       continue;
     }
     const ratio = original > 0 ? net / original : 0;
@@ -89,8 +99,9 @@ export async function getInvoicePostedAmount(db: Db, invoiceId: string) {
     ],
   }).project({ amount: 1, postedAmount: 1, _id: 1 }).toArray();
   if (!payments.length) return 0;
+  const paymentIds = payments.map((payment) => payment._id);
   const reversalRows = await db.collection("financialLedger").aggregate<{ _id: any; total: number }>([
-    { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: payments.map((payment) => payment._id) } } },
+    { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: [...paymentIds, ...paymentIds.map((paymentId) => paymentId.toString())] } } },
     { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
   ]).toArray();
   const reversed = new Map(reversalRows.map((row) => [String(row._id), money(row.total)]));
