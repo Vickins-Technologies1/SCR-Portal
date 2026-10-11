@@ -5,7 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "@/lib/utils";
+import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { calculateTenantFinancialState, reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
@@ -218,32 +218,19 @@ export async function POST(request: NextRequest) {
     const utilityPaid = allocation.utilityPaid;
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const { rentDue, monthsStayed } = calculateTenantRentDueToDate({
-      tenant: tenant as any,
-      today,
-      rentOverrideMap,
-    });
-    const property = ObjectId.isValid(tenant.propertyId)
-      ? await db.collection("properties").findOne({ _id: new ObjectId(tenant.propertyId) })
-      : null;
+    const monthsStayed = allocation.monthsStayed;
+    const rentDue = allocation.rentDue;
 
     const updatedTotalRentPaid = allocation.rentPaid;
     const totalDeposit = allocation.depositDue;
     const updatedWalletBalance = allocation.walletBalance;
 
     const baseRentDues = allocation.rentOutstanding;
-    const penaltyDues = calculateOverduePenalty({
-      rentDues: baseRentDues,
-      today,
-      rentPaymentDate: property?.rentPaymentDate,
-      leaseStartDate: tenant.leaseStartDate,
-      penaltyAmount: property?.penaltyAmount,
-      penaltyFrequency: property?.penaltyFrequency,
-    });
+    const penaltyDues = allocation.penalties;
     const rentDues = Math.max(0, baseRentDues + penaltyDues);
     const depositDues = allocation.depositOutstanding;
     const utilityDues = allocation.utilitiesOutstanding;
-    const totalRemainingDues = Math.max(0, rentDues + depositDues + utilityDues);
+    const totalRemainingDues = allocation.totalOutstanding;
 
     const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
 

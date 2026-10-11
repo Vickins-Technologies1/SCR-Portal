@@ -454,6 +454,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
   );
 
   return {
+    monthsStayed: state.monthsStayed,
     rentPaid: money(rentPaid),
     utilityPaid: money(utilitiesPaid),
     depositPaid: money(depositPaid),
@@ -467,6 +468,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     utilitiesCurrentOutstanding: state.utilitiesCurrentOutstanding,
     utilitiesOverdueOutstanding: state.utilitiesOverdueOutstanding,
     utilityStatus: state.utilityStatus,
+    penalties: state.penalties,
     depositOutstanding,
     otherOutstanding,
     totalOutstanding,
