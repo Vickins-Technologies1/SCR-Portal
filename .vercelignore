@@ -1,0 +1,19 @@
+# Local development caches and toolchains; they are not part of the Next.js deployment.
+.android-avd/
+.android-sdk/
+.gradle-user-home/
+.gradle-user-home2/
+.npm-cache/
+.pnpm-store/
+.tools/
+node_modules/
+.next/
+.vercel/
+
+# Mobile builds and local scratch files are deployed separately from Vercel.
+android/
+ios/
+tmp/
+*.log
+*.patch
+emulator*.png
