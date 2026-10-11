@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { DarajaCallbackSchema, claimDarajaCallback, classifyDarajaResult, extractDarajaMetadata, parseDarajaTransactionDate } from "./daraja-callback";
+import {
+  DarajaCallbackSchema,
+  claimDarajaCallback,
+  classifyDarajaResult,
+  expireStaleDarajaPendingPayments,
+  extractDarajaMetadata,
+  parseDarajaTransactionDate,
+  resolveUnmatchedDarajaFailure,
+} from "./daraja-callback";
 
 describe("Daraja callback helpers", () => {
   it("accepts serialized result codes and nullable metadata values", () => {
@@ -57,5 +65,55 @@ describe("Daraja callback helpers", () => {
     });
     expect(result.shouldProcessEffects).toBe(true);
     expect(result.reason).toBe("retry");
+  });
+
+  it("expires stale pending payments so an invoice can be retried", async () => {
+    let updateQuery: any;
+    let updateDocument: any;
+    const db = {
+      collection: () => ({
+        updateMany: async (query: any, update: any) => {
+          updateQuery = query;
+          updateDocument = update;
+          return { modifiedCount: 1 };
+        },
+      }),
+    } as any;
+
+    const now = new Date("2026-10-11T12:00:00.000Z");
+    await expect(expireStaleDarajaPendingPayments(db, {
+      tenantId: "tenant",
+      invoiceId: "invoice",
+      landlordId: "landlord",
+    }, now)).resolves.toBe(1);
+
+    expect(updateQuery.status).toEqual({ $in: ["pending", "pending_stk"] });
+    expect(updateQuery.$expr.$lt[1].toISOString()).toBe("2026-10-11T11:45:00.000Z");
+    expect(updateDocument.$set.status).toBe("expired");
+    expect(updateDocument.$set.resultCode).toBe("STK_TIMEOUT");
+  });
+
+  it("applies an unmatched provider failure after the payment row is saved", async () => {
+    const paymentId = new ObjectId();
+    const unmatchedId = new ObjectId();
+    let paymentUpdate: any;
+    let unmatchedUpdate: any;
+    const db = {
+      collection: (name: string) => ({
+        findOne: async () => name === "unmatchedMpesaCallbacks"
+          ? { _id: unmatchedId, resultCode: 2001, resultDesc: "The initiator information is invalid.", receivedAt: "2026-10-11T11:00:00.000Z" }
+          : null,
+        updateOne: async (_query: any, update: any) => {
+          if (name === "payments") paymentUpdate = update;
+          if (name === "unmatchedMpesaCallbacks") unmatchedUpdate = update;
+          return { modifiedCount: 1 };
+        },
+      }),
+    } as any;
+
+    await expect(resolveUnmatchedDarajaFailure(db, paymentId, "checkout", new Date("2026-10-11T12:00:00.000Z"))).resolves.toBe(true);
+    expect(paymentUpdate.$set.status).toBe("failed");
+    expect(paymentUpdate.$set.resultCode).toBe(2001);
+    expect(unmatchedUpdate.$set.resolved).toBe(true);
   });
 });

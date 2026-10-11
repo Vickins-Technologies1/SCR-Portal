@@ -20,6 +20,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
 import { resolveAccountTier } from "@/lib/tier";
+import { expireStaleDarajaPendingPayments, resolveUnmatchedDarajaFailure } from "@/lib/daraja-callback";
 import { randomUUID } from "node:crypto";
 
 const StkPushSchema = z.object({
@@ -533,6 +534,12 @@ export async function POST(request: NextRequest) {
     let callbackUrl: string;
     try { callbackUrl = getMpesaCallbackUrl(); } catch { return NextResponse.json({ success: false, message: "Server configuration error" }, { status: 500 }); }
 
+    await expireStaleDarajaPendingPayments(db, {
+      tenantId,
+      invoiceId: parsed.data.invoiceId,
+      landlordId: parsed.data.landlordId,
+    });
+
     const activeDarajaPayment = await db.collection("payments").findOne({
       tenantId,
       invoiceId: parsed.data.invoiceId,
@@ -642,6 +649,15 @@ export async function POST(request: NextRequest) {
       },
       { upsert: true, returnDocument: "after" }
     );
+
+    // If Safaricom callbacked before the payment row was inserted, reconcile
+    // the recorded provider failure now that the row exists.
+    const savedPayment = await db.collection("payments").findOne({
+      checkoutRequestId: stkResponse.CheckoutRequestID,
+    });
+    if (savedPayment?._id) {
+      await resolveUnmatchedDarajaFailure(db, savedPayment._id, stkResponse.CheckoutRequestID);
+    }
 
     return NextResponse.json(
       {

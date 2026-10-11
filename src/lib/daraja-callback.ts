@@ -25,6 +25,9 @@ export type DarajaCallback = z.infer<typeof DarajaCallbackSchema>["Body"]["stkCa
 export type DarajaCallbackStatus = "completed" | "cancelled" | "expired" | "timeout" | "failed";
 type DarajaMetadataItem = { Name: string; Value?: string | number | null };
 
+/** Allow delayed provider callbacks without locking an invoice forever. */
+export const DARAJA_PENDING_TIMEOUT_MS = 15 * 60 * 1000;
+
 export function classifyDarajaResult(resultCode: number, resultDesc: string): DarajaCallbackStatus {
   if (resultCode === 0) return "completed";
   if (resultCode === 1032 || /cancel|request cancelled|user cancelled/i.test(resultDesc)) return "cancelled";
@@ -56,6 +59,51 @@ export function parseDarajaTransactionDate(value?: string | number): Date | null
   const second = Number(text.slice(12, 14));
   const date = new Date(Date.UTC(year, month, day, hour - 3, minute, second));
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function getDarajaPendingCutoff(now = new Date()): Date {
+  return new Date(now.getTime() - DARAJA_PENDING_TIMEOUT_MS);
+}
+
+export async function expireStaleDarajaPendingPayments(
+  db: Db,
+  params: { tenantId: string | null; invoiceId: string; landlordId: string },
+  now = new Date(),
+) {
+  const nowIso = now.toISOString();
+  const result = await db.collection("payments").updateMany(
+    {
+      tenantId: params.tenantId,
+      invoiceId: params.invoiceId,
+      landlordId: params.landlordId,
+      provider: { $in: ["daraja", "mpesa", null] },
+      status: { $in: ["pending", "pending_stk"] },
+      $expr: {
+        $lt: [
+          {
+            $convert: {
+              input: { $ifNull: ["$updatedAt", "$createdAt"] },
+              to: "date",
+              onError: null,
+              onNull: null,
+            },
+          },
+          getDarajaPendingCutoff(now),
+        ],
+      },
+    },
+    {
+      $set: {
+        status: "expired",
+        resultCode: "STK_TIMEOUT",
+        resultDesc: "STK request expired after no provider callback.",
+        expiredAt: nowIso,
+        updatedAt: nowIso,
+      },
+    },
+  );
+
+  return result.modifiedCount || 0;
 }
 
 function identifierQuery(callback: DarajaCallback) {
@@ -123,7 +171,9 @@ export async function claimDarajaCallback(db: Db, callback: DarajaCallback) {
     {
       _id: existing._id,
       darajaEffectsApplied: { $ne: true },
-      status: { $nin: ["completed", "failed", "cancelled", "expired", "timeout", "reversed"] },
+      // A locally expired request may still receive a late provider callback.
+      // Let the provider's authoritative result reopen it for reconciliation.
+      status: { $nin: ["completed", "failed", "cancelled", "timeout", "reversed"] },
     },
     {
       $set: {
@@ -157,6 +207,62 @@ export async function claimDarajaCallback(db: Db, callback: DarajaCallback) {
     shouldProcessEffects: Boolean(payment && status === "completed"),
     reason: payment ? "claimed" as const : "duplicate" as const,
   };
+}
+
+/** Apply a failed callback that arrived before the payment row was persisted. */
+export async function resolveUnmatchedDarajaFailure(
+  db: Db,
+  paymentId: ObjectId,
+  checkoutRequestId: string,
+  now = new Date(),
+) {
+  const unmatched = await db.collection("unmatchedMpesaCallbacks").findOne({
+    provider: "daraja",
+    checkoutRequestId,
+    resolved: false,
+  });
+
+  if (!unmatched) return false;
+
+  const resultCode = Number(unmatched.resultCode);
+  if (!Number.isFinite(resultCode) || resultCode === 0) return false;
+
+  const resultDesc = String(unmatched.resultDesc || "Provider rejected the STK request.");
+  const nowIso = now.toISOString();
+  const status = classifyDarajaResult(resultCode, resultDesc);
+  const updated = await db.collection("payments").updateOne(
+    {
+      _id: paymentId,
+      status: { $in: ["pending", "pending_stk", "processing", "expired"] },
+    },
+    {
+      $set: {
+        provider: "daraja",
+        status,
+        resultCode,
+        resultDesc,
+        callbackReceivedAt: unmatched.receivedAt || nowIso,
+        darajaEffectsApplied: true,
+        updatedAt: nowIso,
+      },
+    },
+  );
+
+  if (!updated.modifiedCount) return false;
+
+  await db.collection("unmatchedMpesaCallbacks").updateOne(
+    { _id: unmatched._id, resolved: false },
+    {
+      $set: {
+        resolved: true,
+        resolvedAt: nowIso,
+        resolvedPaymentId: paymentId,
+        resolution: "applied_to_payment",
+      },
+    },
+  );
+
+  return true;
 }
 
 export async function markDarajaEffectsApplied(db: Db, paymentId: ObjectId) {
