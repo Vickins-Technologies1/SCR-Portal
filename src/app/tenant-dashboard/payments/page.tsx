@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Cookies from "js-cookie";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download, Info, X } from "lucide-react";
 import PayWithMpesaButton from "@/components/PayWithMpesaButton";
 import { Toaster } from "react-hot-toast";
 
@@ -38,7 +38,7 @@ interface Tenant {
 }
 
 interface Message {
-  type: "success" | "error";
+  type: "success" | "error" | "info";
   text: string;
   timestamp: string;
 }
@@ -624,6 +624,10 @@ export default function PaymentsPage() {
                           },
                         ]);
                       }}
+                      onProgress={({ phase, message }) => {
+                        const type = ["failed", "cancelled", "expired", "review"].includes(phase) ? "error" : phase === "completed" ? "success" : "info";
+                        setMessages([{ type, text: message, timestamp: new Date().toISOString() }]);
+                      }}
                       onSuccess={async () => {
                         setMessages((prev) => [
                           ...prev,
@@ -638,6 +642,12 @@ export default function PaymentsPage() {
                         setAmount(0);
                         setPaymentType("Rent");
                         setIsProcessing(false);
+                      }}
+                      onPending={(message) => {
+                        setMessages([{ type: "info", text: message, timestamp: new Date().toISOString() }]);
+                        setIsProcessing(false);
+                        setIsModalOpen(false);
+                        void fetchData();
                       }}
                       onError={(message) => {
                         setMessages((prev) => [
@@ -712,10 +722,14 @@ export default function PaymentsPage() {
                       <div
                         key={i}
                         className={`p-4 rounded-xl flex items-start gap-3 text-left text-sm ${
-                          msg.type === "success" ? "bg-primary/10 text-primary" : "bg-red-50 text-red-700"
+                          msg.type === "success"
+                            ? "bg-primary/10 text-primary"
+                            : msg.type === "info"
+                            ? "bg-blue-50 text-blue-800"
+                            : "bg-red-50 text-red-700"
                         }`}
                       >
-                        {msg.type === "success" ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                        {msg.type === "success" ? <CheckCircle size={20} /> : msg.type === "info" ? <Info size={20} /> : <AlertCircle size={20} />}
                         <div>
                           <p className="font-medium">{msg.text}</p>
                           <p className="text-xs opacity-75 mt-1">
