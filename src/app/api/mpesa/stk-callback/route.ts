@@ -61,7 +61,15 @@ export async function POST(request: NextRequest) {
         resultCode: callback.ResultCode,
         resultDesc: callback.ResultDesc,
       });
-      return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
+      // Do not acknowledge a callback that could not be correlated to a
+      // payment row. A 200 tells Safaricom the callback was handled and can
+      // permanently lose the event while the initiating write is still
+      // catching up. The unmatched row remains as an audit/reconciliation
+      // record, and the provider can retry this callback.
+      return NextResponse.json(
+        { ResultCode: 1, ResultDesc: "Payment record not available; retry callback" },
+        { status: 500 },
+      );
     }
 
     if (!claimed.shouldProcessEffects) {
