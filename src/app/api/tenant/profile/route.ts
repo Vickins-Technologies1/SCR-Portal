@@ -38,6 +38,7 @@ interface Tenant {
   totalRentPaid?: number;
   totalUtilityPaid?: number;
   totalDepositPaid?: number;
+  totalOtherPaid?: number;
 }
 
 async function getMonthlyPayments(
@@ -49,12 +50,14 @@ async function getMonthlyPayments(
   rent: number;
   utility: number;
   deposit: number;      // ← new field
+  other: number;
+  wallet: number;
   total: number;
   paid: boolean;
 }>> {
   const monthlyMap: Record<
     string,
-    { rent: number; utility: number; deposit: number; total: number }
+    { rent: number; utility: number; deposit: number; other: number; wallet: number; total: number }
   > = {};
   const monthFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit" });
   const monthKeyFor = (date: Date) => {
@@ -66,11 +69,13 @@ async function getMonthlyPayments(
     if (!eventDate) return;
     const monthKey = monthKeyFor(eventDate);
     if (!monthlyMap[monthKey]) {
-      monthlyMap[monthKey] = { rent: 0, utility: 0, deposit: 0, total: 0 };
+      monthlyMap[monthKey] = { rent: 0, utility: 0, deposit: 0, other: 0, wallet: 0, total: 0 };
     }
     monthlyMap[monthKey].rent += allocation.rent;
     monthlyMap[monthKey].utility += allocation.utilities;
     monthlyMap[monthKey].deposit += allocation.deposit;
+    monthlyMap[monthKey].other += allocation.other;
+    monthlyMap[monthKey].wallet += allocation.walletCredit;
     monthlyMap[monthKey].total += netAmount;
   });
 
@@ -79,6 +84,8 @@ async function getMonthlyPayments(
     rent: number;
     utility: number;
     deposit: number;
+    other: number;
+    wallet: number;
     total: number;
     paid: boolean;
   }> = [];
@@ -93,13 +100,15 @@ async function getMonthlyPayments(
     const monthKey = monthKeyFor(date);
     const monthName = date.toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "Africa/Nairobi" });
 
-    const data = monthlyMap[monthKey] || { rent: 0, utility: 0, deposit: 0, total: 0 };
+    const data = monthlyMap[monthKey] || { rent: 0, utility: 0, deposit: 0, other: 0, wallet: 0, total: 0 };
 
     monthlyPayments.push({
       month: monthName,
       rent: data.rent,
       utility: data.utility,
       deposit: data.deposit,     // now visible separately if you want
+      other: data.other,
+      wallet: data.wallet,
       total: data.total,
       paid: data.total > 0,
     });
@@ -177,6 +186,7 @@ export async function GET(request: NextRequest) {
       totalRentPaid: tenantDoc.totalRentPaid ?? 0,
       totalUtilityPaid: tenantDoc.totalUtilityPaid ?? 0,
       totalDepositPaid: tenantDoc.totalDepositPaid ?? 0,
+      totalOtherPaid: tenantDoc.totalOtherPaid ?? 0,
     };
 
     let analytics = null;
@@ -198,11 +208,13 @@ export async function GET(request: NextRequest) {
       const utilityPaid = state.utilityPaid;
       const updatedTotalRentPaid = rentPaid;
       const updatedWalletBalance = state.walletBalance;
+      const otherPaid = state.otherPaid;
       const penaltyDues = state.penalties;
       const rentDues = state.rentOutstanding + penaltyDues;
       const depositDues = state.depositOutstanding;
       const utilityDues = state.utilitiesOutstanding;
       const totalRemainingDues = state.totalOutstanding;
+      const totalPaid = rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance;
 
       const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
 
@@ -213,6 +225,7 @@ export async function GET(request: NextRequest) {
             totalRentPaid: updatedTotalRentPaid,
             totalUtilityPaid: utilityPaid,
             totalDepositPaid: depositPaid,
+            totalOtherPaid: otherPaid,
             walletBalance: updatedWalletBalance,
             paymentStatus,
             updatedAt: today.toISOString(),
@@ -232,16 +245,23 @@ export async function GET(request: NextRequest) {
         totalRentPaid: updatedTotalRentPaid,
         totalUtilityPaid: utilityPaid,
         totalDepositPaid: depositPaid,
+        totalOtherPaid: otherPaid,
         walletBalance: updatedWalletBalance,
         wallet: updatedWalletBalance,
         paymentStatus,
         dues: {
           rentDues,
+          rentOutstanding: state.rentOutstanding,
           penaltyDues,
           utilityDues,
+          utilityCurrentDues: state.utilitiesCurrentOutstanding,
+          utilityOverdueDues: state.utilitiesOverdueOutstanding,
+          utilityStatus: state.utilityStatus,
           depositDues,
+          otherDues: state.otherOutstanding,
           totalRemainingDues,
-          walletApplied: 0,
+          totalPaid,
+          walletApplied: state.walletApplied,
           walletRemaining: updatedWalletBalance,
           walletCoverageMonths: effectiveMonthlyRent
             ? Math.floor(updatedWalletBalance / effectiveMonthlyRent)
@@ -258,6 +278,8 @@ export async function GET(request: NextRequest) {
           { name: "Rent", value: rentPaid },
           { name: "Utility", value: utilityPaid },
           { name: "Deposit", value: depositPaid },
+          { name: "Other", value: otherPaid },
+          { name: "Wallet credit", value: updatedWalletBalance },
         ],
       };
     }

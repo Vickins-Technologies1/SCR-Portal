@@ -201,6 +201,7 @@ export async function POST(request: NextRequest) {
     const rentPaid = allocation.rentPaid;
     const depositPaid = allocation.depositPaid;
     const utilityPaid = allocation.utilityPaid;
+    const otherPaid = allocation.otherPaid;
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
     const monthsStayed = allocation.monthsStayed;
@@ -227,6 +228,7 @@ export async function POST(request: NextRequest) {
           totalRentPaid: updatedTotalRentPaid,
           totalDepositPaid: depositPaid,
           totalUtilityPaid: utilityPaid,
+          totalOtherPaid: otherPaid,
           walletBalance: updatedWalletBalance,
           paymentStatus,
           updatedAt: todayISO,
@@ -242,14 +244,17 @@ export async function POST(request: NextRequest) {
 
     const dues = {
       rentDues,
+      rentOutstanding: baseRentDues,
       penaltyDues,
       depositDues,
       utilityDues,
       utilityCurrentDues: allocation.utilitiesCurrentOutstanding,
       utilityOverdueDues: allocation.utilitiesOverdueOutstanding,
       utilityStatus: allocation.utilityStatus,
+      otherDues: allocation.otherOutstanding,
       totalRemainingDues,
-      walletApplied: 0,
+      totalPaid: rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance,
+      walletApplied: allocation.walletApplied,
       walletRemaining: updatedWalletBalance,
       walletCoverageMonths: effectiveMonthlyRent ? Math.floor(updatedWalletBalance / effectiveMonthlyRent) : 0,
       walletCoverageRemainder: effectiveMonthlyRent ? updatedWalletBalance % effectiveMonthlyRent : updatedWalletBalance,
@@ -273,6 +278,7 @@ export async function POST(request: NextRequest) {
         totalRentPaid: updatedTotalRentPaid,
         totalDepositPaid: depositPaid,
         totalUtilityPaid: utilityPaid,
+        totalOtherPaid: otherPaid,
         walletBalance: updatedWalletBalance,
         paymentStatus,
         updatedAt: todayISO,

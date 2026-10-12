@@ -60,11 +60,21 @@ interface Tenant {
   totalRentPaid?: number;
   totalUtilityPaid?: number;
   totalDepositPaid?: number;
+  totalOtherPaid?: number;
   dues?: {
     rentDues: number;
+    rentOutstanding?: number;
+    penaltyDues?: number;
     utilityDues: number;
+    utilityCurrentDues?: number;
+    utilityOverdueDues?: number;
+    utilityStatus?: string;
     depositDues: number;
+    otherDues?: number;
     totalRemainingDues: number;
+    totalPaid?: number;
+    walletApplied?: number;
+    walletRemaining?: number;
   };
   monthsStayed?: number;
 }
@@ -74,6 +84,8 @@ interface MonthlyPayment {
   rent: number;
   utility: number;
   deposit: number;
+  other: number;
+  wallet: number;
   total: number;
   paid: boolean;
 }
@@ -162,7 +174,7 @@ const formatCurrency = (value: unknown): string => {
 function PaymentTrendChart({
   data,
 }: {
-  data: Array<{ month: string; rent: number; utility: number; deposit: number; total: number }>;
+  data: Array<{ month: string; rent: number; utility: number; deposit: number; other: number; wallet: number; total: number }>;
 }) {
   if (!data?.length) {
     return <div className="text-gray-400 text-center py-10 text-sm italic">No payment history yet</div>;
@@ -185,6 +197,14 @@ function PaymentTrendChart({
               <linearGradient id="depositGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.85} />
                 <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.2} />
+              </linearGradient>
+              <linearGradient id="otherGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#ec4899" stopOpacity={0.85} />
+                <stop offset="95%" stopColor="#ec4899" stopOpacity={0.2} />
+              </linearGradient>
+              <linearGradient id="walletGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.85} />
+                <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.2} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -211,6 +231,8 @@ function PaymentTrendChart({
             <Area type="monotone" dataKey="rent" name="Rent" stackId="1" stroke="#42c775" fill="url(#rentGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="utility" name="Utility" stackId="1" stroke="#6366f1" fill="url(#utilityGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="deposit" name="Deposit" stackId="1" stroke="#f59e0b" fill="url(#depositGradient)" strokeWidth={2} />
+            <Area type="monotone" dataKey="other" name="Other" stackId="1" stroke="#ec4899" fill="url(#otherGradient)" strokeWidth={2} />
+            <Area type="monotone" dataKey="wallet" name="Wallet credit" stackId="1" stroke="#14b8a6" fill="url(#walletGradient)" strokeWidth={2} />
             <Line type="monotone" dataKey="total" name="Total Paid" stroke="#111827" strokeWidth={2} dot={{ r: 2, strokeWidth: 2, fill: "white" }} activeDot={{ r: 4 }} />
           </AreaChart>
         </ResponsiveContainer>
@@ -352,6 +374,9 @@ export default function TenantDashboardPage() {
                   totalRentPaid: data.tenant?.totalRentPaid,
                   totalUtilityPaid: data.tenant?.totalUtilityPaid,
                   totalDepositPaid: data.tenant?.totalDepositPaid,
+                  totalOtherPaid: data.tenant?.totalOtherPaid,
+                  walletBalance: data.tenant?.walletBalance ?? prev.walletBalance,
+                  wallet: data.tenant?.walletBalance ?? prev.wallet,
                   paymentStatus: data.tenant?.paymentStatus,
                 }
               : null
@@ -479,6 +504,8 @@ export default function TenantDashboardPage() {
     rent: item.rent,
     utility: item.utility,
     deposit: item.deposit,
+    other: item.other,
+    wallet: item.wallet,
     total: item.total,
   }));
 
@@ -486,6 +513,8 @@ export default function TenantDashboardPage() {
     { name: "Rent", value: tenant?.totalRentPaid || 0 },
     { name: "Utility", value: tenant?.totalUtilityPaid || 0 },
     { name: "Deposit", value: tenant?.totalDepositPaid || 0 },
+    { name: "Other", value: tenant?.totalOtherPaid || 0 },
+    { name: "Wallet credit", value: tenant?.dues?.walletRemaining ?? tenant?.walletBalance ?? tenant?.wallet ?? 0 },
   ];
 
   const fmt = (date?: string) =>
@@ -513,12 +542,22 @@ export default function TenantDashboardPage() {
   const rentLabel = leaseUnits.length > 1 ? "Total Rent" : "Rent";
   const depositLabel = leaseUnits.length > 1 ? "Total Deposit" : "Deposit";
 
-  const walletBalance = tenant?.walletBalance ?? tenant?.wallet ?? 0;
+  const walletBalance = tenant?.dues?.walletRemaining ?? tenant?.walletBalance ?? tenant?.wallet ?? 0;
   const utilityDue = tenant?.dues?.utilityDues ?? 0;
-  const totalPaid =
+  const totalPaid = tenant?.dues?.totalPaid ?? (
     (tenant?.totalRentPaid ?? 0) +
     (tenant?.totalUtilityPaid ?? 0) +
-    (tenant?.totalDepositPaid ?? 0);
+    (tenant?.totalDepositPaid ?? 0) +
+    (tenant?.totalOtherPaid ?? 0) +
+    walletBalance
+  );
+  const rentDue = tenant?.dues?.rentOutstanding ?? tenant?.dues?.rentDues ?? 0;
+  const penaltyDue = tenant?.dues?.penaltyDues ?? Math.max(0, (tenant?.dues?.rentDues ?? 0) - rentDue);
+  const utilityCurrentDue = tenant?.dues?.utilityCurrentDues ?? 0;
+  const utilityOverdueDue = tenant?.dues?.utilityOverdueDues ?? 0;
+  const depositDue = tenant?.dues?.depositDues ?? 0;
+  const otherDue = tenant?.dues?.otherDues ?? 0;
+  const walletApplied = tenant?.dues?.walletApplied ?? 0;
   const totalDue = tenant?.dues?.totalRemainingDues ?? 0;
   const hasDues = totalDue > 0;
   const paymentStatusLabel = tenant?.paymentStatus || "—";
@@ -556,7 +595,7 @@ export default function TenantDashboardPage() {
       value: formatCurrency(walletBalance),
       icon: Wallet,
       tone: "primary",
-      helper: "Ready to use",
+      helper: hasDues ? "Held while dues remain" : walletBalance > 0 ? "Available credit" : "No credit",
     },
     {
       label: "Total Paid",
@@ -767,7 +806,7 @@ export default function TenantDashboardPage() {
               {tenant ? (
                 <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
                   <p>
-                    Status: <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "?"}</Badge>
+                    Status: <Badge status={tenant.paymentStatus}>{isDuesLoading ? "Updating…" : tenant.paymentStatus || "?"}</Badge>
                   </p>
                   <p>
                     Rent paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalRentPaid)}</span>
@@ -779,8 +818,49 @@ export default function TenantDashboardPage() {
                     Deposit paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalDepositPaid)}</span>
                   </p>
                   <p>
-                    Utility due: <span className="font-semibold text-foreground">{formatCurrency(utilityDue)}</span>
+                    Other paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalOtherPaid)}</span>
                   </p>
+                  <div className="pt-2 border-t border-border/70 space-y-1.5">
+                    <p>
+                      Rent due: <span className="font-semibold text-foreground">{formatCurrency(rentDue)}</span>
+                    </p>
+                    {penaltyDue > 0 ? (
+                      <p>
+                        Penalties: <span className="font-semibold text-foreground">{formatCurrency(penaltyDue)}</span>
+                      </p>
+                    ) : null}
+                    <p>
+                      Deposit due: <span className="font-semibold text-foreground">{formatCurrency(depositDue)}</span>
+                    </p>
+                    <p>
+                      Utility due: <span className="font-semibold text-foreground">{formatCurrency(utilityDue)}</span>
+                    </p>
+                    {utilityOverdueDue > 0 ? (
+                      <p>
+                        Utility overdue: <span className="font-semibold text-foreground">{formatCurrency(utilityOverdueDue)}</span>
+                      </p>
+                    ) : null}
+                    {utilityCurrentDue > 0 ? (
+                      <p>
+                        Utility current: <span className="font-semibold text-foreground">{formatCurrency(utilityCurrentDue)}</span>
+                      </p>
+                    ) : null}
+                    {otherDue > 0 ? (
+                      <p>
+                        Other due: <span className="font-semibold text-foreground">{formatCurrency(otherDue)}</span>
+                      </p>
+                    ) : null}
+                    {walletApplied > 0 ? (
+                      <p>
+                        Wallet applied to dues: <span className="font-semibold text-foreground">{formatCurrency(walletApplied)}</span>
+                      </p>
+                    ) : null}
+                    {walletBalance > 0 ? (
+                      <p>
+                        Wallet credit: <span className="font-semibold text-foreground">{formatCurrency(walletBalance)}</span>
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="pt-3 mt-3 border-t border-border text-sm font-semibold text-foreground flex items-center justify-between">
                     <span>Total due</span>
                     <span className={hasDues ? "text-red-600" : "text-primary"}>

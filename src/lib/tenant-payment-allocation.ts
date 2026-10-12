@@ -38,6 +38,7 @@ export type TenantFinancialState = {
   rentOutstanding: number;
   utilitiesCharged: number;
   utilitiesPaid: number;
+  otherPaid: number;
   utilitiesOutstanding: number;
   utilitiesCurrentOutstanding: number;
   utilitiesOverdueOutstanding: number;
@@ -48,6 +49,7 @@ export type TenantFinancialState = {
   overdueAmount: number;
   totalOutstanding: number;
   walletBalance: number;
+  walletApplied: number;
   paymentAllocations: Map<string, PaymentAllocation>;
 };
 
@@ -232,7 +234,16 @@ export function allocatePaymentLedger(params: {
       walletApplied: money(walletApplied),
     });
   }
-  return { depositPaid: money(depositPaid), rentPaid: money(rentPaid), utilitiesPaid: money(utilitiesPaid), otherPaid: money(otherPaid), walletBalance: wallet, allocations };
+  const walletApplied = [...allocations.values()].reduce((sum, allocation) => sum + amountOf(allocation.walletApplied), 0);
+  return {
+    depositPaid: money(depositPaid),
+    rentPaid: money(rentPaid),
+    utilitiesPaid: money(utilitiesPaid),
+    otherPaid: money(otherPaid),
+    walletBalance: wallet,
+    walletApplied: money(walletApplied),
+    allocations,
+  };
 }
 
 export function deriveTenantFinancialState(params: {
@@ -290,6 +301,7 @@ export function deriveTenantFinancialState(params: {
     depositOutstanding,
     rentCharged: money(params.rentDue),
     rentPaid: ledger.rentPaid,
+    otherPaid: ledger.otherPaid,
     rentOutstanding,
     utilitiesCharged: money(params.utilityBreakdown.charged),
     utilitiesPaid: ledger.utilitiesPaid,
@@ -303,6 +315,7 @@ export function deriveTenantFinancialState(params: {
     overdueAmount: money(overdueRent + overdueUtilities),
     totalOutstanding: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + penalties),
     walletBalance: ledger.walletBalance,
+    walletApplied: ledger.walletApplied,
     paymentAllocations: ledger.allocations,
   };
 }
@@ -382,7 +395,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
   const depositPaid = state.depositPaid;
   const rentPaid = state.rentPaid;
   const utilitiesPaid = state.utilitiesPaid;
-  const otherPaid = 0;
+  const otherPaid = state.otherPaid;
   const wallet = state.walletBalance;
 
   for (const [paymentId, allocation] of allocations) {
@@ -453,6 +466,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
       totalRentPaid: money(rentPaid),
       totalUtilityPaid: money(utilitiesPaid),
       totalDepositPaid: money(depositPaid),
+      totalOtherPaid: money(otherPaid),
       walletBalance: money(wallet),
       paymentStatus: totalOutstanding > 0 ? "overdue" : "up-to-date",
       updatedAt: today.toISOString(),
@@ -466,6 +480,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     depositPaid: money(depositPaid),
     otherPaid: money(otherPaid),
     walletBalance: money(wallet),
+    walletApplied: money(state.walletApplied),
     rentDue: state.rentCharged,
     utilityDue: state.utilitiesCharged,
     depositDue: state.depositRequired,
