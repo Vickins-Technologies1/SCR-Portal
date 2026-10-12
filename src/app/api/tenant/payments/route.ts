@@ -206,7 +206,12 @@ export async function GET(request: NextRequest) {
           $project: {
             _id: { $toString: "$_id" },
             tenantId: 1,
-            amount: { $ifNull: ["$postedAmount", "$amount"] },
+            amount: { $ifNull: ["$postedAmount", { $ifNull: ["$providerConfirmedAmount", "$amount"] }] },
+            requestedAmount: 1,
+            providerConfirmedAmount: 1,
+            postedAmount: 1,
+            financialPostingStatus: 1,
+            financialEffectsApplied: 1,
             propertyId: 1,
             paymentDate: 1,
             transactionId: 1,

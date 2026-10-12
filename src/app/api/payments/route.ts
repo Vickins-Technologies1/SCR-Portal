@@ -26,6 +26,9 @@ interface Payment {
   originalAmount?: number;
   reversedAmount?: number;
   netAmount?: number;
+  financialPostingStatus?: string;
+  providerConfirmedAmount?: number | null;
+  postedAmount?: number | null;
 }
 
 interface PaymentDb {
@@ -44,6 +47,10 @@ interface PaymentDb {
   tenantName?: string;
   unitType?: string;
   mpesaCode?: string;
+  providerConfirmedAmount?: number | null;
+  postedAmount?: number | null;
+  financialPostingStatus?: string;
+  financialEffectsApplied?: boolean;
 }
 
 interface Tenant {
@@ -324,7 +331,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           $project: {
             _id: { $toString: "$_id" },
             tenantId: { $ifNull: ["$tenantId", null] },
-            amount: { $ifNull: ["$postedAmount", "$amount"] },
+            amount: { $ifNull: ["$postedAmount", { $ifNull: ["$providerConfirmedAmount", "$amount"] }] },
+            providerConfirmedAmount: 1,
+            postedAmount: 1,
+            financialPostingStatus: 1,
+            financialEffectsApplied: 1,
             propertyId: 1,
             paymentDate: 1,
             transactionId: 1,

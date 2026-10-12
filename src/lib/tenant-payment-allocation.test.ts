@@ -204,6 +204,21 @@ describe("tenant payment allocation", () => {
     expect(result.rentPaid).toBe(0);
   });
 
+  it("counts every supported successful payment status in the tenant ledger", () => {
+    const result = allocatePaymentLedger({
+      rentDue: 5_000,
+      utilityDue: 0,
+      payments: [
+        { ...payment(1_000), status: "successful" },
+        { ...payment(1_000), status: "success" },
+        { ...payment(1_000), status: "paid" },
+        { ...payment(1_000), status: "settled" },
+        { ...payment(1_000), status: "pending" },
+      ],
+    });
+    expect(result.rentPaid).toBe(4_000);
+  });
+
   it("aggregates dashboard deposits from tenant ledger results, not raw payment totals", () => {
     const tenantA = allocatePaymentLedger({
       depositDue: 20_000,

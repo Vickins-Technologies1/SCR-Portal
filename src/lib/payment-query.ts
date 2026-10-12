@@ -50,6 +50,19 @@ export function financialPostingFilter() {
     $or: [
       { financialPostingStatus: { $in: [...POSTED_PAYMENT_STATUSES, null] } },
       { financialPostingStatus: { $exists: false } },
+      // A completed payment can be left with the initial `pending` posting
+      // marker if the callback completed but the final posting update was
+      // interrupted. If it has a provider-confirmed/posted amount (or its
+      // ledger effects were already applied), it is still a real payment and
+      // must not disappear from the tenant's due calculation.
+      {
+        financialPostingStatus: "pending",
+        $or: [
+          { postedAmount: { $exists: true, $ne: null } },
+          { providerConfirmedAmount: { $exists: true, $ne: null } },
+          { financialEffectsApplied: true },
+        ],
+      },
     ],
   };
 }
@@ -67,7 +80,7 @@ export function money(value: unknown): number {
 
 export function paymentAmount(payment: unknown): number {
   const record = payment && typeof payment === "object" ? (payment as Record<string, unknown>) : {};
-  return Math.max(0, money(record.postedAmount ?? record.amount));
+  return Math.max(0, money(record.postedAmount ?? record.providerConfirmedAmount ?? record.amount));
 }
 
 export function paymentEventDate(payment: Record<string, unknown>): Date | null {

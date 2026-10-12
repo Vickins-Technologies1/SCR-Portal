@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import {
   eligibleFinancialPaymentFilter,
   identityValues,
+  paymentAmount,
   paymentDateRangeFilter,
   paymentEventDate,
   SUCCESSFUL_PAYMENT_STATUSES,
@@ -17,9 +18,22 @@ describe("shared payment query rules", () => {
         { $or: expect.arrayContaining([
           { financialPostingStatus: { $in: ["posted", "processing", null] } },
           { financialPostingStatus: { $exists: false } },
+          {
+            financialPostingStatus: "pending",
+            $or: [
+              { postedAmount: { $exists: true, $ne: null } },
+              { providerConfirmedAmount: { $exists: true, $ne: null } },
+              { financialEffectsApplied: true },
+            ],
+          },
         ]) },
       ],
     });
+  });
+
+  it("prefers the provider-confirmed amount when a legacy row lacks postedAmount", () => {
+    expect(paymentAmount({ amount: 1000, providerConfirmedAmount: 1250 })).toBe(1250);
+    expect(paymentAmount({ amount: 1000, postedAmount: 1100, providerConfirmedAmount: 1250 })).toBe(1100);
   });
 
   it("queries legacy string and ObjectId references together", () => {

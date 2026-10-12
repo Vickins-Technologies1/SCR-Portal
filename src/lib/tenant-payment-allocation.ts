@@ -2,7 +2,8 @@ import { Db, ObjectId } from "mongodb";
 import { calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown, UtilityDueBreakdown } from "@/lib/property-utilities";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
-import { financialPostingFilter, identityFilter, identityValues, isSuccessfulPaymentStatus, paymentEventDate, successfulPaymentFilter } from "@/lib/payment-query";
+import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { identityValues, isSuccessfulPaymentStatus, paymentEventDate } from "@/lib/payment-query";
 
 export type PaymentAllocation = {
   deposit: number;
@@ -113,15 +114,6 @@ const scopedPropertyFilter = (propertyId: unknown) => {
 const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdAt">) => {
   return paymentEventDate(payment as unknown as Record<string, unknown>)?.getTime() ?? null;
 };
-
-const eligiblePaymentFilter = (tenant: any) => ({
-  $and: [
-    identityFilter("tenantId", tenant._id),
-    successfulPaymentFilter(),
-    financialPostingFilter(),
-    scopedPropertyFilter(tenant.propertyId),
-  ],
-});
 
 export function allocatePaymentLedger(params: {
   depositDue?: number;
@@ -323,18 +315,16 @@ export async function calculateTenantFinancialState(
     overdueCharged: money(fixedUtilities.overdueCharged + meteredUtilities.overdueCharged),
   };
   const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
-  const payments = await db.collection<LedgerPayment>("payments")
-    .find(eligiblePaymentFilter(tenant))
-    .toArray();
-  const paymentIds = payments.map((payment) => payment._id);
-  const reversalIds = [...paymentIds, ...paymentIds.map((paymentId) => paymentId.toString())];
-  const reversalRows = paymentIds.length
-    ? await db.collection("financialLedger").aggregate<{ _id: ObjectId; total: number }>([
-        { $match: { kind: "PAYMENT_REVERSED", status: "posted", sourcePaymentId: { $in: reversalIds } } },
-        { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
-      ]).toArray()
-    : [];
-  const reversedByPayment = new Map(reversalRows.map((row) => [String(row._id), money(Number(row.total) || 0)]));
+  // Use the same reversal-aware financial projection as reports and payment
+  // totals. Tenant dues must not use a second, subtly different payment query.
+  // tenantId is the authoritative ownership link; this also retains legacy
+  // payment rows whose propertyId was never populated.
+  const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id] });
+  const payments = financialRows.map((row) => ({
+    ...row.payment,
+    amount: row.netAmount,
+    postedAmount: row.netAmount,
+  })) as LedgerPayment[];
   return deriveTenantFinancialState({
     tenant,
     asOf,
@@ -343,7 +333,6 @@ export async function calculateTenantFinancialState(
     utilityBreakdown,
     depositDue,
     payments,
-    reversedByPayment,
     property,
   });
 }
@@ -401,10 +390,11 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     .sort({ billingPeriod: 1, createdAt: 1, _id: 1 })
     .toArray();
   const chargeRemaining = new Map(utilityCharges.map((charge: any) => [String(charge._id), Math.max(0, Number(charge.amount) || 0)]));
-  for (const payment of await db.collection("payments")
-    .find({ ...eligiblePaymentFilter(tenant) })
-    .sort({ paymentDate: 1, createdAt: 1, _id: 1 })
-    .toArray()) {
+  const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id] });
+  for (const { payment } of [...financialRows].sort((a, b) =>
+    (paymentDateValue(a.payment) ?? 0) - (paymentDateValue(b.payment) ?? 0) ||
+    String(a.payment._id).localeCompare(String(b.payment._id))
+  )) {
     if (!allocations.has(String(payment._id))) continue;
     let remaining = Math.max(0, Number(allocations.get(String(payment._id))?.utilities || 0));
     const utilityAllocations: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }> = [];
