@@ -1,6 +1,7 @@
 import { Db, ObjectId } from "mongodb";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
+import { identityValues, isSuccessfulPaymentStatus } from "@/lib/payment-query";
 
 export type FinancialLedgerKind = "PAYMENT_POSTED" | "PAYMENT_REVERSED";
 export type WalletLedgerKind = "PAYMENT_CREDIT" | "CREDIT_CONSUMED" | "CREDIT_RESTORED" | "CREDIT_REVERSED" | "MANUAL_ADJUSTMENT";
@@ -81,7 +82,7 @@ export async function recordPostedPaymentLedger(db: Db, payment: any) {
 
 export async function getPaymentReversalTotal(db: Db, paymentId: ObjectId | string) {
   const rows = await db.collection("financialLedger").aggregate<{ total: number }>([
-    { $match: { kind: "PAYMENT_REVERSED", sourcePaymentId: paymentId instanceof ObjectId ? paymentId : new ObjectId(String(paymentId)), status: "posted" } },
+    { $match: { kind: "PAYMENT_REVERSED", sourcePaymentId: { $in: identityValues(paymentId) }, status: "posted" } },
     { $group: { _id: null, total: { $sum: "$amount" } } },
   ]).toArray();
   return asAmount(rows[0]?.total);
@@ -139,7 +140,7 @@ export async function createPaymentReversal(params: {
   }
 
   const payment = await db.collection("payments").findOne({ _id: paymentId });
-  if (!payment || payment.status !== "completed") {
+  if (!payment || !isSuccessfulPaymentStatus(payment.status)) {
     await db.collection("financialLedger").updateOne(
       { eventKey: reversalKey, status: "processing" },
       { $set: { status: "rejected", rejectionReason: "Only completed payments can be reversed", updatedAt: new Date().toISOString() } },

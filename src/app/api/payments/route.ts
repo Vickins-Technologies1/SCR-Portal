@@ -4,6 +4,7 @@ import { connectToDatabase } from "../../../lib/mongodb";
 import { ObjectId, Db, Filter } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import logger from "../../../lib/logger";
+import { identityFilter, identityValues, isSuccessfulPaymentStatus, money, SUCCESSFUL_PAYMENT_STATUSES } from "@/lib/payment-query";
 
 interface Payment {
   _id: string;
@@ -12,7 +13,7 @@ interface Payment {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "pending_stk" | "failed";
+  status: string;
   createdAt: string;
   type?: "Rent" | "Utility";
   phoneNumber?: string;
@@ -22,6 +23,9 @@ interface Payment {
   unitType?: string;
   mpesaCode?: string;
   isManual?: boolean;
+  originalAmount?: number;
+  reversedAmount?: number;
+  netAmount?: number;
 }
 
 interface PaymentDb {
@@ -31,7 +35,7 @@ interface PaymentDb {
   propertyId: string;
   paymentDate: string;
   transactionId: string;
-  status: "completed" | "pending" | "pending_stk" | "failed";
+  status: string;
   createdAt: string;
   type?: "Rent" | "Utility";
   phoneNumber?: string;
@@ -185,10 +189,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
       }
 
-      query.propertyId = propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds };
+      query.propertyId = propertyId && propertyId !== "all"
+        ? (identityFilter("propertyId", propertyId).propertyId as any)
+        : { $in: identityValues(propertyIds) };
 
       if (tenantId) {
-        query.tenantId = tenantId;
+        query.tenantId = identityFilter("tenantId", tenantId).tenantId as any;
         if (unitType) {
           const tenant = await db
             .collection<Tenant>("tenants")
@@ -214,17 +220,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         logger.debug("Tenants found", { effectiveOwnerId, tenantIds, unitType });
 
         query.$or = [
-          ...(tenantIds.length ? [{ tenantId: { $in: tenantIds } }] : []),
+          ...(tenantIds.length ? [{ tenantId: { $in: tenantIds.flatMap(identityValues) } }] : []),
           { tenantId: { $eq: null } },
           { tenantId: { $exists: false } },
-        ];
+        ] as any;
       }
     } else if (role === "tenant") {
       if (!tenantId || tenantId !== loggedInUserId) {
         logger.error("Unauthorized tenant access", { loggedInUserId, tenantId });
         return NextResponse.json({ success: false, message: "Unauthorized: Tenant ID mismatch" }, { status: 403 });
       }
-      query.tenantId = tenantId;
+      query.tenantId = identityFilter("tenantId", tenantId).tenantId as any;
       if (unitType) {
         const tenant = await db
           .collection<Tenant>("tenants")
@@ -239,7 +245,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       }
     } else if (role === "admin") {
       if (tenantId) {
-        query.tenantId = tenantId;
+        query.tenantId = identityFilter("tenantId", tenantId).tenantId as any;
         if (unitType) {
           const tenant = await db
             .collection<Tenant>("tenants")
@@ -260,18 +266,22 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         const tenantIdsWithUnitType = tenantUnitTypes.map((t) => t._id.toString());
         logger.debug("Admin unitType filter", { unitType, tenantIdsWithUnitType });
         query.$or = [
-          ...(tenantIdsWithUnitType.length ? [{ tenantId: { $in: tenantIdsWithUnitType } }] : []),
+          ...(tenantIdsWithUnitType.length ? [{ tenantId: { $in: tenantIdsWithUnitType.flatMap(identityValues) } }] : []),
           { tenantId: { $eq: null } },
           { tenantId: { $exists: false } },
-        ];
+        ] as any;
       }
-      if (propertyId && propertyId !== "all") query.propertyId = propertyId;
+      if (propertyId && propertyId !== "all") query.propertyId = identityFilter("propertyId", propertyId).propertyId as any;
     }
 
     if (tenantName) query.tenantName = { $regex: tenantName, $options: "i" };
     if (type) query.type = type;
     if (status) {
-      query.status = status === "pending" ? ({ $in: ["pending", "pending_stk"] } as any) : status;
+      query.status = status === "completed"
+        ? ({ $in: [...SUCCESSFUL_PAYMENT_STATUSES] } as any)
+        : status === "pending"
+          ? ({ $in: ["pending", "pending_stk", "processing"] } as any)
+          : status;
     }
     if (unitType && !query.tenantId && !query.$or) {
       query.unitType = unitType;
@@ -282,21 +292,20 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
     const adjustedPage = Math.min(page, totalPages);
 
-    const payments = (await db
+    const rawPayments = (await db
       .collection<PaymentDb>("payments")
       .aggregate([
         { $match: query },
-        { $sort: { paymentDate: sort === "-paymentDate" ? -1 : 1 } },
+        { $sort: { paymentDate: sort === "-paymentDate" ? -1 : 1, createdAt: sort === "-paymentDate" ? -1 : 1, _id: sort === "-paymentDate" ? -1 : 1 } },
         { $skip: (adjustedPage - 1) * limit },
         { $limit: limit },
+        { $addFields: { tenantIdObj: { $convert: { input: "$tenantId", to: "objectId", onError: null, onNull: null } } } },
         {
           $lookup: {
             from: "tenants",
-            let: { tenantId: { $toObjectId: "$tenantId" } },
-            pipeline: [
-              { $match: { $expr: { $eq: ["$_id", "$$tenantId"] } } },
-              { $project: { name: 1, unitType: 1 } },
-            ],
+            localField: "tenantIdObj",
+            foreignField: "_id",
+            pipeline: [{ $project: { name: 1, unitType: 1 } }],
             as: "tenant",
           },
         },
@@ -333,6 +342,26 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         },
       ])
       .toArray()) as Payment[];
+
+    const reversalRows = rawPayments.length
+      ? await db.collection("financialLedger").find({
+          kind: "PAYMENT_REVERSED",
+          status: "posted",
+          sourcePaymentId: { $in: identityValues(rawPayments.map((payment) => payment._id)) },
+        }, { projection: { sourcePaymentId: 1, amount: 1 } }).toArray()
+      : [];
+    const reversedByPayment = new Map<string, number>();
+    for (const reversal of reversalRows) {
+      const key = String(reversal.sourcePaymentId);
+      reversedByPayment.set(key, money((reversedByPayment.get(key) || 0) + Number(reversal.amount || 0)));
+    }
+    const payments = rawPayments.map((payment) => {
+      if (!isSuccessfulPaymentStatus(payment.status)) return payment;
+      const originalAmount = money(payment.amount);
+      const reversedAmount = Math.min(originalAmount, reversedByPayment.get(String(payment._id)) || 0);
+      const netAmount = money(Math.max(0, originalAmount - reversedAmount));
+      return { ...payment, amount: netAmount, originalAmount, reversedAmount, netAmount };
+    });
 
     if (total === 0) {
       logger.info("No payments found for query", {

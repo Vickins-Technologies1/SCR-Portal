@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import logger from "../../../lib/logger";
 import * as ExcelJS from "exceljs";
 import { format } from "date-fns";
+import { ObjectId } from "mongodb";
+import { connectToDatabase } from "../../../lib/mongodb";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
+import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { identityValues } from "@/lib/payment-query";
 
 interface Report {
   _id: string;
@@ -23,20 +28,11 @@ interface Report {
   isManual?: boolean;
 }
 
-interface Property {
-  _id: string;
-  name: string;
-  ownerId: string;
-}
-
 interface GenerateExcelRequest {
-  reports: Report[];
-  selectedPropertyId: string;
-  paymentType: string;
-  startDate: string;
-  endDate: string;
-  totalRevenue: number;
-  properties: Property[];
+  selectedPropertyId?: string;
+  paymentType?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 const getPaymentReference = (report: Report): string => {
@@ -48,8 +44,7 @@ const getPaymentReference = (report: Report): string => {
 };
 
 function groupByMonth(
-  reports: Report[],
-  selectedPropertyId: string
+  reports: Report[]
 ): Map<string, Report[]> {
   const map = new Map<string, Report[]>();
 
@@ -71,34 +66,96 @@ export async function POST(
   const startTime = Date.now();
   try {
     const body: GenerateExcelRequest = await request.json();
-    const {
-      reports,
-      selectedPropertyId,
-      paymentType,
-      startDate,
-      endDate,
-      totalRevenue,
-      properties,
-    } = body;
+    const selectedPropertyId = body.selectedPropertyId || "all";
+    const paymentType = body.paymentType || "all";
+    const startDate = body.startDate || "";
+    const endDate = body.endDate || "";
+    const loggedInUserId = request.cookies.get("userId")?.value;
+    const role = request.cookies.get("role")?.value;
 
-    if (!Array.isArray(reports) || reports.length === 0) {
-      logger.error("No reports provided for Excel generation");
-      return NextResponse.json(
-        { success: false, message: "No reports provided" },
-        { status: 400 }
-      );
+    if (!loggedInUserId || !ObjectId.isValid(loggedInUserId) || !["propertyOwner", "teamMember"].includes(role || "")) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
+    if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
+      return buildInvalidCsrfResponse(request);
+    }
+
+    const { db } = await connectToDatabase();
+    let effectiveOwnerId = loggedInUserId;
+    let assignedPropertyIds: string[] | null = null;
+    if (role === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({ _id: new ObjectId(loggedInUserId), active: true });
+      if (!teamMember?.ownerId) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      effectiveOwnerId = String(teamMember.ownerId);
+      assignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? (teamMember as any).assignedPropertyIds.map((value: unknown) => String(value)).filter((value: string) => ObjectId.isValid(value))
+        : null;
+    }
+
+    const propertiesQuery: Record<string, unknown> = { ownerId: { $in: identityValues(effectiveOwnerId) } };
+    if (role === "teamMember" && assignedPropertyIds?.length) {
+      propertiesQuery._id = { $in: assignedPropertyIds.map((id) => new ObjectId(id)) };
+    }
+    const properties = await db.collection("properties").find(propertiesQuery).project({ _id: 1, name: 1 }).toArray();
+    const propertyIds = properties.map((property) => String(property._id));
+    if (selectedPropertyId !== "all" && !propertyIds.includes(selectedPropertyId)) {
+      return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
+    }
+
+    const parseBusinessDate = (value: string, endOfDay = false) => {
+      if (!value) return undefined;
+      return new Date(`${value.slice(0, 10)}${endOfDay ? "T23:59:59.999+03:00" : "T00:00:00.000+03:00"}`);
+    };
+    const rows = await getFinancialPaymentRows({
+      db,
+      propertyIds: selectedPropertyId === "all" ? propertyIds : [selectedPropertyId],
+      start: parseBusinessDate(startDate),
+      end: parseBusinessDate(endDate, true),
+    });
+    const tenantDocs = await db.collection("tenants")
+      .find({ propertyId: { $in: identityValues(propertyIds) } })
+      .project({ name: 1, paymentStatus: 1, unitType: 1 })
+      .toArray();
+    const tenantMap = new Map(tenantDocs.map((tenant) => [String(tenant._id), tenant]));
+    const propertyMap = new Map(properties.map((property) => [String(property._id), property]));
+    const reports: Report[] = rows
+      .filter(({ payment }) => !paymentType || paymentType === "all" || String(payment.type || "Unknown") === paymentType)
+      .map(({ payment, eventDate, netAmount }) => {
+        const tenant = payment.tenantId ? tenantMap.get(String(payment.tenantId)) : null;
+        const propertyId = String(payment.propertyId || "");
+        return {
+          _id: String(payment._id),
+          propertyId,
+          propertyName: propertyMap.get(propertyId)?.name || "Unassigned",
+          tenantId: payment.tenantId ? String(payment.tenantId) : null,
+          tenantName: tenant?.name || payment.tenantName || "Unknown",
+          revenue: netAmount,
+          date: (eventDate || new Date(0)).toISOString(),
+          status: String(payment.status || "completed"),
+          ownerId: effectiveOwnerId,
+          tenantPaymentStatus: tenant?.paymentStatus || "Unknown",
+          unitType: tenant?.unitType || payment.unitType || "N/A",
+          type: payment.type || "Unknown",
+          transactionId: payment.transactionId,
+          reference: payment.reference,
+          mpesaCode: payment.mpesaCode,
+          isManual: String(payment.transactionId || "").startsWith("MANUAL-"),
+        };
+      });
+
+    if (reports.length === 0) {
+      return NextResponse.json({ success: false, message: "No reports provided" }, { status: 400 });
+    }
+    const totalRevenue = reports.reduce((sum, report) => sum + report.revenue, 0);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Monthly Contributions", {
       pageSetup: { paperSize: 9, orientation: "landscape" },
     });
 
-    const propertyLabel =
-      selectedPropertyId === "all"
-        ? "All Properties"
-        : properties.find((p) => p._id === selectedPropertyId)?.name ??
-          "Selected Property";
+    const propertyLabel = selectedPropertyId === "all"
+      ? "All Properties"
+      : properties.find((property) => String(property._id) === selectedPropertyId)?.name ?? "Selected Property";
 
     const totalColumns = selectedPropertyId === "all" ? 8 : 9;
     const lastColumn = String.fromCharCode(64 + totalColumns);
@@ -186,7 +243,7 @@ export async function POST(
     });
     currentRow++;
 
-    const monthGroups = groupByMonth(reports, selectedPropertyId);
+    const monthGroups = groupByMonth(reports);
     let grandTotal = 0;
 
     monthGroups.forEach((monthReports, monthKey) => {

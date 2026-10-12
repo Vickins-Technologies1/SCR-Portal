@@ -525,13 +525,26 @@ export default function TenantDetailsPage() {
     if (!canViewPayments) return;
     setIsPaymentsLoading(true);
     try {
-      const res = await fetch(
-        `/api/payments?tenantId=${tenantId}&limit=50&sort=-paymentDate`,
-        { credentials: "include" }
-      );
-      const data = await res.json();
-      if (data.success) {
-        setPaymentStatements(data.payments || []);
+      const limit = 100;
+      const fetchPage = async (page: number) => {
+        const res = await fetch(
+          `/api/payments?tenantId=${encodeURIComponent(tenantId)}&page=${page}&limit=${limit}&sort=-paymentDate`,
+          { credentials: "include", cache: "no-store" },
+        );
+        return { res, data: await res.json() };
+      };
+      const first = await fetchPage(1);
+      if (first.data.success) {
+        const totalPages = Math.max(1, Number(first.data.totalPages || 1));
+        const remaining = await Promise.all(
+          Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => fetchPage(index + 2)),
+        );
+        const failedPage = remaining.find(({ data }) => !data.success);
+        if (failedPage) throw new Error(failedPage.data.message || "Failed to fetch payment statements");
+        setPaymentStatements([
+          ...(first.data.payments || []),
+          ...remaining.flatMap(({ data }) => data.payments || []),
+        ]);
       } else {
         setPaymentStatements([]);
       }

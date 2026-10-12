@@ -9,6 +9,7 @@ import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { calculateTenantFinancialState, reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import { getFinancialReportSummary } from "@/lib/financial-reporting";
 
 interface Tenant {
   _id: ObjectId;
@@ -66,8 +67,8 @@ export async function GET(request: NextRequest) {
     const { db } = await connectToDatabase();
     const today = new Date();
     const todayISO = today.toISOString();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const properties = await db.collection("properties").find({ ownerId: userId }).toArray();
     const propertyIds = properties.map((p: any) => p._id.toString());
@@ -104,29 +105,13 @@ export async function GET(request: NextRequest) {
     const totalTenants = activeTenants.length;
     const occupiedUnits = activeTenants.reduce((sum, tenant) => sum + countOccupiedUnitsForTenant(tenant), 0);
 
-    // 3. Total Monthly Revenue Collected (this month)
-    const monthlyRentResult = await db.collection("payments")
-      .aggregate([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
-          },
-        },
-        { $group: { _id: null, totalMonthlyRent: { $sum: "$amount" } } },
-      ])
-      .toArray();
-    const totalMonthlyRent = monthlyRentResult[0]?.totalMonthlyRent || 0;
-
-    // 4. Total Payments Ever
-    const totalPaymentsResult = await db.collection("payments")
-      .aggregate([
-        { $match: { propertyId: { $in: propertyIds }, status: "completed" } },
-        { $group: { _id: null, totalPayments: { $sum: "$amount" } } },
-      ])
-      .toArray();
-    const totalPayments = totalPaymentsResult[0]?.totalPayments || 0;
+    // 3-4. Revenue uses the same net, reversal-aware financial projection as reports.
+    const [monthlySummary, lifetimeSummary] = await Promise.all([
+      getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth }),
+      getFinancialReportSummary({ db, propertyIds }),
+    ]);
+    const totalMonthlyRent = monthlySummary.netReceived;
+    const totalPayments = lifetimeSummary.netReceived;
 
     // 5. Overdue Calculation
     let overdueCount = 0;

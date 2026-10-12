@@ -5,6 +5,9 @@ import * as ExcelJS from "exceljs";
 import { format } from "date-fns";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
+import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { identityValues } from "@/lib/payment-query";
+import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
@@ -12,19 +15,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
     const { ownerId } = body;
+    const sessionUserId = request.cookies.get("userId")?.value;
+    const role = request.cookies.get("role")?.value;
 
     if (!ownerId || ownerId === "all") {
       return NextResponse.json({ success: false, message: "Select a specific owner" }, { status: 400 });
     }
+    if (!sessionUserId || !ObjectId.isValid(sessionUserId) || !ObjectId.isValid(String(ownerId)) || !["admin", "propertyOwner", "teamMember"].includes(role || "")) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) {
+      return buildInvalidCsrfResponse(request);
+    }
 
-    logger.info("Excel export started", { ownerId });
+    const effectiveOwnerId = String(ownerId);
+    let assignedPropertyIds: string[] | null = null;
+    if (role === "propertyOwner" && sessionUserId !== effectiveOwnerId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
 
     const { db } = await connectToDatabase();
+    if (role === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({ _id: new ObjectId(sessionUserId), active: true });
+      if (!teamMember?.ownerId || String(teamMember.ownerId) !== effectiveOwnerId) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+      }
+      assignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? (teamMember as any).assignedPropertyIds.map((value: unknown) => String(value)).filter((value: string) => ObjectId.isValid(value))
+        : null;
+    }
 
-    // === 1. GET OWNER'S PROPERTIES (STRING ownerId) ===
+    logger.info("Excel export started", { ownerId: effectiveOwnerId });
+
+    const propertiesQuery: Record<string, unknown> = { ownerId: { $in: identityValues(effectiveOwnerId) } };
+    if (role === "teamMember" && assignedPropertyIds?.length) {
+      propertiesQuery._id = { $in: assignedPropertyIds.map((id) => new ObjectId(id)) };
+    }
     const properties = await db
       .collection("properties")
-      .find({ ownerId: ownerId }) // ← STRING MATCH
+      .find(propertiesQuery)
       .project({ _id: 1, name: 1 })
       .toArray();
 
@@ -33,80 +62,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ success: true, excel: "", message: "No properties" });
     }
 
-    const propertyIds = properties.map(p => p._id);
+    const propertyIds = properties.map(p => String(p._id));
     logger.info("Found properties", { count: properties.length, names: properties.map(p => p.name) });
 
-    // === 2. GET ALL TENANTS IN THESE PROPERTIES ===
     const tenants = await db
       .collection("tenants")
-      .find({ propertyId: { $in: propertyIds.map(id => id.toString()) } })
-      .project({ _id: 1, name: 1, unitType: 1, propertyId: 1 })
+      .find({ propertyId: { $in: identityValues(propertyIds) } })
+      .project({ _id: 1, name: 1, unitType: 1, propertyId: 1, phone: 1 })
       .toArray();
-
-    const tenantMap = new Map(
-      tenants.map(t => [t._id.toString(), { name: t.name, unitType: t.unitType, propertyId: t.propertyId }])
-    );
-
-    logger.info("Found tenants", { count: tenants.length });
-
-// === 3. GET PAYMENTS FOR THESE TENANTS OR PROPERTIES ===
-const payments = await db
-  .collection("payments")
-  .aggregate([
-    {
-      $match: {
-        $or: [
-          { 
-            propertyId: { 
-              $in: propertyIds.map(id => new ObjectId(id)) 
-            } 
-          },
-          { 
-            tenantId: { $in: Array.from(tenantMap.keys()) } 
-          }
-        ],
-        status: "completed"
-      }
-    },
-    {
-      $lookup: {
-        from: "tenants",
-        let: { tenantId: { $toObjectId: "$tenantId" } },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$_id", "$$tenantId"] } } },
-          { $project: { name: 1, unitType: 1, phone: 1 } }
-        ],
-        as: "tenant"
-      }
-    },
-    { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: "properties",
-        let: { propId: { $toObjectId: "$propertyId" } },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$_id", "$$propId"] } } },
-          { $project: { name: 1 } }
-        ],
-        as: "property"
-      }
-    },
-    { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        amount: 1,
-        paymentDate: 1,
-        transactionId: 1,
-        type: 1,
-        tenantName: { $ifNull: ["$tenant.name", "Guest"] },
-        unitType: { $ifNull: ["$tenant.unitType", "N/A"] },
-        propertyName: { $ifNull: ["$property.name", "Unknown"] },
-        phoneNumber: { $ifNull: ["$tenant.phone", "—"] }
-      }
-    },
-    { $sort: { paymentDate: -1 } }
-  ])
-  .toArray();
+    const tenantMap = new Map(tenants.map(t => [String(t._id), t]));
+    const propertyMap = new Map(properties.map(p => [String(p._id), p]));
+    const rows = await getFinancialPaymentRows({ db, propertyIds });
+    const payments = rows.map(({ payment, eventDate, originalAmount, reversedAmount, netAmount }) => {
+      const tenant = payment.tenantId ? tenantMap.get(String(payment.tenantId)) : undefined;
+      return {
+        amount: netAmount,
+        originalAmount,
+        reversedAmount,
+        paymentDate: eventDate || new Date(0),
+        transactionId: payment.transactionId,
+        type: payment.type,
+        tenantName: tenant?.name || payment.tenantName || "Guest",
+        unitType: tenant?.unitType || payment.unitType || "N/A",
+        propertyName: propertyMap.get(String(payment.propertyId))?.name || "Unknown",
+        phoneNumber: tenant?.phone || payment.phoneNumber || "—",
+      };
+    });
 
     if (payments.length === 0) {
       logger.info("No payments found", { ownerId });

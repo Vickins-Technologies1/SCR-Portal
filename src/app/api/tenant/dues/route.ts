@@ -6,6 +6,8 @@ import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { getFinancialReportSummary } from "@/lib/financial-reporting";
+import { identityValues } from "@/lib/payment-query";
 
 interface Property {
   _id: ObjectId;
@@ -84,7 +86,7 @@ export async function GET(request: NextRequest) {
     // Fetch properties for the owner
     const properties = await db
       .collection("properties")
-      .find<WithId<Property>>({ ownerId: userId })
+      .find<WithId<Property>>({ ownerId: { $in: identityValues(userId) } })
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
     const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
@@ -110,8 +112,6 @@ export async function GET(request: NextRequest) {
     const today = new Date(); // Use current date
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-    const startOfMonthISO = startOfMonth.toISOString();
-    const endOfMonthISO = endOfMonth.toISOString();
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
     const totalUnitsResult = await db
       .collection("properties")
       .aggregate<{ totalUnits: number }>([
-        { $match: { ownerId: userId } },
+        { $match: { ownerId: { $in: identityValues(userId) } } },
         { $unwind: "$unitTypes" },
         { $group: { _id: null, totalUnits: { $sum: "$unitTypes.quantity" } } },
       ])
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
         occupiedUnits: number;
         tenantIds: string[];
       }>([
-        { $match: { propertyId: { $in: propertyIds } } },
+        { $match: { propertyId: { $in: identityValues(propertyIds) } } },
         {
           $group: {
             _id: null,
@@ -164,84 +164,18 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Tenants fetched for ownerstats", { userId, tenantIds, totalTenants, occupiedUnits });
 
-    // Current month revenue (all completed payments)
-    const currentMonthRentResult = await db
-      .collection("payments")
-      .aggregate<{
-        totalMonthlyRent: number;
-      }>([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            $or: [
-              { financialPostingStatus: { $in: ["posted", "processing"] } },
-              { financialPostingStatus: { $exists: false } },
-            ],
-            paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalMonthlyRent: { $sum: { $ifNull: ["$postedAmount", "$amount"] } },
-          },
-        },
-      ])
-      .toArray();
-    const totalMonthlyRent = currentMonthRentResult[0]?.totalMonthlyRent || 0;
-
-    const currentMonthPayments = await db
-      .collection("payments")
-      .find({
-        propertyId: { $in: propertyIds },
-        status: "completed",
-        $or: [
-          { financialPostingStatus: { $in: ["posted", "processing"] } },
-          { financialPostingStatus: { $exists: false } },
-        ],
-        paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO },
-      })
-      .toArray();
-    logger.debug("Current month payments for totalMonthlyRent", {
-      userId,
-      paymentCount: currentMonthPayments.length,
-      totalMonthlyRent,
-      paymentIds: currentMonthPayments.map((p) => p._id),
-      paymentDates: currentMonthPayments.map((p) => p.paymentDate),
-      propertyIds,
-    });
-
-    // Total payments aggregation
-    const paymentsResult = await db
-      .collection("payments")
-      .aggregate<{
-        totalPayments: number;
-      }>([
-        {
-          $match: {
-            propertyId: { $in: propertyIds },
-            status: "completed",
-            $or: [
-              { financialPostingStatus: { $in: ["posted", "processing"] } },
-              { financialPostingStatus: { $exists: false } },
-            ],
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalPayments: { $sum: { $ifNull: ["$postedAmount", "$amount"] } },
-          },
-        },
-      ])
-      .toArray();
-    const totalPayments = paymentsResult[0]?.totalPayments || 0;
+    // Dashboard totals use the same net, reversal-aware projection as reports.
+    const [monthlySummary, lifetimeSummary] = await Promise.all([
+      getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth }),
+      getFinancialReportSummary({ db, propertyIds }),
+    ]);
+    const totalMonthlyRent = monthlySummary.netReceived;
+    const totalPayments = lifetimeSummary.netReceived;
 
     const activeTenants = await db
       .collection("tenants")
       .find({
-        propertyId: { $in: propertyIds },
+        propertyId: { $in: identityValues(propertyIds) },
         leaseStartDate: { $ne: null, $lte: today.toISOString() },
         leaseEndDate: { $ne: null, $gte: today.toISOString() },
       })

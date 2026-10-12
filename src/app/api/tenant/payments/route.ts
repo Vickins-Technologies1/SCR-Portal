@@ -5,6 +5,7 @@ import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
 import logger from "@/lib/logger";
+import { identityFilter, identityValues, isSuccessfulPaymentStatus, money } from "@/lib/payment-query";
 import { z } from "zod";
 import {
   initiateStkPush,
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const query: { tenantId?: string; propertyId?: string | { $in: string[] } } = {};
+    const query: Record<string, any> = {};
 
     if (role === "propertyOwner" && isImpersonating) {
       const tenantContext = await resolveTenantContext({
@@ -149,11 +150,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
       }
 
-      query.tenantId = tenantContext.tenantId;
+      query.tenantId = identityFilter("tenantId", tenantContext.tenantId).tenantId;
     } else if (role === "propertyOwner") {
       const properties = await db
         .collection<Property>("properties")
-        .find({ ownerId: userId })
+        .find(identityFilter("ownerId", userId))
         .toArray();
       const propertyIds = properties.map((p) => p._id.toString());
 
@@ -161,14 +162,16 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, payments: [], total: 0, page, limit, totalPages: 0 }, { status: 200 });
       }
 
-      query.propertyId = propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds };
+      query.propertyId = propertyId && propertyId !== "all"
+        ? identityFilter("propertyId", propertyId).propertyId
+        : { $in: identityValues(propertyIds) };
     } else if (role === "tenant") {
       if (!tenantId || tenantId !== userId) {
         return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
       }
-      query.tenantId = tenantId;
+      query.tenantId = identityFilter("tenantId", tenantId).tenantId;
     } else if (role === "admin") {
-      if (tenantId) query.tenantId = tenantId;
+      if (tenantId) query.tenantId = identityFilter("tenantId", tenantId).tenantId;
     } else {
       return NextResponse.json({ success: false, message: "Invalid role" }, { status: 400 });
     }
@@ -176,21 +179,17 @@ export async function GET(request: NextRequest) {
     const total = await db.collection<Payment>("payments").countDocuments(query);
     const totalPages = Math.ceil(total / limit) || 1;
 
-    const payments = await db
+    const rawPayments = await db
       .collection<Payment>("payments")
       .aggregate([
         { $match: query },
-        { $sort: { paymentDate: sort === "-paymentDate" ? -1 : 1 } },
+        { $sort: { paymentDate: sort === "-paymentDate" ? -1 : 1, createdAt: sort === "-paymentDate" ? -1 : 1, _id: sort === "-paymentDate" ? -1 : 1 } },
         { $skip: skip },
         { $limit: limit },
         {
           $addFields: {
             tenantIdObj: {
-              $cond: {
-                if: { $eq: [{ $type: "$tenantId" }, "string"] },
-                then: { $toObjectId: "$tenantId" },
-                else: "$tenantId",
-              },
+            $convert: { input: "$tenantId", to: "objectId", onError: null, onNull: null },
             },
           },
         },
@@ -221,6 +220,26 @@ export async function GET(request: NextRequest) {
         },
       ])
       .toArray();
+
+    const reversalRows = rawPayments.length
+      ? await db.collection("financialLedger").find({
+          kind: "PAYMENT_REVERSED",
+          status: "posted",
+          sourcePaymentId: { $in: identityValues(rawPayments.map((payment: any) => payment._id)) },
+        }, { projection: { sourcePaymentId: 1, amount: 1 } }).toArray()
+      : [];
+    const reversedByPayment = new Map<string, number>();
+    for (const reversal of reversalRows) {
+      const key = String(reversal.sourcePaymentId);
+      reversedByPayment.set(key, money((reversedByPayment.get(key) || 0) + Number(reversal.amount || 0)));
+    }
+    const payments = rawPayments.map((payment: any) => {
+      if (!isSuccessfulPaymentStatus(payment.status)) return payment;
+      const originalAmount = money(payment.amount);
+      const reversedAmount = Math.min(originalAmount, reversedByPayment.get(String(payment._id)) || 0);
+      const netAmount = money(Math.max(0, originalAmount - reversedAmount));
+      return { ...payment, amount: netAmount, originalAmount, reversedAmount, netAmount };
+    });
 
     return NextResponse.json({ success: true, payments, total, page, limit, totalPages });
   } catch (error: unknown) {

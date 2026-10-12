@@ -3,11 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { requireAdmin } from "../../../../lib/admin-auth";
+import { getFinancialReportSummary } from "@/lib/financial-reporting";
 
 interface Payment {
   _id: ObjectId;
   amount: number;
-  date: Date;
+  postedAmount?: number;
+  date?: Date | string;
+  paymentDate?: Date | string;
   status: string;
   propertyOwnerId?: ObjectId;
 }
@@ -22,31 +25,16 @@ export async function GET(request: NextRequest) {
     // Get total count
     const count = await db.collection<Payment>("payments").countDocuments();
 
-    // Get total collected amount (successful payments)
-    // Adjust statuses based on your actual payment statuses
-    const collectedResult = await db.collection<Payment>("payments").aggregate([
-      {
-        $match: {
-          status: { $in: ["completed", "successful", "paid", "settled"] }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalCollected: { $sum: "$amount" }
-        }
-      }
-    ]).toArray();
-
-    const totalCollected = collectedResult[0]?.totalCollected ?? 0;
+    const financialSummary = await getFinancialReportSummary({ db });
+    const totalCollected = financialSummary.netReceived;
 
     // Optional: fetch recent payments (limit to last 50 for performance)
     const payments = await db
       .collection<Payment>("payments")
       .find({})
-      .sort({ date: -1 })
+      .sort({ paymentDate: -1, createdAt: -1, _id: -1 })
       .limit(50)
-      .project({ _id: 1, amount: 1, date: 1, status: 1 })
+      .project({ _id: 1, amount: 1, postedAmount: 1, paymentDate: 1, date: 1, status: 1 })
       .toArray();
 
     return NextResponse.json(
@@ -56,8 +44,8 @@ export async function GET(request: NextRequest) {
         totalCollected: totalCollected || 0,
         payments: payments.map((p) => ({
           _id: p._id.toString(),
-          amount: p.amount || 0,
-          date: p.date ? p.date.toISOString() : "N/A",
+          amount: p.postedAmount ?? p.amount ?? 0,
+          date: p.paymentDate instanceof Date ? p.paymentDate.toISOString() : p.paymentDate || (p.date instanceof Date ? p.date.toISOString() : p.date || "N/A"),
           status: p.status || "N/A",
         })),
       },

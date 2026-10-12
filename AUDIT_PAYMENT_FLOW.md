@@ -6,6 +6,48 @@ Scope: read-only source audit of tenant payments, Daraja/M-Pesa STK and C2B call
 
 Live-data limitation: `scripts/audit-financial-consistency.mjs` was inspected but could not run because this environment has no `MONGODB_URI` or `MONGO_URI`. Therefore duplicate-record counts, allocation-mismatch counts, and utility-charge anomalies remain unverified against the database.
 
+## 2026-10-12 implementation follow-up
+
+The source audit was implemented and re-verified in the working tree. No production database, gateway configuration, callback endpoint, or payment record was changed.
+
+### Root causes addressed
+
+1. Financial consumers did not share one eligible-payment definition. Reports and dashboards generally matched only `status: "completed"`, compared IDs as strings only, and several date filters could overwrite the posting-status predicate. This caused legacy successful rows, ObjectId/string variants, and some date-window rows to disappear.
+2. Category totals and tenant totals were calculated from raw `amount` values in some paths while other paths used allocations. Posted amounts, partial allocations, and reversals could therefore disagree between tenant statements, owner reports, charts, invoices, and dashboards.
+3. Tenant payment statements fetched only one 50-row page. Older transactions were silently omitted from the tenant report and PDF inputs.
+4. The active Excel route trusted client-provided report rows and totals. A client could export a set of values that did not match the server-side financial data.
+5. The read-only reconciliation script counted only exact `completed` rows and did not include legacy successful statuses or reversal-adjusted invoice balances.
+
+### Changes made
+
+* Added `src/lib/payment-query.ts` as the shared query/calculation contract: successful legacy statuses, posted/quarantined filtering, string/ObjectId identity matching, event-date precedence, money normalization, and prorated reversal allocation.
+* Reworked `src/lib/financial-reporting.ts` to produce one reversal-aware financial payment projection. Gross amount, reversed amount, net amount, category allocation, and unapplied credit are now distinct.
+* Routed `src/lib/payment-totals.ts`, owner reports, owner charts, tenant monthly reports, owner dues stats, tenant payment reads, and invoice amount reconciliation through that projection.
+* Updated `/api/payments` and `/api/tenant/payments` to accept mixed legacy ID types, use safe ObjectId conversion, return net/original/reversed amounts, and provide stable pagination ordering.
+* Updated tenant statement loading to fetch every API page instead of silently stopping at 50 rows.
+* Rebuilt both active/legacy Excel export paths around authenticated, server-side financial rows. The active `/api/generate-excel` route ignores client-supplied amounts and validates owner/team-member property scope.
+* Added payment report indexes for property/tenant, successful status, payment date, and stable `_id` ordering.
+* Updated `scripts/audit-financial-consistency.mjs` to remain read-only while covering legacy successful statuses, mixed identities, posted reversals, and net invoice balances.
+
+### Data impact
+
+No data migration or production write was run. Application reconciliation still updates projections when a new verified payment is posted, as it did before this audit. Existing database rows are only reinterpreted by the shared read-side projection until an authorized reconciliation run is performed.
+
+### Verification
+
+* Targeted financial tests: 30 passed.
+* Full test suite: 124 passed, 1 skipped across 32 files.
+* TypeScript: passed (`pnpm exec tsc --noEmit`).
+* Lint: passed with 0 errors; the repository retains pre-existing warnings.
+* Production build: passed (`pnpm build`).
+* `node --check scripts/audit-financial-consistency.mjs`: passed.
+* `git diff --check`: passed; only Git line-ending notices were emitted.
+* Live reconciliation: not run. It requires `MONGODB_URI` or `MONGO_URI`; no database counts or anomaly totals are claimed here.
+
+### Remaining risks and rollout
+
+The payment posting service now centralizes ordinary successful posting, but the existing non-transactional projection updates and legacy direct invoice/wallet mutation endpoints remain architectural risks. Before rollout, run the audit script with a read-only MongoDB principal, review every finding, then run a separately approved repair/rebuild job for confirmed projection mismatches. Deploy indexes before enabling broad historical report windows, and monitor quarantined amount/relationship mismatches and duplicate provider identities.
+
 ## Executive summary
 
 The ordinary tenant flow is:

@@ -116,6 +116,8 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     indexes: [
       { key: { ownerId: 1, status: 1, createdAt: -1 }, name: "payments_owner_status_createdAt" },
       { key: { tenantId: 1, status: 1, createdAt: -1 }, name: "payments_tenant_status_createdAt" },
+      { key: { propertyId: 1, status: 1, paymentDate: -1, _id: -1 }, name: "payments_property_status_paymentDate" },
+      { key: { tenantId: 1, status: 1, paymentDate: -1, _id: -1 }, name: "payments_tenant_status_paymentDate" },
       { key: { invoiceId: 1 }, name: "payments_invoiceId" },
       { key: { type: 1, status: 1, ownerId: 1 }, name: "payments_type_status_owner" },
       { key: { paymentId: 1 }, name: "payments_paymentId_unique", unique: true, partialFilterExpression: { paymentId: { $type: "string" } } },

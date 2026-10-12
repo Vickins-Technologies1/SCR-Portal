@@ -2,6 +2,10 @@ import { MongoClient } from "mongodb";
 
 const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
 const databaseName = process.env.MONGODB_DB || "rentaldb";
+const SUCCESSFUL_PAYMENT_STATUSES = ["completed", "successful", "success", "paid", "settled"];
+
+const isSuccessfulPayment = (payment) => SUCCESSFUL_PAYMENT_STATUSES.includes(String(payment?.status || "").toLowerCase());
+const paymentAmount = (payment) => Math.max(0, Number(payment?.postedAmount ?? payment?.amount) || 0);
 
 if (!uri) {
   console.error("LIVE DATABASE RECONCILIATION NOT RUN: set MONGODB_URI (or MONGO_URI) for a read-only audit.");
@@ -12,7 +16,7 @@ if (!uri) {
   try {
     const db = client.db(databaseName);
     const payments = await db.collection("payments").find({}).toArray();
-    const postedPayments = payments.filter((p) => p.status === "completed" && p.financialPostingStatus !== "quarantined");
+    const postedPayments = payments.filter((p) => isSuccessfulPayment(p) && p.financialPostingStatus !== "quarantined");
     const ledger = await db.collection("financialLedger").find({}).toArray();
     const wallet = await db.collection("walletTransactions").find({}).toArray();
     const invoices = await db.collection("invoices").find({}).toArray();
@@ -25,19 +29,19 @@ if (!uri) {
     const postedLedger = ledger.filter((e) => e.kind === "PAYMENT_POSTED" && e.status !== "rejected");
     const reversals = ledger.filter((e) => e.kind === "PAYMENT_REVERSED" && e.status === "posted");
 
-    const missingPostingStatus = payments.filter((p) => p.status === "completed" && !p.financialPostingStatus);
+    const missingPostingStatus = payments.filter((p) => isSuccessfulPayment(p) && !p.financialPostingStatus);
     const missingProviderIdentity = postedPayments.filter((p) => !p.providerTransactionId && !p.transactionId && !p.reference);
     const missingAllocation = postedPayments.filter((p) => !p.allocation && !postedLedger.some((e) => String(e.sourcePaymentId) === String(p._id)));
     const allocationMismatches = postedPayments.flatMap((p) => {
       const a = p.allocation || {};
       const allocated = ["rent", "utilities", "deposit", "other", "walletCredit"].reduce((s, k) => s + Math.max(0, Number(a[k]) || 0), 0);
-      const amount = Number(p.postedAmount ?? p.amount) || 0;
+      const amount = paymentAmount(p);
       return allocated > amount + 0.01 ? [{ paymentId: String(p._id), allocated, amount }] : [];
     });
 
     async function duplicates(field) {
       return db.collection("payments").aggregate([
-        { $match: { status: "completed", [field]: { $type: "string", $ne: "" } } },
+        { $match: { status: { $in: SUCCESSFUL_PAYMENT_STATUSES }, [field]: { $exists: true, $nin: [null, ""] } } },
         { $group: { _id: "$" + field, ids: { $push: "$_id" }, count: { $sum: 1 } } },
         { $match: { count: { $gt: 1 } } },
       ]).toArray();
@@ -75,14 +79,14 @@ if (!uri) {
     for (const reversal of reversals) reversalTotals.set(String(reversal.sourcePaymentId), (reversalTotals.get(String(reversal.sourcePaymentId)) || 0) + Number(reversal.amount || 0));
     const excessReversals = [...reversalTotals.entries()].flatMap(([paymentId, total]) => {
       const payment = paymentById.get(paymentId);
-      const original = Number(payment?.postedAmount ?? payment?.amount ?? 0);
+      const original = paymentAmount(payment);
       return total > original + 0.01 ? [{ paymentId, reversed: total, original }] : [];
     });
 
     const invoiceFindings = [];
     for (const invoice of invoices) {
       const related = postedPayments.filter((p) => String(p.invoiceId || "") === String(invoice._id));
-      const paid = related.reduce((s, p) => s + Math.max(0, Number(p.postedAmount ?? p.amount) || 0), 0);
+      const paid = related.reduce((s, p) => s + Math.max(0, paymentAmount(p) - (reversalTotals.get(String(p._id)) || 0)), 0);
       const expectedBalance = Math.max(0, Number(invoice.amount || 0) - paid);
       if (invoice.balanceDue != null && Math.abs(Number(invoice.balanceDue) - expectedBalance) > 0.01) {
         invoiceFindings.push({ invoiceId: String(invoice._id), storedBalance: invoice.balanceDue, expectedBalance });
@@ -110,7 +114,7 @@ if (!uri) {
     const findingsCount = (key) => findings[key]?.length || 0;
     console.log(JSON.stringify({
       readOnly: true,
-      scanned: { payments: payments.length, postedPayments: postedPayments.length, financialLedger: ledger.length, walletTransactions: wallet.length, invoices: invoices.length, tenants: tenants.length, utilityCharges: utilityCharges.length },
+      scanned: { payments: payments.length, successfulPayments: payments.filter(isSuccessfulPayment).length, postedPayments: postedPayments.length, financialLedger: ledger.length, walletTransactions: wallet.length, invoices: invoices.length, tenants: tenants.length, utilityCharges: utilityCharges.length },
       findings,
       categories: {
         CLEAN: [],

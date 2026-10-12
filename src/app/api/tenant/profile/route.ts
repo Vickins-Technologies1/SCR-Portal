@@ -5,6 +5,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csr
 import { calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { getFinancialPaymentRows } from "@/lib/financial-reporting";
 
 interface Tenant {
   _id: ObjectId;
@@ -39,14 +40,6 @@ interface Tenant {
   totalDepositPaid?: number;
 }
 
-interface Payment {
-  tenantId: string;
-  type: string;
-  status: string;
-  amount: number;
-  createdAt: Date | string;
-}
-
 async function getMonthlyPayments(
   db: Db,
   targetTenantId: string,
@@ -59,53 +52,27 @@ async function getMonthlyPayments(
   total: number;
   paid: boolean;
 }>> {
-  const payments = await db
-    .collection<Payment>("payments")
-    .find({ tenantId: targetTenantId, status: "completed" })
-    .sort({ createdAt: -1 })
-    .toArray();
-
   const monthlyMap: Record<
     string,
     { rent: number; utility: number; deposit: number; total: number }
   > = {};
-
-  payments.forEach((p) => {
-    let date: Date;
-
-    if (p.createdAt instanceof Date) {
-      date = p.createdAt;
-    } else if (typeof p.createdAt === "string") {
-      date = new Date(p.createdAt);
-      if (isNaN(date.getTime())) {
-        console.warn(`Invalid payment date: ${p.createdAt} for payment ${p._id}`);
-        return;
-      }
-    } else {
-      console.warn(`Invalid createdAt type: ${typeof p.createdAt}`);
-      return;
-    }
-
-    const monthKey = date.toISOString().slice(0, 7); // YYYY-MM
-
+  const monthFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit" });
+  const monthKeyFor = (date: Date) => {
+    const parts = monthFormatter.formatToParts(date);
+    return `${parts.find((part) => part.type === "year")?.value}-${parts.find((part) => part.type === "month")?.value}`;
+  };
+  const rows = await getFinancialPaymentRows({ db, tenantIds: [targetTenantId] });
+  rows.forEach(({ eventDate, netAmount, allocation }) => {
+    if (!eventDate) return;
+    const monthKey = monthKeyFor(eventDate);
     if (!monthlyMap[monthKey]) {
       monthlyMap[monthKey] = { rent: 0, utility: 0, deposit: 0, total: 0 };
     }
-
-    if (p.type === "Rent") {
-      monthlyMap[monthKey].rent += p.amount;
-    } else if (p.type === "Utility") {
-      monthlyMap[monthKey].utility += p.amount;
-    } else if (p.type === "Deposit") {
-      monthlyMap[monthKey].deposit += p.amount;
-    }
-
-    monthlyMap[monthKey].total += p.amount;
+    monthlyMap[monthKey].rent += allocation.rent;
+    monthlyMap[monthKey].utility += allocation.utilities;
+    monthlyMap[monthKey].deposit += allocation.deposit;
+    monthlyMap[monthKey].total += netAmount;
   });
-
-  // ── Debug helper (uncomment when investigating zero values) ────────
-  // console.log("[DEBUG monthly payments map]", JSON.stringify(monthlyMap, null, 2));
-  // ───────────────────────────────────────────────────────────────────
 
   const monthlyPayments: Array<{
     month: string;
@@ -117,11 +84,14 @@ async function getMonthlyPayments(
   }> = [];
 
   const today = new Date();
+  const todayParts = monthFormatter.formatToParts(today);
+  const currentYear = Number(todayParts.find((part) => part.type === "year")?.value);
+  const currentMonth = Number(todayParts.find((part) => part.type === "month")?.value) - 1;
 
   for (let i = 0; i < Math.min(12, monthsStayed || 12); i++) {
-    const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const monthKey = date.toISOString().slice(0, 7);
-    const monthName = date.toLocaleString("default", { month: "short", year: "2-digit" });
+    const date = new Date(Date.UTC(currentYear, currentMonth - i, 1));
+    const monthKey = monthKeyFor(date);
+    const monthName = date.toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "Africa/Nairobi" });
 
     const data = monthlyMap[monthKey] || { rent: 0, utility: 0, deposit: 0, total: 0 };
 

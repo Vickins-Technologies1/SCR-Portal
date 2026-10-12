@@ -12,6 +12,8 @@ import {
   type PropertyPerformanceProperty,
 } from "@/lib/property-report";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
+import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { identityValues } from "@/lib/payment-query";
 
 // Database connection
 const connectToDatabase = async (): Promise<Db> => {
@@ -19,27 +21,6 @@ const connectToDatabase = async (): Promise<Db> => {
   await client.connect();
   return client.db("rentaldb");
 };
-
-// Interfaces
-interface Payment {
-  _id: ObjectId;
-  tenantId: string | null;
-  amount: number;
-  propertyId: string;
-  paymentDate: string;
-  transactionId: string;
-  status: "completed" | "pending" | "failed";
-  createdAt: string;
-  type?: "Rent" | "Utility" | "Deposit" | "Other";
-  phoneNumber?: string;
-  reference?: string;
-  mpesaCode?: string;
-  isManual?: boolean;
-  date?: string; // Optional, for backward compatibility
-  tenantName?: string;
-  unitType?: string;
-  ownerId: string;
-}
 
 interface Property {
   _id: ObjectId;
@@ -348,112 +329,54 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       return NextResponse.json({ success: true, data: [] }, { status: 200 });
     }
 
-    // Build payment query
-    const paymentQuery: {
-      propertyId: { $in: string[] } | string;
-      paymentDate?: { $gte?: string; $lte?: string };
-      status?: string;
-      type?: string;
-    } = {
-      propertyId: propertyId && propertyId !== "all" ? propertyId : { $in: propertyIds },
-      status: "completed",
+    if (propertyId && propertyId !== "all" && !propertyIds.includes(propertyId)) {
+      return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
+    }
+
+    const parseBusinessDate = (value: string | null, endOfDay = false) => {
+      if (!value) return undefined;
+      const suffix = endOfDay ? "T23:59:59.999+03:00" : "T00:00:00.000+03:00";
+      return new Date(`${value.slice(0, 10)}${suffix}`);
     };
-
-    if (startDate || endDate) {
-      paymentQuery.paymentDate = {};
-      if (startDate) {
-        paymentQuery.paymentDate.$gte = new Date(startDate).toISOString();
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        paymentQuery.paymentDate.$lte = end.toISOString();
-      }
-    }
-
-    if (type && type !== "all") {
-      paymentQuery.type = type;
-    }
-
-    // Fetch payments with tenant and property information
-    const payments = await db
-      .collection<Payment>("payments")
-      .aggregate([
-        { $match: paymentQuery },
-        { $sort: { paymentDate: -1 } },
-        {
-          $lookup: {
-            from: "tenants",
-            let: { tenantId: { $toObjectId: "$tenantId" } },
-            pipeline: [
-              { $match: { $expr: { $eq: ["$_id", "$$tenantId"] } } },
-              { $project: { name: 1, paymentStatus: 1, unitType: 1 } },
-            ],
-            as: "tenant",
-          },
-        },
-        { $unwind: { path: "$tenant", preserveNullAndEmptyArrays: true } },
-        {
-          $lookup: {
-            from: "properties",
-            let: { propertyId: { $toObjectId: "$propertyId" } },
-            pipeline: [
-              { $match: { $expr: { $eq: ["$_id", "$$propertyId"] } } },
-              { $project: { name: 1 } },
-            ],
-            as: "property",
-          },
-        },
-                { $unwind: { path: "$property", preserveNullAndEmptyArrays: true } },
-        {
-          $addFields: {
-            isManual: {
-              $regexMatch: {
-                input: { $ifNull: ["$transactionId", ""] },
-                regex: "^MANUAL-",
-              },
-            },
-          },
-        },
-        {
-          $project: {
-            _id: { $toString: "$_id" },
-            propertyId: { $toString: "$propertyId" },
-            propertyName: { $ifNull: ["$property.name", "Unassigned"] },
-            tenantId: { $ifNull: ["$tenantId", null] },
-            tenantName: { $ifNull: ["$tenant.name", "$tenantName", "Unknown"] },
-            revenue: "$amount",
-            date: {
-              $cond: [
-                {
-                  $and: [
-                    "$paymentDate",
-                    { $ne: ["$paymentDate", ""] },
-                    { $regexMatch: { input: { $toString: "$paymentDate" }, regex: /^\d{4}-\d{2}-\d{2}/ } },
-                  ],
-                },
-                { $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$paymentDate" } } },
-                { $dateToString: { format: "%Y-%m-%d", date: { $toDate: "$createdAt" } } },
-              ],
-            },
-            status: "$status",
-            transactionId: 1,
-            reference: 1,
-            mpesaCode: 1,
-            isManual: 1,
-            ownerId: effectiveOwnerId,
-            tenantPaymentStatus: { $ifNull: ["$tenant.paymentStatus", "Unknown"] },
-            unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },
-            type: { $ifNull: ["$type", "Unknown"] },
-          },
-        },
-        {
-          $match: {
-            date: { $regex: /^\d{4}-\d{2}-\d{2}$/, $ne: "" },
-          },
-        },
-      ])
-      .toArray() as Report[];
+    const reportStart = parseBusinessDate(startDate);
+    const reportEnd = parseBusinessDate(endDate, true);
+    const selectedPropertyIds = propertyId && propertyId !== "all" ? [propertyId] : propertyIds;
+    const rows = await getFinancialPaymentRows({
+      db,
+      propertyIds: selectedPropertyIds,
+      start: reportStart,
+      end: reportEnd,
+    });
+    const tenantDocs = await db.collection("tenants")
+      .find({ propertyId: { $in: identityValues(propertyIds) } })
+      .project({ name: 1, paymentStatus: 1, unitType: 1 })
+      .toArray();
+    const tenantMap = new Map(tenantDocs.map((tenant) => [String(tenant._id), tenant]));
+    const propertyMap = new Map(properties.map((property) => [String(property._id), property]));
+    const payments = rows
+      .filter(({ payment }) => !type || type === "all" || String(payment.type || "Unknown") === type)
+      .map(({ payment, eventDate, netAmount }) => {
+        const tenant = payment.tenantId ? tenantMap.get(String(payment.tenantId)) : null;
+        const propertyKey = String(payment.propertyId || "");
+        return {
+          _id: String(payment._id),
+          propertyId: propertyKey,
+          propertyName: propertyMap.get(propertyKey)?.name || "Unassigned",
+          tenantId: payment.tenantId ? String(payment.tenantId) : null,
+          tenantName: tenant?.name || payment.tenantName || "Unknown",
+          revenue: netAmount,
+          date: (eventDate || new Date(0)).toISOString(),
+          status: String(payment.status || "completed"),
+          ownerId: effectiveOwnerId,
+          tenantPaymentStatus: tenant?.paymentStatus || "Unknown",
+          unitType: tenant?.unitType || payment.unitType || "N/A",
+          type: payment.type || "Unknown",
+          transactionId: payment.transactionId,
+          reference: payment.reference,
+          mpesaCode: payment.mpesaCode,
+          isManual: String(payment.transactionId || "").startsWith("MANUAL-"),
+        } satisfies Report;
+      });
 
     // Log payments with missing unitType for debugging
     const missingUnitTypePayments = payments.filter((p) => p.unitType === "N/A" && propertyId && propertyId !== "all");

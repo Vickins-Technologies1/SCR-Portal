@@ -583,7 +583,7 @@ function ReportsAndInvoicesPageInner() {
     try {
       const response = await fetch("/api/generate-excel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         credentials: "include",
         body: JSON.stringify({
           reports,
@@ -628,7 +628,7 @@ function ReportsAndInvoicesPageInner() {
     } finally {
       setIsExporting(false);
     }
-  }, [canExportReports, reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties]);
+  }, [canExportReports, reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties, csrfToken]);
 
   // Chart data (unchanged)
   const chartLabels = getAllMonths(startDate, endDate);

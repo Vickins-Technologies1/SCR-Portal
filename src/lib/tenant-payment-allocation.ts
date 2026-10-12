@@ -2,6 +2,7 @@ import { Db, ObjectId } from "mongodb";
 import { calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown, UtilityDueBreakdown } from "@/lib/property-utilities";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
+import { financialPostingFilter, identityFilter, identityValues, isSuccessfulPaymentStatus, paymentEventDate, successfulPaymentFilter } from "@/lib/payment-query";
 
 export type PaymentAllocation = {
   deposit: number;
@@ -94,12 +95,6 @@ export function sumTenantOverdueAmount(
 const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
 const amountOf = (value: unknown) => (Number.isFinite(Number(value)) ? money(Number(value)) : 0);
 
-const identityValues = (value: unknown): Array<string | ObjectId> => {
-  const stringValue = String(value || "").trim();
-  if (!stringValue) return [];
-  return ObjectId.isValid(stringValue) ? [stringValue, new ObjectId(stringValue)] : [stringValue];
-};
-
 const scopedPropertyFilter = (propertyId: unknown) => {
   const identities = identityValues(propertyId);
   if (!identities.length) return {};
@@ -116,24 +111,14 @@ const scopedPropertyFilter = (propertyId: unknown) => {
 };
 
 const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdAt">) => {
-  for (const candidate of [payment.paymentDate, payment.createdAt]) {
-    if (!candidate) continue;
-    const parsed = new Date(candidate);
-    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
-  }
-  return null;
+  return paymentEventDate(payment as unknown as Record<string, unknown>)?.getTime() ?? null;
 };
 
 const eligiblePaymentFilter = (tenant: any) => ({
   $and: [
-    { tenantId: { $in: identityValues(tenant._id) } },
-    { status: "completed" },
-    {
-      $or: [
-        { financialPostingStatus: { $in: ["posted", "processing"] } },
-        { financialPostingStatus: { $exists: false } },
-      ],
-    },
+    identityFilter("tenantId", tenant._id),
+    successfulPaymentFilter(),
+    financialPostingFilter(),
     scopedPropertyFilter(tenant.propertyId),
   ],
 });
@@ -157,7 +142,7 @@ export function allocatePaymentLedger(params: {
   const utilityDue = amountOf(params.utilityDue);
   const otherDue = amountOf(params.otherDue);
 
-  for (const payment of params.payments.filter((entry) => entry.status === "completed")) {
+  for (const payment of params.payments.filter((entry) => isSuccessfulPaymentStatus(entry.status))) {
     const paymentAmount = amountOf(payment.amount);
     const previousWallet = wallet;
     const category = payment.type;
@@ -242,7 +227,7 @@ export function deriveTenantFinancialState(params: {
   const reversedByPayment = params.reversedByPayment ?? new Map<string, number>();
   const eligiblePayments = params.payments
     .filter((payment) => {
-      if (payment.status !== "completed") return false;
+      if (!isSuccessfulPaymentStatus(payment.status)) return false;
       const date = paymentDateValue(payment);
       return date === null || date <= cutoff;
     })

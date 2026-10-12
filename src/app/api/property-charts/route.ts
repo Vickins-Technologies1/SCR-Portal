@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
+import { getFinancialPaymentRows } from "@/lib/financial-reporting";
 
 interface ChartData {
   months: string[];
@@ -62,96 +63,47 @@ export async function GET(request: NextRequest) {
     }
 
     const today = new Date();
+    const nairobiParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Africa/Nairobi",
+      year: "numeric",
+      month: "numeric",
+    }).formatToParts(today);
+    const currentYear = Number(nairobiParts.find((part) => part.type === "year")?.value);
+    const currentMonth = Number(nairobiParts.find((part) => part.type === "month")?.value) - 1;
+    const periodStart = new Date(Date.UTC(currentYear, currentMonth - 5, 1) - 3 * 60 * 60 * 1000);
+    const periodEnd = new Date(Date.UTC(currentYear, currentMonth + 1, 1) - 3 * 60 * 60 * 1000 - 1);
+    const rows = await getFinancialPaymentRows({ db, propertyIds: [propertyId], start: periodStart, end: periodEnd });
     const months: string[] = [];
+    const monthKeys: string[] = [];
     const rentPayments: number[] = [];
     const utilityPayments: number[] = [];
     const depositPayments: number[] = [];
+    const totalsByMonth = new Map<string, { rent: number; utility: number; deposit: number }>();
 
-    for (let i = 0; i < 6; i++) {
-      const monthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const monthLabel = monthDate.toLocaleString("en-US", { month: "short", year: "2-digit" });
-      months.unshift(monthLabel);
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));
+      const monthKey = `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, "0")}`;
+      monthKeys.push(monthKey);
+      months.push(monthDate.toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "Africa/Nairobi" }));
+      totalsByMonth.set(monthKey, { rent: 0, utility: 0, deposit: 0 });
+    }
 
-      const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
-      const startOfMonthISO = startOfMonth.toISOString();
-      const endOfMonthISO = endOfMonth.toISOString();
-
-      const rentPaymentsResult = await db
-        .collection("payments")
-        .aggregate<{ total: number }>([
-          {
-            $match: {
-              propertyId,
-              status: "completed",
-              $and: [
-                { $or: [
-                  { financialPostingStatus: { $in: ["posted", "processing"] } },
-                  { financialPostingStatus: { $exists: false } },
-                ] },
-                { $or: [
-                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-                ] },
-              ],
-            },
-          },
-          { $addFields: { reportAmount: { $ifNull: ["$allocation.rent", { $cond: [{ $eq: ["$type", "Rent"] }, { $ifNull: ["$postedAmount", "$amount"] }, 0] }] } } },
-          { $group: { _id: null, total: { $sum: "$reportAmount" } } },
-        ])
-        .toArray();
-
-      const utilityPaymentsResult = await db
-        .collection("payments")
-        .aggregate<{ total: number }>([
-          {
-            $match: {
-              propertyId,
-              status: "completed",
-              $and: [
-                { $or: [
-                  { financialPostingStatus: { $in: ["posted", "processing"] } },
-                  { financialPostingStatus: { $exists: false } },
-                ] },
-                { $or: [
-                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-                ] },
-              ],
-            },
-          },
-          { $addFields: { reportAmount: { $ifNull: ["$allocation.utilities", { $cond: [{ $eq: ["$type", "Utility"] }, { $ifNull: ["$postedAmount", "$amount"] }, 0] }] } } },
-          { $group: { _id: null, total: { $sum: "$reportAmount" } } },
-        ])
-        .toArray();
-
-      const depositPaymentsResult = await db
-        .collection("payments")
-        .aggregate<{ total: number }>([
-          {
-            $match: {
-              propertyId,
-              status: "completed",
-              $and: [
-                { $or: [
-                  { financialPostingStatus: { $in: ["posted", "processing"] } },
-                  { financialPostingStatus: { $exists: false } },
-                ] },
-                { $or: [
-                  { paymentDate: { $gte: startOfMonth, $lte: endOfMonth } },
-                  { paymentDate: { $gte: startOfMonthISO, $lte: endOfMonthISO } },
-                ] },
-              ],
-            },
-          },
-          { $addFields: { reportAmount: { $ifNull: ["$allocation.deposit", { $cond: [{ $eq: ["$type", "Deposit"] }, { $ifNull: ["$postedAmount", "$amount"] }, 0] }] } } },
-          { $group: { _id: null, total: { $sum: "$reportAmount" } } },
-        ])
-        .toArray();
-
-      rentPayments.unshift(rentPaymentsResult[0]?.total || 0);
-      utilityPayments.unshift(utilityPaymentsResult[0]?.total || 0);
-      depositPayments.unshift(depositPaymentsResult[0]?.total || 0);
+    const monthFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit" });
+    for (const row of rows) {
+      if (!row.eventDate) continue;
+      const parts = monthFormatter.formatToParts(row.eventDate);
+      const key = `${parts.find((part) => part.type === "year")?.value}-${parts.find((part) => part.type === "month")?.value}`;
+      const totals = totalsByMonth.get(key);
+      if (!totals) continue;
+      totals.rent += row.allocation.rent;
+      totals.utility += row.allocation.utilities;
+      totals.deposit += row.allocation.deposit;
+    }
+    for (const key of monthKeys) {
+      const totals = totalsByMonth.get(key) || { rent: 0, utility: 0, deposit: 0 };
+      rentPayments.push(Math.round(totals.rent * 100) / 100);
+      utilityPayments.push(Math.round(totals.utility * 100) / 100);
+      depositPayments.push(Math.round(totals.deposit * 100) / 100);
     }
 
     const chartData: ChartData = {
