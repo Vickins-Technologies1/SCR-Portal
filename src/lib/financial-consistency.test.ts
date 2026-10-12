@@ -9,12 +9,12 @@ describe("financial consistency audit", () => {
     }])).toEqual([]);
   });
 
-  it("flags category shifts and amount mismatches", () => {
+  it("allows a valid cross-category cascade and flags amount mismatches", () => {
     const findings = auditPaymentAllocations([{
-      id: "p2", amount: 10_000, type: "Rent",
+      id: "p2", amount: 11_000, type: "Rent",
       allocation: { rent: 8_000, utilities: 2_000, deposit: 0, other: 0, walletCredit: 0 },
     }]);
-    expect(findings.map((finding) => finding.code)).toEqual(["EXPLICIT_CATEGORY_MISMATCH"]);
+    expect(findings.map((finding) => finding.code)).toEqual(["ALLOCATION_SUM_MISMATCH"]);
   });
 
   it("flags untyped records for manual historical review", () => {

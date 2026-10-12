@@ -5,7 +5,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { getFinancialReportSummary } from "@/lib/financial-reporting";
 import { identityValues } from "@/lib/payment-query";
 
@@ -281,11 +281,13 @@ export async function POST(request: NextRequest) {
     }
 
     const today = new Date(); // Use current date
-    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const property = ObjectId.isValid(tenant.propertyId)
-      ? await db.collection<Property>("properties").findOne({ _id: new ObjectId(tenant.propertyId) })
-      : null;
-    const state = await calculateTenantFinancialState(db, tenant, { asOf: today, property, rentOverrideMap });
+    // Keep the stored payment allocations in sync with the same cascade used
+    // to calculate dues. Otherwise the dues response can be correct while
+    // the tenant payment history still shows an old wallet/category split.
+    const state = await reconcileTenantPaymentAllocation(db, tenantId);
+    if (!state) {
+      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+    }
     const dues = {
       rentDues: state.rentOutstanding + state.penalties,
       penaltyDues: state.penalties,
@@ -309,7 +311,7 @@ export async function POST(request: NextRequest) {
         $set: {
           totalRentPaid: state.rentPaid,
           totalDepositPaid: state.depositPaid,
-          totalUtilityPaid: state.utilitiesPaid,
+          totalUtilityPaid: state.utilityPaid,
           paymentStatus: dues.totalRemainingDues > 0 ? "overdue" : "up-to-date",
           updatedAt: today.toISOString(),
         },

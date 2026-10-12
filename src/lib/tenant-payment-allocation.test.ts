@@ -32,15 +32,15 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ rent: 10_000, utilities: 3_000, walletCredit: 0 });
   });
 
-  it("uses deposit priority even when the selected category is rent", () => {
+  it("allocates a rent payment to rent before cascading to deposit", () => {
     const result = allocatePaymentLedger({
       depositDue: 20_000,
       rentDue: 10_000,
       utilityDue: 3_000,
       payments: [payment(13_000, new ObjectId(), "Rent")],
     });
-    expect(result.depositPaid).toBe(13_000);
-    expect(result.rentPaid).toBe(0);
+    expect(result.depositPaid).toBe(3_000);
+    expect(result.rentPaid).toBe(10_000);
     expect(result.utilitiesPaid).toBe(0);
     expect(result.walletBalance).toBe(0);
   });
@@ -54,6 +54,32 @@ describe("tenant payment allocation", () => {
     expect(result.rentPaid).toBe(0);
     expect(result.utilitiesPaid).toBe(2_000);
     expect(result.allocations.values().next().value).toMatchObject({ rent: 0, utilities: 2_000 });
+  });
+
+  it("cascades excess utility payments into rent instead of wallet credit", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 0,
+      rentDue: 10_000,
+      utilityDue: 2_000,
+      payments: [payment(5_000, new ObjectId(), "Utility")],
+    });
+    expect(result.utilitiesPaid).toBe(2_000);
+    expect(result.rentPaid).toBe(3_000);
+    expect(result.walletBalance).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 3_000, utilities: 2_000, walletCredit: 0 });
+  });
+
+  it("cascades excess deposit payments into rent instead of wallet credit", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 2_000,
+      rentDue: 10_000,
+      utilityDue: 0,
+      payments: [payment(5_000, new ObjectId(), "Deposit")],
+    });
+    expect(result.depositPaid).toBe(2_000);
+    expect(result.rentPaid).toBe(3_000);
+    expect(result.walletBalance).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 3_000, deposit: 2_000, walletCredit: 0 });
   });
 
   it("does not cascade before rent is fully satisfied", () => {
@@ -285,7 +311,7 @@ describe("tenant payment allocation", () => {
     });
   });
 
-  it("keeps rent, deposit, and utility balances separate while classifying current utilities", () => {
+  it("cascades a deposit overpayment while classifying current utilities", () => {
     const state = deriveTenantFinancialState({
       tenant: {},
       asOf: new Date("2026-10-11T00:00:00.000Z"),
@@ -298,16 +324,16 @@ describe("tenant payment allocation", () => {
     expect(state).toMatchObject({
       monthsStayed: 2,
       depositPaid: 10_000,
-      rentPaid: 0,
+      rentPaid: 2_000,
       utilitiesPaid: 0,
       depositOutstanding: 0,
-      rentOutstanding: 20_000,
+      rentOutstanding: 18_000,
       utilitiesOutstanding: 3_000,
       utilitiesCurrentOutstanding: 3_000,
       utilitiesOverdueOutstanding: 0,
       utilityStatus: "CURRENT",
-      totalOutstanding: 23_000,
-      walletBalance: 2_000,
+      totalOutstanding: 21_000,
+      walletBalance: 0,
     });
   });
 

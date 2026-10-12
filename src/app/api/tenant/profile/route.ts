@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
-import { calculateTenantRentDueToDate, resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
+import { resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { getFinancialPaymentRows } from "@/lib/financial-reporting";
 
 interface Tenant {
@@ -184,15 +184,18 @@ export async function GET(request: NextRequest) {
 
     if (shouldCalculateDues) {
       const today = new Date();
-      const property = ObjectId.isValid(tenantDoc.propertyId)
-        ? await db.collection<PropertyPenaltyConfig>("properties").findOne({ _id: new ObjectId(tenantDoc.propertyId) })
-        : null;
-      const { monthsStayed } = calculateTenantRentDueToDate({ tenant: tenantDoc as any, today, rentOverrideMap });
-      const state = await calculateTenantFinancialState(db, tenantDoc, { asOf: today, property, rentOverrideMap });
+      // Reconcile the persisted payment allocations before returning the
+      // profile. Payment history and the tenant snapshot must show the same
+      // allocation after a category cascade or wallet correction.
+      const state = await reconcileTenantPaymentAllocation(db, targetTenantId);
+      if (!state) {
+        return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+      }
+      const { monthsStayed } = state;
 
       const rentPaid = state.rentPaid;
       const depositPaid = state.depositPaid;
-      const utilityPaid = state.utilitiesPaid;
+      const utilityPaid = state.utilityPaid;
       const updatedTotalRentPaid = rentPaid;
       const updatedWalletBalance = state.walletBalance;
       const penaltyDues = state.penalties;
@@ -267,13 +270,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-interface PropertyPenaltyConfig {
-  _id: ObjectId;
-  rentPaymentDate?: number;
-  penaltyAmount?: number;
-  penaltyFrequency?: "daily" | "weekly";
 }
 
 export async function PUT(request: NextRequest) {

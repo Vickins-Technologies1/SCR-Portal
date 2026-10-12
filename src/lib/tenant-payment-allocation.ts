@@ -115,6 +115,32 @@ const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdA
   return paymentEventDate(payment as unknown as Record<string, unknown>)?.getTime() ?? null;
 };
 
+type AllocationField = "deposit" | "rent" | "utilities" | "other";
+
+const defaultAllocationPriority: AllocationField[] = ["deposit", "rent", "utilities", "other"];
+
+/**
+ * A payment's declared category is its first allocation target. Any amount
+ * left after that target is satisfied must cascade through the tenant's other
+ * outstanding obligations before it can become wallet credit. This prevents
+ * an overpaid Utility/Deposit/Rent payment from being shown in the wallet
+ * while rent, deposit, or utilities are still due.
+ */
+function allocationPriority(category: PaymentCategory | undefined): AllocationField[] {
+  const categoryField: AllocationField | undefined = category === "Deposit"
+    ? "deposit"
+    : category === "Rent"
+      ? "rent"
+      : category === "Utility"
+        ? "utilities"
+        : category === "Other"
+          ? "other"
+          : undefined;
+
+  if (!categoryField) return [...defaultAllocationPriority];
+  return [categoryField, ...defaultAllocationPriority.filter((field) => field !== categoryField)];
+}
+
 export function allocatePaymentLedger(params: {
   depositDue?: number;
   rentDue: number;
@@ -137,61 +163,66 @@ export function allocatePaymentLedger(params: {
   for (const payment of params.payments.filter((entry) => isSuccessfulPaymentStatus(entry.status))) {
     const paymentAmount = amountOf(payment.amount);
     const previousWallet = wallet;
-    const category = payment.type;
     let deposit = 0;
     let rent = 0;
     let utilities = 0;
     let other = 0;
-    let funds = paymentAmount;
     let walletApplied = 0;
-    const isExplicitCategory = category === "Deposit" || category === "Rent" || category === "Utility" || category === "Other";
 
-    // Rent-selected payments cascade through the tenant's real obligations.
-    // Explicit Utility/Deposit/Other payments remain category-isolated.
-    if (category === "Deposit") {
-      deposit = Math.min(Math.max(0, depositDue - depositPaid), funds);
-    } else if (category === "Rent") {
-      deposit = Math.min(Math.max(0, depositDue - depositPaid), funds);
-      funds -= deposit;
-      rent = Math.min(Math.max(0, rentDue - rentPaid), funds);
-      funds -= rent;
-      utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
-      funds -= utilities;
-      other = Math.min(Math.max(0, otherDue - otherPaid), funds);
-      funds -= other;
-    } else if (category === "Utility") {
-      utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
-    } else if (category === "Other") {
-      other = Math.min(Math.max(0, otherDue - otherPaid), funds);
-    } else {
-      // General/legacy payments follow the established deterministic order.
-      deposit = Math.min(Math.max(0, depositDue - depositPaid), funds);
-      funds = previousWallet + paymentAmount - deposit;
-      rent = Math.min(Math.max(0, rentDue - rentPaid), funds);
-      funds -= rent;
-      utilities = Math.min(Math.max(0, utilityDue - utilitiesPaid), funds);
-      funds -= utilities;
-      other = Math.min(Math.max(0, otherDue - otherPaid), funds);
-      funds -= other;
-      // Treat the current payment as being used before older wallet credit.
-      // This makes the source payment's wallet credit auditable and avoids
-      // counting the same amount as both a credit and a consumption.
-      walletApplied = Math.min(previousWallet, Math.max(0, deposit + rent + utilities + other - paymentAmount));
-    }
-    const allocated = deposit + rent + utilities + other;
-    if (isExplicitCategory) {
-      funds = paymentAmount - allocated;
-      wallet = money(previousWallet + Math.max(0, funds));
-    } else {
-      wallet = money(previousWallet + paymentAmount - allocated);
-    }
+    const paidByField: Record<AllocationField, number> = {
+      deposit: depositPaid,
+      rent: rentPaid,
+      utilities: utilitiesPaid,
+      other: otherPaid,
+    };
+    const dueByField: Record<AllocationField, number> = {
+      deposit: depositDue,
+      rent: rentDue,
+      utilities: utilityDue,
+      other: otherDue,
+    };
+    const allocationByField: Record<AllocationField, number> = {
+      deposit: 0,
+      rent: 0,
+      utilities: 0,
+      other: 0,
+    };
+
+    const applyFunds = (available: number) => {
+      let remaining = money(available);
+      for (const field of allocationPriority(payment.type)) {
+        if (remaining <= 0) break;
+        const outstanding = money(Math.max(0, dueByField[field] - paidByField[field] - allocationByField[field]));
+        const applied = money(Math.min(outstanding, remaining));
+        allocationByField[field] += applied;
+        remaining = money(remaining - applied);
+      }
+      return { allocated: money(available - remaining), remaining };
+    };
+
+    // Apply the current payment before any pre-existing wallet credit. If
+    // the payment does not cover all obligations, an existing wallet balance
+    // may then be consumed. This keeps the source payment and wallet debit
+    // auditable while ensuring no credit survives an outstanding due.
+    const paymentFunds = applyFunds(paymentAmount);
+    const hasOutstandingDues = (Object.keys(dueByField) as AllocationField[]).some((field) =>
+      dueByField[field] - paidByField[field] - allocationByField[field] > 0
+    );
+    const walletFunds = previousWallet > 0 && (paymentFunds.remaining > 0 || hasOutstandingDues)
+      ? applyFunds(previousWallet)
+      : { allocated: 0, remaining: previousWallet };
+    walletApplied = walletFunds.allocated;
+    deposit = allocationByField.deposit;
+    rent = allocationByField.rent;
+    utilities = allocationByField.utilities;
+    other = allocationByField.other;
+
+    const walletCredit = paymentFunds.remaining;
+    wallet = money(walletFunds.remaining + walletCredit);
     depositPaid += deposit;
     rentPaid += rent;
     utilitiesPaid += utilities;
     otherPaid += other;
-    const walletCredit = !isExplicitCategory
-      ? Math.max(0, paymentAmount - Math.max(0, allocated - previousWallet))
-      : Math.max(0, paymentAmount - allocated);
     allocations.set(payment._id.toString(), {
       deposit: money(deposit),
       rent: money(rent),

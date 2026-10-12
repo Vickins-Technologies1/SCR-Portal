@@ -95,7 +95,7 @@ The callback acknowledges unmatched callbacks and stores them in `unmatchedMpesa
 
 ### 3. Allocation and dues
 
-`calculateTenantFinancialState()` is the intended shared source for current tenant state. It sums only `status: "completed"` payments, orders them by `paymentDate`/`createdAt`, and allocates explicit categories without redirecting overpayment. Legacy/general payments use deposit -> rent -> utilities -> other, with remaining value becoming wallet credit.
+`calculateTenantFinancialState()` is the intended shared source for current tenant state. It sums successful payments, orders them by payment event date, allocates each declared category first, then cascades any remainder through every outstanding obligation. Wallet credit is created only after all rent, utility, deposit, and other dues are satisfied.
 
 It calculates rent from lease/rent override rules, fixed utilities from property configuration, and metered utilities from posted `utilityCharges`. It then persists `allocation`, `totalRentPaid`, `totalUtilityPaid`, `totalDepositPaid`, `walletBalance`, and `paymentStatus` to the tenant document.
 
@@ -194,7 +194,7 @@ Observed statuses include `pending_stk`, `pending`, `completed`, `failed`, `canc
 ### P9 — Medium: raw payment totals and shared ledger can disagree on category allocation
 
 * Locations: `src/lib/payment-totals.ts`, owner stats/charts, reports and `src/lib/tenant-payment-allocation.ts`.
-* Root cause: raw totals sum completed `payment.amount` by declared `type`; the shared allocator caps explicit category allocation at current due and sends excess to wallet. General/missing-type legacy rows are handled by the allocator but omitted from `payment-totals` category totals.
+* Root cause: raw totals sum completed `payment.amount` by declared `type`; the shared allocator now derives category totals from the declared target plus deterministic cross-category cascades, with excess sent to wallet only after all dues are satisfied. General/missing-type legacy rows are handled by the allocator but omitted from `payment-totals` category totals.
 * Impact: payment history/property income can show full KES X while tenant rent/utility paid shows only the allocated portion; legacy/general payments may disappear from category totals.
 * Recommendation: reports should consume posted ledger allocations for category totals and separately show unapplied credit.
 
@@ -233,7 +233,7 @@ Observed statuses include `pending_stk`, `pending`, `completed`, `failed`, `canc
 * Utility outstanding: shared ledger subtracts all completed utility-category allocations from aggregate fixed + metered due, not a charge/period ledger.
 * Overdue: shared state reports rent outstanding and overdue utility charge component; deposits and penalties are excluded from `overdueAmount` but included in `totalOutstanding`. Other routes calculate dues differently and can include penalties in rent dues.
 * Partial payments: supported by the allocator, but invoice callback status handling is not consistently partial-aware.
-* Overpayments: explicit categories produce wallet credit; general payments can also create wallet credit. There is no visible wallet consumption transaction ledger; wallet is reconstructed from payment sequence.
+* Overpayments: all declared categories cascade through outstanding obligations before any wallet credit is created. There is no visible wallet consumption transaction ledger; wallet is reconstructed from payment sequence.
 * Rounding: invoice calculations use two decimal places; utility charges use whole KES; allocator uses two decimals; STK requires integer amounts. This is an inconsistent currency precision policy.
 
 ## F. Security and callback validation
