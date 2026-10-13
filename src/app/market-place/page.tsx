@@ -687,7 +687,11 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
       transition={{ duration: 0.4, delay: index * 0.05 }}
       className="group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow duration-300 hover:shadow-lg"
     >
-      <div className="relative h-60 overflow-hidden">
+      <Link
+        href={`/market-place/${property._id}`}
+        aria-label={`View details for ${property.name}`}
+        className="relative block h-60 overflow-hidden"
+      >
         <Image
           src={heroImage}
           alt={property.name}
@@ -710,7 +714,7 @@ const PropertyCard: React.FC<PropertyCardProps> = ({ property, index }) => {
         <span className={`absolute right-4 top-4 rounded-full px-3 py-1 text-[9px] font-semibold uppercase tracking-wider ${statusTone}`}>
           {property.status}
         </span>
-      </div>
+      </Link>
 
       <div className="space-y-3 px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
         <div>
