@@ -9,10 +9,14 @@ import { useSidebar } from "./SidebarContext";
 import NavbarDateTime from "@/components/NavbarDateTime";
 import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import NotificationBell from "@/components/portal/NotificationBell";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function Navbar() {
   const router = useRouter();
   const { isOpen, toggle } = useSidebar();
+  const permissions = usePermissions();
+  const canViewNotifications = permissions.hasPermission("notifications:view") && Cookies.get("tier") !== "free";
   const [isAdminImpersonating, setIsAdminImpersonating] = useState(false);
   const [impersonatedOwnerName, setImpersonatedOwnerName] = useState("");
   const [isReverting, setIsReverting] = useState(false);
@@ -102,6 +106,10 @@ export default function Navbar() {
             </button>
           )}
           <DashboardNavbarActions onSignOut={handleSignOut} desktopBreakpoint="lg" />
+          <div className="flex items-center gap-1 rounded-2xl border border-border/70 bg-background/70 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+            <NotificationBell endpoint="/api/notifications" pageHref="/property-owner-dashboard/notifications" enabled={canViewNotifications} />
+            <ThemeToggle variant="icon" className="h-9 w-9 rounded-xl border-transparent bg-transparent shadow-none hover:bg-primary/10 hover:shadow-none" />
+          </div>
           <button
             onClick={() => window.dispatchEvent(new Event("start-airbnb-tour"))}
             className="group flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] sm:gap-2 sm:px-3.5 sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"
@@ -110,10 +118,6 @@ export default function Navbar() {
             <Sparkles size={16} className="transition-transform group-hover:rotate-6 sm:size-[18px]" />
             <span className="hidden sm:inline">Tour</span>
           </button>
-          <ThemeToggle
-            variant="icon"
-            className="h-10 w-10 rounded-[10px] lg:hidden"
-          />
           <button
             onClick={toggle}
             aria-label={isOpen ? "Close sidebar" : "Open sidebar"}

@@ -68,12 +68,6 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
       placement: "right",
     },
     {
-      title: "Notifications",
-      body: "Monitor updates, reminders, and action items.",
-      selector: '[data-tour="owner-nav-notifications"]',
-      placement: "right",
-    },
-    {
       title: "Finance",
       body: "Open reports, invoices, payments, expenses, and integrations from the Finance dropdown.",
       selector: '[data-tour="owner-nav-finance"]',

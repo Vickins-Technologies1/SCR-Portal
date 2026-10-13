@@ -60,10 +60,7 @@ export default function Navbar({ isSidebarOpen, onToggleSidebar }: NavbarProps) 
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <DashboardNavbarActions onSignOut={handleSignOut} />
-          <ThemeToggle
-            variant="icon"
-            className="h-10 w-10 rounded-[10px] md:hidden"
-          />
+          <ThemeToggle variant="icon" className="h-9 w-9 rounded-xl" />
           <button
             onClick={onToggleSidebar}
             aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}

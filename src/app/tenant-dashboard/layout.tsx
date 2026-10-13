@@ -9,7 +9,6 @@ import {
   X,
   LayoutDashboard,
   CreditCard,
-  Bell,
   Settings,
   LogOut,
   Wrench,
@@ -26,6 +25,7 @@ import BottomTabs from "@/components/mobile/BottomTabs";
 import ShellFooterActions from "@/components/portal/ShellFooterActions";
 import DashboardNavbarActions from "@/components/portal/DashboardNavbarActions";
 import ThemeToggle from "@/components/theme/ThemeToggle";
+import NotificationBell from "@/components/portal/NotificationBell";
 
 const useAuth = () => {
   if (typeof window === "undefined") return { userId: null, role: null };
@@ -93,17 +93,12 @@ export default function TenantDashboardLayout({
       { key: "overview", href: "/tenant-dashboard", label: "Overview", icon: <LayoutDashboard size={18} /> },
       { key: "payments", href: "/tenant-dashboard/payments", label: "Payments", icon: <CreditCard size={18} /> },
       { key: "maintenance", href: "/tenant-dashboard/maintenance", label: "Maintenance", icon: <Wrench size={18} /> },
-      { key: "notifications", href: "/tenant-dashboard/notifications", label: "Notifications", icon: <Bell size={18} /> },
       { key: "vacate", href: "/tenant-dashboard/vacate", label: "Vacate Notice", icon: <DoorOpen size={18} /> },
       { key: "settings", href: "/tenant-dashboard/settings", label: "Settings", icon: <Settings size={18} /> },
     ];
 
-    if (tenantFeatures?.canNotifications === false) {
-      return base.filter((link) => link.key !== "notifications");
-    }
-
     return base;
-  }, [tenantFeatures]);
+  }, []);
 
   useEffect(() => {
     const impersonating = Cookies.get("isImpersonating") === "true";
@@ -344,10 +339,10 @@ export default function TenantDashboardLayout({
           {/* Right side – actions */}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <DashboardNavbarActions onSignOut={handleLogout} desktopBreakpoint="lg" />
-            <ThemeToggle
-              variant="icon"
-              className="h-10 w-10 rounded-[10px] lg:hidden"
-            />
+            <div className="flex items-center gap-1 rounded-2xl border border-border/70 bg-background/70 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+              <NotificationBell endpoint="/api/tenant/notifications" pageHref="/tenant-dashboard/notifications" enabled={tenantFeatures?.canNotifications !== false} />
+              <ThemeToggle variant="icon" className="h-9 w-9 rounded-xl border-transparent bg-transparent shadow-none hover:bg-primary/10 hover:shadow-none" />
+            </div>
             <button
               onClick={() => window.dispatchEvent(new Event("start-tenant-tour"))}
               className="group flex shrink-0 items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-all hover:border-primary/60 hover:text-primary hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 active:scale-95"

@@ -1,7 +1,6 @@
 "use client";
 
 import { LogOut } from "lucide-react";
-import ThemeToggle from "@/components/theme/ThemeToggle";
 
 type DesktopBreakpoint = "md" | "lg";
 
@@ -22,11 +21,6 @@ export default function DashboardNavbarActions({
       role="group"
       aria-label="Account actions"
     >
-      <ThemeToggle
-        variant="icon"
-        className="h-9 w-9 rounded-xl border-transparent bg-transparent shadow-none hover:bg-primary/10 hover:shadow-none"
-      />
-      <span className="h-5 w-px bg-border/80" aria-hidden="true" />
       <button
         type="button"
         onClick={onSignOut}
