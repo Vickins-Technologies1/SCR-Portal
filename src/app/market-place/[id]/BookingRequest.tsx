@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarCheck, MessageCircle } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { buildWhatsAppLink } from "@/lib/listing-contact";
 
@@ -124,9 +124,6 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
       <Toaster position="top-right" toastOptions={{ duration: 2500 }} />
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-foreground">Book via WhatsApp</h3>
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
-          <CalendarCheck size={12} /> Direct contact
-        </span>
       </div>
 
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
@@ -234,12 +231,6 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
             <span>Estimate</span>
             <span className="font-semibold text-foreground">
               {totalEstimate ? `Ksh ${totalEstimate.toLocaleString()}` : "On request"}
-            </span>
-          </div>
-          <div className="mt-1 flex items-center justify-between">
-            <span>Contact</span>
-            <span className="font-mono text-[10px] text-muted-foreground">
-              {contactPhone || "Not listed"}
             </span>
           </div>
         </div>
