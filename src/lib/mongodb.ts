@@ -43,25 +43,43 @@ function createClient(options: ConstructorParameters<typeof MongoClient>[1]) {
   return nextClient;
 }
 
+function connectClient(options: ConstructorParameters<typeof MongoClient>[1]) {
+  const nextClient = createClient(options);
+  client = nextClient;
+
+  // Let a later request retry after a transient startup outage instead of
+  // reusing a rejected connection promise forever in a warm runtime.
+  const connectionPromise = nextClient.connect().catch((error) => {
+    if (global._mongoClientPromise === connectionPromise) {
+      global._mongoClientPromise = undefined;
+    }
+    if (client === nextClient) {
+      client = undefined;
+    }
+    void nextClient.close().catch(() => undefined);
+    throw error;
+  });
+
+  return connectionPromise;
+}
+
 const getClientPromise = (): Promise<MongoClient> => {
   if (process.env.NODE_ENV === 'development') {
     if (!global._mongoClientPromise) {
-      client = createClient({
+      global._mongoClientPromise = connectClient({
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 10000,
       });
-      global._mongoClientPromise = client.connect();
     }
     return global._mongoClientPromise;
   }
 
   if (!global._mongoClientPromise) {
-    client = createClient({
+    global._mongoClientPromise = connectClient({
       maxPoolSize: 20,
       serverSelectionTimeoutMS: 5000,
     });
-    global._mongoClientPromise = client.connect();
   }
 
   return global._mongoClientPromise;
@@ -99,6 +117,8 @@ export async function connectToDatabase(): Promise<DBConnection> {
 export async function closeConnection() {
   if (client) {
     await client.close();
+    client = undefined;
+    global._mongoClientPromise = undefined;
     console.log('MongoDB connection closed');
   }
 }

@@ -1,7 +1,8 @@
 // src/app/api/reports/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { Db, MongoClient, ObjectId } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import logger from "../../../lib/logger";
+import { connectToDatabase } from "@/lib/mongodb";
 import {
   buildAvailableYears,
   buildRollingPeriods,
@@ -15,12 +16,9 @@ import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows } from "@/lib/financial-reporting";
 import { identityValues } from "@/lib/payment-query";
 
-// Database connection
-const connectToDatabase = async (): Promise<Db> => {
-  const client = new MongoClient(process.env.MONGODB_URI || "mongodb://localhost:27017");
-  await client.connect();
-  return client.db("rentaldb");
-};
+// Reuse the application's shared MongoDB pool instead of opening a new client
+// for every report request.
+const getDatabase = async (): Promise<Db> => (await connectToDatabase()).db;
 
 interface Property {
   _id: ObjectId;
@@ -118,7 +116,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     let effectiveOwnerId = loggedInUserId;
 
     if (role === "teamMember") {
-      const db = await connectToDatabase();
+      const db = await getDatabase();
       const teamMember = await db.collection("teamMembers").findOne({
         _id: new ObjectId(loggedInUserId),
         active: true,
@@ -167,7 +165,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         );
       }
 
-      const db = await connectToDatabase();
+      const db = await getDatabase();
       let effectiveOwnerId = loggedInUserId;
       let assignedPropertyIds: string[] | null = null;
 
@@ -310,7 +308,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     }
 
     // DB Connection
-    const db = await connectToDatabase();
+    const db = await getDatabase();
 
     // Fetch properties owned by the effective owner
     const properties = await db

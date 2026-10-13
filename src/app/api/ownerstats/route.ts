@@ -235,13 +235,15 @@ export async function GET(request: NextRequest) {
       0
     );
 
-    const monthlySummary = await getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth });
+    const [monthlySummary, lifetimeSummary] = await Promise.all([
+      getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth }),
+      getFinancialReportSummary({ db, propertyIds }),
+    ]);
     const rentCollectedThisMonth = roundMoney(monthlySummary.rentReceived);
 
     const totalMonthlyRent = rentCollectedThisMonth;
 
     // Total rent paid (all time)
-    const lifetimeSummary = await getFinancialReportSummary({ db, propertyIds });
     const totalRentPaid = roundMoney(lifetimeSummary.rentReceived);
     const totalPayments = roundMoney(lifetimeSummary.netReceived);
     const totalUtilityPaid = roundMoney(lifetimeSummary.utilityReceived);

@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     const properties = await db
       .collection("properties")
-      .find<WithId<{ _id: string }>>(propertyQuery)
+      .find<WithId<{ _id: string }>>(propertyQuery, { projection: { _id: 1 } })
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
 
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
     // Fetch all tenants for the owner's properties
     const tenants = await db
       .collection("tenants")
-      .find<WithId<{ _id: string }>>({ propertyId: { $in: propertyIds } })
+      .find<WithId<{ _id: string }>>({ propertyId: { $in: propertyIds } }, { projection: { _id: 1 } })
       .toArray();
     const tenantIds = tenants.map((t) => t._id.toString());
 
@@ -150,17 +150,28 @@ export async function GET(request: NextRequest) {
     const utilityPayments: number[] = [];
     const depositPayments: number[] = [];
 
-    for (let i = 0; i < 6; i++) {
-      const monthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const monthLabel = monthDate.toLocaleString("en-US", { month: "short", year: "2-digit" });
-      months.unshift(monthLabel);
+    const monthSummaries = await Promise.all(
+      Array.from({ length: 6 }, async (_, i) => {
+        const monthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const monthLabel = monthDate.toLocaleString("en-US", { month: "short", year: "2-digit" });
+        const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+        const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        const summary = await getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth });
 
-      const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
-      const summary = await getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth });
-      rentPayments.unshift(summary.rentReceived);
-      utilityPayments.unshift(summary.utilityReceived);
-      depositPayments.unshift(summary.depositReceived);
+        return {
+          monthLabel,
+          rent: summary.rentReceived,
+          utility: summary.utilityReceived,
+          deposit: summary.depositReceived,
+        };
+      })
+    );
+
+    for (const summary of monthSummaries.reverse()) {
+      months.push(summary.monthLabel);
+      rentPayments.push(summary.rent);
+      utilityPayments.push(summary.utility);
+      depositPayments.push(summary.deposit);
     }
 
     const chartData: ChartData = {

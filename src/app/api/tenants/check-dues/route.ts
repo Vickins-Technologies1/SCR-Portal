@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
@@ -48,6 +48,101 @@ interface Stats {
   overduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
+}
+
+async function calculateTenantDues(db: Db, tenantId: string, today = new Date()) {
+  const todayISO = today.toISOString();
+  const tenant = await db
+    .collection<Tenant>("tenants")
+    .findOne({ _id: new ObjectId(tenantId) });
+
+  if (!tenant) return null;
+
+  const allocation = await reconcileTenantPaymentAllocation(db, tenantId);
+  if (!allocation) return null;
+
+  const rentPaid = allocation.rentPaid;
+  const depositPaid = allocation.depositPaid;
+  const utilityPaid = allocation.utilityPaid;
+  const otherPaid = allocation.otherPaid;
+  const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
+  const monthsStayed = allocation.monthsStayed;
+  const rentDue = allocation.rentDue;
+  const updatedTotalRentPaid = allocation.rentPaid;
+  const totalDeposit = allocation.depositDue;
+  const updatedWalletBalance = allocation.walletBalance;
+  const baseRentDues = allocation.rentOutstanding;
+  const penaltyDues = allocation.penalties;
+  const rentDues = Math.max(0, baseRentDues + penaltyDues);
+  const depositDues = allocation.depositOutstanding;
+  const utilityDues = allocation.utilitiesOutstanding;
+  const totalRemainingDues = allocation.totalOutstanding;
+  const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
+
+  await db.collection<Tenant>("tenants").updateOne(
+    { _id: new ObjectId(tenantId) },
+    {
+      $set: {
+        totalRentPaid: updatedTotalRentPaid,
+        totalDepositPaid: depositPaid,
+        totalUtilityPaid: utilityPaid,
+        totalOtherPaid: otherPaid,
+        walletBalance: updatedWalletBalance,
+        paymentStatus,
+        updatedAt: todayISO,
+      },
+    }
+  );
+
+  const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
+    tenant: tenant as any,
+    date: today,
+    rentOverrideMap,
+  });
+
+  const dues = {
+    rentDues,
+    rentOutstanding: baseRentDues,
+    penaltyDues,
+    depositDues,
+    utilityDues,
+    utilityCurrentDues: allocation.utilitiesCurrentOutstanding,
+    utilityOverdueDues: allocation.utilitiesOverdueOutstanding,
+    utilityStatus: allocation.utilityStatus,
+    otherDues: allocation.otherOutstanding,
+    totalRemainingDues,
+    totalPaid: rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance,
+    walletApplied: allocation.walletApplied,
+    walletRemaining: updatedWalletBalance,
+    walletCoverageMonths: effectiveMonthlyRent ? Math.floor(updatedWalletBalance / effectiveMonthlyRent) : 0,
+    walletCoverageRemainder: effectiveMonthlyRent ? updatedWalletBalance % effectiveMonthlyRent : updatedWalletBalance,
+  };
+
+  logger.info("Tenant dues recalculated and totals synced", {
+    tenantId,
+    monthsStayed,
+    rentDue,
+    depositDue: totalDeposit,
+    rentPaid,
+    depositPaid,
+    totalRemainingDues,
+  });
+
+  return {
+    tenant: {
+      ...tenant,
+      _id: tenant._id.toString(),
+      totalRentPaid: updatedTotalRentPaid,
+      totalDepositPaid: depositPaid,
+      totalUtilityPaid: utilityPaid,
+      totalOtherPaid: otherPaid,
+      walletBalance: updatedWalletBalance,
+      paymentStatus,
+      updatedAt: todayISO,
+    },
+    dues,
+    monthsStayed,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -164,9 +259,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { tenantId } = body;
+  const tenantIds = Array.isArray(body.tenantIds) ? body.tenantIds : null;
+  const tenantId = body.tenantId;
 
-  if (!tenantId || !ObjectId.isValid(tenantId)) {
+  if (tenantIds) {
+    if (
+      tenantIds.length === 0 ||
+      tenantIds.length > 100 ||
+      tenantIds.some((id: unknown) => typeof id !== "string" || !ObjectId.isValid(id))
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Valid tenantIds are required" },
+        { status: 400 }
+      );
+    }
+  } else if (!tenantId || !ObjectId.isValid(tenantId)) {
     return NextResponse.json(
       { success: false, message: "Valid tenantId is required" },
       { status: 400 }
@@ -180,112 +287,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
-    const today = new Date();
-    const todayISO = today.toISOString();
 
-    const tenant = await db
-      .collection<Tenant>("tenants")
-      .findOne({ _id: new ObjectId(tenantId) });
+    if (tenantIds) {
+      const results = await Promise.all(
+        tenantIds.map(async (id: string) => {
+          try {
+            const result = await calculateTenantDues(db, id);
+            return result ? { tenantId: id, ...result } : { tenantId: id };
+          } catch (error) {
+            logger.error("Error checking tenant dues", { error, tenantId: id });
+            return { tenantId: id };
+          }
+        })
+      );
 
-    if (!tenant) {
+      return NextResponse.json({ success: true, results });
+    }
+
+    const result = await calculateTenantDues(db, tenantId);
+    if (!result) {
       return NextResponse.json(
         { success: false, message: "Tenant not found" },
         { status: 404 }
       );
     }
 
-    const tenantIdStr = tenantId.toString();
-
-    const allocation = await reconcileTenantPaymentAllocation(db, tenantIdStr);
-    if (!allocation) return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
-    const rentPaid = allocation.rentPaid;
-    const depositPaid = allocation.depositPaid;
-    const utilityPaid = allocation.utilityPaid;
-    const otherPaid = allocation.otherPaid;
-
-    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const monthsStayed = allocation.monthsStayed;
-    const rentDue = allocation.rentDue;
-
-    const updatedTotalRentPaid = allocation.rentPaid;
-    const totalDeposit = allocation.depositDue;
-    const updatedWalletBalance = allocation.walletBalance;
-
-    const baseRentDues = allocation.rentOutstanding;
-    const penaltyDues = allocation.penalties;
-    const rentDues = Math.max(0, baseRentDues + penaltyDues);
-    const depositDues = allocation.depositOutstanding;
-    const utilityDues = allocation.utilitiesOutstanding;
-    const totalRemainingDues = allocation.totalOutstanding;
-
-    const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
-
-    // Update tenant with accurate totals + status
-    await db.collection<Tenant>("tenants").updateOne(
-      { _id: new ObjectId(tenantId) },
-      {
-        $set: {
-          totalRentPaid: updatedTotalRentPaid,
-          totalDepositPaid: depositPaid,
-          totalUtilityPaid: utilityPaid,
-          totalOtherPaid: otherPaid,
-          walletBalance: updatedWalletBalance,
-          paymentStatus,
-          updatedAt: todayISO,
-        },
-      }
-    );
-
-    const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
-      tenant: tenant as any,
-      date: today,
-      rentOverrideMap,
-    });
-
-    const dues = {
-      rentDues,
-      rentOutstanding: baseRentDues,
-      penaltyDues,
-      depositDues,
-      utilityDues,
-      utilityCurrentDues: allocation.utilitiesCurrentOutstanding,
-      utilityOverdueDues: allocation.utilitiesOverdueOutstanding,
-      utilityStatus: allocation.utilityStatus,
-      otherDues: allocation.otherOutstanding,
-      totalRemainingDues,
-      totalPaid: rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance,
-      walletApplied: allocation.walletApplied,
-      walletRemaining: updatedWalletBalance,
-      walletCoverageMonths: effectiveMonthlyRent ? Math.floor(updatedWalletBalance / effectiveMonthlyRent) : 0,
-      walletCoverageRemainder: effectiveMonthlyRent ? updatedWalletBalance % effectiveMonthlyRent : updatedWalletBalance,
-    };
-
-    logger.info("Tenant dues recalculated and totals synced", {
-      tenantId,
-      monthsStayed,
-      rentDue,
-      depositDue: totalDeposit,
-      rentPaid,
-      depositPaid,
-      totalRemainingDues,
-    });
-
-    return NextResponse.json({
-      success: true,
-      tenant: {
-        ...tenant,
-        _id: tenant._id.toString(),
-        totalRentPaid: updatedTotalRentPaid,
-        totalDepositPaid: depositPaid,
-        totalUtilityPaid: utilityPaid,
-        totalOtherPaid: otherPaid,
-        walletBalance: updatedWalletBalance,
-        paymentStatus,
-        updatedAt: todayISO,
-      },
-      dues,
-      monthsStayed,
-    });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     logger.error("Error checking tenant dues", { error, tenantId });
     return NextResponse.json(

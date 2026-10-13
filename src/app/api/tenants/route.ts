@@ -189,12 +189,41 @@ export async function GET(request: NextRequest) {
       filters.$and = andFilters;
     }
 
-    const total = await db.collection<Tenant>("tenants").countDocuments(filters);
-    const tenants = await db.collection<Tenant>("tenants")
-      .find(filters)
-      .skip(skip)
-      .limit(limit)
-      .toArray();
+    const tenantProjection = {
+      _id: 1,
+      ownerId: 1,
+      name: 1,
+      email: 1,
+      phone: 1,
+      role: 1,
+      propertyId: 1,
+      unitType: 1,
+      unitIdentifier: 1,
+      price: 1,
+      deposit: 1,
+      houseNumber: 1,
+      leasedUnits: 1,
+      leaseStartDate: 1,
+      leaseEndDate: 1,
+      status: 1,
+      paymentStatus: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      totalRentPaid: 1,
+      totalDepositPaid: 1,
+      totalUtilityPaid: 1,
+      walletBalance: 1,
+      deliveryMethod: 1,
+    } as const;
+
+    const [total, tenants] = await Promise.all([
+      db.collection<Tenant>("tenants").countDocuments(filters),
+      db.collection<Tenant>("tenants")
+        .find(filters, { projection: tenantProjection })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+    ]);
 
     return NextResponse.json({
       success: true,

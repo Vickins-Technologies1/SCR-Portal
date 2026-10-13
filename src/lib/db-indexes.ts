@@ -4,7 +4,10 @@ import type { Db, IndexDescription } from "mongodb";
 
 declare global {
   var _productionIndexesReady: Promise<void> | undefined;
+  var _productionIndexesRetryAt: number | undefined;
 }
+
+const INDEX_BOOTSTRAP_RETRY_DELAY_MS = 60_000;
 
 const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = [
   {
@@ -208,20 +211,42 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
 ];
 
 async function createCoreIndexes(db: Db) {
-  await Promise.all(
-    coreIndexes.map(async ({ collection, indexes }) => {
-      await db.collection(collection).createIndexes(indexes);
-    })
-  );
+  // Avoid opening a connection burst that competes with live requests while
+  // still running a small number of independent collections in parallel.
+  const batchSize = 4;
+  for (let index = 0; index < coreIndexes.length; index += batchSize) {
+    const batch = coreIndexes.slice(index, index + batchSize);
+    await Promise.all(
+      batch.map(async ({ collection, indexes }) => {
+        await db.collection(collection).createIndexes(indexes);
+      })
+    );
+  }
 }
 
 export function ensureProductionIndexes(db: Db): Promise<void> {
-  if (!global._productionIndexesReady) {
-    global._productionIndexesReady = createCoreIndexes(db).catch((error) => {
-      global._productionIndexesReady = undefined;
-      console.error("MongoDB index bootstrap failed:", error);
-    });
+  if (global._productionIndexesReady) {
+    return global._productionIndexesReady;
   }
 
-  return global._productionIndexesReady;
+  if ((global._productionIndexesRetryAt ?? 0) > Date.now()) {
+    return Promise.resolve();
+  }
+
+  const bootstrapPromise = createCoreIndexes(db)
+    .then(() => {
+      if (global._productionIndexesReady === bootstrapPromise) {
+        global._productionIndexesRetryAt = undefined;
+      }
+    })
+    .catch((error) => {
+      if (global._productionIndexesReady === bootstrapPromise) {
+        global._productionIndexesReady = undefined;
+        global._productionIndexesRetryAt = Date.now() + INDEX_BOOTSTRAP_RETRY_DELAY_MS;
+      }
+      console.error("MongoDB index bootstrap failed:", error);
+    });
+
+  global._productionIndexesReady = bootstrapPromise;
+  return bootstrapPromise;
 }

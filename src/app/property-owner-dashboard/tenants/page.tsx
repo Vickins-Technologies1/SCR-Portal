@@ -177,33 +177,40 @@ export default function TenantsPage() {
       if (!effectiveOwnerId || !csrfToken || tenantList.length === 0) return;
       const requestId = ++duesRequestId.current;
 
-      const enriched = await Promise.all(
-        tenantList.map(async (tenant) => {
-          try {
-            const res = await fetch("/api/tenants/check-dues", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-csrf-token": csrfToken,
-              },
-              credentials: "include",
-              body: JSON.stringify({ tenantId: tenant._id, userId: effectiveOwnerId }),
-            });
-            const data = await res.json();
-            if (data.success) {
-              return {
-                ...tenant,
-                dues: data.dues,
-                totalRentPaid: data.tenant?.totalRentPaid ?? tenant.totalRentPaid,
-                totalDepositPaid: data.tenant?.totalDepositPaid ?? tenant.totalDepositPaid,
-                totalUtilityPaid: data.tenant?.totalUtilityPaid ?? tenant.totalUtilityPaid,
-                paymentStatus: data.tenant?.paymentStatus ?? tenant.paymentStatus,
-              };
-            }
-          } catch {}
-          return tenant;
-        })
-      );
+      let resultsByTenantId = new Map<string, any>();
+      try {
+        const res = await fetch("/api/tenants/check-dues", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            tenantIds: tenantList.map((tenant) => tenant._id),
+            userId: effectiveOwnerId,
+          }),
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.results)) {
+          resultsByTenantId = new Map(
+            data.results.map((result: any) => [String(result.tenantId), result])
+          );
+        }
+      } catch {}
+
+      const enriched = tenantList.map((tenant) => {
+        const result = resultsByTenantId.get(tenant._id);
+        if (!result?.dues) return tenant;
+        return {
+          ...tenant,
+          dues: result.dues,
+          totalRentPaid: result.tenant?.totalRentPaid ?? tenant.totalRentPaid,
+          totalDepositPaid: result.tenant?.totalDepositPaid ?? tenant.totalDepositPaid,
+          totalUtilityPaid: result.tenant?.totalUtilityPaid ?? tenant.totalUtilityPaid,
+          paymentStatus: result.tenant?.paymentStatus ?? tenant.paymentStatus,
+        };
+      });
 
       if (requestId === duesRequestId.current) {
         setTenants(enriched);
