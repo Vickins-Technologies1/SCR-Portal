@@ -1,5 +1,5 @@
 // src/lib/reminders.ts
-import { Db, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { connectToDatabase } from "./mongodb";
 import { sendWelcomeSms } from "./sms";
 import { sendWhatsAppMessage } from "./whatsapp";
@@ -24,6 +24,8 @@ interface ReminderNotification {
   deliveryMethod: "app" | "sms" | "email" | "whatsapp" | "both";
   deliveryStatus?: "pending" | "success" | "failed";
   errorDetails?: string | null;
+  reminderKey?: string;
+  updatedAt?: string;
   reminderType?: ReminderType;
   dueDate?: string;
   dueAmounts?: {
@@ -123,6 +125,11 @@ export const buildReminderMessages = (
   totalDue: number
 ) => {
   const whenText = reminderType === "fiveDaysBefore" ? `by ${formattedDueDate}` : `today (${formattedDueDate})`;
+  const safeAmount = (value: number) => Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0;
+  rentDue = safeAmount(rentDue);
+  utilityDue = safeAmount(utilityDue);
+  depositDue = safeAmount(depositDue);
+  totalDue = safeAmount(totalDue);
   const shortTotal = totalDue.toFixed(2);
 
   const normalizeSms = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -201,7 +208,6 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     return { sent: 0, skipped: 0, notifications: [] };
   }
 
-  const tenantIds = tenants.map((tenant) => tenant._id.toString());
   const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(
     db,
     Array.from(propertyMap.keys())
@@ -212,7 +218,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
 
   for (const tenant of tenants) {
     const tenantId = tenant._id.toString();
-    const property = propertyMap.get(tenant.propertyId);
+    const property = propertyMap.get(String(tenant.propertyId));
     if (!property) continue;
     if (!isLeaseActiveOn(tenant, todayStart)) continue;
 
@@ -238,28 +244,86 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
 
     const dueDateKey = toDateKey(dueDate);
 
+    const reminderKey = `payment:${String(property.ownerId)}:${tenantId}:${reminderType}:${dueDateKey}`;
     const existingReminder = await db.collection<ReminderNotification>("notifications").findOne({
+      $or: [
+        { reminderKey },
+        {
       ownerId: String(property.ownerId),
       tenantId,
       type: "payment",
       reminderType,
       dueDate: dueDateKey,
+        },
+      ],
     });
 
-    if (existingReminder) {
+    const existingUpdatedAtMs = existingReminder?.updatedAt
+      ? Date.parse(existingReminder.updatedAt)
+      : NaN;
+    const canRetryExisting = existingReminder && (
+      existingReminder.deliveryStatus === "failed" ||
+      (existingReminder.deliveryStatus === "pending" &&
+        Number.isFinite(existingUpdatedAtMs) &&
+        Date.now() - existingUpdatedAtMs >= 15 * 60 * 1000)
+    );
+
+    // A successful or recently claimed reminder is idempotently complete. A
+    // stale pending claim can be reclaimed after a crashed provider call;
+    // legacy pending rows without a timestamp remain protected from replay.
+    if (existingReminder && !canRetryExisting) {
       skipped += 1;
       continue;
     }
 
-    const state = await calculateTenantFinancialState(db, tenant, {
-      asOf: dueDate,
-      property,
-      rentOverrideMap,
-    });
-    const rentDue = state.rentOutstanding;
+    let state;
+    try {
+      state = await calculateTenantFinancialState(db, tenant, {
+        // The scheduled obligation is the due-date state. Use the end of the
+        // local due date so a payment posted later on the due date is visible.
+        asOf: endOfDay(dueDate),
+        property,
+        rentOverrideMap,
+      });
+    } catch (error) {
+      logger.error("Unable to calculate tenant reminder balance", {
+        tenantId,
+        propertyId: String(property._id),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      skipped += 1;
+      continue;
+    }
+
+    if (!Number.isFinite(state.totalOutstanding)) {
+      logger.error("Tenant reminder balance was not finite", { tenantId, propertyId: String(property._id) });
+      skipped += 1;
+      continue;
+    }
+
+    // Re-read the authoritative state immediately before any provider call.
+    // A payment can be posted after the eligibility query and must suppress a
+    // now-paid reminder rather than relying on a cached tenant projection.
+    try {
+      state = await calculateTenantFinancialState(db, tenant, {
+        asOf: endOfDay(dueDate),
+        property,
+        rentOverrideMap,
+      });
+    } catch (error) {
+      logger.error("Unable to recheck tenant reminder balance", {
+        tenantId,
+        propertyId: String(property._id),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      skipped += 1;
+      continue;
+    }
+
+    const rentDue = state.rentOutstanding + state.penalties;
     const utilityDue = state.utilitiesOutstanding;
     const depositDue = state.depositOutstanding;
-    const totalDue = state.totalOutstanding;
+    const totalDue = rentDue + utilityDue + depositDue;
 
     if (totalDue <= 0) {
       skipped += 1;
@@ -299,6 +363,77 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       deliveryStatus = "failed";
       errorDetails = errorDetails ? `${errorDetails}; ${detail}` : detail;
     };
+
+    const newNotification: ReminderNotification = {
+      _id: new ObjectId(),
+      message: appMessage,
+      type: "payment",
+      createdAt: new Date().toISOString(),
+      status: "unread",
+      tenantId,
+      tenantName: tenant.name,
+      ownerId: String(property.ownerId),
+      deliveryMethod,
+      deliveryStatus: "pending",
+      errorDetails: null,
+      updatedAt: new Date().toISOString(),
+      reminderType,
+      dueDate: dueDateKey,
+      reminderKey,
+      dueAmounts: {
+        rentDue,
+        utilityDue,
+        depositDue,
+        totalDue,
+      },
+    };
+
+    // Claim the scheduled event before calling any provider. The unique
+    // reminder key plus the conditional failed-row update makes overlapping
+    // cron invocations converge on one delivery attempt.
+    let claimedId = newNotification._id;
+    try {
+      if (existingReminder) {
+        const claimed = await db.collection<ReminderNotification>("notifications").updateOne(
+          {
+            _id: existingReminder._id,
+            deliveryStatus: existingReminder.deliveryStatus,
+            ...(existingReminder.updatedAt ? { updatedAt: existingReminder.updatedAt } : {}),
+          },
+          {
+            $set: {
+              message: newNotification.message,
+              dueAmounts: newNotification.dueAmounts,
+              deliveryStatus: "pending",
+              errorDetails: null,
+              updatedAt: new Date().toISOString(),
+              reminderKey,
+            },
+          },
+        );
+        if (!claimed.matchedCount) {
+          skipped += 1;
+          continue;
+        }
+        claimedId = existingReminder._id;
+      } else {
+        const claimed = await db.collection<ReminderNotification>("notifications").updateOne(
+          { reminderKey },
+          { $setOnInsert: newNotification },
+          { upsert: true },
+        );
+        if (!claimed.upsertedCount) {
+          skipped += 1;
+          continue;
+        }
+      }
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        skipped += 1;
+        continue;
+      }
+      throw error;
+    }
 
     if (deliveryMethod === "sms" || deliveryMethod === "both") {
       if (tenant.phone) {
@@ -361,31 +496,14 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       }
     }
 
-    const newNotification: ReminderNotification = {
-      _id: new ObjectId(),
-      message: appMessage,
-      type: "payment",
-      createdAt: new Date().toISOString(),
-      status: "unread",
-      tenantId,
-      tenantName: tenant.name,
-        ownerId: String(property.ownerId),
-      deliveryMethod,
-      deliveryStatus,
-      errorDetails,
-      reminderType,
-      dueDate: dueDateKey,
-      dueAmounts: {
-        rentDue,
-        utilityDue,
-        depositDue,
-        totalDue,
-      },
-    };
-
-    await db.collection<ReminderNotification>("notifications").insertOne(newNotification);
-    createdNotifications.push(newNotification);
-    sent += 1;
+    const completedNotification = { ...newNotification, _id: claimedId, deliveryStatus, errorDetails };
+    await db.collection<ReminderNotification>("notifications").updateOne(
+      { _id: claimedId },
+      { $set: { deliveryStatus, errorDetails, updatedAt: new Date().toISOString(), dueAmounts: newNotification.dueAmounts, message: newNotification.message } },
+    );
+    createdNotifications.push(completedNotification);
+    if (deliveryStatus === "success") sent += 1;
+    else skipped += 1;
   }
 
   return { sent, skipped, notifications: createdNotifications };
@@ -432,7 +550,6 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     return [];
   }
 
-  const tenantIds = tenants.map((tenant) => tenant._id.toString());
   const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(
     db,
     Array.from(propertyMap.keys())
@@ -441,7 +558,7 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
 
   for (const tenant of tenants) {
     const tenantId = tenant._id.toString();
-    const property = propertyMap.get(tenant.propertyId);
+    const property = propertyMap.get(String(tenant.propertyId));
     if (!property) continue;
     if (!isLeaseActiveOn(tenant, todayStart)) continue;
 
@@ -480,14 +597,14 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     }
 
     const state = await calculateTenantFinancialState(db, tenant, {
-      asOf: dueDate,
+      asOf: endOfDay(dueDate),
       property,
       rentOverrideMap,
     });
-    const rentDue = state.rentOutstanding;
+    const rentDue = state.rentOutstanding + state.penalties;
     const utilityDue = state.utilitiesOutstanding;
     const depositDue = state.depositOutstanding;
-    const totalDue = state.totalOutstanding;
+    const totalDue = rentDue + utilityDue + depositDue;
 
     if (totalDue <= 0) {
       continue;
@@ -498,8 +615,6 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
       day: "numeric",
       year: "numeric",
     });
-    const smsDueDate = dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-
     const unitLabel = (tenant.leasedUnits && tenant.leasedUnits.length > 0)
       ? tenant.leasedUnits.map((unit) => unit.houseNumber).filter(Boolean).join(", ")
       : tenant.houseNumber;

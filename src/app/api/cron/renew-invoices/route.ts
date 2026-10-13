@@ -1,8 +1,13 @@
 // app/api/cron/renew-invoices/route.ts
 import { NextResponse } from "next/server";
 import checkAndRenewExpiredInvoices from "../../../../cron/check-expired-invoices/route";
+import { authorizeCronRequest } from "../../../../lib/cron-auth";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authorization = authorizeCronRequest(request);
+  if (!authorization.authorized) {
+    return NextResponse.json({ success: false, message: authorization.message }, { status: authorization.status });
+  }
   console.log("Vercel Cron triggered: Running invoice renewal job");
 
   try {

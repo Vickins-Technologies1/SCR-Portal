@@ -1,5 +1,5 @@
 import { Db, ObjectId } from "mongodb";
-import { calculateInvoiceTotals } from "@/lib/invoice-calculations";
+import { calculateInvoiceTotals, type InvoiceCalculation } from "@/lib/invoice-calculations";
 import {
   eligibleFinancialPaymentFilter,
   identityFilter,
@@ -36,6 +36,88 @@ export type FinancialPaymentRow = {
     walletCredit: number;
   };
 };
+
+const normalizeProvider = (value: unknown) => {
+  const provider = String(value || "legacy").trim().toLowerCase();
+  return provider === "mpesa" || provider === "daraja_c2b" ? "daraja" : provider;
+};
+
+/**
+ * Older callback paths could leave more than one successful payment document
+ * for the same provider event. Provider identity is the durable identity of a
+ * payment; Mongo _id is only the storage identity. Keep the strongest row and
+ * map all aliases back to it so reversals attached to a legacy duplicate are
+ * still applied to the surviving row.
+ */
+export function deduplicateFinancialPayments(payments: any[]) {
+  const parent = new Map<string, string>();
+  const identityOwner = new Map<string, string>();
+
+  const find = (id: string): string => {
+    const current = parent.get(id);
+    if (!current || current === id) return id;
+    const root = find(current);
+    parent.set(id, root);
+    return root;
+  };
+
+  const union = (left: string, right: string) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent.set(rightRoot, leftRoot);
+  };
+
+  const identitiesFor = (payment: any) => {
+    const provider = normalizeProvider(payment.provider || payment.paymentMethod);
+    return [
+      payment.providerTransactionId,
+      payment.mpesaCode,
+      payment.checkoutRequestId,
+      payment.merchantRequestId,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .map((value) => `${provider}:${value}`);
+  };
+
+  for (const payment of payments) {
+    const id = String(payment._id);
+    parent.set(id, id);
+    for (const identity of identitiesFor(payment)) {
+      const previous = identityOwner.get(identity);
+      if (previous) union(id, previous);
+      else identityOwner.set(identity, id);
+    }
+  }
+
+  const score = (payment: any) => {
+    let value = 0;
+    if (payment.financialPostingStatus === "posted") value += 8;
+    if (payment.financialEffectsApplied === true) value += 4;
+    if (payment.postedAmount != null || payment.providerConfirmedAmount != null) value += 2;
+    if (String(payment.status || "").toLowerCase() === "completed") value += 1;
+    return value;
+  };
+
+  const representatives = new Map<string, any>();
+  const aliases = new Map<string, string>();
+  for (const payment of payments) {
+    const id = String(payment._id);
+    const root = find(id);
+    const current = representatives.get(root);
+    if (!current || score(payment) > score(current) || (score(payment) === score(current) && id < String(current._id))) {
+      representatives.set(root, payment);
+    }
+  }
+  for (const payment of payments) {
+    aliases.set(String(payment._id), String(representatives.get(find(String(payment._id)))._id));
+  }
+
+  return {
+    payments: [...representatives.values()],
+    aliases,
+  };
+}
 
 function reversalIdentityValues(paymentIds: any[]) {
   return paymentIds.flatMap((paymentId) => identityValues(paymentId));
@@ -107,6 +189,7 @@ export async function getFinancialPaymentRows(params: {
 
   if (!payments.length) return [];
 
+  const { payments: uniquePayments, aliases } = deduplicateFinancialPayments(payments);
   const paymentIds = payments.map((payment) => payment._id);
   const reversalRows = await params.db.collection("financialLedger").aggregate<{ _id: any; total: number }>([
     {
@@ -118,7 +201,15 @@ export async function getFinancialPaymentRows(params: {
     },
     { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
   ]).toArray();
-  return projectFinancialPaymentRows(payments, reversalRows);
+  const reversalTotals = new Map<string, number>();
+  for (const row of reversalRows) {
+    const canonicalId = aliases.get(String(row._id)) || String(row._id);
+    reversalTotals.set(canonicalId, money((reversalTotals.get(canonicalId) || 0) + money(row.total)));
+  }
+  return projectFinancialPaymentRows(
+    uniquePayments,
+    [...reversalTotals.entries()].map(([id, total]) => ({ _id: id, total })),
+  );
 }
 
 /** Shared report projection: gross receipts are distinct from net receipts and category allocation. */
@@ -162,12 +253,12 @@ export async function getInvoicePostedAmount(db: Db, invoiceId: string) {
   return money(rows.reduce((sum, row) => sum + row.netAmount, 0));
 }
 
-export async function reconcileInvoiceFinancialState(db: Db, invoiceId: string) {
-  if (!ObjectId.isValid(invoiceId)) return null;
-  const invoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
-  if (!invoice) return null;
-  const amountPaid = await getInvoicePostedAmount(db, invoiceId);
-  const calculation = calculateInvoiceTotals({
+export type InvoiceFinancialState = InvoiceCalculation;
+
+/** Recalculate an invoice from its immutable billing data and current posted payments. */
+export async function calculateInvoiceFinancialState(db: Db, invoice: any): Promise<InvoiceFinancialState> {
+  const amountPaid = await getInvoicePostedAmount(db, String(invoice._id));
+  return calculateInvoiceTotals({
     amount: Number(invoice.amount || 0),
     items: invoice.items,
     discount: invoice.discount,
@@ -175,6 +266,13 @@ export async function reconcileInvoiceFinancialState(db: Db, invoiceId: string) 
     amountPaid,
     dueDate: invoice.dueDate || invoice.expiresAt,
   });
+}
+
+export async function reconcileInvoiceFinancialState(db: Db, invoiceId: string) {
+  if (!ObjectId.isValid(invoiceId)) return null;
+  const invoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
+  if (!invoice) return null;
+  const calculation = await calculateInvoiceFinancialState(db, invoice);
   await db.collection("invoices").updateOne(
     { _id: invoice._id },
     {

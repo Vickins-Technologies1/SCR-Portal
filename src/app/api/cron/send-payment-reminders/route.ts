@@ -1,8 +1,13 @@
 // app/api/cron/send-payment-reminders/route.ts
 import { NextResponse } from "next/server";
 import { sendPaymentReminders } from "../../../../lib/reminders";
+import { authorizeCronRequest } from "../../../../lib/cron-auth";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authorization = authorizeCronRequest(request);
+  if (!authorization.authorized) {
+    return NextResponse.json({ success: false, message: authorization.message }, { status: authorization.status });
+  }
   console.log("Vercel Cron triggered: Running payment reminder job");
 
   try {

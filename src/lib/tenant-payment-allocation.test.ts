@@ -373,4 +373,22 @@ describe("tenant payment allocation", () => {
     expect(state.rentPaid).toBe(0);
     expect(state.rentOutstanding).toBe(20_000);
   });
+
+  it("does not count pending or failed requests as rent payments", () => {
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-11T00:00:00.000Z"),
+      rentDue: 10_000,
+      monthsStayed: 1,
+      utilityBreakdown: { charged: 0, currentCharged: 0, overdueCharged: 0 },
+      depositDue: 0,
+      payments: [
+        { ...payment(10_000), status: "pending" },
+        { ...payment(10_000), status: "failed" },
+      ],
+    });
+
+    expect(state.rentPaid).toBe(0);
+    expect(state.rentOutstanding).toBe(10_000);
+  });
 });

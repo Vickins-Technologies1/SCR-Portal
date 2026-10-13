@@ -164,6 +164,13 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "invoiceReminderLogs",
+    indexes: [
+      { key: { reminderKey: 1 }, name: "invoiceReminderLogs_reminder_unique", unique: true, partialFilterExpression: { reminderKey: { $type: "string" } } },
+      { key: { invoiceId: 1, reminderType: 1, dueDate: 1, status: 1 }, name: "invoiceReminderLogs_invoice_schedule" },
+    ],
+  },
+  {
     collection: "unmatchedMpesaCallbacks",
     indexes: [
       { key: { checkoutRequestId: 1 }, name: "unmatched_mpesa_checkout_unique", unique: true },
@@ -200,6 +207,7 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
       { key: { ownerId: 1, status: 1, createdAt: -1 }, name: "notifications_owner_status_createdAt" },
       { key: { tenantId: 1, status: 1, createdAt: -1 }, name: "notifications_tenant_status_createdAt" },
       { key: { audience: 1, source: 1, createdAt: -1 }, name: "notifications_audience_source_createdAt" },
+      { key: { reminderKey: 1 }, name: "notifications_reminder_unique", unique: true, partialFilterExpression: { reminderKey: { $type: "string" } } },
     ],
   },
   {

@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { sendAirbnbReminderEmail } from "@/lib/email";
 import { parseDate } from "@/lib/airbnb-utils";
+import { authorizeCronRequest } from "@/lib/cron-auth";
 
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const endOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authorization = authorizeCronRequest(request);
+  if (!authorization.authorized) {
+    return NextResponse.json({ success: false, message: authorization.message }, { status: authorization.status });
+  }
   try {
     const { db } = await connectToDatabase();
     const today = new Date();

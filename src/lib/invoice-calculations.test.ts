@@ -19,4 +19,15 @@ describe("calculateInvoiceTotals", () => {
   it("never exposes a negative balance for overpayment", () => {
     expect(calculateInvoiceTotals({ ...base, amountPaid: 1200 })).toMatchObject({ status: "PAID", balanceDue: 0, amountPaid: 1200 });
   });
+
+  it("uses the recalculated invoice total and net posted payment for reminders", () => {
+    expect(calculateInvoiceTotals({
+      amount: 12_000,
+      tax: 1_000,
+      discount: 1_000,
+      amountPaid: 5_000,
+      dueDate: "2026-09-30T00:00:00.000Z",
+      now: new Date("2026-09-28T00:00:00.000Z"),
+    })).toMatchObject({ total: 12_000, amountPaid: 5_000, balanceDue: 7_000, status: "PARTIALLY PAID" });
+  });
 });
