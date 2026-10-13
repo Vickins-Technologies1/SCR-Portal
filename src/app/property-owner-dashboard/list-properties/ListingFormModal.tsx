@@ -1,13 +1,15 @@
 // src/app/property-owner-dashboard/list-properties/components/ListingFormModal.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
-import { X, Upload, Trash2, AlertCircle } from "lucide-react";
+import { Upload, Trash2, AlertCircle } from "lucide-react";
 import Modal from "../components/Modal"; // Adjust path if needed
 
 import { Property, Listing } from "@/types/property";
 import { readJsonResponse } from "@/lib/api-client";
+import { upload as uploadBlob } from "@vercel/blob/client";
+import { uploadMarketplaceFiles } from "@/lib/marketplace-upload";
 
 const FACILITIES = [
   "Wi-Fi",
@@ -28,6 +30,7 @@ interface ListingFormModalProps {
   mode: "list" | "edit";
   editingPropertyId?: string | null;
   csrfToken: string | null;
+  effectiveOwnerId: string | null;
   onSuccess: () => void;
   originalProperties: Property[]; // Core properties for selection in "list" mode
   existingListings: Listing[]; // For filtering already-listed properties
@@ -39,6 +42,7 @@ export default function ListingFormModal({
   mode,
   editingPropertyId,
   csrfToken,
+  effectiveOwnerId,
   onSuccess,
   originalProperties,
   existingListings,
@@ -49,6 +53,7 @@ export default function ListingFormModal({
   const [contactPhone, setContactPhone] = useState<string>("");
   const [facilities, setFacilities] = useState<string[]>([]);
   const [images, setImages] = useState<File[]>([]);
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<Record<string, string>>({});
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -56,6 +61,7 @@ export default function ListingFormModal({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const preserveUploadsOnClose = useRef(false);
 
   // Compute available properties (exclude already listed ones)
   const availableProperties = useMemo(() => {
@@ -74,6 +80,7 @@ export default function ListingFormModal({
     setContactPhone("");
     setFacilities([]);
     setImages([]);
+    setUploadedImageUrls({});
     setImagePreviews([]);
     setImageUploadError(null);
     setUploadProgress(null);
@@ -81,6 +88,7 @@ export default function ListingFormModal({
     setSubmitError(null);
     setIsSubmitting(false);
     setIsUploading(false);
+    preserveUploadsOnClose.current = false;
   }, []);
 
   // Reset / populate form when modal opens or mode changes
@@ -154,7 +162,12 @@ export default function ListingFormModal({
         return;
       }
 
-      if (!["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"].includes(file.type)) {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      const inferredType = file.type || ({
+        jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+        gif: "image/gif", heic: "image/heic", heif: "image/heif",
+      } as Record<string, string>)[extension || ""] || "";
+      if (!["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"].includes(inferredType)) {
         errors.push(`${file.name}: unsupported image type`);
       } else if (file.size > 5 * 1024 * 1024) {
         errors.push(`${file.name}: Maximum 5MB per image`);
@@ -186,51 +199,95 @@ export default function ListingFormModal({
   };
 
   const removeImage = (index: number) => {
-    if (index < imagePreviews.length) {
-      URL.revokeObjectURL(imagePreviews[index]);
+    const preview = imagePreviews[index];
+    if (preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(preview);
+      const fileIndex = imagePreviews.slice(0, index).filter((url) => url.startsWith("blob:")).length;
+      const file = images[fileIndex];
+      if (file && csrfToken) {
+        const fileKey = `${file.name}:${file.size}:${file.lastModified}:${file.type}`;
+        const uploadedUrl = uploadedImageUrls[fileKey];
+        if (uploadedUrl) {
+          void deleteUploadedImage(uploadedUrl).then(() => {
+            setUploadedImageUrls((prev) => {
+              const next = { ...prev };
+              delete next[fileKey];
+              return next;
+            });
+          }).catch((error) => {
+            setImageUploadError(error instanceof Error ? error.message : "Could not remove uploaded image.");
+          });
+        }
+      }
+      setImages((prev) => prev.filter((_, i) => i !== fileIndex));
     }
     setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const deleteUploadedImage = async (url: string) => {
+    if (!csrfToken) return;
+    const pathname = new URL(url).pathname.replace(/^\/+/, "");
+    const response = await fetch("/api/upload", {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+      body: JSON.stringify({ pathname }),
+    });
+    const data = await readJsonResponse<{ success?: boolean; message?: string }>(response, "Could not remove uploaded image.");
+    if (!response.ok || !data.success) throw new Error(data.message || "Could not remove uploaded image.");
+  };
+
+  const handleClose = () => {
+    if (!preserveUploadsOnClose.current) {
+      void Promise.allSettled(Object.values(uploadedImageUrls).map(deleteUploadedImage));
+    }
+    onClose();
   };
 
   const uploadImages = async (files: File[]): Promise<string[]> => {
-    if (!csrfToken || files.length === 0) return [];
-
-    const formData = new FormData();
-    files.forEach((file) => formData.append("images", file));
-
-    setUploadProgress(`Uploading ${files.length} image${files.length === 1 ? "" : "s"}...`);
-
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-      headers: {
-        "X-CSRF-Token": csrfToken,
-      },
-      credentials: "include",
-    });
-
-    const data = await readJsonResponse<{
-      success?: boolean;
-      urls?: string[];
-      failedFiles?: Array<{ name: string; error: string }>;
-      message?: string;
-    }>(res, "Image upload failed.");
-
-    if (!res.ok || !data.success) {
-      throw new Error(data.message || "Image upload failed");
-    }
-
-    if (Array.isArray(data.failedFiles) && data.failedFiles.length > 0) {
-      setImageUploadError(
-        data.failedFiles.map((item) => `${item.name}: ${item.error}`).join("; ")
+    if (!csrfToken || !effectiveOwnerId || files.length === 0) return [];
+    setImageUploadError(null);
+    try {
+      return await uploadMarketplaceFiles(
+        files,
+        uploadedImageUrls,
+        async (file, reportProgress) => {
+          const extension = file.name.split(".").pop()?.toLowerCase();
+          const safeExtension = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(extension || "")
+            ? extension
+            : file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
+          const contentType = file.type || ({
+            jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+            gif: "image/gif", heic: "image/heic", heif: "image/heif",
+          } as Record<string, string>)[extension || ""];
+          if (!safeExtension || !contentType) throw new Error(`${file.name}: unsupported image format.`);
+          const result = await uploadBlob(
+          `uploads/${effectiveOwnerId}/${crypto.randomUUID()}.${safeExtension}`,
+          file,
+          {
+            access: "public",
+            handleUploadUrl: "/api/upload",
+            contentType,
+            multipart: false,
+            headers: { "X-CSRF-Token": csrfToken },
+            onUploadProgress: ({ percentage }) => {
+                reportProgress(percentage);
+            },
+          }
+        );
+          return result.url;
+        },
+        (file, index, total, percentage) => {
+          setUploadProgress(`Uploading image ${index} of ${total}: ${file.name}${percentage === undefined ? "" : ` (${Math.floor(percentage)}%)`}`);
+        },
+        (key, url) => setUploadedImageUrls((prev) => ({ ...prev, [key]: url })),
       );
-      setUploadProgress(`Uploaded ${data.urls?.length || 0} image(s) with ${data.failedFiles.length} failure(s).`);
-    } else {
+    } catch (error) {
+      setUploadProgress(null);
+      throw error;
+    } finally {
       setUploadProgress(null);
     }
-
-    return data.urls || [];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -292,6 +349,7 @@ export default function ListingFormModal({
       }
 
       onSuccess();
+      preserveUploadsOnClose.current = true;
       onClose();
     } catch (err: any) {
       setSubmitError(err.message || "An error occurred while saving the listing.");
@@ -306,7 +364,7 @@ export default function ListingFormModal({
     <Modal
       title={mode === "list" ? "List Property for Rent" : "Edit Property Listing"}
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Global submit error */}
@@ -451,7 +509,7 @@ export default function ListingFormModal({
                   <span className="font-semibold">Click to upload</span> or drag & drop
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  JPEG/PNG • Max 5MB per image • Max 10 total
+                  JPEG, PNG, WebP, GIF or HEIC • Max 5MB per image • Max 10 total
                 </p>
               </div>
               <input
@@ -523,7 +581,7 @@ export default function ListingFormModal({
         <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition font-medium disabled:opacity-50"
             disabled={isSubmitting || isUploading}
           >

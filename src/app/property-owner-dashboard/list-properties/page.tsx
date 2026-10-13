@@ -383,6 +383,7 @@ export default function ListPropertiesPage() {
         mode={modalMode}
         editingPropertyId={editingPropertyId}
         csrfToken={csrfToken}
+        effectiveOwnerId={effectiveOwnerId}
         onSuccess={() => {
           setSuccessMessage(modalMode === "list" ? "Property listed!" : "Listing updated!");
           fetchListings();

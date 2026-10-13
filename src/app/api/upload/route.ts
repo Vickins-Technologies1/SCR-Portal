@@ -1,23 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from '@vercel/blob';
+import { del, head, put } from '@vercel/blob';
+import { handleUpload } from '@vercel/blob/client';
 import { v4 as uuidv4 } from 'uuid';
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
+import { detectMarketplaceImageType, getMarketplaceUploadTokenOptions, MARKETPLACE_IMAGE_MAX_SIZE, marketplaceImageExtension } from "@/lib/marketplace-image";
 import logger from '@/lib/logger';
 
 // Maximum file size (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 // Maximum number of files
 const MAX_FILES = 10;
-// Allowed file types
-const VALID_FILE_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'image/heic',
-  'image/heif',
-];
-
 function normalizeExtension(file: File): string {
   const byName = file.name.split('.').pop()?.toLowerCase() || "";
   if (["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"].includes(byName)) return byName;
@@ -30,29 +22,6 @@ function normalizeExtension(file: File): string {
   return "img";
 }
 
-function detectMimeFromSignature(bytes: Uint8Array): string | null {
-  if (bytes.length >= 4) {
-    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
-    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return "image/gif";
-  }
-  if (bytes.length >= 12) {
-    const riff = String.fromCharCode(...bytes.slice(0, 4));
-    const webp = String.fromCharCode(...bytes.slice(8, 12));
-    if (riff === "RIFF" && webp === "WEBP") return "image/webp";
-  }
-  if (bytes.length >= 12) {
-    const boxType = String.fromCharCode(...bytes.slice(4, 8));
-    if (boxType === "ftyp") {
-      const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
-      if (brand.includes("heic") || brand.includes("heif") || brand.includes("mif1") || brand.includes("msf1")) {
-        return brand.includes("heif") || brand.includes("msf1") ? "image/heif" : "image/heic";
-      }
-    }
-  }
-  return null;
-}
-
 // Validate file type and size
 async function isValidFile(file: File): Promise<{ valid: boolean; error?: string; mimeType?: string }> {
   if (file.size <= 0) {
@@ -63,19 +32,74 @@ async function isValidFile(file: File): Promise<{ valid: boolean; error?: string
   }
 
   const headerBytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-  const signatureMime = detectMimeFromSignature(headerBytes);
+  const signatureMime = detectMarketplaceImageType(headerBytes);
   const declaredMime = file.type || "";
-  const mimeType = VALID_FILE_TYPES.includes(declaredMime) ? declaredMime : signatureMime || declaredMime;
-
-  if (!mimeType || !VALID_FILE_TYPES.includes(mimeType)) {
+  if (!signatureMime || (declaredMime && declaredMime !== signatureMime) || !marketplaceImageExtension(file.name, signatureMime)) {
     return { valid: false, error: `${file.name} is not a supported image format` };
   }
 
-  return { valid: true, mimeType };
+  return { valid: true, mimeType: signatureMime };
+}
+
+function getUploadIdentity(request: NextRequest) {
+  const role = request.cookies.get("role")?.value;
+  const userId = request.cookies.get("userId")?.value;
+  const ownerId = role === "propertyOwner" ? userId : request.cookies.get("ownerId")?.value;
+  if (!userId || !ownerId || !["propertyOwner", "teamMember", "admin"].includes(role || "")) return null;
+  if (role === "propertyOwner" && ownerId !== userId) return null;
+  return { role, userId, ownerId };
+}
+
+async function handleDirectBlobUpload(request: NextRequest) {
+  const body = await request.json();
+  const isCompletionCallback = body?.type === "blob.upload-completed";
+  const identity = isCompletionCallback ? null : getUploadIdentity(request);
+
+  if (!isCompletionCallback && !identity) {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+  if (!isCompletionCallback) {
+    const csrfToken = request.headers.get("x-csrf-token");
+    if (!validateCsrfToken(request, csrfToken)) return buildInvalidCsrfResponse(request);
+  }
+
+  const result = await handleUpload({
+    request,
+    body,
+    onBeforeGenerateToken: async (pathname, _clientPayload, multipart) => {
+      if (!identity) throw new Error("Unauthorized");
+      return getMarketplaceUploadTokenOptions(pathname, identity, multipart);
+    },
+    onUploadCompleted: async ({ blob, tokenPayload }) => {
+      const parsed = tokenPayload ? JSON.parse(tokenPayload) as { ownerId?: string; userId?: string } : {};
+      const expectedPrefix = `uploads/${parsed.ownerId}/`;
+      try {
+        if (!parsed.ownerId || !blob.pathname.startsWith(expectedPrefix)) {
+          throw new Error("Uploaded image does not match its authorized upload token");
+        }
+        const response = await fetch(blob.url);
+        if (!response.ok) throw new Error("Could not verify uploaded image");
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const actualType = detectMarketplaceImageType(bytes.slice(0, 16));
+        if (!actualType || bytes.length > MARKETPLACE_IMAGE_MAX_SIZE || actualType !== blob.contentType || !marketplaceImageExtension(blob.pathname, actualType)) {
+          throw new Error("Uploaded file is not a supported image");
+        }
+      } catch (error) {
+        await del(blob.url, { token: process.env.BLOB_READ_WRITE_TOKEN });
+        throw error;
+      }
+    },
+  });
+  return NextResponse.json(result);
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // Vercel's function request-size ceiling makes proxied multipart uploads unreliable.
+    // Marketplace uploads use Blob client tokens so file bytes go directly to Blob.
+    if (request.headers.get("content-type")?.includes("application/json")) {
+      return await handleDirectBlobUpload(request);
+    }
     logger.debug('Handling POST request to /api/upload', {
       method: request.method,
       url: request.url,
@@ -225,6 +249,29 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const identity = getUploadIdentity(request);
+    if (!identity) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) return buildInvalidCsrfResponse(request);
+
+    const { pathname } = await request.json();
+    if (typeof pathname !== "string" || pathname.includes("..")) return NextResponse.json({ success: false, message: "Invalid image path" }, { status: 400 });
+    if (!pathname.startsWith(`uploads/${identity.ownerId}/`)) {
+      return NextResponse.json({ success: false, message: "Image does not belong to this owner" }, { status: 403 });
+    }
+    const blob = await head(pathname, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    if (blob.pathname !== pathname) return NextResponse.json({ success: false, message: "Image does not belong to this owner" }, { status: 403 });
+    await del(pathname, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    logger.error("Failed to delete an unreferenced marketplace image", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    return NextResponse.json({ success: false, message: "Could not remove uploaded image" }, { status: 500 });
+  }
+}
+
 // Configure runtime for Vercel serverless
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const maxDuration = 30;
