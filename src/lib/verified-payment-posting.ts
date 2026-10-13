@@ -61,16 +61,12 @@ export async function postVerifiedPayment(params: {
   }
 
   if (payment.financialPostingStatus === "processing") {
-    const postingEvent = await params.db.collection("financialLedger").findOne({ eventKey: `payment:${String(payment._id)}:posted` });
-    if (postingEvent) {
-      const finalized = await params.db.collection("payments").findOneAndUpdate(
-        { _id: paymentObjectId, financialPostingStatus: "processing" },
-        { $set: { financialPostingStatus: "posted", financialEffectsApplied: true, postedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } },
-        { returnDocument: "after" },
-      );
-      return { outcome: "duplicate", payment: finalized?.value || payment };
-    }
-    const claimAge = payment.financialPostingClaimAt ? Date.now() - new Date(payment.financialPostingClaimAt).getTime() : 0;
+    // A ledger row alone does not prove that every side effect completed. In
+    // particular, the wallet event is written after the ledger event. Keep an
+    // active claim untouched; once stale, replay all idempotent effects below
+    // before finalizing the payment.
+    const claimTime = payment.financialPostingClaimAt ? new Date(payment.financialPostingClaimAt).getTime() : Number.NaN;
+    const claimAge = Number.isFinite(claimTime) ? Date.now() - claimTime : Number.POSITIVE_INFINITY;
     if (claimAge >= 0 && claimAge < 5 * 60 * 1000) return { outcome: "duplicate", payment };
   }
 

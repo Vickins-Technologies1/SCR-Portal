@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
+import { getFinancialPaymentRows } from "../../../../lib/financial-reporting";
 
 // Define Invoice interface for consistent typing
 interface Invoice {
@@ -116,8 +117,20 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // A pending/legacy status is not proof that an invoice has no settlement.
+    // Once any eligible payment is linked, line items and status are derived
+    // from those posted events and this general-purpose endpoint must not
+    // override them.
+    const linkedPaymentRows = await getFinancialPaymentRows({ db, invoiceIds: [invoiceId] });
+    if (linkedPaymentRows.some((row) => row.originalAmount > 0)) {
+      return NextResponse.json(
+        { success: false, message: "Invoices with posted payments cannot be edited here" },
+        { status: 409 }
+      );
+    }
+
     const updateResult = await db.collection<Invoice>("invoices").updateOne(
-      { _id: new ObjectId(invoiceId) },
+      { _id: new ObjectId(invoiceId), status: existingInvoice.status },
       {
         $set: {
           amount,
