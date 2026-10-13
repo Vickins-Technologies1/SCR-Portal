@@ -7,6 +7,7 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
 import { useAirbnbAccess } from "../components/useAirbnbAccess";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 import type { AirbnbPayout } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
 import { useAccountTier } from "@/hooks/useAccountTier";
@@ -209,11 +210,7 @@ export default function AirbnbPaymentsPage() {
                   </thead>
                   <tbody>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={6} className="text-center text-muted-foreground py-6">
-                        Loading payouts...
-                      </td>
-                    </tr>
+                    Array.from({ length: 4 }, (_, row) => <tr key={`payout-skeleton-${row}`} aria-hidden="true" className="border-t border-border">{Array.from({ length: 6 }, (_, column) => <td key={column} className="px-3 py-4"><Skeleton className={`h-4 ${column === 0 ? "w-24" : "w-16"} max-w-full`} /></td>)}</tr>)
                   ) : payouts.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-center text-muted-foreground py-6">

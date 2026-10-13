@@ -397,7 +397,7 @@ export default function AdminTeamMembersPage() {
     return (
       <div className="min-h-[100svh] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary" />
+          <div aria-hidden="true" className="loading-skeleton h-4 w-32 rounded-md" />
           <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
         </div>
       </div>
@@ -437,7 +437,7 @@ export default function AdminTeamMembersPage() {
                   onClick={fetchTeam}
                   className="inline-flex items-center gap-2 rounded-xl border border-border bg-white/70 px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-white"
                 >
-                  <RefreshCw className={cn("h-4 w-4", isLoading ? "animate-spin" : "")} />
+                  <RefreshCw className={cn("h-4 w-4", isLoading ? "animate-pulse" : "")} />
                   Refresh
                 </button>
                 <button

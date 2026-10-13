@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Cookies from "js-cookie";
 import { Bell, CheckCircle2, ChevronLeft, ChevronRight, Lock, RefreshCw, Trash2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 interface Notification {
   _id: string;
@@ -346,7 +347,7 @@ export default function TenantNotificationsPage() {
 
           <div className="mt-4 surface-card rounded-3xl p-4 sm:p-6">
             {isLoading ? (
-              <div className="text-muted-foreground text-sm">Loading notifications…</div>
+              <div className="space-y-3" aria-busy="true" aria-label="Loading notifications">{Array.from({ length: 3 }, (_, index) => <div key={index} className="flex items-center gap-3 rounded-xl border border-border p-4"><Skeleton className="h-9 w-9 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div>)}</div>
             ) : notifications.length === 0 ? (
               <div className="text-muted-foreground text-sm">No notifications yet.</div>
             ) : (

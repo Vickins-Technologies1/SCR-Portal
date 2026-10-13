@@ -30,6 +30,7 @@ import {
   Area,
 } from "recharts";
 import { Property } from "../../types/property";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 interface Tenant {
   _id: string;
@@ -947,7 +948,7 @@ export default function TenantDashboardPage() {
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-500 text-sm">Loading profile…</p>
+                <div className="space-y-2" aria-busy="true" aria-label="Loading tenant profile"><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-48 max-w-full" /><Skeleton className="h-4 w-32" /></div>
               )}
             </div>
           </div>

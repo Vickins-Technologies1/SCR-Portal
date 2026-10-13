@@ -5,6 +5,7 @@ import PayForAirbnbBookingButton from "@/components/PayForAirbnbBookingButton";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
 import { useCsrfToken } from "@/hooks/useCsrfToken";
 import AirbnbBookingStatusCard from "@/components/airbnb/AirbnbBookingStatusCard";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 export default function AirbnbGuestPaymentsPage() {
   const { csrfToken } = useCsrfToken();
@@ -29,7 +30,7 @@ export default function AirbnbGuestPaymentsPage() {
       ) : null}
 
       {isLoading ? (
-        <div className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">Loading booking…</div>
+        <div className="surface-card space-y-4 rounded-3xl p-6" aria-busy="true" aria-label="Loading booking"><Skeleton className="h-4 w-32" /><Skeleton className="h-7 w-56 max-w-full" /><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-11 w-full rounded-xl" /></div>
       ) : booking ? (
         <div className="space-y-4">
           <AirbnbBookingStatusCard booking={booking} />

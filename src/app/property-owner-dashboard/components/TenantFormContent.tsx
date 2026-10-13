@@ -497,8 +497,7 @@ export default function TenantFormContent({
           disabled={isLoading}
           className="px-8 py-2.5 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex items-center gap-2"
         >
-          {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"></div>}
-          {mode === "add" ? "Add Tenant" : "Update Tenant"}
+          {isLoading ? "Saving…" : mode === "add" ? "Add Tenant" : "Update Tenant"}
         </button>
       </div>
     </form>

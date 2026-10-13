@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Gift, Link2, Share2, WalletCards } from "lucide-react";
 import OwnerPageShell from "../components/OwnerPageShell";
+import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
 
 type ReferralData = {
   profile: { referralCode: string; rewardMode: string; referralLink: string };
@@ -86,7 +87,7 @@ export default function ReferralsPage() {
   const canPayout = isCash && !!data && data.wallet.available >= data.settings.minimumPayoutAmount;
   const moreNeeded = useMemo(() => Math.max(0, (data?.settings.minimumPayoutAmount || 0) - (data?.wallet.available || 0)), [data]);
 
-  if (loading) return <OwnerPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 text-muted-foreground sm:p-6">Loading your referral dashboard…</main></OwnerPageShell>;
+  if (loading) return <OwnerPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 sm:p-6" aria-busy="true" aria-label="Loading referral dashboard"><PageContentSkeleton /></main></OwnerPageShell>;
   if (!data) return <OwnerPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 text-destructive sm:p-6">{message || "Referral dashboard unavailable."}</main></OwnerPageShell>;
 
   return (

@@ -21,7 +21,6 @@ import {
   ArrowDownRight,
   X,
   Lock,
-  Loader2,
   BarChart2,
   Upload,
   FileUp,
@@ -34,6 +33,7 @@ import { format, startOfMonth, startOfYear } from "date-fns";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAccountTier } from "@/hooks/useAccountTier";
 import PremiumGate from "@/components/PremiumGate";
+import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
 
 
 interface Expense {
@@ -492,7 +492,7 @@ function ExpensesPageInner() {
                 className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-sm transition-all text-xs sm:text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isExporting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  null
                 ) : (
                   <Download size={16} />
                 )}
@@ -631,7 +631,6 @@ function ExpensesPageInner() {
                 >
                   {isApplyingFilters ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
                       Applying...
                     </>
                   ) : (
@@ -1089,7 +1088,6 @@ function ExpensesPageInner() {
                     >
                       {isSavingExpense || uploading ? (
                         <>
-                          <Loader2 className="h-5 w-5 animate-spin" />
                           {uploading ? "Uploading..." : "Saving..."}
                         </>
                       ) : (
@@ -1242,9 +1240,7 @@ export default function ExpensesPage() {
           <Sidebar />
           <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
             <main className="max-w-7xl mx-auto">
-              <div className="flex justify-center items-center min-h-[60vh]">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-              </div>
+              <div className="min-h-[60vh] py-8" aria-busy="true" aria-label="Loading expenses"><PageContentSkeleton /></div>
             </main>
           </div>
         </div>

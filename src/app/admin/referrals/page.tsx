@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminPageShell from "../components/AdminPageShell";
+import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
 
 type AdminData = {
   settings: { attributionDays: number; subscriptionRewardMonths: number; cashCommissionAmount: number; minimumPayoutAmount: number; requirePaidSubscription: boolean };
@@ -32,7 +33,7 @@ export default function AdminReferralsPage() {
   };
 
   if (error) return <AdminPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 text-destructive sm:p-6">{error}</main></AdminPageShell>;
-  if (!data) return <AdminPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 text-muted-foreground sm:p-6">Loading referrals…</main></AdminPageShell>;
+  if (!data) return <AdminPageShell><main className="mx-auto min-h-screen max-w-7xl p-4 sm:p-6" aria-busy="true" aria-label="Loading referrals"><PageContentSkeleton /></main></AdminPageShell>;
 
   return <AdminPageShell><main className="mx-auto min-h-screen max-w-7xl space-y-6">
     <div><p className="text-[10px] uppercase tracking-[0.28em] text-primary">Admin console</p><h1 className="mt-2 text-2xl font-semibold text-foreground">Referrals & payouts</h1><p className="mt-1 text-sm text-muted-foreground">Review attribution, commissions, and cash payout requests inside My Accurate Rent.</p></div>

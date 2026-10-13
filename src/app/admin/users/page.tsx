@@ -631,7 +631,7 @@ export default function PropertyOwnersPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"></div>
+          <div aria-hidden="true" className="loading-skeleton h-4 w-32 rounded-md" />
           <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
         </div>
       </div>

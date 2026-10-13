@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, MessageCircle } from "lucide-react";
 import { useCsrfToken } from "@/hooks/useCsrfToken";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 type Message = {
   id: string;
@@ -92,7 +93,7 @@ export default function AirbnbGuestMessagesPage() {
       <div className="surface-card rounded-3xl p-6">
         <div className="rounded-2xl border border-border bg-white/70 p-4 h-[46vh] overflow-y-auto space-y-3">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading conversation…</p>
+            <div className="space-y-3" aria-busy="true" aria-label="Loading conversation"><Skeleton className="h-14 w-4/5 rounded-2xl" /><Skeleton className="ml-auto h-14 w-3/5 rounded-2xl" /><Skeleton className="h-14 w-2/3 rounded-2xl" /></div>
           ) : messages.length === 0 ? (
             <div className="text-sm text-muted-foreground flex items-center gap-2">
               <MessageCircle size={16} /> No messages yet. Say hello.

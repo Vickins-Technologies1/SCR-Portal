@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wrench, Plus, AlertCircle, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Wrench, Plus, AlertCircle, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface MaintenanceRequest {
   _id: string;
@@ -393,8 +393,7 @@ export default function MaintenanceRequestsPage() {
                     className="px-6 py-2.5 text-sm bg-primary text-white font-bold rounded-xl hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2 transition"
                   >
                     {submitting ? (
-                      <>
-                        <Loader2 className="animate-spin" size={18} /> Submitting...
+                      <> Submitting...
                       </>
                     ) : (
                       "Submit Request"

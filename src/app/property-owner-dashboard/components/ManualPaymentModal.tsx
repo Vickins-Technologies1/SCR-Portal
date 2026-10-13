@@ -206,10 +206,7 @@ export default function ManualPaymentModal({
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition flex items-center gap-2"
             disabled={isLoading}
           >
-            {isLoading && (
-              <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-            )}
-            Process Payment
+            {isLoading ? "Processing…" : "Process Payment"}
           </button>
         </div>
       </form>

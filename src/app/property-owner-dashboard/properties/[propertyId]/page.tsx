@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import { Bar } from "react-chartjs-2";
+import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
 import {
   Chart as ChartJS,
   BarElement,
@@ -282,9 +283,7 @@ export default function PropertyDetailsPage() {
           </div>
 
           {isLoading ? (
-            <div className="surface-card rounded-3xl p-6 sm:p-8 text-center text-muted-foreground">
-              Loading property details...
-            </div>
+            <div className="surface-card rounded-3xl p-6 sm:p-8" aria-busy="true" aria-label="Loading property details"><PageContentSkeleton /></div>
           ) : error ? (
             <div className="surface-card rounded-3xl p-6 sm:p-8">
               <div className="flex items-center gap-3 text-red-700">

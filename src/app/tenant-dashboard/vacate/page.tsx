@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { DoorOpen, AlertCircle, X, Loader2, Calendar } from "lucide-react";
+import { DoorOpen, AlertCircle, X, Calendar } from "lucide-react";
 import { VacateRequest } from "../../../types/vacate";
 
 export default function VacateRequestsPage() {
@@ -291,8 +291,7 @@ export default function VacateRequestsPage() {
                     className="px-6 py-2.5 text-sm bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2 transition"
                   >
                     {submitting ? (
-                      <>
-                        <Loader2 className="animate-spin" size={18} /> Submitting...
+                      <> Submitting...
                       </>
                     ) : (
                       "Submit Request"

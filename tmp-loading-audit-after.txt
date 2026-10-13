@@ -1,0 +1,47 @@
+src\app\tenant-login\page.tsx:9:    <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+src\app\admin\users\page.tsx:634:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\components\ConnectMpesaForm.tsx:5:import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+src\app\tenant-dashboard\vacate\page.tsx:5:import { DoorOpen, AlertCircle, X, Loader2, Calendar } from "lucide-react";
+src\app\admin\reviews\page.tsx:195:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\tenant-dashboard\payments\page.tsx:400:                        < className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full mb-3"  aria-hidden="true" className="loading-skeleton w-10 h-10 rounded-lg" />
+src\app\admin\dashboard\page.tsx:330:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\account\billing\page.tsx:25:                  <div><p className="text-xs text-muted-foreground">Plan</p><p className="mt-1 text-xl font-semibold">{data?.plan?.name || "Loading…"}</p></div>
+src\app\admin\properties\page.tsx:419:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\tenant-dashboard\maintenance\page.tsx:6:import { Wrench, Plus, AlertCircle, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+src\app\admin\airbnb\payouts\page.tsx:99:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\admin\airbnb\bookings\page.tsx:131:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\tenant-dashboard\layout.tsx:19:  Loader2,
+src\app\admin\lifetime\page.tsx:4:import { Loader2, Plus, Trash2 } from "lucide-react";
+src\app\admin\airbnb\listings\page.tsx:102:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\admin\components\BillingPage.tsx:422:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\admin\components\BillingPage.tsx:543:                      <RefreshCw className="h-4 w-4 animate-spin" />
+src\app\admin\components\BillingPage.tsx:745:                                    <RefreshCw className="h-4 w-4 animate-spin" />
+src\app\admin\components\BillingPage.tsx:767:                                    <RefreshCw className="h-4 w-4 animate-spin" />
+src\app\reset-password\page.tsx:192:                  <svg className="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
+src\app\complete-phone\page.tsx:111:    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center">Loading...</div>}>
+src\app\google-otp\page.tsx:144:    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center">Loading...</div>}>
+src\app\admin\airbnb\messages\page.tsx:97:          < className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\property-owner-dashboard\page.tsx:386:              < className="animate-spin rounded-full h-11 w-11 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-11 w-11 rounded-lg" />
+src\app\property-owner-dashboard\tenants\page.tsx:575:              < className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-10 w-10 rounded-lg" />
+src\app\airbnb-dashboard\reports\page.tsx:611:                    Ksh {walletBalance !== null ? walletBalance.toFixed(2) : "Loading..."}
+src\app\property-owner-dashboard\expenses\page.tsx:24:  Loader2,
+src\app\property-owner-dashboard\expenses\page.tsx:1243:                < className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\property-owner-dashboard\settings\activities\page.tsx:320:                  {loadingMore ? "Loading…" : "Load more"}
+src\app\property-owner-dashboard\list-properties\page.tsx:313:              < className="animate-spin rounded-full h-12 w-12 border-t-4 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\property-owner-dashboard\reports\page.tsx:706:              < className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\property-owner-dashboard\reports\page.tsx:945:                  Ksh {walletBalance !== null ? walletBalance.toFixed(2) : "Loading..."}
+src\app\property-owner-dashboard\reports\page.tsx:999:              < className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-8 w-8 rounded-lg" />
+src\app\property-owner-dashboard\reports\page.tsx:1160:                < className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-12 w-12 rounded-lg" />
+src\app\property-owner-dashboard\list-properties\ListingFormModal.tsx:544:                < className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"  aria-hidden="true" className="loading-skeleton h-5 w-5 rounded-lg" />
+src\app\airbnb-dashboard\integrations\page.tsx:457:                          Loading Tuma settings...
+src\app\property-owner-dashboard\properties\page.tsx:713:              < className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-8 w-8 rounded-lg" />
+src\app\property-owner-dashboard\properties\page.tsx:1301:                        < className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"  aria-hidden="true" className="loading-skeleton h-5 w-5 rounded-lg" />
+src\app\property-owner-dashboard\properties\page.tsx:1334:                      < className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"  aria-hidden="true" className="loading-skeleton h-5 w-5 rounded-lg" />
+src\app\airbnb-dashboard\bookings\[bookingId]\page.tsx:192:            <section className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">Loading...</section>
+src\app\property-owner-dashboard\payments\page.tsx:619:              < className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"  aria-hidden="true" className="loading-skeleton h-8 w-8 rounded-lg" />
+src\app\property-owner-dashboard\components\TenantsTable.tsx:418:      {/* Loading State */}
+src\app\property-owner-dashboard\components\TenantInfoGrid.tsx:94:    { label: "Property", value: property?.name || "Loading..." },
+src\app\property-owner-dashboard\components\TenantFormContent.tsx:500:          {isLoading && < className="animate-spin rounded-full h-4 w-4 border-t-2 border-white"  aria-hidden="true" className="loading-skeleton h-4 w-4 rounded-lg" />}
+src\app\property-owner-dashboard\components\PaymentModal.tsx:585:                  < className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"  aria-hidden="true" className="loading-skeleton h-5 w-5 rounded-lg" />
+src\app\property-owner-dashboard\components\ManualPaymentModal.tsx:210:              < className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"  aria-hidden="true" className="loading-skeleton h-5 w-5 rounded-lg" />
+src\app\airbnb-tenant-login\page.tsx:9:    <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>

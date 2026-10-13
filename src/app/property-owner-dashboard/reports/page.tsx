@@ -10,6 +10,7 @@ import PaymentModal from "../components/PaymentModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAccountTier } from "@/hooks/useAccountTier";
 import PremiumGate from "@/components/PremiumGate";
+import { CardGridSkeleton, PageContentSkeleton, Skeleton, TableRowsSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -703,7 +704,7 @@ function ReportsAndInvoicesPageInner() {
         <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
           <main className="max-w-7xl mx-auto">
             <div className="flex justify-center items-center min-h-[60vh]">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+              <div className="w-full" aria-busy="true" aria-label="Loading reports"><PageContentSkeleton /></div>
             </div>
           </main>
         </div>
@@ -942,7 +943,7 @@ function ReportsAndInvoicesPageInner() {
               <div className="surface-card rounded-2xl p-5 sm:p-6">
                 <h2 className="text-base sm:text-lg font-semibold text-foreground">Wallet Balance</h2>
                 <p className="text-xl sm:text-2xl font-semibold text-primary">
-                  Ksh {walletBalance !== null ? walletBalance.toFixed(2) : "Loading..."}
+                  {walletBalance !== null ? `Ksh ${walletBalance.toFixed(2)}` : <Skeleton className="mt-2 h-7 w-32" />}
                 </p>
                 <p className="text-xs sm:text-sm text-muted-foreground">Available for property management</p>
               </div>
@@ -964,9 +965,8 @@ function ReportsAndInvoicesPageInner() {
                 </div>
 
                 {isEstimateLoading ? (
-                  <div className="mt-4 text-xs sm:text-sm text-muted-foreground flex items-center gap-2">
-                    <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                    Calculating estimate...
+                  <div className="mt-4 text-xs sm:text-sm text-muted-foreground" role="status" aria-live="polite">
+                    Calculating estimate…
                   </div>
                 ) : invoiceEstimate?.items?.length ? (
                   <div className="mt-4 space-y-2 text-xs sm:text-sm text-muted-foreground">
@@ -995,9 +995,8 @@ function ReportsAndInvoicesPageInner() {
 
           {/* Loading */}
           {isLoading ? (
-            <div className="text-center text-muted-foreground text-xs sm:text-sm py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-              <span className="ml-2">Loading {activeTab}...</span>
+            <div aria-busy="true" aria-label={`Loading ${activeTab}`}>
+              {activeTab === "reports" ? <TableRowsSkeleton rows={5} columns={5} /> : <CardGridSkeleton count={3} />}
             </div>
           ) : activeTab === "reports" ? (
             reports.length === 0 ? (
@@ -1157,7 +1156,7 @@ export default function ReportsAndInvoicesPage() {
           <div className="md:ml-72 pt-16 pb-10 px-4 sm:px-6 lg:px-8">
             <main className="max-w-7xl mx-auto">
               <div className="flex justify-center items-center min-h-[60vh]">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                <div className="w-full" aria-busy="true" aria-label="Loading reports"><PageContentSkeleton /></div>
               </div>
             </main>
           </div>

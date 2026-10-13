@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 interface UnitType {
   type: string;
@@ -324,7 +325,7 @@ export default function PriceOverrideModal({
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-gray-800">Upcoming & Active Changes</h3>
             {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading overrides...</p>
+              <div className="space-y-2" aria-busy="true" aria-label="Loading scheduled rent changes">{Array.from({ length: 2 }, (_, index) => <div key={index} className="rounded-xl border border-border p-3"><Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="mt-2 h-3 w-28 max-w-full" /></div>)}</div>
             ) : overrides.length === 0 ? (
               <p className="text-sm text-muted-foreground">No scheduled price changes for this property yet.</p>
             ) : (

@@ -11,6 +11,7 @@ import type { AirbnbBooking } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
 import AirbnbBookingStatusCard from "@/components/airbnb/AirbnbBookingStatusCard";
 import AirbnbPaymentVerificationModal from "@/components/airbnb/AirbnbPaymentVerificationModal";
+import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
 
 type BookingDetails = AirbnbBooking & {
   createdAt?: string;
@@ -189,7 +190,7 @@ export default function AirbnbBookingDetailsPage() {
           )}
 
           {isLoading ? (
-            <section className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">Loading...</section>
+            <section className="surface-card rounded-3xl p-6" aria-busy="true" aria-label="Loading booking details"><PageContentSkeleton /></section>
           ) : !booking ? (
             <section className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">
               Booking not found.

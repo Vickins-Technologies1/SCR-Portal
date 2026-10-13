@@ -5,6 +5,7 @@ import Link from "next/link";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import OwnerPageShell from "@/app/property-owner-dashboard/components/OwnerPageShell";
 import { SidebarProvider } from "@/app/property-owner-dashboard/components/SidebarContext";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 export default function AccountBillingPage() {
   const [data, setData] = useState<any>(null);
@@ -22,7 +23,7 @@ export default function AccountBillingPage() {
               </div>
               <section className="rounded-3xl border border-border bg-card p-6 shadow-xl">
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <div><p className="text-xs text-muted-foreground">Plan</p><p className="mt-1 text-xl font-semibold">{data?.plan?.name || "Loading…"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Plan</p>{data ? <p className="mt-1 text-xl font-semibold">{data?.plan?.name || "—"}</p> : <Skeleton className="mt-2 h-7 w-36 max-w-full" />}</div>
                   <div><p className="text-xs text-muted-foreground">Billing</p><p className="mt-1 font-semibold">{lifetime ? "One-time payment" : data?.plan?.billingType || "—"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Status</p><p className="mt-1 font-semibold text-primary">{data?.plan?.status || "—"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Purchased</p><p className="mt-1 font-semibold">{data?.billing?.purchasedAt ? new Date(data.billing.purchasedAt).toLocaleDateString("en-KE") : "—"}</p></div>

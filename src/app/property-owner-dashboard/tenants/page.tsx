@@ -571,9 +571,15 @@ export default function TenantsPage() {
 
           {/* Tenants Table */}
           {isLoading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
-              <p className="mt-4 text-muted-foreground text-xs sm:text-sm">Loading tenants...</p>
+            <div className="surface-card overflow-hidden rounded-2xl" aria-busy="true" aria-label="Loading tenants">
+              <div className="hidden grid-cols-5 gap-4 border-b border-border bg-muted/30 px-5 py-4 sm:grid">
+                {Array.from({ length: 5 }, (_, index) => <span key={index} className="loading-skeleton h-3 w-20 rounded-md" />)}
+              </div>
+              <div className="divide-y divide-border">
+                {Array.from({ length: 5 }, (_, row) => <div key={row} className="grid grid-cols-2 gap-4 px-4 py-4 sm:grid-cols-5 sm:px-5">
+                  {Array.from({ length: 5 }, (_, column) => <span key={column} className={`loading-skeleton h-4 ${column === 0 ? "w-28" : "w-20"} max-w-full rounded-md`} />)}
+                </div>)}
+              </div>
             </div>
           ) : effectiveOwnerId ? (
             <TenantsTable
@@ -598,8 +604,8 @@ export default function TenantsPage() {
               onResendWelcome={handleResendWelcome}
             />
           ) : (
-            <div className="text-center py-12 text-muted-foreground text-xs sm:text-sm">
-              Loading account information...
+            <div className="surface-card rounded-2xl p-5" aria-busy="true" aria-label="Loading account information">
+              <div className="loading-skeleton h-4 w-40 rounded-md" />
             </div>
           )}
 

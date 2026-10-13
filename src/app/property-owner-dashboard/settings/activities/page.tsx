@@ -7,6 +7,7 @@ import Cookies from "js-cookie";
 import { Clock, Filter, RefreshCw, Search, Shield, ArrowLeft, Eye } from "lucide-react";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import toast, { Toaster } from "react-hot-toast";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
@@ -196,7 +197,7 @@ export default function OwnerActivitiesPage() {
                   disabled={refreshing}
                   className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
                 >
-                  <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+                  <RefreshCw size={14} className={refreshing ? "animate-pulse" : ""} />
                   Refresh
                 </button>
               </div>
@@ -256,7 +257,7 @@ export default function OwnerActivitiesPage() {
               </div>
 
               {loading ? (
-                <div className="p-5 sm:p-6 text-sm text-muted-foreground">Loading activity log…</div>
+                <div className="space-y-3 p-5 sm:p-6" aria-busy="true" aria-label="Loading activity log">{Array.from({ length: 4 }, (_, index) => <div key={index} className="flex gap-3"><Skeleton className="h-9 w-9 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/3" /></div></div>)}</div>
               ) : activities.length === 0 ? (
                 <div className="p-5 sm:p-6 text-sm text-muted-foreground">
                   No activities found for the selected filters.
@@ -316,7 +317,7 @@ export default function OwnerActivitiesPage() {
                   disabled={loadingMore}
                   className="inline-flex items-center gap-2 rounded-xl border border-border bg-white/80 px-4 py-2 text-xs font-semibold text-foreground hover:bg-white disabled:opacity-50"
                 >
-                  <RefreshCw size={14} className={loadingMore ? "animate-spin" : ""} />
+                  <RefreshCw size={14} className={loadingMore ? "animate-pulse" : ""} />
                   {loadingMore ? "Loading…" : "Load more"}
                 </button>
               </div>

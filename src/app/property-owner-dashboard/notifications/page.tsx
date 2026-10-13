@@ -13,6 +13,7 @@ import NotificationsTable from "../components/notifications/NotificationsTable";
 import PaginationControls from "../components/notifications/PaginationControls";
 import PremiumGate from "@/components/PremiumGate";
 import { useAccountTier } from "@/hooks/useAccountTier";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 // Interfaces
 interface Tenant {
@@ -551,10 +552,7 @@ export default function NotificationsPage() {
               )}
 
               {isLoading && paginatedItems.length === 0 ? (
-                <div className="flex flex-col items-center py-20">
-                  <Bell className="mb-4 h-16 w-16 animate-pulse text-primary" />
-                  <p className="text-xs sm:text-sm text-muted-foreground">Loading notifications...</p>
-                </div>
+                <div className="space-y-3" aria-busy="true" aria-label="Loading notifications">{Array.from({ length: 4 }, (_, index) => <div key={index} className="surface-card flex items-center gap-3 rounded-2xl p-4"><Skeleton className="h-9 w-9 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div></div>)}</div>
               ) : paginatedItems.length === 0 ? (
                 <div className="flex flex-col items-center rounded-2xl surface-card py-20">
                   <Bell className="mb-6 h-16 w-16 text-gray-300" />

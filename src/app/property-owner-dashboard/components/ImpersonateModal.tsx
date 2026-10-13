@@ -103,10 +103,7 @@ export default function ImpersonateModal({
             className="px-10 py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl hover:from-amber-600 hover:to-orange-700 transition font-bold shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3 min-w-[180px]"
           >
             {isLoading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Switching to Tenant View...
-              </>
+              <>Switching to Tenant View…</>
             ) : (
               <>
                 <LogIn className="h-5 w-5" />

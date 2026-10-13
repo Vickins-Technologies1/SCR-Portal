@@ -19,6 +19,7 @@ import { Line } from "react-chartjs-2";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
+import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title);
 
@@ -348,10 +349,7 @@ export default function PropertiesReportPage() {
           )}
 
           {isLoading ? (
-            <div className="surface-card rounded-3xl p-10 text-center text-muted-foreground">
-              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <p className="mt-3 text-sm">Loading properties report...</p>
-            </div>
+            <div aria-busy="true" aria-label="Loading properties report"><PageContentSkeleton /></div>
           ) : !hasAccess ? (
             <div className="surface-card rounded-3xl p-10 text-center">
               <ShieldAlert className="mx-auto h-10 w-10 text-amber-500" />

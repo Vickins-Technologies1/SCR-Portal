@@ -581,10 +581,7 @@ export default function PaymentModal({
                 }`}
                 aria-label="Initiate payment"
               >
-                {isLoading && (
-                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                )}
-                Pay Now
+                {isLoading ? "Processing…" : "Pay Now"}
               </button>
             </div>
           </form>
@@ -598,7 +595,7 @@ export default function PaymentModal({
       >
         <div className="flex flex-col gap-4 py-2">
           <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-3">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary" />
+            <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-primary/70 animate-pulse" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">{statusMessage}</p>
               <p className="text-xs text-muted-foreground">We’ll keep checking until the payment is confirmed or fails.</p>

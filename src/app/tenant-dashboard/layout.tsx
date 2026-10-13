@@ -16,7 +16,6 @@ import {
   DoorOpen,
   Sparkles,
   Shield,
-  Loader2,
 } from "lucide-react";
 import Cookies from "js-cookie";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
@@ -308,7 +307,6 @@ export default function TenantDashboardLayout({
             >
               {isReverting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
                   Reverting…
                 </>
               ) : (

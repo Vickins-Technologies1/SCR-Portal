@@ -7,6 +7,7 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import SectionHeader from "../components/SectionHeader";
 import { useAirbnbAccess } from "../components/useAirbnbAccess";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 import type { AirbnbBooking } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
 
@@ -494,11 +495,7 @@ export default function AirbnbBookingsPage() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={8} className="text-center text-muted-foreground py-6">
-                        Loading bookings...
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }, (_, row) => <tr key={`booking-skeleton-${row}`} aria-hidden="true" className="border-t border-border">{Array.from({ length: 8 }, (_, column) => <td key={column} className="px-3 py-4"><Skeleton className={`h-4 ${column === 0 ? "w-28" : "w-16"} max-w-full`} /></td>)}</tr>)
                   ) : bookings.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="text-center text-muted-foreground py-6">

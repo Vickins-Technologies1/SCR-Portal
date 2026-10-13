@@ -8,6 +8,7 @@ import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAccountTier } from "@/hooks/useAccountTier";
+import { TableRowsSkeleton } from "@/components/ui/LoadingSkeletons";
 
 interface Payment {
   _id: string;
@@ -615,9 +616,8 @@ export default function PaymentsPage() {
             </div>
           )}
           {isLoading ? (
-            <div className="text-center text-muted-foreground text-xs sm:text-sm">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-              <span className="ml-2">Loading payments...</span>
+            <div className="table-shell overflow-hidden" aria-busy="true" aria-label="Loading payments">
+              <TableRowsSkeleton rows={6} columns={6} />
             </div>
           ) : payments.length === 0 ? (
             <div className="surface-card rounded-2xl p-6 text-muted-foreground text-center text-xs sm:text-sm">

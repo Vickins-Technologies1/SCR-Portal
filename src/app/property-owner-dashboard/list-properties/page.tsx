@@ -19,6 +19,7 @@ import { useAccountTier } from "@/hooks/useAccountTier";
 import { Property, Listing } from "@/types/property";
 import { ensureAvailability } from "@/lib/availability";  // ← Updated imports
 import PremiumGate from "@/components/PremiumGate";
+import { CardGridSkeleton } from "@/components/ui/LoadingSkeletons";
 
 interface SortConfig {
   key: "name" | "address" | "createdAt" | "status";
@@ -309,9 +310,7 @@ export default function ListPropertiesPage() {
             )}
 
           {isLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-primary"></div>
-            </div>
+            <div aria-busy="true" aria-label="Loading listed properties"><CardGridSkeleton count={6} /></div>
           ) : sortedListings.length === 0 ? (
             <motion.div className="text-center py-20 surface-card rounded-2xl text-muted-foreground">
               <Building2 className="h-14 w-14 mx-auto mb-4 text-slate-300" />

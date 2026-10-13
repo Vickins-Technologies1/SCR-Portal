@@ -540,10 +540,7 @@ export default function ListingFormModal({
             }`}
           >
             {isSubmitting || isUploading ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
-                {isUploading ? "Uploading images..." : "Saving..."}
-              </>
+              <>{isUploading ? "Uploading images…" : "Saving…"}</>
             ) : mode === "list" ? (
               "List Property"
             ) : (

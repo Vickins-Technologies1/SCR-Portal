@@ -7,6 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Lock, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
@@ -189,10 +190,7 @@ function ResetPasswordContent() {
             >
               {loading ? (
                 <span className="flex items-center justify-center">
-                  <svg className="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+
                   Resetting...
                 </span>
               ) : (
@@ -215,15 +213,11 @@ function ResetPasswordContent() {
     </div>
   );
 }
- 
+
 // Wrap in Suspense (required for useSearchParams)
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-600 text-lg animate-pulse">Loading reset page...</div>
-      </div>
-    }>
+    <Suspense fallback={<div className="min-h-screen grid place-items-center bg-background p-4"><AuthLoadingFallback /></div>}>
       <ResetPasswordContent />
     </Suspense>
   );

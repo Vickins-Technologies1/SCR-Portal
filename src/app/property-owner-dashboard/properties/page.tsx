@@ -11,6 +11,7 @@ import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
 import PriceOverrideModal from "../components/PriceOverrideModal";
 import { usePermissions } from "@/hooks/usePermissions";
+import { TableRowsSkeleton } from "@/components/ui/LoadingSkeletons";
 
 interface Property {
   _id: string;
@@ -704,15 +705,9 @@ export default function PropertiesPage() {
             </motion.div>
           )}
           {isLoading ? (
-            <motion.div
-              className="text-center text-muted-foreground text-xs sm:text-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-              <span className="ml-2">Loading properties...</span>
-            </motion.div>
+            <div className="table-shell overflow-hidden" aria-busy="true" aria-label="Loading properties">
+              <TableRowsSkeleton rows={5} columns={5} />
+            </div>
           ) : sortedProperties.length === 0 ? (
             <motion.div
               className="surface-card rounded-2xl p-6 text-muted-foreground text-center text-xs sm:text-sm"
@@ -1297,10 +1292,7 @@ export default function PropertiesPage() {
                         }`}
                       aria-label={modalMode === "add" ? "Add property" : "Update property"}
                     >
-                      {isLoading && (
-                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                      )}
-                      {modalMode === "add" ? "Add Property" : "Update Property"}
+                      {isLoading ? "Saving…" : modalMode === "add" ? "Add Property" : "Update Property"}
                     </button>
                   </div>
                 </form>
@@ -1330,10 +1322,7 @@ export default function PropertiesPage() {
                     disabled={isLoading || !csrfToken}
                     aria-label="Confirm delete property"
                   >
-                    {isLoading && (
-                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                    )}
-                    Delete
+                    {isLoading ? "Deleting…" : "Delete"}
                   </button>
                 </div>
               </Modal>

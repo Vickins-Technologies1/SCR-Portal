@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CreditCard, FileText, CalendarPlus, MessageCircle, ArrowRight } from "lucide-react";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
 import AirbnbBookingStatusCard from "@/components/airbnb/AirbnbBookingStatusCard";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 export default function AirbnbGuestDashboardOverviewPage() {
   const { booking, isLoading, error } = useAirbnbTenantBooking();
@@ -36,7 +37,7 @@ export default function AirbnbGuestDashboardOverviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           {isLoading ? (
-            <div className="surface-card rounded-3xl p-6 text-sm text-muted-foreground">Loading booking…</div>
+            <div className="surface-card space-y-4 rounded-3xl p-6" aria-busy="true" aria-label="Loading booking"><Skeleton className="h-4 w-32" /><Skeleton className="h-7 w-56 max-w-full" /><div className="grid gap-3 sm:grid-cols-2"><Skeleton className="h-20 rounded-2xl" /><Skeleton className="h-20 rounded-2xl" /></div><Skeleton className="h-10 w-36 rounded-xl" /></div>
           ) : booking ? (
             <AirbnbBookingStatusCard booking={booking} />
           ) : (

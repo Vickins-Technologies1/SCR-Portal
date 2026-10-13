@@ -77,6 +77,25 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
+@keyframes skeleton-sheen {
+  to { background-position: -200% 0; }
+}
+
+.loading-skeleton {
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--foreground) 7%, var(--background)) 25%,
+    color-mix(in srgb, var(--foreground) 12%, var(--background)) 50%,
+    color-mix(in srgb, var(--foreground) 7%, var(--background)) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sheen 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-skeleton { animation: none; }
+}
+
 body {
   background: var(--color-background);
   color: var(--color-foreground);

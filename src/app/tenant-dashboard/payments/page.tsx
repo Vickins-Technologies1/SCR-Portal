@@ -394,14 +394,13 @@ export default function PaymentsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100 text-gray-700">
                 {loading ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-12">
-                      <div className="flex flex-col items-center">
-                        <div className="animate-spin w-10 h-10 border-4 border-primary border-t-transparent rounded-full mb-3"></div>
-                        <span className="text-sm text-gray-500">Loading payments...</span>
-                      </div>
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, row) => (
+                    <tr key={`payment-skeleton-${row}`} aria-hidden="true" className="border-t border-border">
+                      {Array.from({ length: 7 }, (_, column) => (
+                        <td key={column} className="px-4 py-4"><span className={`loading-skeleton block h-4 ${column === 0 ? "w-28" : "w-16"} max-w-full rounded-md`} /></td>
+                      ))}
+                    </tr>
+                  ))
                 ) : displayedPayments.length > 0 ? (
                   displayedPayments.map((p) => (
                     <motion.tr

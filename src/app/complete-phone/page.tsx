@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
 
 function CompletePhoneContent() {
   const router = useRouter();
@@ -108,7 +109,7 @@ function CompletePhoneContent() {
 
 export default function CompletePhonePage() {
   return (
-    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center p-4"><AuthLoadingFallback /></div>}>
       <CompletePhoneContent />
     </Suspense>
   );

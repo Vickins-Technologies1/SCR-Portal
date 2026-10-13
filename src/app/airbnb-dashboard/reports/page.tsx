@@ -21,6 +21,7 @@ import { formatKes } from "@/lib/airbnb-metrics";
 import PaymentModal from "@/app/property-owner-dashboard/components/PaymentModal";
 import { useAccountTier } from "@/hooks/useAccountTier";
 import PremiumGate from "@/components/PremiumGate";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend);
 
@@ -407,7 +408,7 @@ export default function AirbnbReportsPage() {
                   disabled={isInvoiceSyncing || !csrfToken}
                   className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-sm transition-all text-xs sm:text-sm font-semibold disabled:opacity-60"
                 >
-                  <RefreshCw size={16} className={isInvoiceSyncing ? "animate-spin" : ""} />
+                  <RefreshCw size={16} className={isInvoiceSyncing ? "animate-pulse" : ""} />
                   {!csrfToken ? "Preparing..." : isInvoiceSyncing ? "Syncing invoices..." : "Refresh invoices"}
                 </button>
               )

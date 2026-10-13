@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
+import { CardGridSkeleton } from "@/components/ui/LoadingSkeletons";
 
 type ListingStatus = "published" | "draft" | "sold";
 
@@ -441,7 +442,7 @@ export default function AdminMarketPlacePage() {
     return (
       <div className="min-h-[70vh] grid place-items-center">
         <div className="text-center">
-          <div className="mx-auto mb-3 h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <div aria-hidden="true" className="loading-skeleton h-4 w-32 rounded-md" />
           <p className="text-lg font-medium text-muted-foreground">Verifying admin session...</p>
         </div>
       </div>
@@ -482,7 +483,7 @@ export default function AdminMarketPlacePage() {
                   className="inline-flex items-center gap-2 rounded-full border border-border bg-white/80 px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition"
                   disabled={isLoading}
                 >
-                  <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+                  <RefreshCw size={14} className={isLoading ? "animate-pulse" : ""} />
                   Refresh
                 </button>
                 <button
@@ -546,10 +547,7 @@ export default function AdminMarketPlacePage() {
             </div>
 
             {isLoading && listings.length === 0 ? (
-              <div className="mt-8 flex items-center gap-3 text-muted-foreground">
-                <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                Loading listings…
-              </div>
+              <div className="mt-8" aria-busy="true" aria-label="Loading listings"><CardGridSkeleton count={3} /></div>
             ) : filteredListings.length === 0 ? (
               <div className="mt-10 text-center text-muted-foreground">
                 <AlertCircle className="mx-auto mb-3 h-10 w-10 opacity-60" />

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { UploadCloud, FileText } from "lucide-react";
 import { useCsrfToken } from "@/hooks/useCsrfToken";
 import { useAirbnbTenantBooking } from "@/hooks/useAirbnbTenantBooking";
+import { Skeleton } from "@/components/ui/LoadingSkeletons";
 
 type DocumentType = "id_card" | "driver_license" | "passport";
 
@@ -147,7 +148,7 @@ export default function AirbnbGuestDocumentsPage() {
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.3em]">Uploaded</p>
 
         {isLoading ? (
-          <p className="mt-4 text-sm text-muted-foreground">Loading documents…</p>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2" aria-busy="true" aria-label="Loading documents">{Array.from({ length: 2 }, (_, index) => <div key={index} className="flex items-center gap-4 rounded-2xl border border-border p-4"><Skeleton className="h-10 w-10 rounded-xl" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-40 max-w-full" /><Skeleton className="h-3 w-28 max-w-full" /></div></div>)}</div>
         ) : documents.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">No documents uploaded yet.</p>
         ) : (

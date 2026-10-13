@@ -383,7 +383,7 @@ export default function PropertyOwnerDashboard() {
           ) : hasDashboardAccess === null ? (
             // Loading state while checking permissions
             <div className="flex justify-center items-center min-h-[60vh]">
-              <div className="animate-spin rounded-full h-11 w-11 border-t-2 border-b-2 border-primary"></div>
+              <div aria-hidden="true" className="loading-skeleton h-4 w-32 rounded-md" />
             </div>
           ) : (
             <>

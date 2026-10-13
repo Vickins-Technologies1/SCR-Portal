@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface ConnectMpesaFormProps {
@@ -214,7 +214,7 @@ export default function ConnectMpesaForm({ disabled }: ConnectMpesaFormProps) {
               }`}
             >
               {connected === null ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
+                <span aria-hidden="true" className="loading-skeleton h-3 w-6 rounded-full" />
               ) : connected ? (
                 <CheckCircle2 className="h-5 w-5" />
               ) : (

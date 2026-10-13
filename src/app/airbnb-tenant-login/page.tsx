@@ -3,10 +3,11 @@
 
 import { Suspense } from "react";
 import TenantLoginPage from "../tenant-login/tenant-login-component";
+import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
 
 export default function SuspendedAirbnbTenantLoginPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+    <Suspense fallback={<AuthLoadingFallback />}>
       <TenantLoginPage variant="airbnb" />
     </Suspense>
   );

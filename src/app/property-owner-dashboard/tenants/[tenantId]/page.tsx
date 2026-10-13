@@ -20,6 +20,7 @@ import RecordPaymentModal from "../../components/RecordPaymentModal";
 import ImpersonateModal from "../../components/ImpersonateModal";
 import TenantRentOverrideModal from "../../components/TenantRentOverrideModal";
 import UtilityUsageModal from "../../components/UtilityUsageModal";
+import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
 
 interface Property {
   _id: string;
@@ -86,6 +87,7 @@ export default function TenantDetailsPage() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPageLoading, setIsPageLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [isDuesLoading, setIsDuesLoading] = useState(false);
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
   const [isImpersonating, setIsImpersonating] = useState(false);
@@ -502,6 +504,7 @@ export default function TenantDetailsPage() {
   const fetchTenantData = useCallback(async (token: string) => {
     if (!userId || !tenantId || !token) return;
     setIsPageLoading(true);
+    setPageError(null);
     try {
       const res = await fetch(`/api/tenants/${tenantId}`, {
         headers: { "X-CSRF-Token": token },
@@ -512,9 +515,13 @@ export default function TenantDetailsPage() {
       if (data.success) {
         setTenant(data.tenant);
         setProperty(data.property || null);
+      } else {
+        setTenant(null);
+        setPageError(data.message || "Tenant details could not be loaded.");
       }
-    } catch {
+    } catch (error) {
       setTenant(null);
+      setPageError(error instanceof Error ? error.message : "Tenant details could not be loaded.");
     } finally {
       setIsPageLoading(false);
     }
@@ -737,13 +744,25 @@ export default function TenantDetailsPage() {
     }
   };
 
-  if (isPageLoading || !tenant) {
+  if (isPageLoading) {
     return (
-      <div className="min-h-[100svh] bg-background text-foreground flex items-center justify-center p-4">
-        <div className="glass-panel rounded-2xl px-6 py-5 text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-xs sm:text-sm text-muted-foreground">Loading tenant...</p>
-        </div>
+      <div className="min-h-[100svh] bg-background p-4 pt-20 text-foreground sm:p-6 md:pl-80" aria-busy="true" aria-label="Loading tenant details">
+        <div className="mx-auto max-w-7xl"><PageContentSkeleton /></div>
+      </div>
+    );
+  }
+
+  if (!tenant) {
+    return (
+      <div className="min-h-[100svh] bg-background p-4 pt-20 text-foreground sm:p-6 md:pl-80">
+        <section className="surface-card mx-auto max-w-xl rounded-2xl p-6" role="alert">
+          <h1 className="text-lg font-semibold">Tenant details unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{pageError || "The tenant record could not be found."}</p>
+          <div className="mt-5 flex gap-3">
+            <button type="button" onClick={() => router.back()} className="rounded-xl border border-border px-4 py-2 text-sm font-medium">Go back</button>
+            <button type="button" onClick={() => { if (csrfToken) void fetchTenantData(csrfToken); }} disabled={!csrfToken} className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">Try again</button>
+          </div>
+        </section>
       </div>
     );
   }

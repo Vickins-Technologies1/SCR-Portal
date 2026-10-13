@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import OtpCodeField from "@/components/auth/OtpCodeField";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
+import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
 
 function GoogleOtpContent() {
   const router = useRouter();
@@ -141,7 +142,7 @@ function GoogleOtpContent() {
 
 export default function GoogleOtpPage() {
   return (
-    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-[100svh] grid place-items-center p-4"><AuthLoadingFallback /></div>}>
       <GoogleOtpContent />
     </Suspense>
   );
