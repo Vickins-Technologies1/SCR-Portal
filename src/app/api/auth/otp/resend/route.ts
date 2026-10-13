@@ -140,7 +140,7 @@ export async function POST(request: Request) {
         code: newCode,
         appHash: otp.appHash,
       });
-    } catch (sendErr) {
+    } catch {
       await db.collection("otpChallenges").updateOne(
         { _id: otpObjectId },
         {
@@ -152,11 +152,11 @@ export async function POST(request: Request) {
           },
         }
       );
-      console.error("OTP resend delivery failed:", sendErr);
+      console.error("OTP resend delivery failed", { category: "delivery_error" });
       return NextResponse.json(
         {
           success: false,
-          message: sendErr instanceof Error ? sendErr.message : "Failed to resend OTP. Please try again.",
+          message: "Failed to resend OTP. Please try again.",
         },
         { status: 500 }
       );
@@ -167,8 +167,8 @@ export async function POST(request: Request) {
       message: delivery.message,
       retryAfterMs: OTP_RESEND_COOLDOWN_MS,
     });
-  } catch (error) {
-    console.error("OTP resend error:", error);
+  } catch {
+    console.error("OTP resend error", { category: "internal_error" });
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 }

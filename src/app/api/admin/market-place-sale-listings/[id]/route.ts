@@ -91,7 +91,7 @@ export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdmin(request, "admin:marketplace:view");
+  const auth = await requireAdmin(request, "admin:marketplace:manage");
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;
@@ -158,7 +158,7 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAdmin(request, "admin:marketplace:view");
+  const auth = await requireAdmin(request, "admin:marketplace:manage");
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await context.params;

@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { sendAirbnbPaymentReceivedEmail } from "@/lib/email";
 import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
+import { claimWebhookEvent, completeWebhookEvent, releaseWebhookEvent } from "@/lib/webhook-idempotency";
 
 const STRIPE_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_TOLERANCE = Number(process.env.STRIPE_WEBHOOK_TOLERANCE || 300);
@@ -46,10 +47,13 @@ export async function POST(request: NextRequest) {
   }
 
   const { timestamp } = parseStripeSignature(signature || "");
-  if (timestamp && STRIPE_TOLERANCE > 0) {
+  if (!timestamp || !/^\d+$/.test(timestamp)) {
+    return NextResponse.json({ success: false, message: "Invalid Stripe signature timestamp" }, { status: 400 });
+  }
+  if (STRIPE_TOLERANCE > 0) {
     const now = Math.floor(Date.now() / 1000);
     const diff = Math.abs(now - Number(timestamp));
-    if (Number.isFinite(diff) && diff > STRIPE_TOLERANCE) {
+    if (!Number.isFinite(diff) || diff > STRIPE_TOLERANCE) {
       return NextResponse.json({ success: false, message: "Stale Stripe signature" }, { status: 400 });
     }
   }
@@ -83,8 +87,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  const { db } = await connectToDatabase();
+  const eventId = typeof event?.id === "string" ? event.id.trim() : "";
+  if (!eventId) return NextResponse.json({ success: false, message: "Missing Stripe event ID" }, { status: 400 });
 
+  const { db } = await connectToDatabase();
+  const eventClaim = await claimWebhookEvent(db, "stripe", eventId);
+  if (!eventClaim.claimed) return NextResponse.json({ received: true, duplicate: true });
+
+  try {
   const existing = await db.collection("payments").findOne({ transactionId: paymentId });
 
   if (existing) {
@@ -178,7 +188,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  await completeWebhookEvent(db, "stripe", eventId, eventClaim.token);
   return NextResponse.json({ received: true });
+  } catch {
+    await releaseWebhookEvent(db, "stripe", eventId, eventClaim.token).catch(() => undefined);
+    console.error("Stripe webhook processing failed", { category: "processing_error" });
+    return NextResponse.json({ success: false, message: "Webhook processing failed" }, { status: 500 });
+  }
 }
 
 export const runtime = "nodejs";

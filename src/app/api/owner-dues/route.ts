@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
         managementType: session.managementType ?? normalizeManagementType(cookieStore.get("managementType")?.value ?? owner?.managementType),
         tier: effectiveTier,
         impersonator: session.impersonator ?? null,
+        impersonatedTenantId: session.impersonatedTenantId ?? null,
       });
       response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, getSessionCookieOptions());
     }

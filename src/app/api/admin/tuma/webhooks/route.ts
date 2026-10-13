@@ -40,12 +40,14 @@ export async function GET(request: NextRequest) {
           paymentId: hook.paymentId ? String(hook.paymentId) : "",
           paymentStatus: hook.paymentStatus || "",
           paymentMatched: hook.paymentMatched ?? null,
-          rawBody: hook.rawBody || "",
+          authenticityVerified: hook.authenticityVerified === true,
+          processingStatus: hook.processingStatus || "legacy",
+          reason: hook.reason || "",
         })),
       },
       { status: 200 }
     );
-  } catch (error: unknown) {
+  } catch {
     return NextResponse.json(
       { success: false, message: "Failed to load Tuma webhooks" },
       { status: 500 }

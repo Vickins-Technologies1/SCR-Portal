@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 
 export async function POST(request: NextRequest) {
@@ -46,6 +46,9 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+    if (owner.accountStatus === "suspended") {
+      return NextResponse.json({ success: false, message: "Suspended owner accounts cannot impersonate tenants" }, { status: 403 });
+    }
 
     const tenant = await db.collection("tenants").findOne({
       _id: new ObjectId(tenantId),
@@ -67,10 +70,22 @@ export async function POST(request: NextRequest) {
       redirect,
     });
 
+    const refreshedToken = await createSessionToken({
+      sub: session.sub,
+      role: session.role,
+      ownerId: session.ownerId ?? ownerId,
+      managementType: session.managementType ?? owner.managementType ?? "rentals",
+      tier: session.tier ?? null,
+      impersonator: session.impersonator ?? null,
+      impersonatedTenantId: tenant._id.toString(),
+      preImpersonationExpiresAt: session.exp,
+    }, 60 * 60);
+    response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, getSessionCookieOptions(60 * 60));
+
     // Impersonation cookies — must NOT be httpOnly so client-side JS can read them
     response.cookies.set("impersonatingTenantId", tenant._id.toString(), {
       path: "/",
-      httpOnly: false, // Critical: allow client-side access for banner & logic
+      httpOnly: false, // UI hint only; the signed session is authoritative.
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       maxAge: 3600, // 1 hour
@@ -78,10 +93,20 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set("isImpersonating", "true", {
       path: "/",
-      httpOnly: false, // Critical: allow client-side access
+      httpOnly: false, // UI hint only; the signed session is authoritative.
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       maxAge: 3600,
+    });
+
+    await db.collection("securityAuditEvents").insertOne({
+      event: "impersonation.started",
+      actorId: session.impersonator?.userId || session.sub,
+      actorRole: session.impersonator?.role || session.role,
+      ownerId,
+      targetType: "tenant",
+      targetId: tenant._id.toString(),
+      createdAt: new Date().toISOString(),
     });
 
     return response;

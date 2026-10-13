@@ -316,6 +316,7 @@ export default async function generateMonthlyInvoices() {
       message: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
     });
+    throw error;
   }
 }
 

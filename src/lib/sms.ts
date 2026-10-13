@@ -46,6 +46,17 @@ const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs: numbe
   }
 };
 
+function errorCategory(error: unknown): string {
+  if (error instanceof Error && error.name === "AbortError") return "timeout";
+  if (error instanceof TypeError) return "network_error";
+  return "provider_error";
+}
+
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length > 4 ? `***${digits.slice(-4)}` : "***";
+}
+
 const buildSmsVariants = (payload: Record<string, string>): SmsRequestVariant[] => {
   const endpoint = (process.env.BLESSEDTEXTS_SMS_ENDPOINT || DEFAULT_SMS_ENDPOINT).replace(/\/$/, "");
   const queryString = new URLSearchParams(payload).toString();
@@ -108,7 +119,7 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
   } else if ((recipient.startsWith("7") || recipient.startsWith("1")) && recipient.length === 9) {
     recipient = "254" + recipient;
   } else {
-    throw new Error(`Invalid Kenyan phone format: ${phone}`);
+    throw new Error("Invalid Kenyan phone format");
   }
 
   const payload = {
@@ -137,20 +148,12 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
           }
         }
 
-        logger.info("BlessedTexts SMS Request", {
-          to: recipient,
-          sender: resolvedSenderId,
-          message,
-          status: res.status,
-          variant: variant.label,
-        });
+        logger.info("SMS provider response", { provider: "BlessedTexts", operation: "send", recipient: maskPhone(recipient), status: res.status, variant: variant.label });
 
         if (!res.ok) {
           logger.error("BlessedTexts HTTP Error", {
             status: res.status,
-            statusText: res.statusText,
-            response: json ?? rawText.slice(0, 300),
-            payload,
+            category: "http_error",
             variant: variant.label,
           });
 
@@ -164,9 +167,9 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
 
         if (!json) {
           logger.error("BlessedTexts returned non-JSON", {
-            phone: recipient,
+            recipient: maskPhone(recipient),
             status: res.status,
-            body: rawText.slice(0, 300),
+            category: "invalid_response",
             variant: variant.label,
           });
 
@@ -183,21 +186,17 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
 
         if (failed) {
           logger.error("BlessedTexts SMS Failed", {
-            phone: recipient,
-            error: failed.status_desc,
-            code: failed.status_code,
-            response: json,
+            recipient: maskPhone(recipient),
+            errorCode: /^[A-Za-z0-9_-]{1,32}$/.test(failed.status_code) ? failed.status_code : "provider_error",
             variant: variant.label,
           });
-          throw new Error(`BlessedTexts: ${failed.status_desc} (${failed.status_code})`);
+          throw new Error("BlessedTexts delivery failed");
         }
 
         const successItem = responseArray[0];
         logger.info("SMS Sent Successfully", {
-          phone: recipient,
-          sender: resolvedSenderId,
-          message_id: successItem.message_id,
-          cost: successItem.message_cost,
+          recipient: maskPhone(recipient),
+          messageId: typeof successItem.message_id === "string" ? successItem.message_id : undefined,
           variant: variant.label,
         });
         return;
@@ -213,7 +212,7 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
           lastError = error;
           logger.warn("BlessedTexts SMS attempt failed, trying fallback", {
             variant: variant.label,
-            error: error.message,
+            category: errorCategory(error),
           });
           continue;
         }
@@ -229,9 +228,8 @@ const sendSingleSms = async ({ phone, message, senderId }: SendSmsOptions): Prom
     throw new Error("Unable to send SMS");
   } catch (error) {
     logger.error("sendWelcomeSms() Failed", {
-      phone: phone,
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined,
+      recipient: maskPhone(phone),
+      category: errorCategory(error),
     });
     throw error; // Re-throw for caller to handle
   }

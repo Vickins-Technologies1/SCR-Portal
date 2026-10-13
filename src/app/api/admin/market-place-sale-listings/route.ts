@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/admin-auth";
 
@@ -78,7 +77,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request, "admin:marketplace:view");
+  const auth = await requireAdmin(request, "admin:marketplace:manage");
   if (auth instanceof NextResponse) return auth;
 
   try {

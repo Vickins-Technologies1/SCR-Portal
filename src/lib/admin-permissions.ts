@@ -8,6 +8,7 @@ export type AdminPermission =
   | "admin:payments:manage"
   | "admin:invoices:view"
   | "admin:marketplace:view"
+  | "admin:marketplace:manage"
   | "admin:airbnb:view"
   | "admin:support:view"
   | "admin:support:respond"
@@ -33,6 +34,7 @@ export const ALL_ADMIN_PERMISSIONS: AdminPermission[] = [
   "admin:payments:manage",
   "admin:invoices:view",
   "admin:marketplace:view",
+  "admin:marketplace:manage",
   "admin:airbnb:view",
   "admin:support:view",
   "admin:support:respond",
@@ -153,6 +155,11 @@ export const ADMIN_PERMISSION_GROUPS: AdminPermissionGroup[] = [
         description: "Access market place listings and related admin tools.",
       },
       {
+        key: "admin:marketplace:manage",
+        label: "Manage market place listings",
+        description: "Create, edit, publish, and remove market place listings.",
+      },
+      {
         key: "admin:webhooks:view",
         label: "Webhooks",
         description: "View webhook activity (Tuma, etc).",
@@ -228,6 +235,7 @@ export const ADMIN_ROLE_PRESETS: Record<string, AdminPermission[]> = {
     "admin:owners:manage",
     "admin:airbnb:view",
     "admin:marketplace:view",
+    "admin:marketplace:manage",
   ],
   "Finance": [
     "admin:dashboard:view",
@@ -283,9 +291,7 @@ export function getAdminPermissionFeatureKey(permission: AdminPermission): strin
   return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : permission;
 }
 
-// Feature-level matching: any permission under the same feature key (e.g. "admin:support:*")
-// grants full access to that feature.
+// Grants are exact by default: viewing a feature never implies mutation rights.
 export function adminPermissionsCover(required: AdminPermission, granted: AdminPermission[]): boolean {
-  const requiredKey = getAdminPermissionFeatureKey(required);
-  return granted.some((perm) => getAdminPermissionFeatureKey(perm) === requiredKey);
+  return granted.includes(required);
 }

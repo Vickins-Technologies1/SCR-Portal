@@ -677,15 +677,10 @@ export async function sendOtpEmail({
       subject: "Your OTP Code",
       html,
     });
-    console.log(`OTP email sent to ${to}`);
+    console.log("OTP email sent", { operation: "send_otp_email", success: true });
   } catch (error) {
-    const err = error as { code?: string; responseCode?: number; response?: string; message?: string };
-    console.error(`Error sending OTP email to ${to}:`, {
-      code: err?.code,
-      responseCode: err?.responseCode,
-      response: err?.response,
-      message: err?.message,
-    });
+    const err = error as { code?: string; responseCode?: number };
+    console.error("OTP email delivery failed", { operation: "send_otp_email", category: err?.code === "EAUTH" || err?.responseCode === 535 ? "provider_auth_error" : "provider_error" });
 
     if (err?.code === "EAUTH" || err?.responseCode === 535) {
       throw new Error("SMTP authentication failed. Check SMTP_USER/SMTP_PASS (use an app password if required).");

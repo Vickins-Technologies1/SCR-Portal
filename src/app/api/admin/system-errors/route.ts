@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireAdmin(request, "admin:dashboard:view");
+  const auth = await requireAdmin(request, "admin:settings:manage");
   if (auth instanceof NextResponse) return auth;
   const body = await request.json();
   if (typeof body.errorId !== "string" || typeof body.resolved !== "boolean") return NextResponse.json({ success: false, message: "Invalid request" }, { status: 400 });

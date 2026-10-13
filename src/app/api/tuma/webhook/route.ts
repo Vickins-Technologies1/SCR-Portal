@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { applyTumaPaymentUpdate } from "@/lib/tuma-incoming";
 import logger from "@/lib/logger";
-import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
-import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 function parseNumber(value: unknown): number | undefined {
   if (value == null) return undefined;
@@ -12,197 +9,67 @@ function parseNumber(value: unknown): number | undefined {
 }
 
 function normalizeWebhookPayload(payload: any) {
-  const status =
-    payload?.status ||
-    payload?.payment_status ||
-    payload?.result?.status ||
-    payload?.data?.status ||
-    "";
+  const status = payload?.status || payload?.payment_status || payload?.result?.status || payload?.data?.status || "";
   const resultCode = payload?.result_code ?? payload?.resultCode ?? payload?.result?.code ?? payload?.data?.result_code;
-  const resultDesc =
-    payload?.result_desc ||
-    payload?.resultDesc ||
-    payload?.message ||
-    payload?.failure_reason ||
-    payload?.result?.description ||
-    payload?.data?.result_desc ||
-    "";
-  const merchantRequestId =
-    payload?.merchant_request_id ||
-    payload?.merchantRequestId ||
-    payload?.merchant_requestID ||
-    payload?.data?.merchant_request_id ||
-    "";
-  const checkoutRequestId =
-    payload?.checkout_request_id ||
-    payload?.checkoutRequestId ||
-    payload?.checkout_requestID ||
-    payload?.data?.checkout_request_id ||
-    "";
+  const merchantRequestId = payload?.merchant_request_id || payload?.merchantRequestId || payload?.merchant_requestID || payload?.data?.merchant_request_id || "";
+  const checkoutRequestId = payload?.checkout_request_id || payload?.checkoutRequestId || payload?.checkout_requestID || payload?.data?.checkout_request_id || "";
   const paymentId = payload?.payment_id || payload?.paymentId || payload?.id || payload?.data?.payment_id || "";
-  const mpesaReceiptNumber =
-    payload?.mpesa_receipt_number || payload?.mpesaReceiptNumber || payload?.receipt_number || "";
-  const timestamp =
-    payload?.timestamp ||
-    payload?.transaction_timestamp ||
-    payload?.transaction_date ||
-    payload?.transactionDate ||
-    payload?.paid_at ||
-    payload?.paidAt ||
-    payload?.payment_time ||
-    payload?.data?.timestamp ||
-    payload?.data?.transaction_timestamp ||
-    payload?.data?.transaction_date ||
-    payload?.data?.transactionDate ||
-    payload?.data?.paid_at ||
-    payload?.data?.paidAt ||
-    payload?.data?.payment_time ||
-    payload?.result?.timestamp ||
-    payload?.result?.transaction_timestamp ||
-    payload?.result?.transaction_date ||
-    payload?.result?.transactionDate ||
-    "";
-  const phoneNumber =
-    payload?.phone ||
-    payload?.phone_number ||
-    payload?.msisdn ||
-    payload?.customer?.phone ||
-    payload?.data?.phone ||
-    "";
-  const amount =
-    parseNumber(payload?.amount) ??
-    parseNumber(payload?.data?.amount) ??
-    parseNumber(payload?.transaction_amount);
+  const receipt = payload?.mpesa_receipt_number || payload?.mpesaReceiptNumber || payload?.receipt_number || "";
+  const timestamp = payload?.timestamp || payload?.transaction_timestamp || payload?.transaction_date || payload?.transactionDate || payload?.paid_at || payload?.paidAt || payload?.payment_time || payload?.data?.timestamp || "";
+  const phone = payload?.phone || payload?.phone_number || payload?.msisdn || payload?.customer?.phone || payload?.data?.phone || "";
+  const amount = parseNumber(payload?.amount) ?? parseNumber(payload?.data?.amount) ?? parseNumber(payload?.transaction_amount);
 
   return {
     status: status ? String(status) : "",
-    resultCode,
-    resultDesc: resultDesc ? String(resultDesc) : "",
+    resultCode: resultCode ?? null,
     merchantRequestId: merchantRequestId ? String(merchantRequestId) : "",
     checkoutRequestId: checkoutRequestId ? String(checkoutRequestId) : "",
     paymentId: paymentId ? String(paymentId) : "",
-    mpesaReceiptNumber: mpesaReceiptNumber ? String(mpesaReceiptNumber) : "",
+    receipt: receipt ? String(receipt) : "",
     timestamp: timestamp ? String(timestamp) : "",
-    phoneNumber: phoneNumber ? String(phoneNumber) : "",
-    amount,
+    phone: phone ? String(phone) : "",
+    amount: amount ?? null,
   };
 }
 
 export async function POST(request: NextRequest) {
-  const receivedAt = new Date().toISOString();
-  let rawBody = "";
-  let payload: any = {};
-
+  let payload: unknown;
   try {
-    rawBody = await request.text();
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch (error) {
-    logger.error("Tuma webhook: invalid JSON payload", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    payload = await request.json();
+  } catch {
+    return NextResponse.json({ success: false, message: "Invalid payload" }, { status: 400 });
+  }
+
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return NextResponse.json({ success: false, message: "Invalid payload" }, { status: 400 });
   }
 
   const normalized = normalizeWebhookPayload(payload);
-
   try {
     const { db } = await connectToDatabase();
-    const matchFilters: Record<string, any>[] = [];
-    if (normalized.checkoutRequestId) matchFilters.push({ checkoutRequestId: normalized.checkoutRequestId });
-    if (normalized.merchantRequestId) matchFilters.push({ merchantRequestId: normalized.merchantRequestId });
-    if (normalized.paymentId) {
-      matchFilters.push({ tumaPaymentId: normalized.paymentId });
-      matchFilters.push({ transactionId: normalized.paymentId });
-    }
-
-    let payment = matchFilters.length > 0 ? await db.collection("payments").findOne({ $or: matchFilters }) : null;
-    const paymentMatched = !!payment;
-
-    const webhookInsert = await db.collection("tumaWebhooks").insertOne({
-      receivedAt,
+    await db.collection("tumaWebhooks").insertOne({
+      receivedAt: new Date().toISOString(),
       merchantRequestId: normalized.merchantRequestId,
       checkoutRequestId: normalized.checkoutRequestId,
       paymentGatewayId: normalized.paymentId,
       status: normalized.status,
-      resultCode: normalized.resultCode ?? null,
-      resultDesc: normalized.resultDesc,
-      reference: normalized.mpesaReceiptNumber,
-      amount: normalized.amount ?? null,
-      phoneNumber: normalized.phoneNumber,
+      resultCode: normalized.resultCode,
+      reference: normalized.receipt,
+      amount: normalized.amount,
+      phoneNumber: normalized.phone ? `***${normalized.phone.replace(/\D/g, "").slice(-4)}` : "",
       timestamp: normalized.timestamp,
-      paymentId: payment?._id || null,
-      paymentStatus: payment?.status || "",
-      paymentMatched,
-      rawBody,
+      authenticityVerified: false,
+      paymentMatched: false,
+      processingStatus: "held_for_reconciliation",
+      reason: "provider_callback_authentication_not_configured",
     });
 
-    if (!payment) {
-      return NextResponse.json({ success: true, message: "Webhook received (payment not matched)" }, { status: 200 });
-    }
-
-    if (payment.provider && payment.provider !== "tuma") {
-      return NextResponse.json({ success: true, message: "Webhook ignored for non-Tuma payment" }, { status: 200 });
-    }
-
-    if (normalized.paymentId && !payment.tumaPaymentId) {
-      await db.collection("payments").updateOne(
-        { _id: payment._id },
-        { $set: { tumaPaymentId: normalized.paymentId } }
-      );
-      payment = { ...payment, tumaPaymentId: normalized.paymentId };
-    }
-
-    const result = await applyTumaPaymentUpdate({
-      db,
-      payment,
-      skipFinancialEffects: Boolean(payment.tenantId && !payment.airbnbBookingId),
-      update: {
-        id: normalized.checkoutRequestId || normalized.merchantRequestId || normalized.paymentId || payment._id.toString(),
-        status: normalized.status,
-        resultCode: normalized.resultCode,
-        resultDesc: normalized.resultDesc,
-        reference: normalized.mpesaReceiptNumber,
-        mpesaReceiptNumber: normalized.mpesaReceiptNumber,
-        amount: normalized.amount,
-        phoneNumber: normalized.phoneNumber,
-        timestamp: normalized.timestamp,
-      },
-    });
-
-    if (result.normalizedStatus === "completed" && result.payment?.tenantId) {
-      await postVerifiedPayment({
-        db,
-        paymentId: result.payment._id,
-        providerConfirmedAmount: normalized.amount ?? result.payment.providerConfirmedAmount,
-        providerTransactionId: normalized.paymentId || normalized.checkoutRequestId || normalized.merchantRequestId || null,
-        providerReceipt: normalized.mpesaReceiptNumber || null,
-      });
-    }
-
-    if (result.normalizedStatus === "completed" && result.payment?.planType === "lifetime" && result.payment?.billingType === "one_time") {
-      await activateLifetimeFromVerifiedPayment({
-        db,
-        paymentId: result.payment._id,
-        providerReference: normalized.mpesaReceiptNumber || normalized.paymentId || null,
-      });
-    }
-
-    await db.collection("tumaWebhooks").updateOne(
-      { _id: webhookInsert.insertedId },
-      {
-        $set: {
-          paymentId: payment._id,
-          paymentStatus: result.payment?.status || payment.status,
-          paymentMatched: true,
-        },
-      }
-    );
-
-    return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error) {
-    logger.error("Tuma webhook error", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    // Current repository integration has no Tuma webhook signature, shared
+    // callback credential, or authenticated status lookup. Do not treat this
+    // request as authority to update a payment or apply financial effects.
+    return NextResponse.json({ success: true, message: "Webhook accepted for reconciliation" }, { status: 200 });
+  } catch {
+    logger.error("Tuma webhook could not be recorded", { category: "storage_error" });
     return NextResponse.json({ success: false, message: "Webhook processing failed" }, { status: 500 });
   }
 }

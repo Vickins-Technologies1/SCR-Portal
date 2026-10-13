@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import checkAndRenewExpiredInvoices from "../../../../cron/check-expired-invoices/route";
 import { authorizeCronRequest } from "../../../../lib/cron-auth";
+import { connectToDatabase } from "../../../../lib/mongodb";
+import { withCronJobLock } from "../../../../lib/cron-lock";
 
 export async function GET(request: Request) {
   const authorization = authorizeCronRequest(request);
@@ -11,7 +13,9 @@ export async function GET(request: Request) {
   console.log("Vercel Cron triggered: Running invoice renewal job");
 
   try {
-    await checkAndRenewExpiredInvoices();
+    const { db } = await connectToDatabase();
+    const run = await withCronJobLock(db, "renew-invoices", checkAndRenewExpiredInvoices);
+    if (!run.acquired) return NextResponse.json({ success: true, skipped: true, reason: "already_running" });
 
     return NextResponse.json({
       success: true,

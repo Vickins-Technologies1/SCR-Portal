@@ -13,7 +13,12 @@ export type SessionPayload = JWTPayload & {
   impersonator?: {
     userId: string;
     role: string;
+    expiresAt?: number;
   } | null;
+  /** Signed owner-authorized tenant subject; never sourced from a browser cookie. */
+  impersonatedTenantId?: string | null;
+  /** Original session deadline so ending impersonation cannot extend a session. */
+  preImpersonationExpiresAt?: number;
 };
 
 function getJwtSecret(): Uint8Array {

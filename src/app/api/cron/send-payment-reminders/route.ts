@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import { sendPaymentReminders } from "../../../../lib/reminders";
 import { authorizeCronRequest } from "../../../../lib/cron-auth";
+import { connectToDatabase } from "../../../../lib/mongodb";
+import { withCronJobLock } from "../../../../lib/cron-lock";
 
 export async function GET(request: Request) {
   const authorization = authorizeCronRequest(request);
@@ -11,7 +13,10 @@ export async function GET(request: Request) {
   console.log("Vercel Cron triggered: Running payment reminder job");
 
   try {
-    const { sent, skipped } = await sendPaymentReminders({});
+    const { db } = await connectToDatabase();
+    const run = await withCronJobLock(db, "send-payment-reminders", () => sendPaymentReminders({}));
+    if (!run.acquired) return NextResponse.json({ success: true, skipped: true, reason: "already_running" });
+    const { sent, skipped } = run.result;
 
     return NextResponse.json({
       success: true,

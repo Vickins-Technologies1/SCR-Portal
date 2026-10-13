@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Db, ObjectId } from "mongodb";
-import { createSessionToken, getSessionCookieOptions } from "@/lib/session";
+import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 import { resolveAccountTier } from "@/lib/tier";
 import { getOwnerDueStatus } from "@/lib/billing";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -19,6 +19,11 @@ export async function POST(request: NextRequest) {
     const auth = await requireAdmin(request, "admin:impersonation:manage");
     if (auth instanceof NextResponse) return auth;
     const adminUserId = auth.userId;
+    const adminToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const adminSession = adminToken ? await verifySessionToken(adminToken) : null;
+    if (!adminSession?.exp || adminSession.sub !== adminUserId) {
+      return NextResponse.json({ success: false, message: "Administrator session expired" }, { status: 401 });
+    }
 
     const body = await request.json();
     const { ownerId } = body || {};
@@ -58,6 +63,9 @@ export async function POST(request: NextRequest) {
     if (!owner) {
       return NextResponse.json({ success: false, message: "Owner not found" }, { status: 404 });
     }
+    if (owner.accountStatus === "suspended") {
+      return NextResponse.json({ success: false, message: "Suspended owner accounts cannot be impersonated" }, { status: 403 });
+    }
 
     const managementType = normalizeManagementType(owner.managementType);
     const redirectPath = managementType === "airbnb" ? "/airbnb-dashboard" : "/property-owner-dashboard";
@@ -77,9 +85,9 @@ export async function POST(request: NextRequest) {
       ownerId: owner._id.toString(),
       managementType,
       tier: ownerTier,
-      impersonator: { userId: adminUserId, role: auth.role },
-    });
-    response.cookies.set("session", impersonationToken, getSessionCookieOptions());
+      impersonator: { userId: adminUserId, role: auth.role, expiresAt: adminSession.exp },
+    }, 60 * 60);
+    response.cookies.set("session", impersonationToken, getSessionCookieOptions(60 * 60));
 
     response.cookies.set("managementType", managementType, {
       path: "/",
@@ -151,6 +159,15 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       maxAge: 3600,
+    });
+
+    await db.collection("securityAuditEvents").insertOne({
+      event: "impersonation.started",
+      actorId: adminUserId,
+      actorRole: auth.role,
+      targetType: "owner",
+      targetId: owner._id.toString(),
+      createdAt: new Date().toISOString(),
     });
 
     return response;

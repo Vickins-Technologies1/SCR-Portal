@@ -48,7 +48,7 @@ export async function deliverOtp({
     };
   }
 
-  const smsError = smsResult.reason instanceof Error ? smsResult.reason : new Error(String(smsResult.reason));
-  const emailError = emailResult.reason instanceof Error ? emailResult.reason : new Error(String(emailResult.reason));
-  throw new Error(smsError.message || emailError.message || "OTP delivery failed. Please try again.");
+  // Provider errors can contain request/recipient details. Never surface them
+  // through the OTP API response or callers' error telemetry.
+  throw new Error("OTP delivery failed. Please try again.");
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { sendInvoiceReminders } from "@/lib/invoice-reminders";
 import { authorizeCronRequest } from "@/lib/cron-auth";
+import { connectToDatabase } from "@/lib/mongodb";
+import { withCronJobLock } from "@/lib/cron-lock";
 
 export async function GET(request: Request) {
   const authorization = authorizeCronRequest(request);
@@ -10,7 +12,10 @@ export async function GET(request: Request) {
   console.log("Vercel Cron triggered: Running invoice reminder job");
 
   try {
-    const { sent, skipped } = await sendInvoiceReminders({});
+    const { db } = await connectToDatabase();
+    const run = await withCronJobLock(db, "send-invoice-reminders", () => sendInvoiceReminders({}));
+    if (!run.acquired) return NextResponse.json({ success: true, skipped: true, reason: "already_running" });
+    const { sent, skipped } = run.result;
 
     return NextResponse.json({
       success: true,

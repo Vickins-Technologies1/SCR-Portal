@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { adminPermissionsCover, normalizeAdminPermissions, type AdminPermission } from "@/lib/admin-permissions";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 export type AdminRole = "admin" | "adminTeamMember";
 
@@ -27,12 +28,22 @@ export async function requireAdmin(
   request: NextRequest,
   required?: AdminPermission | AdminPermission[]
 ): Promise<AdminAuthContext | NextResponse> {
-  const role = request.cookies.get("role")?.value;
-  const userId = request.cookies.get("userId")?.value;
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = token ? await verifySessionToken(token) : null;
+  const role = session?.role;
+  const userId = session?.sub;
 
   if (!role || !userId) return jsonUnauthorized();
 
   if (role === "admin") {
+    if (!ObjectId.isValid(userId)) return jsonUnauthorized();
+    const { db } = await connectToDatabase();
+    const admin = await db.collection("propertyOwners").findOne({
+      _id: new ObjectId(userId),
+      role: "admin",
+      accountStatus: { $ne: "suspended" },
+    }, { projection: { _id: 1 } });
+    if (!admin) return jsonUnauthorized();
     return { userId, role: "admin", permissions: [] };
   }
 

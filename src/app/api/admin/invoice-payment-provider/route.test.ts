@@ -1,7 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { settings } = vi.hoisted(() => ({ settings: { provider: "kopokopo" as string } }));
+const { settings, authState } = vi.hoisted(() => ({
+  settings: { provider: "kopokopo" as string },
+  authState: { grants: ["admin:settings:manage"] as string[] },
+}));
+vi.mock("@/lib/admin-auth", async () => {
+  const { NextResponse } = await import("next/server");
+  return {
+    requireAdmin: async (request: any, permission: string) => {
+      if (request.cookies.get("role")?.value !== "admin") {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+      }
+      return authState.grants.includes(permission)
+        ? { userId: "verified-admin" }
+        : NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+    },
+  };
+});
 vi.mock("@/lib/mongodb", () => ({
   connectToDatabase: async () => ({
     db: {
@@ -34,6 +50,7 @@ function request(role: string, body?: unknown) {
 describe("admin invoice payment provider setting", () => {
   it("persists A→B→A switches and rejects invalid and unauthorized changes", async () => {
     settings.provider = "kopokopo";
+    authState.grants = ["admin:settings:manage"];
     const { GET, PUT } = await import("@/app/api/admin/invoice-payment-provider/route");
 
     const getInitial = await GET(request("admin"));
@@ -49,6 +66,10 @@ describe("admin invoice payment provider setting", () => {
 
     expect((await PUT(request("admin", { provider: "stripe" }))).status).toBe(400);
     expect((await PUT(request("propertyOwner", { provider: "daraja" }))).status).toBe(401);
+    expect(settings.provider).toBe("kopokopo");
+
+    authState.grants = ["admin:payments:view"];
+    expect((await PUT(request("admin", { provider: "daraja" }))).status).toBe(403);
     expect(settings.provider).toBe("kopokopo");
   });
 });

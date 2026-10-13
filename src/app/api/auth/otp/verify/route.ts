@@ -255,8 +255,8 @@ export async function POST(request: Request) {
     await db.collection("otpChallenges").deleteOne({ _id: otpObjectId });
 
     return response;
-  } catch (error) {
-    console.error("OTP verification error:", error);
+  } catch {
+    console.error("OTP verification error", { category: "internal_error" });
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 }

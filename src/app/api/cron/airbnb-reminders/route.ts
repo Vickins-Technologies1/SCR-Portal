@@ -1,11 +1,30 @@
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { sendAirbnbReminderEmail } from "@/lib/email";
 import { parseDate } from "@/lib/airbnb-utils";
 import { authorizeCronRequest } from "@/lib/cron-auth";
+import { withCronJobLock } from "@/lib/cron-lock";
 
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const endOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+const STALE_REMINDER_CLAIM_MS = 15 * 60 * 1000;
+
+async function claimReminder(db: Awaited<ReturnType<typeof connectToDatabase>>["db"], bookingId: ObjectId, kind: "CheckIn" | "CheckOut") {
+  const claimedAt = new Date();
+  const claimed = await db.collection("airbnbBookings").updateOne(
+    {
+      _id: bookingId,
+      [`${kind.toLowerCase()}ReminderSent`]: { $ne: true },
+      $or: [
+        { [`${kind.toLowerCase()}ReminderClaimedAt`]: { $exists: false } },
+        { [`${kind.toLowerCase()}ReminderClaimedAt`]: { $lt: new Date(claimedAt.getTime() - STALE_REMINDER_CLAIM_MS) } },
+      ],
+    },
+    { $set: { [`${kind.toLowerCase()}ReminderClaimedAt`]: claimedAt } },
+  );
+  return claimed.modifiedCount === 1 ? claimedAt : null;
+}
 
 export async function GET(request: Request) {
   const authorization = authorizeCronRequest(request);
@@ -14,6 +33,7 @@ export async function GET(request: Request) {
   }
   try {
     const { db } = await connectToDatabase();
+    const run = await withCronJobLock(db, "airbnb-reminders", async () => {
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
@@ -43,7 +63,6 @@ export async function GET(request: Request) {
 
     let sent = 0;
     let skipped = 0;
-    const updates: any[] = [];
 
     for (const booking of bookings) {
       const settings = settingsMap.get(booking.ownerId);
@@ -61,6 +80,9 @@ export async function GET(request: Request) {
         if (settings?.sendCheckInReminder === false) {
           skipped += 1;
         } else {
+          const claimedAt = await claimReminder(db, booking._id, "CheckIn");
+          if (!claimedAt) skipped += 1;
+          if (claimedAt) {
           await sendAirbnbReminderEmail({
             to: booking.guestEmail,
             guestName: booking.guestName || "Guest",
@@ -75,12 +97,11 @@ export async function GET(request: Request) {
             type: "checkin",
           });
           sent += 1;
-          updates.push({
-            updateOne: {
-              filter: { _id: booking._id },
-              update: { $set: { checkInReminderSent: true, updatedAt: new Date().toISOString() } },
-            },
-          });
+          await db.collection("airbnbBookings").updateOne(
+            { _id: booking._id, checkInReminderClaimedAt: claimedAt },
+            { $set: { checkInReminderSent: true, updatedAt: new Date().toISOString() }, $unset: { checkInReminderClaimedAt: "" } },
+          );
+          }
         }
       }
 
@@ -93,6 +114,9 @@ export async function GET(request: Request) {
         if (settings?.sendCheckOutReminder === false) {
           skipped += 1;
         } else {
+          const claimedAt = await claimReminder(db, booking._id, "CheckOut");
+          if (!claimedAt) skipped += 1;
+          if (claimedAt) {
           await sendAirbnbReminderEmail({
             to: booking.guestEmail,
             guestName: booking.guestName || "Guest",
@@ -107,27 +131,22 @@ export async function GET(request: Request) {
             type: "checkout",
           });
           sent += 1;
-          updates.push({
-            updateOne: {
-              filter: { _id: booking._id },
-              update: { $set: { checkOutReminderSent: true, updatedAt: new Date().toISOString() } },
-            },
-          });
+          await db.collection("airbnbBookings").updateOne(
+            { _id: booking._id, checkOutReminderClaimedAt: claimedAt },
+            { $set: { checkOutReminderSent: true, updatedAt: new Date().toISOString() }, $unset: { checkOutReminderClaimedAt: "" } },
+          );
+          }
         }
       }
     }
 
-    if (updates.length > 0) {
-      await db.collection("airbnbBookings").bulkWrite(updates);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Airbnb reminders sent. Sent ${sent}, skipped ${skipped}.`,
+    return { sent, skipped };
     });
-  } catch (error) {
+    if (!run.acquired) return NextResponse.json({ success: true, skipped: true, reason: "already_running" });
+    return NextResponse.json({ success: true, message: `Airbnb reminders sent. Sent ${run.result.sent}, skipped ${run.result.skipped}.` });
+  } catch {
     return NextResponse.json(
-      { success: false, message: error instanceof Error ? error.message : "Failed to send reminders" },
+      { success: false, message: "Failed to send reminders" },
       { status: 500 }
     );
   }

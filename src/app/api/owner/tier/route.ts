@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
     ownerId: session?.ownerId ?? userId,
     managementType: session?.managementType ?? normalizeManagementType(cookieStore.get("managementType")?.value),
     impersonator: session?.impersonator ?? null,
+    impersonatedTenantId: session?.impersonatedTenantId ?? null,
     tier: "premium",
   });
   response.cookies.set(SESSION_COOKIE_NAME, refreshedToken, getSessionCookieOptions());

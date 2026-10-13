@@ -278,11 +278,32 @@ export async function proxy(request: NextRequest) {
       role === "propertyOwner" || role === "teamMember"
         ? resolveAccountTier(session?.tier ?? cookies.get("tier")?.value, "premium")
         : null;
-    const isImpersonating =
-      role === "propertyOwner" && cookies.get("isImpersonating")?.value === "true";
-    const impersonatingTenantId = isImpersonating
-      ? cookies.get("impersonatingTenantId")?.value
+    const impersonatingTenantId = role === "propertyOwner" && session?.impersonatedTenantId
+      ? session.impersonatedTenantId
       : undefined;
+    const isImpersonating = Boolean(impersonatingTenantId);
+
+    // An administrator's signed actor claim remains authoritative during owner
+    // impersonation, and disabling that actor revokes the impersonated session.
+    if (role === "propertyOwner" && session?.impersonator) {
+      const actorId = session.impersonator.userId;
+      if (!ObjectId.isValid(actorId)) {
+        const response = NextResponse.json({ success: false, message: "Administrator session is no longer active" }, { status: 401 });
+        response.cookies.delete(SESSION_COOKIE_NAME);
+        return response;
+      }
+      const { db } = await connectToDatabase();
+      const actor = session.impersonator.role === "admin"
+        ? await db.collection("propertyOwners").findOne({ _id: new ObjectId(actorId), role: "admin", accountStatus: { $ne: "suspended" } }, { projection: { _id: 1 } })
+        : session.impersonator.role === "adminTeamMember"
+          ? await db.collection("adminTeamMembers").findOne({ _id: new ObjectId(actorId), role: "adminTeamMember", active: true }, { projection: { _id: 1 } })
+          : null;
+      if (!actor || (session.impersonator.expiresAt && session.impersonator.expiresAt <= Math.floor(Date.now() / 1000))) {
+        const response = NextResponse.json({ success: false, message: "Administrator session is no longer active" }, { status: 401 });
+        response.cookies.delete(SESSION_COOKIE_NAME);
+        return response;
+      }
+    }
 
     const requestHeaders = new Headers(request.headers);
     const cookieHeader = buildCookieHeader(request, {
@@ -291,6 +312,8 @@ export async function proxy(request: NextRequest) {
       ownerId,
       managementType,
       tier,
+      isImpersonating: isImpersonating ? "true" : null,
+      impersonatingTenantId: impersonatingTenantId ?? null,
     });
     if (cookieHeader) {
       requestHeaders.set("cookie", cookieHeader);
