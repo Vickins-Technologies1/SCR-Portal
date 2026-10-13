@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { Cormorant_Garamond, Manrope } from "next/font/google";
 import Script from "next/script";
 import PublicNavbar from "./components/PublicNavbar";
+
+const manrope = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-sora" });
+const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-cormorant" });
 
 export const metadata: Metadata = {
   title: "My Accurate Rent Marketplace",
@@ -28,7 +32,7 @@ export default function MarketPlaceLayout({ children }: { children: ReactNode })
   const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
 
   return (
-    <div className="sorana-theme">
+    <div className={`${manrope.variable} ${cormorant.variable} sorana-theme`}>
       {gaId && (
         <>
           <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} strategy="afterInteractive" />

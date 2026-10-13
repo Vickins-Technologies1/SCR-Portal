@@ -65,7 +65,7 @@ export default function ImageGallery({ images, title }: ImageGalleryProps) {
   return (
     <>
       {/* Main gallery preview */}
-      <div className="group relative h-72 w-full overflow-hidden rounded-3xl border border-white/70 bg-white/80 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.4)] transition-all duration-300 hover:shadow-[0_26px_60px_-35px_rgba(15,23,42,0.5)] backdrop-blur sm:h-80">
+      <div className="group relative h-[min(68vw,34rem)] min-h-64 max-h-[34rem] w-full overflow-hidden rounded-3xl border border-border bg-card shadow-[0_18px_45px_-30px_rgba(15,23,42,0.4)] transition-all duration-300 hover:shadow-[0_26px_60px_-35px_rgba(15,23,42,0.5)] backdrop-blur ">
         {/* Main image */}
         <Image
           src={activeImage}

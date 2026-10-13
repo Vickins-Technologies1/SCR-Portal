@@ -68,18 +68,18 @@ export default function ViewingRequestWhatsApp({ propertyName, contactPhone }: V
         {isOpening ? "Opening WhatsApp..." : "Request Viewing on WhatsApp"}
       </button>
 
-      <div className="rounded-2xl border border-white/70 bg-white/70 p-4 text-[11px] text-slate-500">
+      <div className="rounded-2xl border border-border bg-muted/50 p-4 text-[11px] text-muted-foreground">
         <div className="flex items-center justify-between gap-3">
           <span className="uppercase tracking-wider">Contact</span>
-          <span className="font-mono text-[10px] text-slate-700">{contactPhone || "Not listed"}</span>
+          <span className="font-mono text-[10px] text-muted-foreground">{contactPhone || "Not listed"}</span>
         </div>
         <div className="mt-1 flex items-center gap-2">
-          <PhoneOff size={12} className={normalizedPhone ? "text-emerald-600" : "text-amber-600"} />
+          <PhoneOff size={12} className={normalizedPhone ? "text-primary" : "text-amber-600"} />
           <span>{normalizedPhone ? "WhatsApp opens with a prefilled viewing request." : "No valid WhatsApp contact number is listed for this property."}</span>
         </div>
       </div>
 
-      {statusMessage ? <p className="text-[11px] text-slate-500">{statusMessage}</p> : null}
+      {statusMessage ? <p className="text-[11px] text-muted-foreground">{statusMessage}</p> : null}
     </div>
   );
 }

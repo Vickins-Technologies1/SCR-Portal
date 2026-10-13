@@ -124,15 +124,15 @@ export default function ReviewsSection({
   };
 
   return (
-    <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur space-y-6">
+    <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur space-y-6">
       <Toaster position="top-right" toastOptions={{ duration: 2500 }} />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Reviews</p>
-          <h2 className="mt-2 text-lg sm:text-xl font-semibold text-slate-900">{sectionTitle}</h2>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">Reviews</p>
+          <h2 className="mt-2 text-lg sm:text-xl font-semibold text-foreground">{sectionTitle}</h2>
         </div>
-        <div className="rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-xs text-slate-600">
-          <span className="font-semibold text-slate-900">{ratingLabel}</span>
+        <div className="rounded-full border border-border bg-card px-4 py-2 text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">{ratingLabel}</span>
           {reviewCount ? ` · ${reviewCount} review${reviewCount === 1 ? "" : "s"}` : ""}
         </div>
       </div>
@@ -143,9 +143,9 @@ export default function ReviewsSection({
             reviews.map((review) => (
               <div
                 key={review._id}
-                className="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6"
+                className="rounded-2xl border border-border bg-muted/50 p-5 sm:p-6"
               >
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1 text-amber-500">
                     {Array.from({ length: 5 }).map((_, idx) => (
                       <Star
@@ -156,22 +156,22 @@ export default function ReviewsSection({
                       />
                     ))}
                   </div>
-                  <span className="font-semibold text-slate-800">{review.reviewerName}</span>
+                  <span className="font-semibold text-foreground">{review.reviewerName}</span>
                   <span>{formatDate(review.createdAt)}</span>
                 </div>
-                <p className="mt-3 text-sm text-slate-700 whitespace-pre-line break-words">{review.review}</p>
+                <p className="mt-3 text-sm text-muted-foreground whitespace-pre-line break-words">{review.review}</p>
               </div>
             ))
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-sm text-slate-500">
+            <div className="rounded-2xl border border-dashed border-border bg-muted/50 p-6 text-sm text-muted-foreground">
               No reviews yet. Be the first to share your experience.
             </div>
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-slate-900">Leave a review</h3>
-          <p className="mt-1 text-xs text-slate-500">
+        <div className="rounded-2xl border border-border bg-muted/50 p-5 sm:p-6">
+          <h3 className="text-sm font-semibold text-foreground">Leave a review</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
             Share helpful details for future guests or tenants.
           </p>
 
@@ -180,7 +180,7 @@ export default function ReviewsSection({
               className="absolute left-0 top-0 h-0 w-0 overflow-hidden opacity-0 pointer-events-none"
               aria-hidden="true"
             >
-              <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+              <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
                 Company
               </label>
               <input
@@ -194,7 +194,7 @@ export default function ReviewsSection({
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+              <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
                 Your name
               </label>
               <input
@@ -204,13 +204,13 @@ export default function ReviewsSection({
                   markFormStarted();
                   setName(event.target.value);
                 }}
-                className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+                className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+              <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
                 Email (optional)
               </label>
               <input
@@ -220,12 +220,12 @@ export default function ReviewsSection({
                   markFormStarted();
                   setEmail(event.target.value);
                 }}
-                className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+                className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+              <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
                 Rating
               </label>
               <div className="flex items-center gap-1">
@@ -249,12 +249,12 @@ export default function ReviewsSection({
                 </button>
                   );
                 })}
-                <span className="ml-2 text-xs text-slate-500">{selectedRating} / 5</span>
+                <span className="ml-2 text-xs text-muted-foreground">{selectedRating} / 5</span>
               </div>
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+              <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
                 Review
               </label>
               <textarea
@@ -264,7 +264,7 @@ export default function ReviewsSection({
                   setMessage(event.target.value);
                 }}
                 rows={4}
-                className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+                className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
                 placeholder="Tell us about the stay, cleanliness, or communication."
                 required
               />
@@ -279,9 +279,9 @@ export default function ReviewsSection({
             </button>
 
             {formMessage ? (
-              <p className="text-[11px] text-slate-500">{formMessage}</p>
+              <p className="text-[11px] text-muted-foreground">{formMessage}</p>
             ) : (
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-muted-foreground">
                 Reviews are visible after admin approval.
               </p>
             )}

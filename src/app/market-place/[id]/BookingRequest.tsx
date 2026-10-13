@@ -120,11 +120,11 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
   };
 
   return (
-    <div className="rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
+    <div className="rounded-2xl border border-border bg-card p-6 shadow-[0_18px_40px_-35px_rgba(15,23,42,0.45)] backdrop-blur">
       <Toaster position="top-right" toastOptions={{ duration: 2500 }} />
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-slate-900">Book via WhatsApp</h3>
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+        <h3 className="text-base font-semibold text-foreground">Book via WhatsApp</h3>
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
           <CalendarCheck size={12} /> Direct contact
         </span>
       </div>
@@ -132,7 +132,7 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
               Full name
             </label>
             <input
@@ -140,12 +140,12 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
               value={fullName}
               onChange={(event) => setFullName(event.target.value)}
               placeholder="Your name"
-              className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
               required
             />
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
               Email (optional)
             </label>
             <input
@@ -153,33 +153,33 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="name@email.com"
-              className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
             />
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
               Check-in
             </label>
             <input
               type="date"
               value={checkIn}
               onChange={(event) => setCheckIn(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
               required
             />
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
               Check-out
             </label>
             <input
               type="date"
               value={checkOut}
               onChange={(event) => setCheckOut(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
               required
             />
           </div>
@@ -187,7 +187,7 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
               Guests
             </label>
             <input
@@ -195,11 +195,11 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
               min="1"
               value={guests}
               onChange={(event) => setGuests(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
             />
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
               Phone (optional)
             </label>
             <input
@@ -207,13 +207,13 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               placeholder="+254..."
-              className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+          <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
             Notes (optional)
           </label>
           <textarea
@@ -221,24 +221,24 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
             onChange={(event) => setNotes(event.target.value)}
             rows={3}
             placeholder="Preferred arrival time, special requests."
-            className="w-full rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition"
+            className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition"
           />
         </div>
 
-        <div className="rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-[11px] text-slate-500">
+        <div className="rounded-2xl border border-border bg-muted/50 px-4 py-3 text-[11px] text-muted-foreground">
           <div className="flex items-center justify-between">
             <span>Nights</span>
-            <span className="font-semibold text-slate-700">{nights || "—"}</span>
+            <span className="font-semibold text-muted-foreground">{nights || "—"}</span>
           </div>
           <div className="mt-1 flex items-center justify-between">
             <span>Estimate</span>
-            <span className="font-semibold text-slate-900">
+            <span className="font-semibold text-foreground">
               {totalEstimate ? `Ksh ${totalEstimate.toLocaleString()}` : "On request"}
             </span>
           </div>
           <div className="mt-1 flex items-center justify-between">
             <span>Contact</span>
-            <span className="font-mono text-[10px] text-slate-700">
+            <span className="font-mono text-[10px] text-muted-foreground">
               {contactPhone || "Not listed"}
             </span>
           </div>
@@ -254,9 +254,9 @@ export default function BookingRequest({ propertyName, contactPhone, nightlyRate
         </button>
 
         {formMessage ? (
-          <p className="text-[11px] text-slate-500">{formMessage}</p>
+          <p className="text-[11px] text-muted-foreground">{formMessage}</p>
         ) : (
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-muted-foreground">
             WhatsApp opens with a prefilled inquiry. This does not confirm the booking.
           </p>
         )}
