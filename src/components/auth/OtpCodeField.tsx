@@ -114,7 +114,9 @@ export default function OtpCodeField({
           onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled}
-          className={`w-full rounded-xl border border-border bg-background px-4 py-3 text-center text-sm font-semibold tracking-[0.35em] tabular-nums shadow-inner focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60 ${inputClassName}`.trim()}
+          maxLength={OTP_LENGTH}
+          aria-label={label}
+          className={`w-full rounded-xl border border-border bg-background px-4 py-3 text-center text-sm font-semibold tracking-[0.35em] tabular-nums text-foreground placeholder:text-muted-foreground shadow-inner focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60 ${inputClassName}`.trim()}
         />
       </label>
 

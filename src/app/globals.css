@@ -104,6 +104,30 @@ body {
   padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
 }
 
+.auth-status-error {
+  border-color: rgba(220, 38, 38, 0.24);
+  background-color: rgba(254, 242, 242, 0.94);
+  color: #b91c1c;
+}
+
+.auth-status-success {
+  border-color: rgba(16, 185, 129, 0.28);
+  background-color: rgba(236, 253, 245, 0.94);
+  color: #047857;
+}
+
+:root[data-theme="dark"] .auth-status-error {
+  border-color: rgba(248, 113, 113, 0.32);
+  background-color: rgba(127, 29, 29, 0.24);
+  color: #fecaca;
+}
+
+:root[data-theme="dark"] .auth-status-success {
+  border-color: rgba(52, 211, 153, 0.3);
+  background-color: rgba(6, 78, 59, 0.3);
+  color: #a7f3d0;
+}
+
 /* Sorana public theme (scoped) */
 .sorana-theme {
   --font-sans: var(--font-sora, var(--font-sans));

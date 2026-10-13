@@ -24,6 +24,7 @@ import {
   userOptedOutOfQuickLoginPrompt,
 } from "@/lib/quick-login";
 import { signInAdmin } from "@/lib/signin-client";
+import { useOtpAutoVerify } from "@/lib/use-otp-auto-verify";
 
 interface LoginResponse {
   success: boolean;
@@ -60,7 +61,6 @@ export default function AdminLogin() {
   const [pinMode, setPinMode] = useState<"login" | "setup" | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
-  const autoVerifyRef = useRef<string>("");
   const otpVerifyInFlightRef = useRef(false);
   const { appHash } = useAndroidSmsRetriever({ enabled: true, onCode: setOtpCode });
 
@@ -272,17 +272,13 @@ export default function AdminLogin() {
     }
   };
 
-  const verifyOtp = async () => {
+  const verifyOtp = async (submittedCode: string) => {
     if (otpVerifyInFlightRef.current) return;
     otpVerifyInFlightRef.current = true;
     setError(null);
     setIsLoading(true);
 
     try {
-      // Prevent the auto-verify effect from re-submitting the same code
-      // when `isLoading` toggles back to false after an error.
-      autoVerifyRef.current = otpCode;
-
       if (!otpId) {
         throw new Error("OTP session expired. Please log in again.");
       }
@@ -291,7 +287,7 @@ export default function AdminLogin() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId, code: otpCode }),
+        body: JSON.stringify({ otpId, code: submittedCode }),
       });
 
       const data: LoginResponse = await res.json();
@@ -310,19 +306,16 @@ export default function AdminLogin() {
     }
   };
 
+  const verifyOtpWithAuto = useOtpAutoVerify({
+    code: otpCode,
+    enabled: otpRequired && !isLoading,
+    onVerify: verifyOtp,
+  });
+
   const handleOtpVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    await verifyOtp();
+    await verifyOtpWithAuto(otpCode, true);
   };
-
-  useEffect(() => {
-    if (!otpRequired) return;
-    if (otpCode.length !== 6) return;
-    if (isLoading) return;
-    if (autoVerifyRef.current === otpCode) return;
-    autoVerifyRef.current = otpCode;
-    verifyOtp();
-  }, [otpCode, otpRequired, isLoading]);
 
   useEffect(() => {
     if (!otpRequired) return;
@@ -539,7 +532,7 @@ export default function AdminLogin() {
               </div>
 
               {error && (
-                <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
+                <div className="auth-status-error p-2.5 xs:p-3.5 border text-xs sm:text-sm rounded-xl text-center">
                   {error}
                 </div>
               )}
@@ -572,7 +565,7 @@ export default function AdminLogin() {
               {otpRequired ? (
                 <form onSubmit={handleOtpVerify} className="space-y-3 sm:space-y-3.5 pt-1">
                   {otpMessage && (
-                    <div className="p-2.5 xs:p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs sm:text-sm rounded-xl text-center">
+                    <div className="auth-status-success p-2.5 xs:p-3.5 border text-xs sm:text-sm rounded-xl text-center">
                       {otpMessage}
                     </div>
                   )}
@@ -604,7 +597,6 @@ export default function AdminLogin() {
                       setOtpCode("");
                       setOtpMessage(null);
                       setResendCountdown(0);
-                      autoVerifyRef.current = "";
                     }}
                     className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
                   >

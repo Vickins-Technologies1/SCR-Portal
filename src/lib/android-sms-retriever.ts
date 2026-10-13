@@ -90,10 +90,17 @@ export function useAndroidSmsRetriever(params: {
           if (code && onCodeRef.current) {
             onCodeRef.current(code);
           }
+          if (!cancelled) {
+            SmsRetriever.startListening().catch(() => undefined);
+          }
         });
 
         timeoutHandle = await SmsRetriever.addListener("smsTimeout", () => {
-          // Let the manual entry path continue unchanged.
+          // SmsRetriever listens for five minutes per request. Keep the native
+          // OTP path armed while the login/OTP screen remains open.
+          if (!cancelled) {
+            SmsRetriever.startListening().catch(() => undefined);
+          }
         });
 
         await SmsRetriever.startListening();

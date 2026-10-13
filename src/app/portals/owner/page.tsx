@@ -24,6 +24,7 @@ import {
   userOptedOutOfQuickLoginPrompt,
 } from "@/lib/quick-login";
 import { signInOwner } from "@/lib/signin-client";
+import { useOtpAutoVerify } from "@/lib/use-otp-auto-verify";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -38,7 +39,6 @@ export default function LoginPage() {
   const otpInputRef = useRef<HTMLInputElement | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
-  const autoVerifyRef = useRef<string>("");
   const [showResetModal, setShowResetModal] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricReady, setBiometricReady] = useState(false);
@@ -277,7 +277,7 @@ export default function LoginPage() {
     }
   };
 
-  const verifyOtp = async () => {
+  const verifyOtp = async (submittedCode: string) => {
     setError(null);
     setIsLoading(true);
 
@@ -290,7 +290,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId, code: otpCode }),
+        body: JSON.stringify({ otpId, code: submittedCode }),
       });
 
       const data = await res.json();
@@ -325,25 +325,21 @@ export default function LoginPage() {
       router.push(data.redirect || fallback);
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
-      autoVerifyRef.current = "";
     } finally {
       setIsLoading(false);
     }
   };
 
+  const verifyOtpWithAuto = useOtpAutoVerify({
+    code: otpCode,
+    enabled: otpRequired && !isLoading,
+    onVerify: verifyOtp,
+  });
+
   const handleOtpVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    await verifyOtp();
+    await verifyOtpWithAuto(otpCode, true);
   };
-
-  useEffect(() => {
-    if (!otpRequired) return;
-    if (otpCode.length !== 6) return;
-    if (isLoading) return;
-    if (autoVerifyRef.current === otpCode) return;
-    autoVerifyRef.current = otpCode;
-    verifyOtp();
-  }, [otpCode, otpRequired, isLoading]);
 
   useEffect(() => {
     if (!otpRequired) return;
@@ -670,7 +666,7 @@ export default function LoginPage() {
               </Link>
             </div>
             {error && (
-              <div className="p-2.5 xs:p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm rounded-xl text-center">
+              <div className="auth-status-error p-2.5 xs:p-3.5 border text-xs sm:text-sm rounded-xl text-center">
                 {error}
               </div>
             )}
@@ -705,7 +701,7 @@ export default function LoginPage() {
             {otpRequired ? (
               <form onSubmit={handleOtpVerify} className="space-y-3.5 sm:space-y-4 pt-1">
                 {otpMessage && (
-                  <div className="p-2.5 xs:p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs sm:text-sm rounded-xl text-center">
+                  <div className="auth-status-success p-2.5 xs:p-3.5 border text-xs sm:text-sm rounded-xl text-center">
                     {otpMessage}
                   </div>
                 )}
@@ -738,7 +734,6 @@ export default function LoginPage() {
                     setOtpCode("");
                     setOtpMessage(null);
                     setResendCountdown(0);
-                    autoVerifyRef.current = "";
                   }}
                   className="w-full text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors"
                 >

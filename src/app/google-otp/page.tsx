@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import OtpCodeField from "@/components/auth/OtpCodeField";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
+import { useOtpAutoVerify } from "@/lib/use-otp-auto-verify";
 import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
 
 function GoogleOtpContent() {
@@ -19,14 +20,13 @@ function GoogleOtpContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const autoVerifyRef = useRef<string>("");
   useAndroidSmsRetriever({ enabled: true, onCode: setCode });
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  const submitOtp = useCallback(async () => {
+  const submitOtp = useCallback(async (submittedCode: string) => {
     setError(null);
     setMessage(null);
 
@@ -41,7 +41,7 @@ function GoogleOtpContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId, code }),
+        body: JSON.stringify({ otpId, code: submittedCode }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -56,36 +56,33 @@ function GoogleOtpContent() {
       }
     } catch (err: any) {
       setError(err?.message || "OTP verification failed.");
-      autoVerifyRef.current = "";
     } finally {
       setLoading(false);
     }
-  }, [code, otpId, returnTo, router]);
+  }, [otpId, returnTo, router]);
+
+  const verifyOtp = useOtpAutoVerify({
+    code,
+    enabled: !loading,
+    onVerify: submitOtp,
+  });
 
   const handleVerify = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      return void submitOtp();
+      return void verifyOtp(code, true);
     },
-    [submitOtp]
+    [code, verifyOtp]
   );
-
-  useEffect(() => {
-    if (loading) return;
-    if (code.length !== 6) return;
-    if (autoVerifyRef.current === code) return;
-    autoVerifyRef.current = code;
-    void submitOtp();
-  }, [code, loading, submitOtp]);
 
   return (
     <PublicThemeWrapper>
-      <div className="min-h-[100svh] flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(30,58,138,0.18),_transparent_45%),linear-gradient(180deg,#f8fafc,white)] px-4 py-10">
+      <div className="min-h-[100dvh] flex items-center justify-center overflow-y-auto bg-background px-4 py-6 text-foreground sm:py-10">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="w-full max-w-md rounded-3xl border border-border bg-card/95 p-6 sm:p-8 shadow-2xl backdrop-blur-xl"
+        className="my-auto w-full max-w-md rounded-3xl border border-border bg-card/95 p-6 shadow-2xl backdrop-blur-xl sm:p-8"
         >
           <div className="text-center space-y-2">
             <p className="text-xs uppercase tracking-[0.35em] text-primary font-semibold">Google Login</p>
@@ -97,12 +94,12 @@ function GoogleOtpContent() {
 
           <form onSubmit={handleVerify} className="mt-6 space-y-4">
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="auth-status-error rounded-xl border px-4 py-3 text-sm">
                 {error}
               </div>
             )}
             {message && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              <div className="auth-status-success rounded-xl border px-4 py-3 text-sm">
                 {message}
               </div>
             )}
