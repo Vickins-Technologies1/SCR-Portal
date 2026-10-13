@@ -8,7 +8,11 @@ import logger from "@/lib/logger";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
-import { calculateTenantFinancialState, reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import {
+  calculateTenantFinancialState,
+  reconcileTenantPaymentAllocation,
+  type TenantFinancialState,
+} from "@/lib/tenant-payment-allocation";
 import { getFinancialReportSummary } from "@/lib/financial-reporting";
 
 interface Tenant {
@@ -143,6 +147,121 @@ async function calculateTenantDues(db: Db, tenantId: string, today = new Date())
     dues,
     monthsStayed,
   };
+}
+
+function buildTenantDuesResponse(
+  tenant: Tenant,
+  state: TenantFinancialState,
+  today: Date,
+  rentOverrideMap: Map<string, any>
+) {
+  const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
+    tenant: tenant as any,
+    date: today,
+    rentOverrideMap,
+  });
+  const totalRemainingDues = state.totalOutstanding;
+  const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
+
+  return {
+    tenant: {
+      ...tenant,
+      _id: tenant._id.toString(),
+      totalRentPaid: state.rentPaid,
+      totalDepositPaid: state.depositPaid,
+      totalUtilityPaid: state.utilitiesPaid,
+      totalOtherPaid: state.otherPaid,
+      walletBalance: state.walletBalance,
+      paymentStatus,
+      updatedAt: today.toISOString(),
+    },
+    dues: {
+      rentDues: Math.max(0, state.rentOutstanding + state.penalties),
+      rentOutstanding: state.rentOutstanding,
+      penaltyDues: state.penalties,
+      depositDues: state.depositOutstanding,
+      utilityDues: state.utilitiesOutstanding,
+      utilityCurrentDues: state.utilitiesCurrentOutstanding,
+      utilityOverdueDues: state.utilitiesOverdueOutstanding,
+      utilityStatus: state.utilityStatus,
+      otherDues: 0,
+      totalRemainingDues,
+      totalPaid: state.rentPaid + state.utilitiesPaid + state.depositPaid + state.otherPaid + state.walletBalance,
+      walletApplied: state.walletApplied,
+      walletRemaining: state.walletBalance,
+      walletCoverageMonths: effectiveMonthlyRent ? Math.floor(state.walletBalance / effectiveMonthlyRent) : 0,
+      walletCoverageRemainder: effectiveMonthlyRent
+        ? state.walletBalance % effectiveMonthlyRent
+        : state.walletBalance,
+    },
+    monthsStayed: state.monthsStayed,
+  };
+}
+
+async function mapWithConcurrency<T, TResult>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<TResult>
+): Promise<TResult[]> {
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index]);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+  );
+  return results;
+}
+
+async function calculateBatchTenantDues(db: Db, tenantIds: string[]) {
+  const today = new Date();
+  const tenantObjectIds = tenantIds.map((id) => new ObjectId(id));
+  const tenants = await db
+    .collection<Tenant>("tenants")
+    .find({ _id: { $in: tenantObjectIds } })
+    .toArray();
+  const tenantById = new Map(tenants.map((tenant) => [tenant._id.toString(), tenant]));
+
+  const allPropertyIds = Array.from(
+    new Set(
+      tenants
+        .map((tenant) => String(tenant.propertyId || ""))
+        .filter(Boolean)
+    )
+  );
+  const propertyIds = allPropertyIds.filter((propertyId) => ObjectId.isValid(propertyId));
+  const propertyObjectIds = propertyIds.map((propertyId) => new ObjectId(propertyId));
+  const [properties, rentOverrideMap] = await Promise.all([
+    propertyObjectIds.length > 0
+      ? db.collection("properties").find({ _id: { $in: propertyObjectIds } }).toArray()
+      : Promise.resolve([]),
+    fetchActiveRentOverridesByPropertyIds(db, allPropertyIds),
+  ]);
+  const propertyById = new Map(properties.map((property) => [property._id.toString(), property]));
+
+  return mapWithConcurrency(tenantIds, 8, async (tenantId) => {
+    const tenant = tenantById.get(tenantId);
+    if (!tenant) return { tenantId };
+
+    try {
+      const state = await calculateTenantFinancialState(db, tenant, {
+        property: propertyById.get(String(tenant.propertyId)),
+        asOf: today,
+        rentOverrideMap,
+      });
+      return { tenantId, ...buildTenantDuesResponse(tenant, state, today, rentOverrideMap) };
+    } catch (error) {
+      logger.error("Error checking tenant dues", { error, tenantId });
+      return { tenantId };
+    }
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -289,18 +408,7 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
 
     if (tenantIds) {
-      const results = await Promise.all(
-        tenantIds.map(async (id: string) => {
-          try {
-            const result = await calculateTenantDues(db, id);
-            return result ? { tenantId: id, ...result } : { tenantId: id };
-          } catch (error) {
-            logger.error("Error checking tenant dues", { error, tenantId: id });
-            return { tenantId: id };
-          }
-        })
-      );
-
+      const results = await calculateBatchTenantDues(db, tenantIds);
       return NextResponse.json({ success: true, results });
     }
 

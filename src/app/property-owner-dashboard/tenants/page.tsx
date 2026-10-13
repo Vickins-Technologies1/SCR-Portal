@@ -87,6 +87,7 @@ export default function TenantsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const duesRequestId = useRef(0);
+  const duesAbortController = useRef<AbortController | null>(null);
 
   // Pagination & Filters
   const [page, setPage] = useState(1);
@@ -176,6 +177,9 @@ export default function TenantsPage() {
     async (tenantList: ResponseTenant[]) => {
       if (!effectiveOwnerId || !csrfToken || tenantList.length === 0) return;
       const requestId = ++duesRequestId.current;
+      duesAbortController.current?.abort();
+      const abortController = new AbortController();
+      duesAbortController.current = abortController;
 
       let resultsByTenantId = new Map<string, any>();
       try {
@@ -186,6 +190,7 @@ export default function TenantsPage() {
             "x-csrf-token": csrfToken,
           },
           credentials: "include",
+          signal: abortController.signal,
           body: JSON.stringify({
             tenantIds: tenantList.map((tenant) => tenant._id),
             userId: effectiveOwnerId,
