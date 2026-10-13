@@ -1,4 +1,4 @@
-# Smart Choice Rental Management
+# Sorana Property Managers Ltd
 
 <grok-card data-id="b87049" data-type="image_card"></grok-card>
 
