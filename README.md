@@ -6,7 +6,7 @@
 **Premier Property Management Services in Kenya**  
 Expert solutions for residential and commercial rentals, maximizing returns and minimizing hassle.
 
-**Official Website:** [smartchoicerentalmanagement.com](https://smartchoicerentalmanagement.com)
+**Official Website:** [soranapropertymanagers.com](https://soranapropertymanagers.com)
 
 ## About Us
 
@@ -59,4 +59,4 @@ We deliver comprehensive property management to protect and grow your investment
 
 Ready to simplify your property ownership? Visit our website for more details or to get started.
 
-[Visit smartchoicerentalmanagement.com](https://smartchoicerentalmanagement.com)
+[Visit soranapropertymanagers.com](https://soranapropertymanagers.com)
