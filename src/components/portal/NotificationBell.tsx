@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, ArrowUpRight, LoaderCircle } from "lucide-react";
+import { Bell, ArrowUpRight, LoaderCircle, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useCsrfToken } from "@/hooks/useCsrfToken";
 
 type NotificationItem = {
@@ -58,8 +59,10 @@ export default function NotificationBell({ endpoint, pageHref, enabled = true }:
   const router = useRouter();
   const { csrfToken, ensureCsrf } = useCsrfToken();
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -110,9 +113,18 @@ export default function NotificationBell({ endpoint, pageHref, enabled = true }:
   }, [enabled, refreshUnreadCount]);
 
   useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const syncViewport = () => setIsMobile(media.matches);
+    syncViewport();
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -160,6 +172,97 @@ export default function NotificationBell({ endpoint, pageHref, enabled = true }:
     router.push(pageHref);
   };
 
+  const notificationPanel = (
+    <>
+      {isMobile && (
+        <button
+          type="button"
+          aria-label="Close notifications"
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-[60] cursor-default bg-slate-950/35 backdrop-blur-[2px]"
+        />
+      )}
+      <section
+        ref={panelRef}
+        role="dialog"
+        aria-label="Notifications"
+        className={isMobile
+          ? "fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-[max(0.5rem,env(safe-area-inset-left))] right-[max(0.5rem,env(safe-area-inset-right))] z-[70] flex max-h-[min(36rem,calc(100dvh-2rem))] flex-col overflow-hidden rounded-[1.5rem] border border-border bg-card text-card-foreground shadow-[0_24px_70px_rgba(15,23,42,0.28)] ring-1 ring-black/5"
+          : "absolute right-0 top-[calc(100%+0.65rem)] z-[70] flex max-h-[min(30rem,calc(100dvh-5.5rem))] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-[0_24px_70px_rgba(15,23,42,0.2)] ring-1 ring-black/5"}
+      >
+        {isMobile && (
+          <div className="flex shrink-0 justify-center pt-2.5" aria-hidden="true">
+            <span className="h-1 w-9 rounded-full bg-muted-foreground/25" />
+          </div>
+        )}
+        <div className="flex shrink-0 items-center justify-between border-b border-border/70 px-4 py-3 sm:py-3.5">
+          <div>
+            <h2 className="text-sm font-semibold tracking-tight">Notifications</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Close notifications"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y">
+          {loading && !loaded ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-10 text-xs text-muted-foreground" aria-live="polite">
+              <LoaderCircle size={15} className="animate-spin" /> Loading notifications
+            </div>
+          ) : error && items.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-xs text-muted-foreground">{error}</p>
+              <button type="button" onClick={() => void loadLatest()} className="mt-3 text-xs font-semibold text-primary hover:underline">Try again</button>
+            </div>
+          ) : items.length === 0 ? (
+            <p className="px-4 py-10 text-center text-xs text-muted-foreground">No notifications yet.</p>
+          ) : (
+            <ul>
+              {items.map((notification) => (
+                <li key={notification._id} className="border-b border-border/50 last:border-0">
+                  <button
+                    type="button"
+                    onClick={() => void selectNotification(notification)}
+                    className="group flex w-full gap-3 px-4 py-3 text-left transition hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+                  >
+                    <span className="mt-1 flex w-2 shrink-0 justify-center">
+                      {notification.status === "unread" && <span className="h-2 w-2 rounded-full bg-primary" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="truncate text-xs font-semibold text-foreground">{notificationTitle(notification)}</span>
+                        <time className="shrink-0 pt-0.5 text-[10px] text-muted-foreground">{relativeTime(notification.createdAt)}</time>
+                      </span>
+                      <span className="mt-1 line-clamp-2 block text-[11px] leading-relaxed text-muted-foreground">{notification.message}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className={`shrink-0 border-t border-border/70 bg-muted/20 p-2.5 ${isMobile ? "pb-[max(0.625rem,env(safe-area-inset-bottom))]" : ""}`}>
+          <Link
+            href={pageHref}
+            onClick={() => setOpen(false)}
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            View all notifications <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
+        </div>
+      </section>
+    </>
+  );
+
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -179,71 +282,8 @@ export default function NotificationBell({ endpoint, pageHref, enabled = true }:
         )}
       </button>
 
-      {open && (
-        <section
-          role="dialog"
-          aria-label="Notifications"
-          className="absolute right-0 top-[calc(100%+0.65rem)] z-[70] flex max-h-[min(30rem,calc(100dvh-5.5rem))] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-[0_24px_70px_rgba(15,23,42,0.2)] ring-1 ring-black/5"
-        >
-          <div className="flex items-center justify-between border-b border-border/70 px-4 py-3.5">
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight">Notifications</h2>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up"}
-              </p>
-            </div>
-            <Bell size={16} className="text-primary" aria-hidden="true" />
-          </div>
-
-          <div className="overflow-y-auto overscroll-contain">
-            {loading && !loaded ? (
-              <div className="flex items-center justify-center gap-2 px-4 py-10 text-xs text-muted-foreground" aria-live="polite">
-                <LoaderCircle size={15} className="animate-spin" /> Loading notifications
-              </div>
-            ) : error && items.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <p className="text-xs text-muted-foreground">{error}</p>
-                <button type="button" onClick={() => void loadLatest()} className="mt-3 text-xs font-semibold text-primary hover:underline">Try again</button>
-              </div>
-            ) : items.length === 0 ? (
-              <p className="px-4 py-10 text-center text-xs text-muted-foreground">No notifications yet.</p>
-            ) : (
-              <ul>
-                {items.map((notification) => (
-                  <li key={notification._id} className="border-b border-border/50 last:border-0">
-                    <button
-                      type="button"
-                      onClick={() => void selectNotification(notification)}
-                      className="group flex w-full gap-3 px-4 py-3 text-left transition hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
-                    >
-                      <span className="mt-1 flex w-2 shrink-0 justify-center">
-                        {notification.status === "unread" && <span className="h-2 w-2 rounded-full bg-primary" />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-start justify-between gap-2">
-                          <span className="truncate text-xs font-semibold text-foreground">{notificationTitle(notification)}</span>
-                          <time className="shrink-0 pt-0.5 text-[10px] text-muted-foreground">{relativeTime(notification.createdAt)}</time>
-                        </span>
-                        <span className="mt-1 line-clamp-2 block text-[11px] leading-relaxed text-muted-foreground">{notification.message}</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="border-t border-border/70 bg-muted/20 p-2.5">
-            <Link
-              href={pageHref}
-              onClick={() => setOpen(false)}
-              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              View all notifications <ArrowUpRight size={14} aria-hidden="true" />
-            </Link>
-          </div>
-        </section>
-      )}
+      {open && isMobile && typeof document !== "undefined" && createPortal(notificationPanel, document.body)}
+      {open && !isMobile && notificationPanel}
     </div>
   );
 }
