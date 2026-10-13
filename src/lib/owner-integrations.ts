@@ -72,6 +72,9 @@ export async function getOwnerInvoicePaymentProvider(db: Db, ownerId: string): P
     { _id: "property_owner_invoice_payments" },
     { projection: { provider: 1, invoicePaymentProvider: 1 } }
   );
-  const selected = String(doc?.provider || doc?.invoicePaymentProvider || "kopokopo").toLowerCase();
-  return selected === "daraja" ? "daraja" : "kopokopo";
+  const configured = doc?.provider ?? doc?.invoicePaymentProvider;
+  if (configured == null || String(configured).trim() === "") return "kopokopo";
+  const selected = String(configured).trim().toLowerCase();
+  if (selected === "daraja" || selected === "kopokopo") return selected;
+  throw new Error("The configured invoice payment provider is unsupported. Ask an administrator to correct the setting.");
 }

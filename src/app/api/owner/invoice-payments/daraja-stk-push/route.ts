@@ -21,9 +21,8 @@ export async function POST(request: NextRequest) {
     const { db } = await connectToDatabase();
     const invoice = await db.collection("invoices").findOne({ _id: new ObjectId(parsed.data.invoiceId), userId: ownerId });
     if (!invoice) return NextResponse.json({ success: false, message: "Invoice not found" }, { status: 404 });
-    const assignedProvider = invoice.paymentProvider || await getOwnerInvoicePaymentProvider(db, ownerId);
+    const assignedProvider = await getOwnerInvoicePaymentProvider(db, ownerId);
     if (String(assignedProvider).toLowerCase() !== "daraja") return NextResponse.json({ success: false, message: "Daraja is not the provider assigned to this invoice", provider: assignedProvider }, { status: 409 });
-    if (!invoice.paymentProvider) await db.collection("invoices").updateOne({ _id: invoice._id }, { $set: { paymentProvider: assignedProvider, updatedAt: new Date() } });
     const amount = Number(invoice?.amount || 0);
     if (invoice.status !== "pending") return NextResponse.json({ success: false, message: "Invoice is no longer payable" }, { status: 409 });
     if (!Number.isSafeInteger(amount) || amount <= 0) return NextResponse.json({ success: false, message: "Invoice amount is invalid" }, { status: 400 });
@@ -35,7 +34,7 @@ export async function POST(request: NextRequest) {
     const response = await initiateStkPush({ ...credentials, environment: undefined, amount, phone, accountReference: reference, transactionDesc: `My Accurate Rent invoice ${reference}`, callbackUrl, transactionType: "CustomerPayBillOnline", partyB: credentials.shortcode });
     if (!isStkPushAccepted(response)) return NextResponse.json({ success: false, message: response.ResponseDescription || "Payment initiation failed" }, { status: 502 });
     const now = new Date().toISOString();
-    await db.collection("payments").insertOne({ invoiceId: invoice._id.toString(), ownerId, propertyOwnerId: ownerId, amount, currency: "KES", provider: "daraja", paymentRail: "property_owner_invoice_daraja", phoneNumber: phone, accountReference: reference, transactionId: response.CheckoutRequestID, checkoutRequestId: response.CheckoutRequestID, merchantRequestId: response.MerchantRequestID, status: "pending", resultCode: null, rawCallbackData: null, createdAt: now, updatedAt: now });
+    await db.collection("payments").insertOne({ invoiceId: invoice._id.toString(), ownerId, propertyOwnerId: ownerId, landlordId: ownerId, amount, currency: "KES", provider: "daraja", paymentRail: "property_owner_invoice_daraja", phoneNumber: phone, accountReference: reference, transactionId: response.CheckoutRequestID, checkoutRequestId: response.CheckoutRequestID, merchantRequestId: response.MerchantRequestID, status: "pending", resultCode: null, rawCallbackData: null, createdAt: now, updatedAt: now });
     return NextResponse.json({ success: true, provider: "daraja", status: "pending", checkoutRequestId: response.CheckoutRequestID, merchantRequestId: response.MerchantRequestID, message: response.CustomerMessage || "STK Push sent. Check your phone and enter your M-Pesa PIN." });
   } catch (error) {
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Payment initiation failed" }, { status: 500 });

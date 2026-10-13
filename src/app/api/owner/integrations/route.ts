@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { getOwnerInvoicePaymentProvider, getOwnerPaymentGateway, maskSecret } from "@/lib/owner-integrations";
+import { getOwnerPaymentGateway, maskSecret } from "@/lib/owner-integrations";
 import { decryptTumaApiKey, encryptTumaApiKey, isLikelyEncryptedTumaApiKey } from "@/lib/tuma-crypto";
 
 type OwnerContext = {
@@ -60,7 +60,6 @@ export async function GET(request: NextRequest) {
 
     const tuma = record?.tuma || {};
     const paymentGateway = await getOwnerPaymentGateway(db, context.ownerId);
-    const invoicePaymentProvider = await getOwnerInvoicePaymentProvider(db, context.ownerId);
     const email = String(tuma.email || "").trim();
     const storedApiKey = String(tuma.apiKey || "").trim();
     const businessId = String(tuma.businessId || "").trim();
@@ -78,7 +77,6 @@ export async function GET(request: NextRequest) {
       success: true,
       integrations: {
         paymentGateway,
-        invoicePaymentProvider,
         tuma: {
           enabled,
           email,

@@ -47,7 +47,6 @@ interface Invoice {
   updatedAt: string;
   expiresAt: string;
   description: string;
-  paymentProvider?: "daraja" | "kopokopo";
 }
 
 interface PaymentModalProps {
@@ -61,24 +60,6 @@ interface PaymentModalProps {
   userId: string | null;
   billingPlan?: string;
 }
-
-type PaymentRail = "legacy_mpesa" | "shared_daraja" | "user_paybill";
-
-type OwnerDarajaIntegrationState = {
-  shared: {
-    enabled: boolean;
-    paymentType: "till" | "paybill" | "bank";
-    destinationNumber: string;
-    accountNumber: string;
-    hasDestinationNumber: boolean;
-  };
-  userPaybill: {
-    enabled: boolean;
-    environment: "sandbox" | "production";
-    shortcode: string;
-    hasCredentials: boolean;
-  };
-};
 
 export default function PaymentModal({
   isOpen,
@@ -103,10 +84,6 @@ export default function PaymentModal({
   const [csrfToken, setCsrfToken] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("Processing your payment. Please wait...");
   const [statusEvents, setStatusEvents] = useState<{ id: string; message: string; tone: "info" | "success" | "warning" | "error" }[]>([]);
-  const [ownerDarajaLoading, setOwnerDarajaLoading] = useState(false);
-  const [ownerDarajaConfig, setOwnerDarajaConfig] = useState<OwnerDarajaIntegrationState | null>(null);
-  const [paymentRail, setPaymentRail] = useState<PaymentRail>("legacy_mpesa");
-  const [invoicePaymentProvider, setInvoicePaymentProvider] = useState<"kopokopo" | "daraja">("kopokopo");
 
   const pushStatusEvent = useCallback((message: string, tone: "info" | "success" | "warning" | "error" = "info") => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -133,69 +110,7 @@ export default function PaymentModal({
         }
       };
 
-      const fetchOwnerDarajaConfig = async () => {
-        setOwnerDarajaLoading(true);
-        try {
-          const response = await fetch("/api/owner/daraja", { credentials: "include" });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok || !data?.success) {
-            setOwnerDarajaConfig(null);
-            setPaymentRail("legacy_mpesa");
-            return;
-          }
-
-          const nextShared = data.integrations?.daraja?.shared || {};
-          const nextUserPaybill = data.integrations?.daraja?.userPaybill || {};
-          const sharedAvailable = nextShared.enabled !== false && !!nextShared.hasDestinationNumber;
-          const userPaybillAvailable = nextUserPaybill.enabled !== false && !!nextUserPaybill.hasCredentials;
-
-          setOwnerDarajaConfig({
-            shared: {
-              enabled: nextShared.enabled !== false,
-              paymentType:
-                nextShared.paymentType === "till"
-                  ? "till"
-                  : nextShared.paymentType === "bank"
-                    ? "bank"
-                    : "paybill",
-              destinationNumber: nextShared.destinationNumber || "",
-              accountNumber: nextShared.accountNumber || "",
-              hasDestinationNumber: !!nextShared.hasDestinationNumber,
-            },
-            userPaybill: {
-              enabled: nextUserPaybill.enabled !== false,
-              environment: nextUserPaybill.environment === "production" ? "production" : "sandbox",
-              shortcode: nextUserPaybill.shortcode || "",
-              hasCredentials: !!nextUserPaybill.hasCredentials,
-            },
-          });
-
-          if (sharedAvailable) {
-            setPaymentRail((prev) => (prev === "legacy_mpesa" || prev === "shared_daraja" ? "shared_daraja" : prev));
-          } else if (userPaybillAvailable) {
-            setPaymentRail((prev) => (prev === "legacy_mpesa" || prev === "user_paybill" ? "user_paybill" : prev));
-          } else {
-            setPaymentRail("legacy_mpesa");
-          }
-        } catch {
-          setOwnerDarajaConfig(null);
-          setPaymentRail("legacy_mpesa");
-        } finally {
-          setOwnerDarajaLoading(false);
-        }
-      };
-
-      const fetchInvoiceProvider = async () => {
-        try {
-          const response = await fetch("/api/owner/integrations", { credentials: "include" });
-          const data = await response.json().catch(() => ({}));
-          if (data?.integrations?.invoicePaymentProvider === "daraja" || data?.integrations?.invoicePaymentProvider === "kopokopo") setInvoicePaymentProvider(data.integrations.invoicePaymentProvider);
-        } catch { setInvoicePaymentProvider("kopokopo"); }
-      };
-
       fetchCsrfToken();
-      fetchOwnerDarajaConfig();
-      fetchInvoiceProvider();
     }
   }, [isOpen, onError]);
 
@@ -207,7 +122,6 @@ export default function PaymentModal({
     setIsFetchingAmount(false);
     setStatusMessage("Processing your payment. Please wait...");
     setStatusEvents([]);
-    setPaymentRail("legacy_mpesa");
   }, [initialPropertyId, initialPhone]);
 
   const validatePaymentForm = useCallback(
@@ -414,7 +328,7 @@ export default function PaymentModal({
 
       void poll();
     },
-    [onSuccess, paymentPropertyId, userId, csrfToken, onError, pushStatusEvent]
+    [onSuccess, paymentPropertyId, userId, csrfToken, onError, pushStatusEvent, billingPlan]
   );
 
   const handlePayment = useCallback(
@@ -476,20 +390,15 @@ export default function PaymentModal({
         }
         const invoice: Invoice = invoiceData.invoices[0];
 
-        // Legacy invoices may not have a snapshot yet; use the backend-reported active
-        // provider only for those records. Stored invoice providers always win.
-        const useInvoiceDaraja = (invoice.paymentProvider || invoicePaymentProvider) === "daraja";
-        const requestBody = useInvoiceDaraja
-          ? { invoiceId: invoice._id, phone: paymentPhone }
-          : {
-              amount: invoice.amount,
-              phone: paymentPhone,
-              invoiceId: invoice._id,
-              landlordId: userId,
-              type: "Other",
-            };
+        const requestBody = {
+          amount: invoice.amount,
+          phone: paymentPhone,
+          invoiceId: invoice._id,
+          landlordId: userId,
+          type: "Other" as const,
+        };
 
-        const stkRes = await fetch(useInvoiceDaraja ? "/api/owner/invoice-payments/daraja-stk-push" : "/api/mpesa/stk-push", {
+        const stkRes = await fetch("/api/mpesa/stk-push", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -499,9 +408,10 @@ export default function PaymentModal({
         });
         const stkData = await stkRes.json();
         if (stkRes.ok && stkData.success) {
+          const isDaraja = stkData.provider === "daraja";
           pollTransactionStatus(stkData.checkoutRequestId, invoice, {
-            statusEndpoint: useInvoiceDaraja ? "/api/owner/invoice-payments/daraja-status" : "/api/transaction-status",
-            serverConfirmsInvoice: useInvoiceDaraja,
+            statusEndpoint: isDaraja ? "/api/owner/invoice-payments/daraja-status" : "/api/transaction-status",
+            serverConfirmsInvoice: isDaraja,
           });
         } else {
           onError(stkData.message || "Failed to initiate payment");
@@ -523,9 +433,8 @@ export default function PaymentModal({
       pollTransactionStatus,
       csrfToken,
       onError,
+      pushStatusEvent,
       billingPlan,
-      paymentRail,
-      invoicePaymentProvider,
     ]
   );
 
@@ -534,39 +443,6 @@ export default function PaymentModal({
     if (!property) return 0;
     return property.unitTypes.reduce((sum: number, unit: UnitType) => sum + (unit.quantity || 0), 0);
   };
-
-  const sharedDarajaAvailable = !!ownerDarajaConfig?.shared.enabled && !!ownerDarajaConfig?.shared.hasDestinationNumber;
-  const userPaybillAvailable = !!ownerDarajaConfig?.userPaybill.enabled && !!ownerDarajaConfig?.userPaybill.hasCredentials;
-  const hasOwnerDarajaModes = sharedDarajaAvailable || userPaybillAvailable;
-  const maskInline = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return "";
-    if (trimmed.length <= 4) return trimmed;
-    return `${"*".repeat(Math.max(2, trimmed.length - 4))}${trimmed.slice(-4)}`;
-  };
-  const sharedPaymentType = ownerDarajaConfig?.shared.paymentType || "paybill";
-  const sharedDestinationLabel =
-    sharedPaymentType === "till" ? "Till" : sharedPaymentType === "bank" ? "Bank" : "Paybill";
-  const darajaModeBadgeText =
-    paymentRail === "shared_daraja"
-      ? `${sharedPaymentType === "till" ? "K-till" : "Mpesa"} · funds land in ${sharedDestinationLabel} ${
-          maskInline(
-            sharedPaymentType === "bank"
-              ? ownerDarajaConfig?.shared.accountNumber || ownerDarajaConfig?.shared.destinationNumber || ""
-              : ownerDarajaConfig?.shared.destinationNumber || ""
-          ) || "destination"
-        }`
-      : paymentRail === "user_paybill"
-        ? `User Paybill · funds land in Paybill ${maskInline(ownerDarajaConfig?.userPaybill.shortcode || "") || "account"}`
-        : "KopoKopo · platform till";
-  const selectedDarajaLabel =
-    paymentRail === "shared_daraja"
-      ? sharedPaymentType === "till"
-        ? "K-till"
-        : "Mpesa"
-      : paymentRail === "user_paybill"
-        ? "User-owned Paybill"
-        : "KopoKopo";
 
   return (
     <>
@@ -673,68 +549,6 @@ export default function PaymentModal({
                 <p className="text-red-500 text-xs mt-1">{paymentFormErrors.paymentInvoice}</p>
               )}
             </div>
-            {hasOwnerDarajaModes && (
-              <div className="rounded-2xl border border-border bg-slate-50/70 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground">Payment Rail</label>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Choose how this payment should be initiated from the owner dashboard.
-                    </p>
-                  </div>
-                  <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">
-                    {selectedDarajaLabel}
-                  </span>
-                </div>
-
-                <div className="mt-3 inline-flex max-w-full items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-[10px] font-semibold text-sky-700">
-                  <span className="truncate">{darajaModeBadgeText}</span>
-                </div>
-
-                <select
-                  value={paymentRail}
-                  onChange={(e) => setPaymentRail(e.target.value as PaymentRail)}
-                  disabled={ownerDarajaLoading}
-                  className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary transition-colors"
-                >
-                  <option value="legacy_mpesa">KopoKopo till flow</option>
-                  {/* Platform invoice payments use KopoKopo behind the scenes. */}
-                  {sharedDarajaAvailable && (
-                    <option value="shared_daraja">
-                      {sharedPaymentType === "till" ? "K-till" : "Mpesa"}
-                    </option>
-                  )}
-                  {userPaybillAvailable && <option value="user_paybill">User-owned Paybill</option>}
-                </select>
-
-                <div className="mt-3 grid gap-3 text-xs text-muted-foreground sm:grid-cols-3">
-                  <div className="rounded-xl bg-white/80 px-3 py-2 border border-border">
-                    <p className="uppercase tracking-[0.2em] text-[10px]">Mpesa</p>
-                    <p className="mt-1 font-medium text-foreground">
-                      {sharedDarajaAvailable
-                        ? `${sharedDestinationLabel} connected`
-                        : ownerDarajaLoading
-                          ? "Checking..."
-                          : "Unavailable"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-white/80 px-3 py-2 border border-border">
-                    <p className="uppercase tracking-[0.2em] text-[10px]">User Paybill</p>
-                    <p className="mt-1 font-medium text-foreground">
-                      {userPaybillAvailable
-                        ? `${ownerDarajaConfig?.userPaybill.environment || "sandbox"} ready`
-                        : ownerDarajaLoading
-                          ? "Checking..."
-                          : "Unavailable"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-white/80 px-3 py-2 border border-border">
-                    <p className="uppercase tracking-[0.2em] text-[10px]">Fallback</p>
-                    <p className="mt-1 font-medium text-foreground">KopoKopo `/api/mpesa/stk-push`</p>
-                  </div>
-                </div>
-              </div>
-            )}
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <button
                 type="button"

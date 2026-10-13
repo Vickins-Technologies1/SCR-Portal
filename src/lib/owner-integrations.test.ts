@@ -15,8 +15,13 @@ describe("invoice payment provider configuration", () => {
     await expect(getOwnerInvoicePaymentProvider(dbWith({ provider: "kopokopo" }), "")).resolves.toBe("kopokopo");
   });
 
-  it("supports the legacy setting name and defaults safely", async () => {
+  it("supports the legacy setting name, defaults only when unset, and rejects invalid stored values", async () => {
     await expect(getOwnerInvoicePaymentProvider(dbWith({ invoicePaymentProvider: "daraja" }), "")).resolves.toBe("daraja");
-    await expect(getOwnerInvoicePaymentProvider(dbWith({ provider: "unsupported" }), "")).resolves.toBe("kopokopo");
+    await expect(getOwnerInvoicePaymentProvider(dbWith({}), "")).resolves.toBe("kopokopo");
+    await expect(getOwnerInvoicePaymentProvider(dbWith({ provider: "unsupported" }), "")).rejects.toThrow("unsupported");
+  });
+
+  it("uses the canonical setting ahead of its legacy alias", async () => {
+    await expect(getOwnerInvoicePaymentProvider(dbWith({ provider: "daraja", invoicePaymentProvider: "kopokopo" }), "")).resolves.toBe("daraja");
   });
 });

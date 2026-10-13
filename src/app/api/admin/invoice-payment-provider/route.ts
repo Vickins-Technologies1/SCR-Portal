@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { getOwnerInvoicePaymentProvider } from "@/lib/owner-integrations";
+import { assertKopokopoInvoicePaymentConfigured } from "@/lib/kopokopo";
+import { resolveDarajaPlatformStkCredentials } from "@/lib/mpesa";
 
 const isAdmin = (request: NextRequest) => request.cookies.get("role")?.value === "admin";
 
@@ -18,6 +20,12 @@ export async function PUT(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const provider = body?.provider;
   if (provider !== "kopokopo" && provider !== "daraja") return NextResponse.json({ success: false, message: "Invalid provider" }, { status: 400 });
+  try {
+    if (provider === "kopokopo") assertKopokopoInvoicePaymentConfigured();
+    else resolveDarajaPlatformStkCredentials();
+  } catch (error) {
+    return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "Selected provider is not configured" }, { status: 400 });
+  }
   const { db } = await connectToDatabase();
   const existing = await db.collection<any>("platformSettings").findOne({ _id: "property_owner_invoice_payments" });
   const now = new Date().toISOString();
@@ -29,5 +37,6 @@ export async function PUT(request: NextRequest) {
   if (String(existing?.provider || "kopokopo") !== provider) {
     await db.collection("integrationAuditLog").insertOne({ type: "property_owner_invoice_payment_provider_changed", from: existing?.provider || "kopokopo", to: provider, changedAt: now, changedBy: request.cookies.get("userId")?.value || null });
   }
-  return NextResponse.json({ success: true, provider });
+  const persisted = await getOwnerInvoicePaymentProvider(db, "");
+  return NextResponse.json({ success: true, provider: persisted });
 }

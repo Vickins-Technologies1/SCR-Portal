@@ -88,6 +88,12 @@ export function getKopokopoTillNumber(): string {
   return KOPOKOPO_TILL_NUMBER;
 }
 
+export function assertKopokopoInvoicePaymentConfigured(): void {
+  getKopokopoTillNumber();
+  requireEnv("KOPOKOPO_CLIENT_ID", KOPOKOPO_CLIENT_ID);
+  requireEnv("KOPOKOPO_CLIENT_SECRET", KOPOKOPO_CLIENT_SECRET);
+}
+
 async function getAccessToken(): Promise<string> {
   requireEnv("KOPOKOPO_CLIENT_ID", KOPOKOPO_CLIENT_ID);
   requireEnv("KOPOKOPO_CLIENT_SECRET", KOPOKOPO_CLIENT_SECRET);

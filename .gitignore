@@ -45,6 +45,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Local architecture audit export
+/docs/architecture/COMPLETE_ARCHITECTURE.md
+
 # vercel
 .vercel
 

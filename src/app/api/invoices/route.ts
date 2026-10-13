@@ -196,7 +196,6 @@ export async function GET(request: NextRequest) {
         billingPlan: invoice.billingPlan,
         percentage: invoice.percentage,
         expectedIncome: invoice.expectedIncome,
-        paymentProvider: invoice.paymentProvider,
       }));
 
       return NextResponse.json(
@@ -261,7 +260,6 @@ export async function GET(request: NextRequest) {
         billingPlan: invoice.billingPlan,
         percentage: invoice.percentage,
         expectedIncome: invoice.expectedIncome,
-        paymentProvider: invoice.paymentProvider,
       };
     });
 

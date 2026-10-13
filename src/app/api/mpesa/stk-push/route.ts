@@ -154,6 +154,9 @@ export async function POST(request: NextRequest) {
       if (invoice.userId?.toString?.() !== userId) {
         return NextResponse.json({ success: false, message: "Unauthorized invoice access" }, { status: 403 });
       }
+      if (invoice.status !== "pending") {
+        return NextResponse.json({ success: false, message: "Invoice is no longer payable" }, { status: 409 });
+      }
       const ownerProfile = await db.collection("propertyOwners").findOne(
         { _id: new ObjectId(userId), role: "propertyOwner" },
         { projection: { phone: 1 } }
@@ -173,7 +176,7 @@ export async function POST(request: NextRequest) {
         );
       }
       const trustedInvoiceAmount = Number(invoice.amount || 0);
-      if (!Number.isFinite(trustedInvoiceAmount) || trustedInvoiceAmount <= 0) {
+      if (!Number.isSafeInteger(trustedInvoiceAmount) || trustedInvoiceAmount <= 0) {
         return NextResponse.json(
           { success: false, message: "Invoice amount is invalid. Please regenerate the invoice." },
           { status: 400 }
@@ -189,10 +192,9 @@ export async function POST(request: NextRequest) {
       propertyId = invoice.propertyId || null;
       derivedLandlordId = userId;
       isPlatformInvoicePayment = true;
-      invoicePaymentProvider = invoice.paymentProvider === "daraja" ? "daraja" : invoice.paymentProvider === "kopokopo" ? "kopokopo" : await getOwnerInvoicePaymentProvider(db, userId);
-      if (!invoice.paymentProvider && invoicePaymentProvider) {
-        await db.collection("invoices").updateOne({ _id: invoice._id }, { $set: { paymentProvider: invoicePaymentProvider, updatedAt: new Date() } });
-      }
+      // The persisted platform setting controls every new attempt. Invoice snapshots
+      // are historical metadata and must not pin future attempts to a stale provider.
+      invoicePaymentProvider = await getOwnerInvoicePaymentProvider(db, userId);
     }
 
     if (!isPlatformInvoicePayment && !isValidKenyanMsisdn(payerPhone)) {
@@ -207,7 +209,11 @@ export async function POST(request: NextRequest) {
       const existingInvoicePayment = await db.collection("payments").findOne(
         {
           invoiceId: parsed.data.invoiceId,
-          landlordId: parsed.data.landlordId,
+          $or: [
+            { landlordId: userId },
+            { ownerId: userId },
+            { propertyOwnerId: userId },
+          ],
           status: { $in: ["pending", "pending_stk", "completed"] },
         },
         { sort: { createdAt: -1, _id: -1 } }
@@ -226,6 +232,14 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        const existingProvider = String(existingInvoicePayment.provider || "").toLowerCase();
+        if (existingProvider !== "daraja" && existingProvider !== "kopokopo") {
+          return NextResponse.json(
+            { success: false, message: "An existing invoice payment is pending but its provider cannot be identified. Contact support before retrying." },
+            { status: 409 }
+          );
+        }
+
         const existingCheckoutRequestId =
           existingInvoicePayment.checkoutRequestId || existingInvoicePayment.transactionId || "";
         return NextResponse.json(
@@ -235,7 +249,7 @@ export async function POST(request: NextRequest) {
             checkoutRequestId: existingCheckoutRequestId,
             merchantRequestId: existingInvoicePayment.merchantRequestId || "",
             customerMessage: "A payment request is already pending for this invoice.",
-            shortcode: safeGetKopokopoTillNumber(),
+            provider: existingProvider,
           },
           { status: 200 }
         );
@@ -274,6 +288,58 @@ export async function POST(request: NextRequest) {
     const paymentGateway = isPlatformInvoicePayment
       ? invoicePaymentProvider || "kopokopo"
       : await getOwnerPaymentGateway(db, derivedLandlordId);
+
+    if (isPlatformInvoicePayment && paymentGateway === "daraja") {
+      const credentials = resolveDarajaPlatformStkCredentials();
+      const callbackUrl = getMpesaCallbackUrl("/api/owner/invoice-payments/daraja-callback");
+      const response = await initiateStkPush({
+        ...credentials,
+        environment: undefined,
+        amount: paymentAmount,
+        phone: payerPhone,
+        accountReference: invoiceReference,
+        transactionDesc: `My Accurate Rent invoice ${invoiceReference}`,
+        callbackUrl,
+        transactionType: "CustomerPayBillOnline",
+        partyB: credentials.shortcode,
+      });
+      if (!isStkPushAccepted(response)) {
+        return NextResponse.json({ success: false, message: response.ResponseDescription || "Payment initiation failed" }, { status: 502 });
+      }
+      const now = new Date().toISOString();
+      await db.collection("payments").insertOne({
+        invoiceId: parsed.data.invoiceId,
+        ownerId: userId,
+        propertyOwnerId: userId,
+        landlordId: userId,
+        propertyId,
+        amount: paymentAmount,
+        requestedAmount: paymentAmount,
+        currency: "KES",
+        provider: "daraja",
+        paymentRail: "property_owner_invoice_daraja",
+        phoneNumber: payerPhone,
+        accountReference: invoiceReference,
+        reference: invoiceReference,
+        transactionId: response.CheckoutRequestID,
+        checkoutRequestId: response.CheckoutRequestID,
+        merchantRequestId: response.MerchantRequestID,
+        shortcode: credentials.shortcode,
+        status: "pending",
+        resultCode: null,
+        rawCallbackData: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return NextResponse.json({
+        success: true,
+        provider: "daraja",
+        status: "pending",
+        checkoutRequestId: response.CheckoutRequestID,
+        merchantRequestId: response.MerchantRequestID,
+        message: response.CustomerMessage || "STK Push sent. Check your phone and enter your M-Pesa PIN.",
+      });
+    }
 
     if (isPlatformInvoicePayment && paymentGateway === "kopokopo") {
       tillNumber = safeGetKopokopoTillNumber();
