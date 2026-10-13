@@ -140,8 +140,8 @@ export default function AirbnbGuestPortalLayout({ children }: { children: ReactN
               </div>
             </div>
 
-            <DashboardNavbarActions onSignOut={handleLogout} desktopBreakpoint="lg" />
             <ThemeToggle variant="icon" className="h-9 w-9 rounded-xl" />
+            <DashboardNavbarActions onSignOut={handleLogout} desktopBreakpoint="lg" />
             <button
               onClick={() => setIsSidebarOpen((v) => !v)}
               aria-label={isSidebarOpen ? "Close menu" : "Open menu"}

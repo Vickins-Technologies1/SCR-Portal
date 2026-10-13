@@ -106,7 +106,6 @@ export default function Navbar() {
               <span className="sm:hidden">Return</span>
             </button>
           )}
-          <DashboardNavbarActions onSignOut={handleSignOut} desktopBreakpoint="lg" />
           <div className="flex items-center gap-1 rounded-2xl border border-border/70 bg-background/70 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
             <NotificationBell endpoint="/api/notifications" pageHref="/property-owner-dashboard/notifications" enabled={canViewNotifications} />
             <ThemeToggle variant="icon" className="h-9 w-9 rounded-xl border-transparent bg-transparent shadow-none hover:bg-primary/10 hover:shadow-none" />
@@ -128,6 +127,7 @@ export default function Navbar() {
             >
               {isOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
+          <DashboardNavbarActions onSignOut={handleSignOut} desktopBreakpoint="lg" />
           </div>
       </div>
     </header>
