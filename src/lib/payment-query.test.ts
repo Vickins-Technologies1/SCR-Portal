@@ -10,23 +10,15 @@ import {
 } from "./payment-query";
 
 describe("shared payment query rules", () => {
-  it("recognizes legacy successful statuses without admitting pending payments", () => {
+  it("recognizes legacy successful statuses and only admits completed postings or legacy rows", () => {
     expect(SUCCESSFUL_PAYMENT_STATUSES).toEqual(["completed", "successful", "success", "paid", "settled"]);
     expect(eligibleFinancialPaymentFilter()).toMatchObject({
       $and: [
         { status: { $in: SUCCESSFUL_PAYMENT_STATUSES } },
-        { $or: expect.arrayContaining([
-          { financialPostingStatus: { $in: ["posted", "processing", null] } },
+        { $or: [
+          { financialPostingStatus: { $in: ["posted", null] } },
           { financialPostingStatus: { $exists: false } },
-          {
-            financialPostingStatus: "pending",
-            $or: [
-              { postedAmount: { $exists: true, $ne: null } },
-              { providerConfirmedAmount: { $exists: true, $ne: null } },
-              { financialEffectsApplied: true },
-            ],
-          },
-        ]) },
+        ] },
       ],
     });
   });

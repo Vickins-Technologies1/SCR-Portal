@@ -16,7 +16,13 @@ Scope: source-level review of rent payment eligibility, tenant dues and allocati
 | Wallet history | Idempotent `walletTransactions` events for payment credit, wallet consumption and reversal credit | Current tenant wallet balance is presently recalculated from payment allocations, rather than replayed from wallet events |
 | Reports | `getFinancialPaymentRows()` and `getFinancialReportSummary()`; gross and net receipts are separate | Dashboard and export totals for metrics migrated to the shared reporting service |
 
-`financialPostingStatus` is currently considered eligible when `posted` **or `processing`**; legacy successful rows with no marker are also eligible. The `pending` marker is accepted when a confirmed/posted amount or `financialEffectsApplied` exists. This preserves recovery visibility but means user-facing reads can include a payment while related posting writes are still running. Treat this as an unresolved consistency risk pending a migration to an explicit internal-replay path and read-side eligibility boundary.
+Before the 2026-10-14 follow-up, the read-side payment filter admitted `processing` rows and some `pending` rows when amount/effects metadata existed. That risk is now addressed as described below.
+
+## 2026-10-14 follow-up
+
+The read-side eligibility boundary now admits successful payments only when posting is complete (`financialPostingStatus: "posted"`) or when the record predates posting markers (missing/null marker). `processing`, `pending`, and `quarantined` rows no longer contribute to financial totals solely because they carry a provider-confirmed amount. They remain discoverable by the reconciliation audit for review/retry. This avoids presenting a partially posted receipt as settled money; a durable scheduled recovery worker remains a separate operational gap.
+
+The reconciliation audit's invoice expected balance now uses the application's item subtotal, discount, and tax rules before subtracting posted net payments. This removes the previous mismatch for itemized/discounted/taxed invoices. The script remains read-only and was not run against production; no live discrepancy counts are available.
 
 ## Findings and code paths
 

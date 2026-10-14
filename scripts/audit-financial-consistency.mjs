@@ -5,7 +5,19 @@ const databaseName = process.env.MONGODB_DB || "rentaldb";
 const SUCCESSFUL_PAYMENT_STATUSES = ["completed", "successful", "success", "paid", "settled"];
 
 const isSuccessfulPayment = (payment) => SUCCESSFUL_PAYMENT_STATUSES.includes(String(payment?.status || "").toLowerCase());
-const paymentAmount = (payment) => Math.max(0, Number(payment?.postedAmount ?? payment?.amount) || 0);
+const isFinanciallyPosted = (payment) =>
+  payment?.financialPostingStatus == null || payment.financialPostingStatus === "posted";
+const roundCurrency = (value) => Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+const paymentAmount = (payment) => Math.max(0, roundCurrency(Number(payment?.postedAmount ?? payment?.providerConfirmedAmount ?? payment?.amount) || 0));
+const invoiceTotal = (invoice) => {
+  const items = Array.isArray(invoice?.items) ? invoice.items : [];
+  const subtotal = roundCurrency(items.length
+    ? items.reduce((sum, item) => sum + Math.max(0, Number(item?.qty) || 0) * Math.max(0, Number(item?.rate) || 0), 0)
+    : Math.max(0, Number(invoice?.amount) || 0));
+  const discount = roundCurrency(Math.max(0, Number(invoice?.discount) || 0));
+  const tax = roundCurrency(Math.max(0, Number(invoice?.tax) || 0));
+  return roundCurrency(Math.max(0, subtotal - discount + tax));
+};
 
 if (!uri) {
   console.error("LIVE DATABASE RECONCILIATION NOT RUN: set MONGODB_URI (or MONGO_URI) for a read-only audit.");
@@ -16,7 +28,11 @@ if (!uri) {
   try {
     const db = client.db(databaseName);
     const payments = await db.collection("payments").find({}).toArray();
-    const postedPayments = payments.filter((p) => isSuccessfulPayment(p) && p.financialPostingStatus !== "quarantined");
+    const successfulPayments = payments.filter(isSuccessfulPayment);
+    const postedPayments = successfulPayments.filter(isFinanciallyPosted);
+    const incompletePosting = successfulPayments
+      .filter((p) => p.financialPostingStatus != null && !isFinanciallyPosted(p))
+      .map((p) => ({ paymentId: String(p._id), financialPostingStatus: p.financialPostingStatus }));
     const ledger = await db.collection("financialLedger").find({}).toArray();
     const wallet = await db.collection("walletTransactions").find({}).toArray();
     const invoices = await db.collection("invoices").find({}).toArray();
@@ -41,7 +57,7 @@ if (!uri) {
 
     async function duplicates(field) {
       return db.collection("payments").aggregate([
-        { $match: { status: { $in: SUCCESSFUL_PAYMENT_STATUSES }, [field]: { $exists: true, $nin: [null, ""] } } },
+        { $match: { status: { $in: SUCCESSFUL_PAYMENT_STATUSES }, financialPostingStatus: { $in: ["posted", null] }, [field]: { $exists: true, $nin: [null, ""] } } },
         { $group: { _id: "$" + field, ids: { $push: "$_id" }, count: { $sum: 1 } } },
         { $match: { count: { $gt: 1 } } },
       ]).toArray();
@@ -87,7 +103,7 @@ if (!uri) {
     for (const invoice of invoices) {
       const related = postedPayments.filter((p) => String(p.invoiceId || "") === String(invoice._id));
       const paid = related.reduce((s, p) => s + Math.max(0, paymentAmount(p) - (reversalTotals.get(String(p._id)) || 0)), 0);
-      const expectedBalance = Math.max(0, Number(invoice.amount || 0) - paid);
+      const expectedBalance = Math.max(0, invoiceTotal(invoice) - paid);
       if (invoice.balanceDue != null && Math.abs(Number(invoice.balanceDue) - expectedBalance) > 0.01) {
         invoiceFindings.push({ invoiceId: String(invoice._id), storedBalance: invoice.balanceDue, expectedBalance });
       }
@@ -95,6 +111,7 @@ if (!uri) {
 
     const findings = {
       missingPostingStatus: missingPostingStatus.map((p) => String(p._id)),
+      incompletePosting,
       missingProviderIdentity: missingProviderIdentity.map((p) => String(p._id)),
       missingAllocation: missingAllocation.map((p) => String(p._id)),
       allocationMismatches,
@@ -114,11 +131,11 @@ if (!uri) {
     const findingsCount = (key) => findings[key]?.length || 0;
     console.log(JSON.stringify({
       readOnly: true,
-      scanned: { payments: payments.length, successfulPayments: payments.filter(isSuccessfulPayment).length, postedPayments: postedPayments.length, financialLedger: ledger.length, walletTransactions: wallet.length, invoices: invoices.length, tenants: tenants.length, utilityCharges: utilityCharges.length },
+      scanned: { payments: payments.length, successfulPayments: successfulPayments.length, postedPayments: postedPayments.length, financialLedger: ledger.length, walletTransactions: wallet.length, invoices: invoices.length, tenants: tenants.length, utilityCharges: utilityCharges.length },
       findings,
       categories: {
         CLEAN: [],
-        REVIEW_REQUIRED: ["missingPostingStatus", "missingProviderIdentity", "missingAllocation"].filter((key) => findingsCount(key) > 0),
+        REVIEW_REQUIRED: ["missingPostingStatus", "incompletePosting", "missingProviderIdentity", "missingAllocation"].filter((key) => findingsCount(key) > 0),
         DATA_INCONSISTENCY: ["allocationMismatches", "duplicateProviderTransactions", "duplicateReceipts", "orphanLedger", "orphanWalletTransactions", "duplicateLedgerEventKeys", "negativeWalletBalances", "orphanInvoiceReferences", "relationshipMismatches", "orphanUtilityAllocations", "utilityAllocationMismatches", "excessReversals", "invoiceFindings"].filter((key) => findingsCount(key) > 0),
         SYSTEM_ERROR: [],
       },
