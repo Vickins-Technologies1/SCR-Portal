@@ -5,8 +5,12 @@ const databaseName = process.env.MONGODB_DB || "rentaldb";
 const SUCCESSFUL_PAYMENT_STATUSES = ["completed", "successful", "success", "paid", "settled"];
 
 const isSuccessfulPayment = (payment) => SUCCESSFUL_PAYMENT_STATUSES.includes(String(payment?.status || "").toLowerCase());
-const isFinanciallyPosted = (payment) =>
-  payment?.financialPostingStatus == null || payment.financialPostingStatus === "posted";
+const hasPostingEvidence = (payment) =>
+  payment?.postedAmount != null || payment?.providerConfirmedAmount != null || payment?.financialEffectsApplied === true;
+const isFinanciallyEligible = (payment) =>
+  payment?.financialPostingStatus == null ||
+  ["posted", "processing"].includes(payment.financialPostingStatus) ||
+  (payment.financialPostingStatus === "pending" && hasPostingEvidence(payment));
 const roundCurrency = (value) => Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 const paymentAmount = (payment) => Math.max(0, roundCurrency(Number(payment?.postedAmount ?? payment?.providerConfirmedAmount ?? payment?.amount) || 0));
 const invoiceTotal = (invoice) => {
@@ -29,9 +33,9 @@ if (!uri) {
     const db = client.db(databaseName);
     const payments = await db.collection("payments").find({}).toArray();
     const successfulPayments = payments.filter(isSuccessfulPayment);
-    const postedPayments = successfulPayments.filter(isFinanciallyPosted);
+    const eligiblePayments = successfulPayments.filter(isFinanciallyEligible);
     const incompletePosting = successfulPayments
-      .filter((p) => p.financialPostingStatus != null && !isFinanciallyPosted(p))
+      .filter((p) => ["processing", "pending", "quarantined"].includes(p.financialPostingStatus))
       .map((p) => ({ paymentId: String(p._id), financialPostingStatus: p.financialPostingStatus }));
     const ledger = await db.collection("financialLedger").find({}).toArray();
     const wallet = await db.collection("walletTransactions").find({}).toArray();
@@ -46,9 +50,9 @@ if (!uri) {
     const reversals = ledger.filter((e) => e.kind === "PAYMENT_REVERSED" && e.status === "posted");
 
     const missingPostingStatus = payments.filter((p) => isSuccessfulPayment(p) && !p.financialPostingStatus);
-    const missingProviderIdentity = postedPayments.filter((p) => !p.providerTransactionId && !p.transactionId && !p.reference);
-    const missingAllocation = postedPayments.filter((p) => !p.allocation && !postedLedger.some((e) => String(e.sourcePaymentId) === String(p._id)));
-    const allocationMismatches = postedPayments.flatMap((p) => {
+    const missingProviderIdentity = eligiblePayments.filter((p) => !p.providerTransactionId && !p.transactionId && !p.reference);
+    const missingAllocation = eligiblePayments.filter((p) => !p.allocation && !postedLedger.some((e) => String(e.sourcePaymentId) === String(p._id)));
+    const allocationMismatches = eligiblePayments.flatMap((p) => {
       const a = p.allocation || {};
       const allocated = ["rent", "utilities", "deposit", "other", "walletCredit"].reduce((s, k) => s + Math.max(0, Number(a[k]) || 0), 0);
       const amount = paymentAmount(p);
@@ -57,7 +61,24 @@ if (!uri) {
 
     async function duplicates(field) {
       return db.collection("payments").aggregate([
-        { $match: { status: { $in: SUCCESSFUL_PAYMENT_STATUSES }, financialPostingStatus: { $in: ["posted", null] }, [field]: { $exists: true, $nin: [null, ""] } } },
+        {
+          $match: {
+            status: { $in: SUCCESSFUL_PAYMENT_STATUSES },
+            $or: [
+              { financialPostingStatus: { $in: ["posted", "processing", null] } },
+              { financialPostingStatus: { $exists: false } },
+              {
+                financialPostingStatus: "pending",
+                $or: [
+                  { postedAmount: { $exists: true, $ne: null } },
+                  { providerConfirmedAmount: { $exists: true, $ne: null } },
+                  { financialEffectsApplied: true },
+                ],
+              },
+            ],
+            [field]: { $exists: true, $nin: [null, ""] },
+          },
+        },
         { $group: { _id: "$" + field, ids: { $push: "$_id" }, count: { $sum: 1 } } },
         { $match: { count: { $gt: 1 } } },
       ]).toArray();
@@ -79,12 +100,12 @@ if (!uri) {
       return map;
     }, new Map()).entries()].filter(([, balance]) => balance < -0.01).map(([tenantId, balance]) => ({ tenantId, balance }));
     const orphanInvoiceReferences = payments.filter((p) => p.invoiceId && !invoiceById.has(String(p.invoiceId)));
-    const relationshipMismatches = postedPayments.filter((p) => {
+    const relationshipMismatches = eligiblePayments.filter((p) => {
       const tenant = p.tenantId ? tenants.find((t) => String(t._id) === String(p.tenantId)) : null;
       return tenant && p.propertyId && String(tenant.propertyId) !== String(p.propertyId);
     });
-    const orphanUtilityAllocations = postedPayments.flatMap((p) => (p.utilityAllocations || []).filter((a) => !utilityById.has(String(a.utilityChargeId)) || !a.billingPeriod).map((allocation) => ({ paymentId: String(p._id), allocation })));
-    const utilityAllocationMismatches = postedPayments.flatMap((p) => (p.utilityAllocations || []).flatMap((a) => {
+    const orphanUtilityAllocations = eligiblePayments.flatMap((p) => (p.utilityAllocations || []).filter((a) => !utilityById.has(String(a.utilityChargeId)) || !a.billingPeriod).map((allocation) => ({ paymentId: String(p._id), allocation })));
+    const utilityAllocationMismatches = eligiblePayments.flatMap((p) => (p.utilityAllocations || []).flatMap((a) => {
       const charge = utilityById.get(String(a.utilityChargeId));
       const allocated = Number(a.amount || 0);
       const charged = Number(charge?.amount || charge?.totalAmount || 0);
@@ -101,7 +122,7 @@ if (!uri) {
 
     const invoiceFindings = [];
     for (const invoice of invoices) {
-      const related = postedPayments.filter((p) => String(p.invoiceId || "") === String(invoice._id));
+      const related = eligiblePayments.filter((p) => String(p.invoiceId || "") === String(invoice._id));
       const paid = related.reduce((s, p) => s + Math.max(0, paymentAmount(p) - (reversalTotals.get(String(p._id)) || 0)), 0);
       const expectedBalance = Math.max(0, invoiceTotal(invoice) - paid);
       if (invoice.balanceDue != null && Math.abs(Number(invoice.balanceDue) - expectedBalance) > 0.01) {
@@ -131,7 +152,7 @@ if (!uri) {
     const findingsCount = (key) => findings[key]?.length || 0;
     console.log(JSON.stringify({
       readOnly: true,
-      scanned: { payments: payments.length, successfulPayments: successfulPayments.length, postedPayments: postedPayments.length, financialLedger: ledger.length, walletTransactions: wallet.length, invoices: invoices.length, tenants: tenants.length, utilityCharges: utilityCharges.length },
+      scanned: { payments: payments.length, successfulPayments: successfulPayments.length, eligiblePayments: eligiblePayments.length, financialLedger: ledger.length, walletTransactions: wallet.length, invoices: invoices.length, tenants: tenants.length, utilityCharges: utilityCharges.length },
       findings,
       categories: {
         CLEAN: [],

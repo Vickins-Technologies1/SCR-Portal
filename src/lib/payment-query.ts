@@ -16,7 +16,7 @@ export const SUCCESSFUL_PAYMENT_STATUSES = [
   "settled",
 ] as const;
 
-export const POSTED_PAYMENT_STATUSES = ["posted"] as const;
+export const POSTED_PAYMENT_STATUSES = ["posted", "processing"] as const;
 
 export function isSuccessfulPaymentStatus(value: unknown): boolean {
   return SUCCESSFUL_PAYMENT_STATUSES.includes(String(value || "").trim().toLowerCase() as (typeof SUCCESSFUL_PAYMENT_STATUSES)[number]);
@@ -50,6 +50,17 @@ export function financialPostingFilter() {
     $or: [
       { financialPostingStatus: { $in: [...POSTED_PAYMENT_STATUSES, null] } },
       { financialPostingStatus: { $exists: false } },
+      // A callback can confirm a payment before the final posting marker is
+      // written. Keep evidenced payments visible to financial calculations
+      // while the idempotent posting recovery path completes downstream work.
+      {
+        financialPostingStatus: "pending",
+        $or: [
+          { postedAmount: { $exists: true, $ne: null } },
+          { providerConfirmedAmount: { $exists: true, $ne: null } },
+          { financialEffectsApplied: true },
+        ],
+      },
     ],
   };
 }
