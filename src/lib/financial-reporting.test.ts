@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { deduplicateFinancialPayments, projectFinancialPaymentRows } from "./financial-reporting";
+import { getFinancialPaymentRows, projectFinancialPaymentRows } from "./financial-reporting";
 
 describe("financial report payment projection", () => {
   it("uses posted amounts, prorates allocations, and subtracts reversals", () => {
@@ -30,16 +30,30 @@ describe("financial report payment projection", () => {
     expect(row.allocation).toEqual({ rent: 0, utilities: 0, deposit: 0, other: 0, walletCredit: 0 });
   });
 
-  it("deduplicates legacy representations of one provider transaction", () => {
+  it("uses each returned payment row without deduplicating provider references", async () => {
     const firstId = new ObjectId("000000000000000000000001");
     const secondId = new ObjectId("000000000000000000000002");
-    const result = deduplicateFinancialPayments([
-      { _id: firstId, provider: "daraja", checkoutRequestId: "Q123", amount: 10_000, status: "completed" },
-      { _id: secondId, provider: "mpesa", providerTransactionId: "Q123", amount: 10_000, status: "completed", financialPostingStatus: "posted" },
-      { _id: new ObjectId("000000000000000000000003"), provider: "daraja", transactionId: "Q999", amount: 5_000, status: "completed" },
-    ]);
+    const paymentRows = [
+      { _id: firstId, tenantId: "tenant-1", provider: "daraja", checkoutRequestId: "Q123", amount: 10_000, status: "completed", financialPostingStatus: "posted" },
+      { _id: secondId, tenantId: "tenant-1", provider: "mpesa", providerTransactionId: "Q123", amount: 10_000, status: "completed", financialPostingStatus: "posted" },
+    ];
+    const db = {
+      collection(name: string) {
+        if (name === "payments") {
+          return {
+            find: () => ({ sort: () => ({ toArray: async () => paymentRows }) }),
+          };
+        }
+        if (name === "financialLedger") {
+          return { aggregate: () => ({ toArray: async () => [] }) };
+        }
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    } as any;
 
-    expect(result.payments).toHaveLength(2);
-    expect(result.aliases.get(firstId.toString())).toBe(secondId.toString());
+    const rows = await getFinancialPaymentRows({ db, tenantIds: ["tenant-1"] });
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.originalAmount)).toEqual([10_000, 10_000]);
   });
 });

@@ -117,15 +117,6 @@ const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdA
   return paymentEventDate(payment as unknown as Record<string, unknown>)?.getTime() ?? null;
 };
 
-const paymentMatchesTenantProperty = (payment: Record<string, unknown>, propertyId: unknown) => {
-  const paymentPropertyId = String(payment.propertyId ?? "").trim();
-  const tenantPropertyId = String(propertyId ?? "").trim();
-  // Legacy rows without property linkage remain eligible because tenantId is
-  // authoritative. An explicit link to another property must never reduce
-  // this tenant's balance.
-  return !paymentPropertyId || !tenantPropertyId || paymentPropertyId === tenantPropertyId;
-};
-
 type AllocationField = "deposit" | "rent" | "utilities" | "other";
 
 const defaultAllocationPriority: AllocationField[] = ["deposit", "rent", "utilities", "other"];
@@ -372,8 +363,7 @@ export async function calculateTenantFinancialState(
   // totals. Tenant dues must not use a second, subtly different payment query.
   // tenantId is the authoritative ownership link; this also retains legacy
   // payment rows whose propertyId was never populated.
-  const financialRows = (await getFinancialPaymentRows({ db, tenantIds: [tenant._id] }))
-    .filter((row) => paymentMatchesTenantProperty(row.payment, tenant.propertyId));
+  const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id] });
   const payments = financialRows.map((row) => ({
     ...row.payment,
     amount: row.netAmount,
@@ -444,8 +434,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     .sort({ billingPeriod: 1, createdAt: 1, _id: 1 })
     .toArray();
   const chargeRemaining = new Map(utilityCharges.map((charge: any) => [String(charge._id), Math.max(0, Number(charge.amount) || 0)]));
-  const financialRows = (await getFinancialPaymentRows({ db, tenantIds: [tenant._id] }))
-    .filter((row) => paymentMatchesTenantProperty(row.payment, tenant.propertyId));
+  const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id] });
   for (const { payment } of [...financialRows].sort((a, b) =>
     (paymentDateValue(a.payment) ?? 0) - (paymentDateValue(b.payment) ?? 0) ||
     String(a.payment._id).localeCompare(String(b.payment._id))
