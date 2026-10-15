@@ -11,6 +11,7 @@ import crypto from "crypto";
 import { createReferralAttribution, ensureReferralProfile, normalizeRewardMode } from "@/lib/referrals";
 import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/session";
 import { calculateLifetimePrice, LifetimePricingError } from "@/lib/lifetime";
+import { requireTurnstile } from "@/lib/turnstile";
 
 // ──────────────────────────────────────────────────────────────
 // In-memory rate limiter (IP-based, 5 attempts / 15 min)
@@ -68,6 +69,8 @@ interface SignupRequestBody {
 // POST handler
 // ──────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
+  const turnstileFailure = await requireTurnstile(request, "signup");
+  if (turnstileFailure) return turnstileFailure;
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   let body: SignupRequestBody | undefined;
 

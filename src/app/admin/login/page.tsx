@@ -8,6 +8,7 @@ import { FaEye, FaEyeSlash, FaTimes, FaGoogle } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
 import OtpCodeField from "@/components/auth/OtpCodeField";
+import TurnstileField from "@/components/auth/TurnstileField";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
@@ -44,6 +45,12 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [turnstileLoginToken, setTurnstileLoginToken] = useState("");
+  const [turnstileOtpToken, setTurnstileOtpToken] = useState("");
+  const [turnstileResendToken, setTurnstileResendToken] = useState("");
+  const [turnstileLoginVersion, setTurnstileLoginVersion] = useState(0);
+  const [turnstileOtpVersion, setTurnstileOtpVersion] = useState(0);
+  const [turnstileResendVersion, setTurnstileResendVersion] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<{ email?: string; password?: string }>({});
   const [otpRequired, setOtpRequired] = useState(false);
@@ -158,7 +165,7 @@ export default function AdminLogin() {
     setQuickLoading(true);
     try {
       const creds = await getBiometricCredentials("admin");
-      const result = await signInAdmin({ email: creds.email, password: creds.password, appHash });
+      const result = await signInAdmin({ email: creds.email, password: creds.password, appHash, turnstileToken: turnstileLoginToken });
       if (result.requiresOtp && result.otpId) {
         setOtpRequired(true);
         setOtpId(result.otpId);
@@ -170,6 +177,8 @@ export default function AdminLogin() {
     } catch (err: any) {
       setError(err?.message || "Biometric login failed.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setQuickLoading(false);
     }
   };
@@ -181,7 +190,7 @@ export default function AdminLogin() {
     try {
       if (pinMode === "login") {
         const creds = await getPinCredentials({ pin: pinValue, kind: "admin" });
-        const result = await signInAdmin({ email: creds.email, password: creds.password, appHash });
+        const result = await signInAdmin({ email: creds.email, password: creds.password, appHash, turnstileToken: turnstileLoginToken });
         if (result.requiresOtp && result.otpId) {
           closePinModal();
           setOtpRequired(true);
@@ -206,6 +215,8 @@ export default function AdminLogin() {
     } catch (err: any) {
       setPinError(err?.message || "PIN failed.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setQuickLoading(false);
     }
   };
@@ -247,7 +258,7 @@ export default function AdminLogin() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password, role: "admin", appHash }),
+        body: JSON.stringify({ email, password, role: "admin", appHash, turnstileToken: turnstileLoginToken }),
       });
 
       const data: LoginResponse = await response.json();
@@ -268,6 +279,8 @@ export default function AdminLogin() {
     } catch {
       setError("Connection error. Please try again.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setIsLoading(false);
     }
   };
@@ -287,7 +300,7 @@ export default function AdminLogin() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId, code: submittedCode }),
+        body: JSON.stringify({ otpId, code: submittedCode, turnstileToken: turnstileOtpToken }),
       });
 
       const data: LoginResponse = await res.json();
@@ -302,13 +315,15 @@ export default function AdminLogin() {
       setError(err.message || "OTP verification failed.");
     } finally {
       otpVerifyInFlightRef.current = false;
+      setTurnstileOtpToken("");
+      setTurnstileOtpVersion((version) => version + 1);
       setIsLoading(false);
     }
   };
 
   const verifyOtpWithAuto = useOtpAutoVerify({
     code: otpCode,
-    enabled: otpRequired && !isLoading,
+    enabled: otpRequired && !isLoading && Boolean(turnstileOtpToken),
     onVerify: verifyOtp,
   });
 
@@ -344,7 +359,7 @@ export default function AdminLogin() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId }),
+        body: JSON.stringify({ otpId, turnstileToken: turnstileResendToken }),
       });
 
       const data: LoginResponse & { retryAfterMs?: number } = await res.json();
@@ -362,6 +377,8 @@ export default function AdminLogin() {
     } catch (err: any) {
       setError(err.message || "Failed to resend OTP.");
     } finally {
+      setTurnstileResendToken("");
+      setTurnstileResendVersion((version) => version + 1);
       setResendLoading(false);
     }
   };
@@ -578,6 +595,7 @@ export default function AdminLogin() {
                     helperText="Your phone can autofill the code automatically."
                     inputClassName="bg-background/80 px-3.5 xs:px-4 py-2.5 text-xs xs:text-sm sm:text-base"
                   />
+                  <TurnstileField key={turnstileOtpVersion} action="otp_verify" onToken={setTurnstileOtpToken} />
 
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -615,6 +633,7 @@ export default function AdminLogin() {
                         ? `Resend OTP in ${resendCountdown}s`
                         : "Resend OTP"}
                   </button>
+                  <TurnstileField key={turnstileResendVersion} action="otp_resend" onToken={setTurnstileResendToken} />
                 </form>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-3.5 pt-1">
@@ -695,6 +714,7 @@ export default function AdminLogin() {
                       <p className="mt-1.5 text-[10px] sm:text-[11px] text-red-600">{formErrors.password}</p>
                     )}
                   </div>
+                  <TurnstileField key={turnstileLoginVersion} action="login" onToken={setTurnstileLoginToken} />
 
                   <motion.button
                     whileHover={{ scale: 1.02 }}

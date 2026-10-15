@@ -6,6 +6,7 @@ import crypto from "crypto";
 import validator from "validator";
 import logger from "../../../../lib/logger";
 import { sendPasswordResetEmail } from "../../../../lib/email";
+import { requireTurnstile } from "../../../../lib/turnstile";
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -36,6 +37,8 @@ function rateLimit(ip: string): { ok: boolean; remaining: number } {
 }
 
 export async function POST(request: NextRequest) {
+  const turnstileFailure = await requireTurnstile(request, "password_reset_request");
+  if (turnstileFailure) return turnstileFailure;
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
   try {

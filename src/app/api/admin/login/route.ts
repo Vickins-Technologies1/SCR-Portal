@@ -15,10 +15,13 @@ import {
   shouldBypassOtp,
 } from "../../../../lib/otp";
 import { buildLoginIdentifierQuery, normalizeLoginIdentifier } from "../../../../lib/login-identifier";
+import { requireTurnstile } from "../../../../lib/turnstile";
 
 const OTP_COLLECTION = "otpChallenges";
 
 export async function POST(request: Request) {
+  const turnstileFailure = await requireTurnstile(request, "login");
+  if (turnstileFailure) return turnstileFailure;
   let loginIdentifier: string | null = null;
 
   try {

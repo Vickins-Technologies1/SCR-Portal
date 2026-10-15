@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
+import TurnstileField from "@/components/auth/TurnstileField";
 
 function CompletePhoneContent() {
   const router = useRouter();
@@ -14,6 +15,8 @@ function CompletePhoneContent() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileVersion, setTurnstileVersion] = useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +34,7 @@ function CompletePhoneContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ token, phone }),
+        body: JSON.stringify({ token, phone, turnstileToken }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -48,6 +51,8 @@ function CompletePhoneContent() {
     } catch (err: any) {
       setError(err?.message || "Unable to save your phone number.");
     } finally {
+      setTurnstileToken("");
+      setTurnstileVersion((version) => version + 1);
       setLoading(false);
     }
   };
@@ -70,6 +75,7 @@ function CompletePhoneContent() {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <TurnstileField key={turnstileVersion} action="google_auth" onToken={setTurnstileToken} />
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}

@@ -8,6 +8,7 @@ import Cookies from "js-cookie";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import OtpCodeField from "@/components/auth/OtpCodeField";
+import TurnstileField from "@/components/auth/TurnstileField";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
@@ -31,6 +32,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [turnstileLoginToken, setTurnstileLoginToken] = useState("");
+  const [turnstileOtpToken, setTurnstileOtpToken] = useState("");
+  const [turnstileResendToken, setTurnstileResendToken] = useState("");
+  const [turnstileResetToken, setTurnstileResetToken] = useState("");
+  const [turnstileLoginVersion, setTurnstileLoginVersion] = useState(0);
+  const [turnstileOtpVersion, setTurnstileOtpVersion] = useState(0);
+  const [turnstileResendVersion, setTurnstileResendVersion] = useState(0);
+  const [turnstileResetVersion, setTurnstileResetVersion] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [otpRequired, setOtpRequired] = useState(false);
   const [otpId, setOtpId] = useState<string | null>(null);
@@ -145,7 +154,7 @@ export default function LoginPage() {
     setQuickLoading(true);
     try {
       const creds = await getBiometricCredentials("owner");
-      const result = await signInOwner({ email: creds.email, password: creds.password, appHash });
+      const result = await signInOwner({ email: creds.email, password: creds.password, appHash, turnstileToken: turnstileLoginToken });
       if (result.requiresOtp && result.otpId) {
         setOtpRequired(true);
         setOtpId(result.otpId);
@@ -159,6 +168,8 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err?.message || "Biometric login failed.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setQuickLoading(false);
     }
   };
@@ -171,7 +182,7 @@ export default function LoginPage() {
     try {
       if (pinMode === "login") {
         const creds = await getPinCredentials({ pin: pinValue, kind: "owner" });
-        const result = await signInOwner({ email: creds.email, password: creds.password, appHash });
+        const result = await signInOwner({ email: creds.email, password: creds.password, appHash, turnstileToken: turnstileLoginToken });
         if (result.requiresOtp && result.otpId) {
           closePinModal();
           setOtpRequired(true);
@@ -198,6 +209,8 @@ export default function LoginPage() {
     } catch (err: any) {
       setPinError(err?.message || "PIN failed.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setQuickLoading(false);
     }
   };
@@ -228,7 +241,7 @@ export default function LoginPage() {
       const res = await fetch("/api/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, appHash }), // Removed role from payload
+        body: JSON.stringify({ email, password, appHash, turnstileToken: turnstileLoginToken }), // Removed role from payload
         credentials: "include",
       });
 
@@ -273,6 +286,8 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err.message || "Authentication failed. Please check your credentials.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setIsLoading(false);
     }
   };
@@ -290,7 +305,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId, code: submittedCode }),
+        body: JSON.stringify({ otpId, code: submittedCode, turnstileToken: turnstileOtpToken }),
       });
 
       const data = await res.json();
@@ -326,6 +341,8 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err.message || "OTP verification failed.");
     } finally {
+      setTurnstileOtpToken("");
+      setTurnstileOtpVersion((version) => version + 1);
       setIsLoading(false);
     }
   };
@@ -368,7 +385,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId }),
+        body: JSON.stringify({ otpId, turnstileToken: turnstileResendToken }),
       });
 
       const data = await res.json();
@@ -386,6 +403,8 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err.message || "Failed to resend OTP.");
     } finally {
+      setTurnstileResendToken("");
+      setTurnstileResendVersion((version) => version + 1);
       setResendLoading(false);
     }
   };
@@ -437,7 +456,7 @@ export default function LoginPage() {
           "x-csrf-token": token,
         },
         credentials: "include",
-        body: JSON.stringify({ email: resetEmail }),
+        body: JSON.stringify({ email: resetEmail, turnstileToken: turnstileResetToken }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -451,6 +470,8 @@ export default function LoginPage() {
     } catch (err: any) {
       setResetError(err.message || "Failed to send reset link. Please try again.");
     } finally {
+      setTurnstileResetToken("");
+      setTurnstileResetVersion((version) => version + 1);
       setResetLoading(false);
     }
   };
@@ -715,6 +736,7 @@ export default function LoginPage() {
                   helperText="Your phone can autofill the code automatically."
                   inputClassName="bg-background/80 px-3.5 xs:px-4 py-2.5 text-xs xs:text-sm sm:text-base"
                 />
+                <TurnstileField key={turnstileOtpVersion} action="otp_verify" onToken={setTurnstileOtpToken} />
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
@@ -752,6 +774,7 @@ export default function LoginPage() {
                       ? `Resend OTP in ${resendCountdown}s`
                       : "Resend OTP"}
                 </button>
+                <TurnstileField key={turnstileResendVersion} action="otp_resend" onToken={setTurnstileResendToken} />
               </form>
             ) : (
               <form id="login-form" onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
@@ -821,6 +844,8 @@ export default function LoginPage() {
                     Forgot password?
                   </button>
                 </div>
+
+                <TurnstileField key={turnstileLoginVersion} action="login" onToken={setTurnstileLoginToken} />
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
@@ -929,6 +954,8 @@ export default function LoginPage() {
                 autoComplete="off"
                 className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.25em] text-center"
               />
+
+              <TurnstileField key={turnstileResetVersion} action="password_reset_request" onToken={setTurnstileResetToken} />
               <button
                 type="submit"
                 disabled={quickLoading || pinValue.length < 4}

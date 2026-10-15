@@ -8,6 +8,7 @@ import { FaEye, FaEyeSlash, FaGoogle, FaArrowRight, FaUserTie, FaInfoCircle, FaT
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
+import TurnstileField from "@/components/auth/TurnstileField";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
 import {
@@ -44,6 +45,10 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [turnstileLoginToken, setTurnstileLoginToken] = useState("");
+  const [turnstileResetToken, setTurnstileResetToken] = useState("");
+  const [turnstileLoginVersion, setTurnstileLoginVersion] = useState(0);
+  const [turnstileResetVersion, setTurnstileResetVersion] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricReady, setBiometricReady] = useState(false);
@@ -109,7 +114,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
           "x-csrf-token": token,
         },
         credentials: "include",
-        body: JSON.stringify({ email: resetEmail }),
+        body: JSON.stringify({ email: resetEmail, turnstileToken: turnstileResetToken }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -123,6 +128,8 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     } catch (err: any) {
       setResetError(err.message || "Failed to send reset link. Please try again.");
     } finally {
+      setTurnstileResetToken("");
+      setTurnstileResetVersion((version) => version + 1);
       setResetLoading(false);
     }
   };
@@ -217,12 +224,15 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
         password: creds.password,
         portal: isAirbnbGuestPortal ? "airbnb" : "rental",
         appHash,
+        turnstileToken: turnstileLoginToken,
       });
       if (!result.success) throw new Error(result.message || "Login failed");
       router.push(result.redirect || defaultRedirectPath);
     } catch (err: any) {
       setError(err?.message || "Biometric login failed.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setQuickLoading(false);
     }
   };
@@ -239,6 +249,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
         password: creds.password,
         portal: isAirbnbGuestPortal ? "airbnb" : "rental",
         appHash,
+        turnstileToken: turnstileLoginToken,
       });
         if (!result.success) throw new Error(result.message || "Login failed");
         closePinModal();
@@ -257,6 +268,8 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     } catch (err: any) {
       setPinError(err?.message || "PIN failed.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setQuickLoading(false);
     }
   };
@@ -304,7 +317,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     };
 
     try {
-      const result = await signInTenant({ email: payload.email, password: payload.password, portal: payload.portal, appHash });
+      const result = await signInTenant({ email: payload.email, password: payload.password, portal: payload.portal, appHash, turnstileToken: turnstileLoginToken });
 
       if (!result.success) {
         throw new Error(result.message || "Login failed. Please check your credentials.");
@@ -315,6 +328,8 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
     } finally {
+      setTurnstileLoginToken("");
+      setTurnstileLoginVersion((version) => version + 1);
       setIsSubmitting(false);
     }
   };
@@ -645,6 +660,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
                     Forgot password?
                   </button>
                 </div>
+                <TurnstileField key={turnstileLoginVersion} action="login" onToken={setTurnstileLoginToken} />
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
@@ -749,6 +765,7 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
                 autoComplete="off"
                 className="w-full px-3.5 xs:px-4 py-2.5 bg-background/80 border border-border rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-muted-foreground text-xs xs:text-sm sm:text-base shadow-inner tracking-[0.25em] text-center"
               />
+              <TurnstileField key={turnstileResetVersion} action="password_reset_request" onToken={setTurnstileResetToken} />
               <button
                 type="submit"
                 disabled={quickLoading || pinValue.length < 4}

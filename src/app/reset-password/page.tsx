@@ -8,6 +8,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Lock, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
+import TurnstileField from "@/components/auth/TurnstileField";
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
@@ -25,6 +26,8 @@ function ResetPasswordContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileVersion, setTurnstileVersion] = useState(0);
 
   useEffect(() => {
     if (!token || !email) {
@@ -53,7 +56,7 @@ function ResetPasswordContent() {
       const res = await fetch(isOwner ? "/api/owner/reset-password" : "/api/tenant/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, email, newPassword: password }),
+        body: JSON.stringify({ token, email, newPassword: password, turnstileToken }),
       });
 
       const data = await res.json();
@@ -71,6 +74,8 @@ function ResetPasswordContent() {
     } catch (err: any) {
       setError(err.message || "Something went wrong. The link may have expired or is invalid.");
     } finally {
+      setTurnstileToken("");
+      setTurnstileVersion((version) => version + 1);
       setLoading(false);
     }
   };
@@ -146,6 +151,7 @@ function ResetPasswordContent() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
+            <TurnstileField key={turnstileVersion} action="password_reset" onToken={setTurnstileToken} />
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 New Password
