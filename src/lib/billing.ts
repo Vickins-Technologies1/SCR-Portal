@@ -4,6 +4,8 @@ import { Tenant } from "../types/tenant";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 import type { AccountTier } from "./tier";
 import { getOwnerInvoicePaymentProvider } from "./owner-integrations";
+import { getFinancialPaymentRows, type FinancialPaymentRow } from "./financial-reporting";
+import { isSuccessfulPaymentStatus } from "./payment-query";
 
 export type BillingPlan = "RentCollection" | "FullManagement" | "Airbnb";
 
@@ -27,6 +29,149 @@ export function getBillingMonth(date: Date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
+}
+
+const BILLING_TIME_ZONE = "Africa/Nairobi";
+
+/** Nairobi calendar month, independent of the host/server timezone. */
+export function getFullManagementBillingMonth(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BILLING_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  return `${year}-${month}`;
+}
+
+export function getFullManagementBillingMonthRange(date: Date = new Date()) {
+  const billingMonth = getFullManagementBillingMonth(date);
+  const [year, month] = billingMonth.split("-").map(Number);
+  // Nairobi is UTC+03:00 year-round. Use half-open bounds to avoid host locale
+  // behavior and month-boundary ambiguity in Mongo date comparisons.
+  return {
+    billingMonth,
+    start: new Date(Date.UTC(year, month - 1, 1) - 3 * 60 * 60 * 1000),
+    end: new Date(Date.UTC(year, month, 1) - 3 * 60 * 60 * 1000),
+  };
+}
+
+export async function computeActualMonthlyRentReceived(db: Db, propertyId: string, date: Date = new Date()): Promise<number> {
+  if (!propertyId) return 0;
+  const { start, end } = getFullManagementBillingMonthRange(date);
+  const rows = await getFinancialPaymentRows({ db, propertyIds: [propertyId], start, end: new Date(end.getTime() - 1) });
+  return sumFullManagementRentReceived(rows);
+}
+
+export function sumFullManagementRentReceived(rows: FinancialPaymentRow[]): number {
+  const seen = new Set<string>();
+  return roundCurrency(rows.reduce((sum, row) => {
+    const payment = row.payment || {};
+    if (!isSuccessfulPaymentStatus(payment.status)) return sum;
+    const providerReference = payment.providerTransactionId || payment.transactionId || payment.mpesaCode || payment.reference;
+    const key = providerReference
+      ? `${String(payment.provider || "")}:${String(providerReference)}`
+      : String(payment._id);
+    if (seen.has(key)) return sum;
+    seen.add(key);
+    return sum + Math.max(0, Number(row.allocation.rent) || 0);
+  }, 0));
+}
+
+/** Full Management has its own write path so Software Leasing keeps its expected-income pricing. */
+export async function upsertFullManagementInvoice(params: {
+  db: Db;
+  userId: string;
+  propertyId: string;
+  percentage: number;
+  actualRentReceived: number;
+  description: string;
+  expiresAt: Date;
+  now?: Date;
+  metadata?: Record<string, unknown>;
+}) {
+  const { db, userId, propertyId, percentage, description, expiresAt } = params;
+  const now = params.now ?? new Date();
+  const metadata = params.metadata ?? {};
+  const { billingMonth } = getFullManagementBillingMonthRange(now);
+  const actualRentReceived = roundCurrency(Math.max(0, Number(params.actualRentReceived) || 0));
+  const amount = roundCurrency((actualRentReceived * percentage) / 100);
+  const invoices = db.collection("invoices");
+  const existing = await invoices.findOne({
+    userId,
+    propertyId,
+    billingPlan: "FullManagement",
+    billingMonth,
+  });
+
+  if (existing) {
+    if (!["pending", "unpaid", "overdue", "draft"].includes(String(existing.status || "").toLowerCase())) {
+      return { action: "skipped" as const, amount, billingMonth, invoiceId: existing._id.toString() };
+    }
+    // Once any posted payment is linked, retain the historical invoice and
+    // let the auditable correction workflow handle a discrepancy.
+    const linkedRows = await getFinancialPaymentRows({ db, invoiceIds: [String(existing._id)] });
+    if (linkedRows.some((row) => row.originalAmount > 0)) {
+      return { action: "skipped" as const, amount, billingMonth, invoiceId: existing._id.toString() };
+    }
+    const legacyProvider = existing.paymentProvider ? {} : { paymentProvider: await getOwnerInvoicePaymentProvider(db, userId) };
+    const changed = Number(existing.amount || 0) !== amount
+      || Number(existing.actualRentReceived ?? existing.expectedIncome ?? 0) !== actualRentReceived
+      || Number(existing.percentage || 0) !== percentage
+      || existing.actualRentReceived == null
+      || existing.pricingBasis !== "actual_rent_received";
+    if (!changed && existing.description === description) {
+      return { action: "skipped" as const, amount, billingMonth, invoiceId: existing._id.toString() };
+    }
+    const update: Record<string, unknown> = {
+      $set: { amount, updatedAt: now, description, expectedIncome: actualRentReceived, actualRentReceived, pricingBasis: "actual_rent_received", percentage, billingPlan: "FullManagement", expiresAt, ...legacyProvider, ...metadata },
+    };
+    if (changed) {
+      update.$push = {
+        pricingRecalculationHistory: {
+          at: now,
+          source: "full_management_actual_rent_recalculation",
+          previousAmount: Number(existing.amount || 0),
+          correctedAmount: amount,
+          previousRentBasis: Number(existing.actualRentReceived ?? existing.expectedIncome ?? 0),
+          previousPercentage: Number(existing.percentage || 0),
+          actualRentReceived,
+          percentage,
+        },
+      };
+    }
+    await invoices.updateOne({ _id: existing._id, status: existing.status }, update);
+    return { action: "updated" as const, amount, billingMonth, invoiceId: existing._id.toString() };
+  }
+
+  // A zero fee is represented by no new payable invoice. Existing unpaid
+  // invoices above are still corrected to zero when recalculated.
+  if (amount <= 0) return { action: "skipped" as const, amount, billingMonth };
+
+  const paymentProvider = await getOwnerInvoicePaymentProvider(db, userId);
+  const reference = `FM-${propertyId}-${billingMonth}-${Date.now()}`;
+  const result = await invoices.insertOne({
+    userId,
+    propertyId,
+    unitType: "All Units",
+    amount,
+    status: "pending",
+    reference,
+    createdAt: now,
+    updatedAt: now,
+    expiresAt,
+    description,
+    billingMonth,
+    billingPlan: "FullManagement",
+    percentage,
+    expectedIncome: actualRentReceived,
+    actualRentReceived,
+    pricingBasis: "actual_rent_received",
+    paymentProvider,
+    ...metadata,
+  } as any);
+  return { action: "created" as const, amount, billingMonth, invoiceId: result.insertedId.toString() };
 }
 
 export function getGracePeriodEndDate(propertyCreatedAt: Date, now: Date = new Date(), graceDays = 5): Date {

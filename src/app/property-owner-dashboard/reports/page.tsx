@@ -61,6 +61,8 @@ interface InvoiceEstimateItem {
   billingPlan: string;
   percentage: number;
   expectedIncome: number;
+  incomeBasis?: "actualRentReceived" | "expectedMonthlyRent";
+  incomeBasisBillingMonth?: string;
   estimatedAmount: number;
 }
 
@@ -975,7 +977,7 @@ function ReportsAndInvoicesPageInner() {
                         <div>
                           <p className="font-semibold text-foreground">{item.propertyName}</p>
                           <p className="text-[11px] text-muted-foreground">
-                            {item.billingPlan} • {item.percentage.toFixed(2)}% • Expected income Ksh {item.expectedIncome.toFixed(2)}
+                            {item.billingPlan} • {item.percentage.toFixed(2)}% • {item.incomeBasis === "actualRentReceived" ? `Actual rent received in ${item.incomeBasisBillingMonth}` : "Expected income"} Ksh {item.expectedIncome.toFixed(2)}
                           </p>
                         </div>
                         <div className="text-right font-semibold text-foreground">

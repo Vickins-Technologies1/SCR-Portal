@@ -1,6 +1,6 @@
 // cron/generate-monthly-invoices.ts
 import { connectToDatabase } from "@/lib/mongodb";
-import { computeExpectedMonthlyIncome, getBillingMonth, getGracePeriodEndDate, resolveBillingPlan, SOFTWARE_LEASING_PERCENT, upsertPercentageInvoice, getSoftwareLeasingPercentage } from "@/lib/billing";
+import { computeActualMonthlyRentReceived, computeExpectedMonthlyIncome, getBillingMonth, getFullManagementBillingMonthRange, getGracePeriodEndDate, resolveBillingPlan, upsertFullManagementInvoice, upsertPercentageInvoice, getSoftwareLeasingPercentage } from "@/lib/billing";
 import { AIRBNB_BOOKING_INVOICE_PERCENT } from "@/lib/airbnb-billing";
 import { parseDate, startOfDay } from "@/lib/airbnb-utils";
 import { Property } from "@/types/property";
@@ -285,6 +285,79 @@ export default async function generateMonthlyInvoices() {
       }
     }
 
+    // Full Management invoices use net rent actually received during the
+    // preceding Nairobi calendar month. Keep this path separate from the
+    // Software Leasing expected-rent calculation above.
+    let fullManagementChecked = 0;
+    let fullManagementCreated = 0;
+    let fullManagementUpdated = 0;
+    let fullManagementSkipped = 0;
+    const [currentBillingYear, currentBillingMonth] = getFullManagementBillingMonthRange(now).billingMonth.split("-").map(Number);
+    const fullManagementMonth = new Date(Date.UTC(currentBillingYear, currentBillingMonth - 2, 15, 12));
+
+    for (const property of properties) {
+      if (resolveBillingPlan(property) !== "FullManagement") continue;
+      const percentage = Number(property.managementFeePercent);
+      if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) continue;
+      fullManagementChecked += 1;
+
+      const propertyId = property._id.toString();
+      const ownerId = typeof property.ownerId === "string"
+        ? property.ownerId
+        : property.ownerId?.toString?.() ?? String(property.ownerId);
+      const actualRentReceived = await computeActualMonthlyRentReceived(db, propertyId, fullManagementMonth);
+      const { billingMonth } = getFullManagementBillingMonthRange(fullManagementMonth);
+      const monthLabel = new Intl.DateTimeFormat("en-KE", { timeZone: "Africa/Nairobi", month: "long", year: "numeric" }).format(fullManagementMonth);
+      const description = `Full management fee (${percentage}% of actual rent received Ksh ${actualRentReceived.toFixed(2)}) for ${monthLabel}`;
+      const result = await upsertFullManagementInvoice({
+        db,
+        userId: ownerId,
+        propertyId,
+        percentage,
+        actualRentReceived,
+        description,
+        expiresAt: getGracePeriodEndDate(property.createdAt ? new Date(property.createdAt) : fullManagementMonth, fullManagementMonth),
+        now: fullManagementMonth,
+        metadata: { billingMonth },
+      });
+      if (result.action === "created") fullManagementCreated += 1;
+      if (result.action === "updated") fullManagementUpdated += 1;
+      if (result.action === "skipped") fullManagementSkipped += 1;
+    }
+
+    // Re-evaluate still-open historical Full Management invoices too, so a
+    // later posted refund/reversal corrects an unpaid invoice for its original
+    // rent month. Settled invoices are excluded by status and the upsert guard.
+    const openFullManagementInvoices = await invoicesCollection.find({
+      billingPlan: "FullManagement",
+      status: { $in: ["pending", "unpaid", "overdue", "draft"] },
+      billingMonth: { $type: "string" },
+    }).toArray();
+    for (const invoice of openFullManagementInvoices as any[]) {
+      if (!/^\d{4}-\d{2}$/.test(String(invoice.billingMonth))) continue;
+      const [year, month] = String(invoice.billingMonth).split("-").map(Number);
+      const invoiceMonth = new Date(Date.UTC(year, month - 1, 15, 12));
+      const property = properties.find((candidate) => candidate._id.toString() === String(invoice.propertyId));
+      if (!property || resolveBillingPlan(property) !== "FullManagement") continue;
+      const percentage = Number(invoice.percentage ?? property.managementFeePercent);
+      if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) continue;
+      const actualRentReceived = await computeActualMonthlyRentReceived(db, String(invoice.propertyId), invoiceMonth);
+      const monthLabel = new Intl.DateTimeFormat("en-KE", { timeZone: "Africa/Nairobi", month: "long", year: "numeric" }).format(invoiceMonth);
+      const description = `Full management fee (${percentage}% of actual rent received Ksh ${actualRentReceived.toFixed(2)}) for ${monthLabel}`;
+      const result = await upsertFullManagementInvoice({
+        db,
+        userId: String(invoice.userId),
+        propertyId: String(invoice.propertyId),
+        percentage,
+        actualRentReceived,
+        description,
+        expiresAt: invoice.expiresAt ? new Date(invoice.expiresAt) : getGracePeriodEndDate(property.createdAt ? new Date(property.createdAt) : invoiceMonth, invoiceMonth),
+        now: invoiceMonth,
+      });
+      if (result.action === "updated") fullManagementUpdated += 1;
+      if (result.action === "skipped") fullManagementSkipped += 1;
+    }
+
     const airbnbOwnerIds = new Set<string>([
       ...(await db.collection("airbnbListings").distinct("ownerId")),
       ...(await db.collection("airbnbBookings").distinct("ownerId")),
@@ -308,6 +381,7 @@ export default async function generateMonthlyInvoices() {
     console.log(
       `Monthly invoice generation completed: properties=${propertiesChecked}, monthsChecked=${monthsConsidered}, created=${created}, updated=${updated}, skipped=${skipped}, skippedExisting=${skippedExisting}.`
     );
+    console.log(`Full Management invoice generation completed: properties=${fullManagementChecked}, created=${fullManagementCreated}, updated=${fullManagementUpdated}, skipped=${fullManagementSkipped}.`);
     console.log(
       `Airbnb invoice generation completed: owners=${airbnbOwnersChecked}, monthsChecked=${airbnbMonthsConsidered}, created=${airbnbCreated}, updated=${airbnbUpdated}, skipped=${airbnbSkipped}, skippedExisting=${airbnbSkippedExisting}.`
     );

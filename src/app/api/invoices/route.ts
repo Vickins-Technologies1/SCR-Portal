@@ -19,6 +19,8 @@ interface Invoice {
   billingPlan?: string;
   percentage?: number;
   expectedIncome?: number;
+  actualRentReceived?: number;
+  pricingBasis?: string;
   paymentProvider?: "daraja" | "kopokopo";
 }
 
@@ -196,6 +198,8 @@ export async function GET(request: NextRequest) {
         billingPlan: invoice.billingPlan,
         percentage: invoice.percentage,
         expectedIncome: invoice.expectedIncome,
+        actualRentReceived: invoice.actualRentReceived,
+        pricingBasis: invoice.pricingBasis,
       }));
 
       return NextResponse.json(
@@ -260,6 +264,8 @@ export async function GET(request: NextRequest) {
         billingPlan: invoice.billingPlan,
         percentage: invoice.percentage,
         expectedIncome: invoice.expectedIncome,
+        actualRentReceived: invoice.actualRentReceived,
+        pricingBasis: invoice.pricingBasis,
       };
     });
 

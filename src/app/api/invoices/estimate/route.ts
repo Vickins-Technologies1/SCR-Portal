@@ -3,9 +3,10 @@ import { connectToDatabase } from "../../../../lib/mongodb";
 import { ObjectId } from "mongodb";
 import {
   computeExpectedMonthlyIncome,
+  computeActualMonthlyRentReceived,
+  getFullManagementBillingMonthRange,
   resolveBillingPlan,
   roundCurrency,
-  SOFTWARE_LEASING_PERCENT,
   getBillingMonth,
   getSoftwareLeasingPercentage,
 } from "../../../../lib/billing";
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
 
     const targetDate = new Date();
     targetDate.setMonth(targetDate.getMonth() + 1, 1);
+    const actualMonthDate = new Date();
     const periodLabel = targetDate.toLocaleString("default", { month: "long", year: "numeric" });
     const billingMonth = getBillingMonth(targetDate);
 
@@ -51,15 +53,21 @@ export async function GET(request: NextRequest) {
           billingPlan === "FullManagement"
             ? Math.max(0, property.managementFeePercent ?? 0)
             : softwareLeasingPercentage;
-        const expectedIncome = await computeExpectedMonthlyIncome(db, propertyId, targetDate);
-        const estimatedAmount = roundCurrency((expectedIncome * percentage) / 100);
+        const incomeBasis = billingPlan === "FullManagement"
+          ? await computeActualMonthlyRentReceived(db, propertyId, actualMonthDate)
+          : await computeExpectedMonthlyIncome(db, propertyId, targetDate);
+        const estimatedAmount = roundCurrency((incomeBasis * percentage) / 100);
 
         return {
           propertyId,
           propertyName: property.name || "Property",
           billingPlan,
           percentage,
-          expectedIncome,
+          expectedIncome: incomeBasis,
+          incomeBasis: billingPlan === "FullManagement" ? "actualRentReceived" : "expectedMonthlyRent",
+          incomeBasisBillingMonth: billingPlan === "FullManagement"
+            ? getFullManagementBillingMonthRange(actualMonthDate).billingMonth
+            : billingMonth,
           estimatedAmount,
         };
       })

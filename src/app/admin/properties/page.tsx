@@ -618,7 +618,7 @@ export default function PropertiesPage() {
                                     <div className="flex flex-col sm:flex-row sm:items-end gap-2.5">
                                       <div className="flex-1">
                                         <label className="block text-[10px] font-semibold text-foreground uppercase tracking-wide mb-1.5">
-                                          Full Management Fee (% of expected income)
+                                          Full Management Fee (% of actual rent received)
                                         </label>
                                         <input
                                           type="number"

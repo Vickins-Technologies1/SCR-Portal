@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
-import { computeExpectedMonthlyIncome, getGracePeriodEndDate, resolveBillingPlan, upsertPercentageInvoice } from "../../../../../lib/billing";
+import { computeActualMonthlyRentReceived, getGracePeriodEndDate, getFullManagementBillingMonthRange, resolveBillingPlan, upsertFullManagementInvoice } from "../../../../../lib/billing";
 import { Property } from "../../../../../types/property";
 import { requireAdmin } from "../../../../../lib/admin-auth";
 
@@ -125,27 +125,22 @@ export async function PUT(
       }
 
       const now = new Date();
-      const expectedIncome = await computeExpectedMonthlyIncome(db, property._id.toString(), now);
-      if (expectedIncome <= 0) {
-        return NextResponse.json(
-          { success: false, message: "Expected monthly income is 0. Add tenants before creating this invoice." },
-          { status: 400 }
-        );
-      }
-
+      const actualRentReceived = await computeActualMonthlyRentReceived(db, property._id.toString(), now);
       const dueDate = getGracePeriodEndDate(property.createdAt ? new Date(property.createdAt) : now, now);
-      const description = `Full management fee (${percentToUse}% of expected monthly income Ksh ${expectedIncome.toFixed(2)}) for ${now.toLocaleString("default", { month: "long", year: "numeric" })}`;
+      const { billingMonth } = getFullManagementBillingMonthRange(now);
+      const monthLabel = new Intl.DateTimeFormat("en-KE", { timeZone: "Africa/Nairobi", month: "long", year: "numeric" }).format(now);
+      const description = `Full management fee (${percentToUse}% of actual rent received Ksh ${actualRentReceived.toFixed(2)}) for ${monthLabel}`;
 
-      invoiceResult = await upsertPercentageInvoice({
+      invoiceResult = await upsertFullManagementInvoice({
         db,
         userId: String(property.ownerId),
         propertyId: property._id.toString(),
-        billingPlan: "FullManagement",
         percentage: percentToUse,
-        expectedIncome,
+        actualRentReceived,
         description,
         expiresAt: dueDate,
         now,
+        metadata: { billingMonth },
       });
     }
 

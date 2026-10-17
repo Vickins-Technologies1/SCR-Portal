@@ -1265,7 +1265,7 @@ export default function PropertiesPage() {
                           <span className="text-foreground font-semibold">Billing Plan:</span>{" "}
                           {billingType === "RentCollection"
                             ? "Software leasing (% of expected income)"
-                            : "Full management (admin-set % of expected income)"}
+                            : "Full management (admin-set % of actual rent received)"}
                         </p>
                       </div>
                     </div>

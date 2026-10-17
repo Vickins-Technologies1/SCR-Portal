@@ -17,6 +17,7 @@ interface InvoiceRecord {
   billingPlan?: string;
   percentage?: number;
   expectedIncome?: number;
+  actualRentReceived?: number;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       "Property",
       "Billing Plan",
       "Percentage",
-      "Expected Income",
+      "Rent / Income Basis",
       "Amount (KES)",
       "Status",
       "Description",
@@ -126,7 +127,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         propertyLabel,
         billingPlan,
         inv.percentage != null ? `${inv.percentage}%` : "—",
-        inv.expectedIncome != null ? inv.expectedIncome : "—",
+        inv.billingPlan === "FullManagement"
+          ? (inv.actualRentReceived ?? inv.expectedIncome ?? "—")
+          : (inv.expectedIncome ?? "—"),
         inv.amount || 0,
         inv.status || "N/A",
         inv.description || "",
