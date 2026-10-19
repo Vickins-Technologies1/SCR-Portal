@@ -40,6 +40,12 @@ async function reconcileInvoice(db: Db, invoiceId: string) {
   return reconcileInvoiceFinancialState(db, invoiceId);
 }
 
+/** MongoDB driver v6 returns the document directly by default; older config or
+ * mocks may still return a ModifyResult with `.value`. Accept both shapes. */
+function updatedDocument<T>(result: any): T | null {
+  return result?.value ?? result ?? null;
+}
+
 /**
  * The single application-side financial posting boundary. Provider handlers
  * may identify and validate a provider event, but only this function may mark
@@ -133,10 +139,11 @@ export async function postVerifiedPayment(params: {
       { $set: { paymentPostingClaim: token, paymentPostingClaimAt: new Date().toISOString() } },
       { returnDocument: "after" },
     );
-    if (!claim?.value) return { outcome: "duplicate", payment };
+    const claimedInvoice = updatedDocument<any>(claim);
+    if (!claimedInvoice) return { outcome: "duplicate", payment };
     invoiceClaim = { invoiceId, token };
 
-    const calculation = await calculateInvoiceFinancialState(params.db, claim.value);
+    const calculation = await calculateInvoiceFinancialState(params.db, claimedInvoice);
     if (Math.round(providerAmount * 100) > Math.round(calculation.balanceDue * 100)) {
       await releaseInvoiceClaim(params.db, invoiceClaim);
       return quarantine(params.db, payment, "Payment amount exceeds the current invoice balance.");
@@ -171,12 +178,12 @@ export async function postVerifiedPayment(params: {
     },
     { returnDocument: "after" },
   );
-  if (!claimed?.value) {
+  const claimedPayment = updatedDocument<any>(claimed);
+  if (!claimedPayment) {
     if (invoiceClaim) await releaseInvoiceClaim(params.db, invoiceClaim);
     return { outcome: "duplicate", payment };
   }
 
-  const claimedPayment = claimed.value;
   let tenantState;
   if (claimedPayment.tenantId) {
     tenantState = await reconcileTenantPaymentAllocation(params.db, String(claimedPayment.tenantId));
@@ -199,7 +206,8 @@ export async function postVerifiedPayment(params: {
     },
     { returnDocument: "after" },
   );
-  if (!posted?.value) {
+  const postedPayment = updatedDocument<any>(posted);
+  if (!postedPayment) {
     const current = await params.db.collection("payments").findOne({ _id: paymentObjectId });
     if (current?.financialPostingStatus === "posted" || current?.financialEffectsApplied === true) {
       if (invoiceClaim) await releaseInvoiceClaim(params.db, invoiceClaim);
@@ -209,7 +217,7 @@ export async function postVerifiedPayment(params: {
     throw new Error("Financial posting claim was lost before finalization");
   }
   if (invoiceClaim) await releaseInvoiceClaim(params.db, invoiceClaim);
-  const finalPayment = { ...refreshedPayment, ...posted.value };
+  const finalPayment = { ...refreshedPayment, ...postedPayment };
   return { outcome: "posted", payment: finalPayment, tenantState, invoice };
 }
 

@@ -134,7 +134,7 @@ export async function applyTumaPaymentUpdate(params: {
       { $set: patch },
       { returnDocument: "after" }
     );
-    updatedPayment = refreshed?.value ?? payment;
+    updatedPayment = refreshed?.value ?? refreshed ?? payment;
   }
 
   // Provider status persistence is deliberately separate from financial

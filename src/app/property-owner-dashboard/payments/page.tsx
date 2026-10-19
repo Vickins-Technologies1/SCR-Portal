@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { CreditCard, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { CreditCard, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -18,7 +18,7 @@ interface Payment {
   paymentDate: string;
   date?: string;
   transactionId: string;
-  status: "completed" | "pending" | "pending_stk" | "failed";
+  status: string;
   tenantName: string;
   type: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber: string;
@@ -27,6 +27,11 @@ interface Payment {
   createdAt: string;
   mpesaCode?: string;
   isManual?: boolean;
+  originalAmount?: number;
+  reversedAmount?: number;
+  allocation?: { rent?: number; utilities?: number; deposit?: number; other?: number; walletCredit?: number };
+  paymentMethod?: string;
+  unitIdentifier?: string;
 }
 
 interface Property {
@@ -52,8 +57,6 @@ export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
-  const [userId, setUserId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
   const [effectiveOwnerId, setEffectiveOwnerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +65,11 @@ export default function PaymentsPage() {
   const [totalPayments, setTotalPayments] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
-  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+  const [reversingPaymentId, setReversingPaymentId] = useState<string | null>(null);
+  const [paymentToReverse, setPaymentToReverse] = useState<Payment | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
+  const [reversalNote, setReversalNote] = useState("");
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterConfig>({
     tenantName: "",
     type: "",
@@ -112,9 +119,6 @@ export default function PaymentsPage() {
     const uid = Cookies.get("userId");
     const userRole = Cookies.get("role");
     const ownerIdFromCookie = Cookies.get("ownerId");
-
-    setUserId(uid || null);
-    setRole(userRole || null);
 
     let ownerIdToUse: string | null = null;
 
@@ -303,32 +307,30 @@ export default function PaymentsPage() {
     }
   }, [effectiveOwnerId, selectedPropertyId, currentPage, itemsPerPage, csrfToken, filters, fetchCsrfToken]);
 
-  const deleteManualPayment = useCallback(async (payment: Payment) => {
+  const reverseManualPayment = useCallback(async () => {
+    const payment = paymentToReverse;
+    if (!payment) return;
     if (!canManagePayments) {
-      setError("You do not have permission to delete manual payments.");
+      setError("You do not have permission to reverse manual payments.");
       return;
     }
-
-    const isManual = payment.isManual ?? payment.transactionId?.startsWith("MANUAL-");
-    if (!isManual) {
-      setError("Only manual payments can be deleted.");
+    if (!reversalReason || (reversalReason === "Other" && !reversalNote.trim())) {
+      setError("Choose a reason and add a note when selecting Other.");
       return;
     }
-
-    const confirmed = window.confirm("Delete this manual payment? This action cannot be undone.");
-    if (!confirmed) return;
-
-    setDeletingPaymentId(payment._id);
+    setReversingPaymentId(payment._id);
     setError(null);
+    setSuccessMessage(null);
 
-    const runDelete = async (token: string) => {
-      const res = await fetch(`/api/payments/${encodeURIComponent(payment._id)}`, {
-        method: "DELETE",
+    const runReversal = async (token: string) => {
+      const res = await fetch(`/api/payments/${encodeURIComponent(payment._id)}/reverse`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": token,
         },
         credentials: "include",
+        body: JSON.stringify({ reason: reversalReason, note: reversalNote.trim() }),
       });
       const data = await res.json().catch(() => null);
       return { res, data };
@@ -341,27 +343,31 @@ export default function PaymentsPage() {
         return;
       }
 
-      let { res, data } = await runDelete(token);
+      let { res, data } = await runReversal(token);
 
       if (!res.ok && res.status === 403) {
         const newToken = await fetchCsrfToken();
         if (newToken) {
-          ({ res, data } = await runDelete(newToken));
+          ({ res, data } = await runReversal(newToken));
         }
       }
 
       if (!res.ok || !data?.success) {
-        setError(data?.message || "Failed to delete manual payment.");
+        setError(data?.message || "Failed to reverse manual payment.");
         return;
       }
 
+      setSuccessMessage("Manual payment reversed. Tenant balances and allocations have been recalculated.");
+      setPaymentToReverse(null);
+      setReversalReason("");
+      setReversalNote("");
       await fetchPayments();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect to the server.");
     } finally {
-      setDeletingPaymentId(null);
+      setReversingPaymentId(null);
     }
-  }, [canManagePayments, csrfToken, fetchCsrfToken, fetchPayments]);
+  }, [canManagePayments, csrfToken, fetchCsrfToken, fetchPayments, paymentToReverse, reversalReason, reversalNote]);
 
   // Fetch data when dependencies change
   useEffect(() => {
@@ -412,6 +418,8 @@ export default function PaymentsPage() {
         return "text-yellow-600 bg-yellow-100";
       case "failed":
         return "text-red-600 bg-red-100";
+      case "reversed":
+        return "text-gray-600 bg-gray-100";
       default:
         return "text-gray-600 bg-gray-100";
     }
@@ -615,6 +623,11 @@ export default function PaymentsPage() {
               {error}
             </div>
           )}
+          {successMessage && (
+            <div role="status" className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 shadow sm:text-sm">
+              {successMessage}
+            </div>
+          )}
           {isLoading ? (
             <div className="table-shell overflow-hidden" aria-busy="true" aria-label="Loading payments">
               <TableRowsSkeleton rows={6} columns={6} />
@@ -670,19 +683,22 @@ export default function PaymentsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${getStatusStyles(payment.status)}`}>
-                            {payment.status === "pending_stk" ? "pending" : payment.status}
+                            {payment.reversedAmount && payment.originalAmount && payment.reversedAmount >= payment.originalAmount
+                              ? "reversed"
+                              : payment.status === "pending_stk" ? "pending" : payment.status}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {canManagePayments && transactionDisplay.isManual ? (
+                          {canManagePayments && transactionDisplay.isManual && payment.status === "completed" && !(payment.reversedAmount && payment.originalAmount && payment.reversedAmount >= payment.originalAmount) ? (
                             <button
                               type="button"
-                              onClick={() => deleteManualPayment(payment)}
-                              disabled={deletingPaymentId === payment._id}
-                              className="inline-flex items-center justify-center rounded-lg border border-border bg-white/80 px-2.5 py-2 text-xs font-semibold text-red-600 hover:border-red-200 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                              aria-label="Delete manual payment"
+                              onClick={() => { setPaymentToReverse(payment); setReversalReason(""); setReversalNote(""); setError(null); }}
+                              disabled={reversingPaymentId === payment._id}
+                              className="inline-flex items-center gap-1.5 justify-center rounded-lg border border-border bg-white/80 px-2.5 py-2 text-xs font-semibold text-red-600 hover:border-red-200 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                              aria-label="Reverse manual payment"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <RotateCcw className="h-4 w-4" />
+                              Reverse
                             </button>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
@@ -738,6 +754,38 @@ export default function PaymentsPage() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+          {paymentToReverse && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" role="presentation">
+              <section role="dialog" aria-modal="true" aria-labelledby="reverse-payment-title" className="w-full max-w-lg rounded-2xl bg-background p-5 shadow-2xl">
+                <h2 id="reverse-payment-title" className="text-lg font-semibold">Reverse manual payment</h2>
+                <p className="mt-1 text-sm text-muted-foreground">This keeps the original transaction in the audit history and recalculates the tenant’s outstanding rent, utilities, deposit, and later payment allocations.</p>
+                <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-muted/40 p-3 text-sm">
+                  <div><dt className="text-xs text-muted-foreground">Tenant</dt><dd className="font-medium">{paymentToReverse.tenantName || "Unknown"}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Property / unit</dt><dd className="font-medium">{properties.find((p) => p._id === paymentToReverse.propertyId)?.name || "Unknown"} · {paymentToReverse.unitIdentifier || paymentToReverse.unitType || "—"}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Original amount</dt><dd className="font-medium">Ksh {(paymentToReverse.originalAmount ?? paymentToReverse.amount).toFixed(2)}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Payment date</dt><dd className="font-medium">{formatPaymentDate(paymentToReverse)}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Method</dt><dd className="font-medium">{paymentToReverse.paymentMethod || "Manual entry"}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Reference</dt><dd className="font-medium">{paymentToReverse.reference || paymentToReverse.transactionId || "—"}</dd></div>
+                  <div className="col-span-2"><dt className="text-xs text-muted-foreground">Allocation</dt><dd className="font-medium">Rent {paymentToReverse.allocation?.rent ?? 0} · Utilities {paymentToReverse.allocation?.utilities ?? 0} · Deposit {paymentToReverse.allocation?.deposit ?? 0} · Credit {paymentToReverse.allocation?.walletCredit ?? 0}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Current status</dt><dd className="font-medium">{paymentToReverse.status}</dd></div>
+                </dl>
+                <label className="mt-4 block text-sm font-medium">Correction reason
+                  <select value={reversalReason} onChange={(event) => setReversalReason(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2">
+                    <option value="">Select a reason</option>
+                    <option>Incorrect amount</option><option>Wrong tenant</option><option>Wrong property or unit</option><option>Duplicate manual entry</option><option>Payment was not received</option><option>Incorrect payment date or reference</option><option>Other</option>
+                  </select>
+                </label>
+                <label className="mt-3 block text-sm font-medium">Note{reversalReason === "Other" ? " (required)" : " (optional)"}
+                  <textarea value={reversalNote} onChange={(event) => setReversalNote(event.target.value.slice(0, 500))} rows={2} maxLength={500} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2" placeholder="Add details for the audit record" />
+                </label>
+                {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
+                <div className="mt-5 flex justify-end gap-2">
+                  <button type="button" onClick={() => { setPaymentToReverse(null); setError(null); }} disabled={reversingPaymentId === paymentToReverse._id} className="rounded-lg border border-border px-4 py-2 text-sm">Cancel</button>
+                  <button type="button" onClick={reverseManualPayment} disabled={reversingPaymentId === paymentToReverse._id || !reversalReason || (reversalReason === "Other" && !reversalNote.trim())} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{reversingPaymentId === paymentToReverse._id ? "Reversing…" : "Confirm reversal"}</button>
+                </div>
+              </section>
             </div>
           )}
         </main>

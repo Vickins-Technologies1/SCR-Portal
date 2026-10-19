@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     // A duplicate success callback can recover a prior interrupted posting.
     // postVerifiedPayment owns the conditional processing claim and makes
     // concurrent retries safe.
-    const claimedPayment = claimed?.value || (status === "completed" && payment.status === "completed" ? payment : null);
+    const claimedPayment = claimed?.value ?? claimed ?? (status === "completed" && payment.status === "completed" ? payment : null);
     if (status === "completed" && claimedPayment) {
       const invoiceId = String(claimedPayment.invoiceId || "");
       const invoice = ObjectId.isValid(invoiceId)

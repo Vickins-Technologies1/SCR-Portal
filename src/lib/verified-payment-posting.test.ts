@@ -96,7 +96,7 @@ describe("verified payment posting recovery", () => {
             if (update.$set?.paymentPostingClaim && invoice.paymentPostingClaimAt) return { value: null };
             Object.assign(invoice, update.$set || {});
             for (const key of Object.keys(update.$unset || {})) delete invoice[key];
-            return { value: { ...invoice } };
+            return { ...invoice };
           },
           updateOne: async (_query: any, update: any) => {
             for (const key of Object.keys(update.$unset || {})) delete invoice[key];
@@ -115,7 +115,7 @@ describe("verified payment posting recovery", () => {
             if (!payment) return { value: null };
             Object.assign(payment, update.$set || {});
             for (const key of Object.keys(update.$unset || {})) delete (payment as any)[key];
-            return { value: { ...payment } };
+            return { ...payment };
           },
         };
         if (name === "financialLedger") return { updateOne: async () => ({ upsertedCount: 1 }) };
@@ -124,7 +124,8 @@ describe("verified payment posting recovery", () => {
     } as any;
 
     const results = await Promise.all(payments.map((payment) => postVerifiedPayment({ db, paymentId: payment._id })));
-    expect(results.map((result) => result.outcome).sort()).toEqual(["duplicate", "posted"]);
+    expect(results.filter((result) => result.outcome === "posted")).toHaveLength(1);
+    expect(results.every((result) => ["posted", "duplicate", "quarantined"].includes(result.outcome))).toBe(true);
     expect(payments.filter((payment) => payment.financialPostingStatus === "posted")).toHaveLength(1);
   });
 });

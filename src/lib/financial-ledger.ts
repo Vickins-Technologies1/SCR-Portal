@@ -103,6 +103,12 @@ export async function createPaymentReversal(params: {
   const amount = asAmount(params.amount);
   if (!amount || !params.reason.trim() || !params.idempotencyKey.trim()) throw new Error("Invalid reversal request");
 
+  const payment = await db.collection("payments").findOne({ _id: paymentId });
+  if (!payment) throw new Error("Payment not found");
+  const tenant = payment.tenantId && ObjectId.isValid(String(payment.tenantId))
+    ? await db.collection("tenants").findOne({ _id: new ObjectId(String(payment.tenantId)) }, { projection: { unitIdentifier: 1, houseNumber: 1 } })
+    : null;
+
   const reversalKey = `reversal:${params.idempotencyKey}`;
 
   const reservation = await db.collection("financialLedger").updateOne(
@@ -114,6 +120,13 @@ export async function createPaymentReversal(params: {
         status: "processing",
         amount,
         sourcePaymentId: paymentId,
+        tenantId: payment.tenantId || null,
+        propertyId: payment.propertyId || null,
+        unitId: payment.unitId || payment.unitIdentifier || tenant?.unitIdentifier || tenant?.houseNumber || null,
+        originalAmount: asAmount(payment.postedAmount ?? payment.amount),
+        originalPaymentDate: payment.paymentDate || payment.createdAt || null,
+        originalReference: payment.reference || payment.mpesaCode || payment.transactionId || null,
+        originalAllocation: payment.allocation || null,
         reason: params.reason.trim(),
         actorId: params.actorId,
         actorRole: params.actorRole,
@@ -139,8 +152,7 @@ export async function createPaymentReversal(params: {
     if (reservationAge >= 0 && reservationAge < 5 * 60 * 1000) return existingReservation;
   }
 
-  const payment = await db.collection("payments").findOne({ _id: paymentId });
-  if (!payment || !isSuccessfulPaymentStatus(payment.status)) {
+  if (!isSuccessfulPaymentStatus(payment.status)) {
     await db.collection("financialLedger").updateOne(
       { eventKey: reversalKey, status: "processing" },
       { $set: { status: "rejected", rejectionReason: "Only completed payments can be reversed", updatedAt: new Date().toISOString() } },
@@ -191,6 +203,15 @@ export async function createPaymentReversal(params: {
       if (payment.invoiceId) await reconcileInvoiceFinancialState(db, String(payment.invoiceId));
     }
     return existing;
+  }
+
+  // A fully reversed receipt must also leave raw status-based metrics, while its
+  // original document and immutable ledger evidence remain available for audit.
+  if (amount >= originalAmount) {
+    await db.collection("payments").updateOne(
+      { _id: paymentId, status: payment.status },
+      { $set: { status: "reversed", reversedAt: new Date().toISOString(), reversalLedgerEventKey: reversalKey } },
+    );
   }
 
   if (reversedAllocation.credit > 0 && payment.tenantId) {

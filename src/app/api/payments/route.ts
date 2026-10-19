@@ -29,6 +29,9 @@ interface Payment {
   financialPostingStatus?: string;
   providerConfirmedAmount?: number | null;
   postedAmount?: number | null;
+  allocation?: { rent?: number; utilities?: number; deposit?: number; other?: number; walletCredit?: number };
+  paymentMethod?: string;
+  unitIdentifier?: string;
 }
 
 interface PaymentDb {
@@ -51,6 +54,10 @@ interface PaymentDb {
   postedAmount?: number | null;
   financialPostingStatus?: string;
   financialEffectsApplied?: boolean;
+  allocation?: Record<string, number>;
+  paymentMethod?: string;
+  originalAmount?: number;
+  reversedAmount?: number;
 }
 
 interface Tenant {
@@ -312,7 +319,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             from: "tenants",
             localField: "tenantIdObj",
             foreignField: "_id",
-            pipeline: [{ $project: { name: 1, unitType: 1 } }],
+            pipeline: [{ $project: { name: 1, unitType: 1, unitIdentifier: 1, houseNumber: 1 } }],
             as: "tenant",
           },
         },
@@ -349,6 +356,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
             isManual: 1,
             createdAt: 1,
             unitType: { $ifNull: ["$tenant.unitType", "$unitType", "N/A"] },
+            unitIdentifier: { $ifNull: ["$tenant.unitIdentifier", "$tenant.houseNumber", ""] },
+            allocation: 1,
+            paymentMethod: 1,
           },
         },
       ])
@@ -367,10 +377,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       reversedByPayment.set(key, money((reversedByPayment.get(key) || 0) + Number(reversal.amount || 0)));
     }
     const payments = rawPayments.map((payment) => {
-      if (!isSuccessfulPaymentStatus(payment.status)) return payment;
       const originalAmount = money(payment.amount);
       const reversedAmount = Math.min(originalAmount, reversedByPayment.get(String(payment._id)) || 0);
       const netAmount = money(Math.max(0, originalAmount - reversedAmount));
+      if (String(payment.status).toLowerCase() === "reversed" || reversedAmount >= originalAmount) {
+        return { ...payment, amount: 0, originalAmount, reversedAmount, netAmount: 0, status: "reversed" };
+      }
+      if (!isSuccessfulPaymentStatus(payment.status)) return payment;
       return { ...payment, amount: netAmount, originalAmount, reversedAmount, netAmount };
     });
 

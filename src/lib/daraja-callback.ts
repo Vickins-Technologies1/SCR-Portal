@@ -199,7 +199,9 @@ export async function claimDarajaCallback(db: Db, callback: DarajaCallback) {
     { returnDocument: "after" },
   );
 
-  const payment = claimed?.value;
+  // MongoDB driver v6 returns the document directly unless
+  // includeResultMetadata is enabled; accept either response shape.
+  const payment = claimed?.value ?? claimed ?? null;
   return {
     payment,
     metadata,

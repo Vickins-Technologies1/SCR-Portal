@@ -239,10 +239,13 @@ export async function GET(request: NextRequest) {
       reversedByPayment.set(key, money((reversedByPayment.get(key) || 0) + Number(reversal.amount || 0)));
     }
     const payments = rawPayments.map((payment: any) => {
-      if (!isSuccessfulPaymentStatus(payment.status)) return payment;
       const originalAmount = money(payment.amount);
       const reversedAmount = Math.min(originalAmount, reversedByPayment.get(String(payment._id)) || 0);
       const netAmount = money(Math.max(0, originalAmount - reversedAmount));
+      if (String(payment.status).toLowerCase() === "reversed" || reversedAmount >= originalAmount) {
+        return { ...payment, amount: 0, originalAmount, reversedAmount, netAmount: 0, status: "reversed" };
+      }
+      if (!isSuccessfulPaymentStatus(payment.status)) return payment;
       return { ...payment, amount: netAmount, originalAmount, reversedAmount, netAmount };
     });
 
