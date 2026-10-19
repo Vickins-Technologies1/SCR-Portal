@@ -202,7 +202,7 @@ export default function TurnstileField({ action, onToken, onError, className = "
   };
 
   if (!TURNSTILE_ENABLED) {
-    return <p role="status" className={`text-sm text-muted-foreground ${className}`}>Security verification is temporarily disabled.</p>;
+    return null;
   }
 
   if (!siteKey) {
