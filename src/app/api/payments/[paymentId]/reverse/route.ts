@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
 import { createPaymentReversal } from "@/lib/financial-ledger";
 import { isSuccessfulPaymentStatus, paymentAmount } from "@/lib/payment-query";
+import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 const REVERSAL_REASONS = new Set([
   "Incorrect amount",
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const { db } = await connectToDatabase();
-  const payment = await db.collection("payments").findOne({ _id: new ObjectId(paymentId) });
+  let payment = await db.collection("payments").findOne({ _id: new ObjectId(paymentId) });
   if (!payment) return NextResponse.json({ success: false, message: "Payment not found" }, { status: 404 });
   const member = role === "teamMember"
     ? await db.collection("teamMembers").findOne({ _id: new ObjectId(userId), active: true })
@@ -101,8 +102,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, message: "A reversal for this payment is already processing. Refresh shortly." }, { status: 409 });
     }
   }
+  // A successful manual receipt can be left in pending/processing when the
+  // original request is interrupted after recording it. Replay the shared,
+  // idempotent posting flow before attempting a reversal; never set the posted
+  // marker directly here.
+  if (
+    isSuccessfulPaymentStatus(payment.status) &&
+    payment.status === "completed" &&
+    payment.financialPostingStatus !== "posted"
+  ) {
+    try {
+      const posting = await postVerifiedPayment({
+        db,
+        paymentId: payment._id,
+        providerConfirmedAmount: payment.postedAmount ?? payment.providerConfirmedAmount ?? payment.amount,
+        providerTransactionId: transactionId,
+      });
+      payment = await db.collection("payments").findOne({ _id: payment._id }) || payment;
+      if (posting.outcome === "quarantined") {
+        return NextResponse.json({ success: false, message: posting.reason }, { status: 409 });
+      }
+    } catch {
+      return NextResponse.json({
+        success: false,
+        message: "Payment posting recovery failed. Contact support for review.",
+      }, { status: 409 });
+    }
+  }
+
   if (!isSuccessfulPaymentStatus(payment.status) || payment.financialPostingStatus !== "posted") {
-    return NextResponse.json({ success: false, message: "This payment is not a posted, eligible payment." }, { status: 409 });
+    return NextResponse.json({
+      success: false,
+      message: payment.financialPostingStatus === "processing"
+        ? "Payment posting is still processing. Refresh and retry shortly; contact support if it remains in this state."
+        : "This payment could not be posted for reversal and needs review.",
+    }, { status: 409 });
   }
   const existingReversal = await db.collection("financialLedger").findOne({
     kind: "PAYMENT_REVERSED",

@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { connectToDatabase, createPaymentReversal, validateCsrfToken } = vi.hoisted(() => ({
+const { connectToDatabase, createPaymentReversal, postVerifiedPayment, validateCsrfToken } = vi.hoisted(() => ({
   connectToDatabase: vi.fn(),
   createPaymentReversal: vi.fn(),
+  postVerifiedPayment: vi.fn(),
   validateCsrfToken: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/mongodb", () => ({ connectToDatabase }));
 vi.mock("@/lib/financial-ledger", () => ({ createPaymentReversal }));
+vi.mock("@/lib/verified-payment-posting", () => ({ postVerifiedPayment }));
 vi.mock("@/lib/csrf", () => ({ validateCsrfToken, buildInvalidCsrfResponse: () => new Response("csrf", { status: 403 }) }));
 
 const ownerId = "64a000000000000000000001";
@@ -59,6 +61,7 @@ describe("POST /api/payments/[paymentId]/reverse", () => {
     vi.clearAllMocks();
     validateCsrfToken.mockReturnValue(true);
     createPaymentReversal.mockResolvedValue({ eventKey: "reversal:test", status: "posted" });
+    postVerifiedPayment.mockReset();
   });
 
   it("reverses the server-recorded full manual amount for its property owner", async () => {
@@ -75,6 +78,26 @@ describe("POST /api/payments/[paymentId]/reverse", () => {
       idempotencyKey: `manual-payment:${paymentId}`,
     }));
   }, 15000);
+
+  it("recovers posting for an eligible manual payment before reversing it", async () => {
+    const payment = { ...manualPayment(), financialPostingStatus: "pending" };
+    mockDatabase(payment);
+    postVerifiedPayment.mockImplementation(async () => {
+      payment.financialPostingStatus = "posted";
+      return { outcome: "posted", payment };
+    });
+
+    const { POST } = await import("@/app/api/payments/[paymentId]/reverse/route");
+    const response = await POST(request() as any, { params: Promise.resolve({ paymentId }) });
+
+    expect(response.status).toBe(200);
+    expect(postVerifiedPayment).toHaveBeenCalledWith(expect.objectContaining({
+      paymentId,
+      providerConfirmedAmount: 1250,
+      providerTransactionId: "MANUAL-abc123",
+    }));
+    expect(createPaymentReversal).toHaveBeenCalled();
+  });
 
   it("rejects a payment belonging to another owner", async () => {
     mockDatabase(manualPayment(), "64a000000000000000000099");
