@@ -85,7 +85,7 @@ describe("verified payment posting recovery", () => {
   it("serializes two payments targeting the same invoice", async () => {
     const invoiceId = new ObjectId();
     const invoice: any = { _id: invoiceId, amount: 100, balanceDue: 100 };
-    const payments = [
+    const payments: any[] = [
       { _id: new ObjectId(), invoiceId: invoiceId.toString(), amount: 100, provider: "admin_manual", status: "completed" },
       { _id: new ObjectId(), invoiceId: invoiceId.toString(), amount: 100, providerConfirmedAmount: 100, requestedAmount: 100, provider: "daraja", status: "completed" },
     ];

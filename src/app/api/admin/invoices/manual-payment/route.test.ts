@@ -24,7 +24,7 @@ vi.mock("@/lib/financial-reporting", () => ({
 }));
 vi.mock("@/lib/verified-payment-posting", () => ({
   postVerifiedPayment: vi.fn(async ({ paymentId }: any) => {
-    const payment = state.payments.find((item) => item.paymentId === paymentId);
+    const payment = state.payments.find((item) => item._id?.equals(paymentId));
     payment.financialPostingStatus = "posted";
     payment.financialEffectsApplied = true;
     return { outcome: "posted", payment };
@@ -97,6 +97,7 @@ describe("admin manual invoice payment", () => {
       invoiceStatusBefore: "DUE",
       invoiceBalanceBefore: 1200,
     });
+    expect(state.payments[0]._id).toBeInstanceOf(ObjectId);
   });
 
   it("rejects non-admin access", async () => {

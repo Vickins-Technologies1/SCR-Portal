@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       if (existingRequest.financialPostingStatus === "posted" || existingRequest.financialEffectsApplied === true) {
         return NextResponse.json({ success: true, message: "Payment was already recorded.", invoiceId, status: existingRequest.invoiceStatusAfter || "PARTIALLY PAID" });
       }
-      await postVerifiedPayment({ db, paymentId });
+      await postVerifiedPayment({ db, paymentId: existingRequest._id });
       const recovered = await db.collection("payments").findOne({ paymentId }, { projection: { financialPostingStatus: 1, financialEffectsApplied: 1 } });
       if (recovered?.financialPostingStatus !== "posted" && recovered?.financialEffectsApplied !== true) {
         return NextResponse.json({ success: false, message: "This payment needs review before another attempt." }, { status: 409 });
@@ -79,7 +79,9 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString();
+    const paymentObjectId = new ObjectId();
     const paymentDocument = {
+      _id: paymentObjectId,
       paymentId,
       invoiceId,
       ownerId,
@@ -110,7 +112,7 @@ export async function POST(request: NextRequest) {
     };
 
     await db.collection("payments").insertOne(paymentDocument);
-    const posting = await postVerifiedPayment({ db, paymentId, providerConfirmedAmount: amount });
+    const posting = await postVerifiedPayment({ db, paymentId: paymentObjectId, providerConfirmedAmount: amount });
     const recordedPayment = await db.collection("payments").findOne({ paymentId }, { projection: { financialPostingStatus: 1, financialEffectsApplied: 1 } });
     if (posting.outcome !== "posted" && recordedPayment?.financialPostingStatus !== "posted" && recordedPayment?.financialEffectsApplied !== true) {
       return NextResponse.json({ success: false, message: "The payment could not be safely posted. Contact support before retrying." }, { status: 409 });
