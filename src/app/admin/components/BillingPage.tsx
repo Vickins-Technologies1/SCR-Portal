@@ -43,7 +43,15 @@ interface InvoiceTransaction {
   billingPlan?: string;
   percentage?: number;
   expectedIncome?: number;
+  amountPaid?: number;
+  balanceDue?: number;
+  invoiceStatus?: string;
+  dueDate?: string;
+  latestPaymentMethod?: string | null;
+  latestPaymentReference?: string | null;
 }
+
+type ManualPaymentDraft = { invoice: InvoiceTransaction; idempotencyKey: string };
 
 export default function BillingPage() {
   const router = useRouter();
@@ -60,6 +68,14 @@ export default function BillingPage() {
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [isSendingInvoice, setIsSendingInvoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manualPayment, setManualPayment] = useState<ManualPaymentDraft | null>(null);
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualMethod, setManualMethod] = useState("mpesa_paybill");
+  const [manualReference, setManualReference] = useState("");
+  const [manualPaymentDate, setManualPaymentDate] = useState("");
+  const [manualNote, setManualNote] = useState("");
+  const [manualConfirmed, setManualConfirmed] = useState(false);
+  const [isRecordingManualPayment, setIsRecordingManualPayment] = useState(false);
 
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
 
@@ -345,6 +361,46 @@ export default function BillingPage() {
     },
     [csrfToken, router, showToast]
   );
+
+  const openManualPayment = (invoice: InvoiceTransaction) => {
+    setManualPayment({ invoice, idempotencyKey: crypto.randomUUID() });
+    setManualAmount(String(invoice.balanceDue ?? Math.max(0, invoice.amount - (invoice.amountPaid || 0))));
+    setManualMethod("mpesa_paybill");
+    setManualReference("");
+    setManualPaymentDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16));
+    setManualNote("");
+    setManualConfirmed(false);
+  };
+
+  const submitManualPayment = async () => {
+    if (!manualPayment || !csrfToken || !manualConfirmed || isRecordingManualPayment) return;
+    setIsRecordingManualPayment(true);
+    try {
+      const response = await fetch("/api/admin/invoices/manual-payment", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({
+          invoiceId: manualPayment.invoice._id,
+          idempotencyKey: manualPayment.idempotencyKey,
+          amount: Number(manualAmount),
+          method: manualMethod,
+          reference: manualReference,
+          paymentDate: new Date(manualPaymentDate).toISOString(),
+          note: manualNote,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.message || "Unable to record the payment.");
+      setManualPayment(null);
+      showToast("Manual payment recorded. Invoice balances refreshed.", "success");
+      await fetchData();
+    } catch (submitError) {
+      showToast(submitError instanceof Error ? submitError.message : "Unable to record the payment.", "error");
+    } finally {
+      setIsRecordingManualPayment(false);
+    }
+  };
 
   // ── Update status ────────────────────────────────────────────────────────
   const handleStatusChange = useCallback(
@@ -702,7 +758,8 @@ export default function BillingPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs font-semibold text-primary">
-                            Ksh {p.amount.toLocaleString("en-KE")}
+                            <div>Ksh {p.amount.toLocaleString("en-KE")}</div>
+                            {(p.amountPaid || 0) > 0 && <div className="mt-1 text-[10px] font-normal text-muted-foreground">Paid Ksh {(p.amountPaid || 0).toLocaleString("en-KE")} · Due Ksh {(p.balanceDue || 0).toLocaleString("en-KE")}</div>}
                           </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">
                             {p.description || "—"}
@@ -774,6 +831,15 @@ export default function BillingPage() {
                                   </>
                                 )}
                               </button>
+                              {p.status !== "completed" && (p.balanceDue ?? p.amount) > 0 && p.status !== "failed" && (
+                                <button
+                                  onClick={() => openManualPayment(p)}
+                                  className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                                  title="Record a verified payment received outside the automated flow"
+                                >
+                                  <CreditCard className="h-4 w-4" /> Mark as Paid
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -814,6 +880,40 @@ export default function BillingPage() {
                 </div>
               </div>
             </motion.div>
+          )}
+          {manualPayment && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation">
+              <section role="dialog" aria-modal="true" aria-labelledby="manual-payment-title" className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-7">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 id="manual-payment-title" className="text-lg font-semibold">Record manual invoice payment</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">This records a payment received outside the automated payment flow.</p>
+                  </div>
+                  <button type="button" onClick={() => setManualPayment(null)} disabled={isRecordingManualPayment} aria-label="Close" className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-4 text-sm">
+                  <div><span className="text-xs text-muted-foreground">Invoice</span><p className="font-mono font-medium">{manualPayment.invoice.reference}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Owner</span><p className="font-medium">{propertyOwners.find((owner) => owner._id === manualPayment.invoice.userId)?.name || propertyOwners.find((owner) => owner._id === manualPayment.invoice.userId)?.email || "—"}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Original amount</span><p>Ksh {manualPayment.invoice.amount.toLocaleString("en-KE")}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Already paid</span><p>Ksh {(manualPayment.invoice.amountPaid || 0).toLocaleString("en-KE")}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Outstanding balance</span><p className="font-semibold">Ksh {(manualPayment.invoice.balanceDue ?? manualPayment.invoice.amount).toLocaleString("en-KE")}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Issue date</span><p>{new Date(manualPayment.invoice.createdAt).toLocaleDateString("en-KE")}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Due date</span><p>{manualPayment.invoice.dueDate ? new Date(manualPayment.invoice.dueDate).toLocaleDateString("en-KE") : "—"}</p></div>
+                  <div><span className="text-xs text-muted-foreground">Current status</span><p>{manualPayment.invoice.invoiceStatus || manualPayment.invoice.status}</p></div>
+                  {manualPayment.invoice.latestPaymentMethod && <div><span className="text-xs text-muted-foreground">Last payment</span><p>{manualPayment.invoice.latestPaymentMethod} · {manualPayment.invoice.latestPaymentReference || "No reference"}</p></div>}
+                </div>
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <label className="text-xs font-medium">Amount received (KES)<input type="number" min="0.01" max={manualPayment.invoice.balanceDue ?? manualPayment.invoice.amount} step="0.01" value={manualAmount} onChange={(event) => { setManualAmount(event.target.value); setManualConfirmed(false); }} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
+                  <label className="text-xs font-medium">Payment method<select value={manualMethod} onChange={(event) => setManualMethod(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"><option value="mpesa_paybill">M-Pesa Paybill</option><option value="mpesa_till">M-Pesa Till</option><option value="bank_transfer">Bank transfer</option><option value="cash">Cash</option><option value="other">Other verified method</option></select></label>
+                  <label className="text-xs font-medium sm:col-span-2">Payment reference {manualMethod !== "cash" && <span className="text-red-600">(required)</span>}<input value={manualReference} onChange={(event) => setManualReference(event.target.value)} maxLength={120} placeholder="M-Pesa code, bank reference, or receipt number" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
+                  <label className="text-xs font-medium sm:col-span-2">Payment date and time<input type="datetime-local" value={manualPaymentDate} onChange={(event) => setManualPaymentDate(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
+                  <label className="text-xs font-medium sm:col-span-2">Reconciliation note (optional)<textarea value={manualNote} onChange={(event) => setManualNote(event.target.value)} maxLength={500} rows={2} className="mt-1 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
+                </div>
+                <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">Amount to record: <strong>Ksh {Number(manualAmount || 0).toLocaleString("en-KE")}</strong>. The server will recheck the live outstanding balance before saving.</p>
+                <label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={manualConfirmed} onChange={(event) => setManualConfirmed(event.target.checked)} className="mt-0.5" /><span>I verified that this payment was received and want to record it in the invoice payment history.</span></label>
+                <div className="mt-5 flex flex-col-reverse justify-end gap-2 sm:flex-row"><button type="button" onClick={() => setManualPayment(null)} disabled={isRecordingManualPayment} className="rounded-lg border border-border px-4 py-2 text-sm">Cancel</button><button type="button" onClick={submitManualPayment} disabled={isRecordingManualPayment || !manualConfirmed || !manualAmount || Number(manualAmount) <= 0 || Number(manualAmount) > (manualPayment.invoice.balanceDue ?? manualPayment.invoice.amount) || !manualPaymentDate || (manualMethod !== "cash" && !manualReference.trim())} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isRecordingManualPayment ? "Recording payment…" : "Confirm and record payment"}</button></div>
+              </section>
+            </div>
           )}
         </main>
       </div>

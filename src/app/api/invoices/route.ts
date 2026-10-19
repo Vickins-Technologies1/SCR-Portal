@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { ObjectId } from "mongodb";
+import { calculateInvoiceFinancialState } from "@/lib/financial-reporting";
 
 // Define Invoice interface for consistent typing
 interface Invoice {
@@ -237,7 +238,7 @@ export async function GET(request: NextRequest) {
     console.log(`Fetched ${invoices.length} invoices for userId: ${userId}, role: ${role}`);
 
     // Validate and format date fields
-    const formattedInvoices = invoices.map((invoice) => {
+    const formattedInvoices = await Promise.all(invoices.map(async (invoice) => {
       // Log warning if date fields are invalid
       if (!invoice.createdAt || !invoice.updatedAt || !invoice.expiresAt) {
         console.warn("Invalid invoice fields", { invoiceId: invoice._id.toString(), invoice });
@@ -248,12 +249,14 @@ export async function GET(request: NextRequest) {
       const updatedAt = invoice.updatedAt instanceof Date ? invoice.updatedAt : new Date();
       const expiresAt = invoice.expiresAt instanceof Date ? invoice.expiresAt : new Date();
 
+      const financial = await calculateInvoiceFinancialState(db, invoice);
+      const latestPayment = await db.collection("payments").find({ invoiceId: invoice._id.toString(), status: "completed" }).sort({ paymentDate: -1, createdAt: -1 }).limit(1).next();
       return {
         _id: invoice._id.toString(),
         userId: invoice.userId,
         propertyId: invoice.propertyId,
         amount: invoice.amount,
-        status: invoice.status,
+        status: financial.status === "PAID" ? "completed" : invoice.status === "failed" && financial.amountPaid === 0 ? "failed" : "pending",
         reference: invoice.reference,
         createdAt: createdAt.toISOString(),
         updatedAt: updatedAt.toISOString(),
@@ -266,8 +269,14 @@ export async function GET(request: NextRequest) {
         expectedIncome: invoice.expectedIncome,
         actualRentReceived: invoice.actualRentReceived,
         pricingBasis: invoice.pricingBasis,
+        amountPaid: financial.amountPaid,
+        balanceDue: financial.balanceDue,
+        invoiceStatus: financial.status,
+        dueDate: expiresAt.toISOString(),
+        latestPaymentMethod: latestPayment?.paymentMethod || null,
+        latestPaymentReference: latestPayment?.reference || latestPayment?.mpesaCode || null,
       };
-    });
+    }));
 
     console.log("GET /api/invoices - Completed in", Date.now() - startTime, "ms");
 

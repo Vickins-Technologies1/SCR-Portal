@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Db, ObjectId } from "mongodb";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { recordPostedPaymentLedger } from "@/lib/financial-ledger";
-import { reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
+import { calculateInvoiceFinancialState, reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
 
 export type VerifiedPaymentPostingResult =
   | { outcome: "posted"; payment: any; tenantState?: any; invoice?: any }
@@ -113,6 +113,36 @@ export async function postVerifiedPayment(params: {
     if (duplicate) return { outcome: "duplicate", payment: duplicate };
   }
 
+  // Invoice payments from providers and administrators share one invoice
+  // claim. This serializes their balance check so a manual receipt cannot
+  // race a successful provider callback and over-settle the same invoice.
+  let invoiceClaim: { invoiceId: ObjectId; token: string } | null = null;
+  if (payment.invoiceId && ObjectId.isValid(String(payment.invoiceId))) {
+    const invoiceId = new ObjectId(String(payment.invoiceId));
+    const token = randomUUID();
+    const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const claim = await params.db.collection("invoices").findOneAndUpdate(
+      {
+        _id: invoiceId,
+        $or: [
+          { paymentPostingClaimAt: { $exists: false } },
+          { paymentPostingClaimAt: null },
+          { paymentPostingClaimAt: { $lt: staleBefore } },
+        ],
+      },
+      { $set: { paymentPostingClaim: token, paymentPostingClaimAt: new Date().toISOString() } },
+      { returnDocument: "after" },
+    );
+    if (!claim?.value) return { outcome: "duplicate", payment };
+    invoiceClaim = { invoiceId, token };
+
+    const calculation = await calculateInvoiceFinancialState(params.db, claim.value);
+    if (Math.round(providerAmount * 100) > Math.round(calculation.balanceDue * 100)) {
+      await releaseInvoiceClaim(params.db, invoiceClaim);
+      return quarantine(params.db, payment, "Payment amount exceeds the current invoice balance.");
+    }
+  }
+
   const claimToken = randomUUID();
   const staleClaimBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const claimed = await params.db.collection("payments").findOneAndUpdate(
@@ -141,7 +171,10 @@ export async function postVerifiedPayment(params: {
     },
     { returnDocument: "after" },
   );
-  if (!claimed?.value) return { outcome: "duplicate", payment };
+  if (!claimed?.value) {
+    if (invoiceClaim) await releaseInvoiceClaim(params.db, invoiceClaim);
+    return { outcome: "duplicate", payment };
+  }
 
   const claimedPayment = claimed.value;
   let tenantState;
@@ -169,10 +202,20 @@ export async function postVerifiedPayment(params: {
   if (!posted?.value) {
     const current = await params.db.collection("payments").findOne({ _id: paymentObjectId });
     if (current?.financialPostingStatus === "posted" || current?.financialEffectsApplied === true) {
+      if (invoiceClaim) await releaseInvoiceClaim(params.db, invoiceClaim);
       return { outcome: "duplicate", payment: current };
     }
+    if (invoiceClaim) await releaseInvoiceClaim(params.db, invoiceClaim);
     throw new Error("Financial posting claim was lost before finalization");
   }
+  if (invoiceClaim) await releaseInvoiceClaim(params.db, invoiceClaim);
   const finalPayment = { ...refreshedPayment, ...posted.value };
   return { outcome: "posted", payment: finalPayment, tenantState, invoice };
+}
+
+async function releaseInvoiceClaim(db: Db, claim: { invoiceId: ObjectId; token: string }) {
+  await db.collection("invoices").updateOne(
+    { _id: claim.invoiceId, paymentPostingClaim: claim.token },
+    { $unset: { paymentPostingClaim: "", paymentPostingClaimAt: "" } },
+  );
 }

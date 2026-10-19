@@ -129,6 +129,7 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
       { key: { provider: 1, mpesaCode: 1 }, name: "payments_daraja_receipt_unique", unique: true, partialFilterExpression: { provider: "daraja", mpesaCode: { $type: "string" } } },
       { key: { ownerId: 1, planType: 1, status: 1 }, name: "payments_owner_plan_status" },
       { key: { provider: 1, providerTransactionId: 1 }, name: "payments_provider_transaction_unique", unique: true, partialFilterExpression: { providerTransactionId: { $type: "string" } } },
+      { key: { adminPaymentReferenceKey: 1 }, name: "payments_admin_manual_reference_unique", unique: true, partialFilterExpression: { adminPaymentReferenceKey: { $type: "string" } } },
       { key: { financialPostingStatus: 1, updatedAt: -1 }, name: "payments_financial_posting_status" },
       { key: { tenantId: 1, financialPostingStatus: 1, status: 1 }, name: "payments_tenant_financial_status" },
     ],
