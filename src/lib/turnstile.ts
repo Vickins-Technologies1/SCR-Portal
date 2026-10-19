@@ -5,6 +5,7 @@ import { Redis } from "@upstash/redis";
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const VERIFY_TIMEOUT_MS = 5_000;
+const TURNSTILE_ENABLED = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === "true";
 
 export type TurnstileAction =
   | "login"
@@ -188,6 +189,10 @@ export async function requireTurnstile(request: Request | NextRequest, action: T
     console.warn("Authentication protection event", { action, outcome: "rate_limit_unavailable" });
     return Response.json({ success: false, code: "AUTH_PROTECTION_UNAVAILABLE", message: "Security protection is temporarily unavailable. Please try again." }, { status: 503 });
   }
+  // Temporary operational switch. Authentication rate limiting remains active
+  // while Cloudflare token verification is disabled.
+  if (!TURNSTILE_ENABLED) return null;
+
   const result = await verifyTurnstile(request, action);
   if (!result.ok) {
     console.warn("Authentication protection event", { action, outcome: result.reason });

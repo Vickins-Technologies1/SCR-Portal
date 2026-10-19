@@ -19,10 +19,11 @@ The client treats a token as a one-use value. It clears tokens on expiry and aft
 
 Google OAuth start/callback and native Google ID-token exchange use the provider's signed identity proof, state, nonce, and redirect validation. They are not HTML forms accepting a user-supplied password, OTP, or account-creation payload; the callback must retain its OAuth protections rather than require a browser Turnstile token. Google phone completion and its subsequent OTP actions are protected as listed above. Authenticated password changes are session-authenticated and CSRF-protected rather than public password-reset requests.
 
-`requireTurnstile` is the shared server gate for the public actions above. It rejects absent and oversized tokens, fails closed if the secret/production hostname allowlist/rate-limit service is unavailable, sends tokens to Cloudflare Siteverify, and requires success, the expected action, and an explicitly configured hostname. Cloudflare enforces the single-use/expiry property and reports expired or reused tokens as `timeout-or-duplicate`; a failed Siteverify result is rejected.
+When `NEXT_PUBLIC_TURNSTILE_ENABLED=true`, `requireTurnstile` is the shared server gate for the public actions above. It rejects absent and oversized tokens, fails closed if the secret/production hostname allowlist/rate-limit service is unavailable, sends tokens to Cloudflare Siteverify, and requires success, the expected action, and an explicitly configured hostname. Cloudflare enforces the single-use/expiry property and reports expired or reused tokens as `timeout-or-duplicate`; a failed Siteverify result is rejected.
 
 ## Deployment configuration
 
+- `NEXT_PUBLIC_TURNSTILE_ENABLED` controls both the browser widget and server verification. It currently defaults to `false` as a temporary bypass; set it to `true` to restore Turnstile. Authentication rate limits remain active while it is disabled.
 - `NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY` must be the public sitekey paired with the server-side `CLOUDFLARE_TURNSTILE_SECRET_KEY`.
 - Production must set `TURNSTILE_EXPECTED_HOSTNAMES` to an explicit comma-separated allowlist containing every configured canonical hostname, normally `myaccuraterent.com,www.myaccuraterent.com` if both serve the application. The verifier does not infer production hostnames from an incoming `Host` header.
 - Production must also configure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`; auth endpoints fail closed if their shared rate limiter is unavailable.

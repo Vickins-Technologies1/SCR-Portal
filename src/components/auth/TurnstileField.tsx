@@ -26,6 +26,8 @@ type WidgetState = "loading" | "awaiting" | "verified" | "expired" | "failed";
 
 const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 const SCRIPT_TIMEOUT_MS = 15_000;
+const TURNSTILE_ENABLED = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === "true";
+const TURNSTILE_DISABLED_SENTINEL = "turnstile-temporarily-disabled";
 
 function loadTurnstile(): Promise<void> {
   if (window.turnstile) return Promise.resolve();
@@ -96,6 +98,12 @@ export default function TurnstileField({ action, onToken, onError, className = "
     onErrorRef.current = onError;
   });
 
+  useEffect(() => {
+    if (TURNSTILE_ENABLED) return;
+    setState("verified");
+    onTokenRef.current(TURNSTILE_DISABLED_SENTINEL);
+  }, []);
+
   const fail = useCallback((message: string, diagnostic: string) => {
     setState("failed");
     setErrorMessage(message);
@@ -105,6 +113,7 @@ export default function TurnstileField({ action, onToken, onError, className = "
   }, [action]);
 
   useEffect(() => {
+    if (!TURNSTILE_ENABLED) return;
     let active = true;
     let widgetId: string | null = null;
     setState("loading");
@@ -191,6 +200,10 @@ export default function TurnstileField({ action, onToken, onError, className = "
     onTokenRef.current("");
     setRetryVersion((version) => version + 1);
   };
+
+  if (!TURNSTILE_ENABLED) {
+    return <p role="status" className={`text-sm text-muted-foreground ${className}`}>Security verification is temporarily disabled.</p>;
+  }
 
   if (!siteKey) {
     return <p role="alert" className={`text-sm text-red-700 ${className}`}>Security verification is not configured. Please contact support.</p>;
