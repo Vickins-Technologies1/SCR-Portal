@@ -67,16 +67,39 @@ export async function POST(request: NextRequest) {
     if (!owner) return NextResponse.json({ success: false, message: "Invoice owner could not be verified." }, { status: 409 });
 
     const calculation = await calculateInvoiceFinancialState(db, invoice);
-    if (calculation.balanceDue <= 0) return NextResponse.json({ success: false, message: "This invoice is already fully paid." }, { status: 409 });
-    if (cents(amount) > cents(calculation.balanceDue)) return NextResponse.json({ success: false, message: "The payment exceeds the current outstanding balance." }, { status: 400 });
-
     const referenceKey = reference.toLocaleUpperCase("en-US");
     if (referenceKey) {
       const duplicate = await db.collection("payments").findOne({
         $or: [{ adminPaymentReferenceKey: referenceKey }, { mpesaCode: referenceKey }],
       });
-      if (duplicate) return NextResponse.json({ success: false, message: "That payment reference has already been recorded." }, { status: 409 });
+      if (duplicate) {
+        const sameManualReceipt = duplicate.paymentRail === "property_owner_invoice_manual"
+          && String(duplicate.invoiceId) === invoiceId
+          && cents(Number(duplicate.amount)) === cents(amount)
+          && duplicate.paymentMethod === method
+          && new Date(duplicate.paymentDate).getTime() === paymentDate.getTime();
+        if (sameManualReceipt && duplicate.financialPostingStatus !== "quarantined") {
+          if (duplicate.financialPostingStatus !== "posted" && duplicate.financialEffectsApplied !== true) {
+            await postVerifiedPayment({ db, paymentId: duplicate._id });
+          }
+          const recovered = await db.collection("payments").findOne({ _id: duplicate._id });
+          if (recovered?.financialPostingStatus === "posted" || recovered?.financialEffectsApplied === true) {
+            const currentInvoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
+            const currentState = currentInvoice ? await calculateInvoiceFinancialState(db, currentInvoice) : null;
+            await db.collection("payments").updateOne(
+              { _id: duplicate._id },
+              { $set: { invoiceStatusAfter: currentState?.status || "UNKNOWN", auditUpdatedAt: new Date().toISOString() } },
+            );
+            return NextResponse.json({ success: true, message: "This payment had already been recorded and is now confirmed.", invoiceId, status: currentState?.status });
+          }
+          return NextResponse.json({ success: false, message: "This payment reference is already attached to a receipt that needs review. Contact support before recording it again." }, { status: 409 });
+        }
+        return NextResponse.json({ success: false, message: "That payment reference has already been recorded." }, { status: 409 });
+      }
     }
+
+    if (calculation.balanceDue <= 0) return NextResponse.json({ success: false, message: "This invoice is already fully paid." }, { status: 409 });
+    if (cents(amount) > cents(calculation.balanceDue)) return NextResponse.json({ success: false, message: "The payment exceeds the current outstanding balance." }, { status: 400 });
 
     const now = new Date().toISOString();
     const paymentObjectId = new ObjectId();

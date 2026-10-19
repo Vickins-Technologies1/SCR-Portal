@@ -38,6 +38,7 @@ vi.mock("@/lib/mongodb", () => ({
       if (name === "payments") return {
         findOne: async (query: any) => {
           if (query.paymentId) return state.payments.find((item) => item.paymentId === query.paymentId) || null;
+          if (query._id) return state.payments.find((item) => item._id?.equals(query._id)) || null;
           if (query.$or) return state.payments.find((item) => query.$or.some((clause: any) => Object.entries(clause).some(([key, value]) => item[key] === value))) || null;
           return null;
         },
@@ -123,5 +124,26 @@ describe("admin manual invoice payment", () => {
     const response = await POST(request(validBody({ amount: 500, method: "cash", reference: "" })));
     expect(response.status).toBe(200);
     expect(state.payments[0]).toMatchObject({ amount: 500, paymentMethod: "cash", reference: null });
+  });
+
+  it("recovers the same receipt if an earlier request saved it before posting", async () => {
+    const paymentDate = new Date(Date.now() - 60_000).toISOString();
+    state.payments.push({
+      _id: new ObjectId(),
+      paymentId: "admin-manual:prior-request",
+      invoiceId,
+      amount: 1200,
+      paymentMethod: "mpesa_paybill",
+      reference: "QWE123ABC",
+      adminPaymentReferenceKey: "QWE123ABC",
+      paymentDate,
+      paymentRail: "property_owner_invoice_manual",
+      financialPostingStatus: "pending",
+    });
+    const { POST } = await import("./route");
+    const response = await POST(request(validBody({ paymentDate })));
+    expect(response.status).toBe(200);
+    expect(state.payments).toHaveLength(1);
+    expect(state.payments[0].financialPostingStatus).toBe("posted");
   });
 });
