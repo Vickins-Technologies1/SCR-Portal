@@ -3,7 +3,7 @@
 
 import { Suspense } from "react";
 import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Lock, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
@@ -12,7 +12,6 @@ import TurnstileField from "@/components/auth/TurnstileField";
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   const token = searchParams.get("token");
   const email = searchParams.get("email");
@@ -47,6 +46,11 @@ function ResetPasswordContent() {
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
+      return;
+    }
+
+    if (!turnstileToken) {
+      setError("Please wait for the security check to finish, then try again.");
       return;
     }
 

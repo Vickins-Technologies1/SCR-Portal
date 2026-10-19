@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type TurnstileApi = {
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
@@ -22,21 +22,63 @@ type Props = {
   className?: string;
 };
 
+type WidgetState = "loading" | "awaiting" | "verified" | "expired" | "failed";
+
 const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const SCRIPT_TIMEOUT_MS = 15_000;
 
 function loadTurnstile(): Promise<void> {
   if (window.turnstile) return Promise.resolve();
   if (window.__turnstileScriptPromise) return window.__turnstileScriptPromise;
-  window.__turnstileScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = SCRIPT_URL;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Security verification could not load."));
-    document.head.appendChild(script);
+
+  const existing = document.querySelector<HTMLScriptElement>(`script[src^="${SCRIPT_URL}"]`);
+  const script = existing ?? document.createElement("script");
+  let timer: number | undefined;
+
+  const attempt = new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      script.removeEventListener("load", onLoad);
+      script.removeEventListener("error", onError);
+    };
+    const onLoad = () => {
+      cleanup();
+      script.dataset.turnstileLoaded = "true";
+      if (window.turnstile) resolve();
+      else reject(new Error("Turnstile script loaded without exposing its API."));
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Turnstile script failed to load."));
+    };
+
+    script.addEventListener("load", onLoad, { once: true });
+    script.addEventListener("error", onError, { once: true });
+    timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Turnstile script load timed out."));
+    }, SCRIPT_TIMEOUT_MS);
+
+    if (script.dataset.turnstileLoaded === "true") {
+      onLoad();
+    } else if (!existing) {
+      script.src = SCRIPT_URL;
+      script.async = true;
+      script.defer = true;
+      script.dataset.turnstileScript = "true";
+      document.head.appendChild(script);
+    }
+  }).catch((error: unknown) => {
+    if (window.__turnstileScriptPromise === attempt) {
+      window.__turnstileScriptPromise = undefined;
+    }
+    // Remove a failed copy so the user initiated retry can make a fresh request.
+    if (!window.turnstile) script.remove();
+    throw error;
   });
-  return window.__turnstileScriptPromise;
+
+  window.__turnstileScriptPromise = attempt;
+  return attempt;
 }
 
 export default function TurnstileField({ action, onToken, onError, className = "" }: Props) {
@@ -44,7 +86,9 @@ export default function TurnstileField({ action, onToken, onError, className = "
   const widgetIdRef = useRef<string | null>(null);
   const onTokenRef = useRef(onToken);
   const onErrorRef = useRef(onError);
-  const [loadError, setLoadError] = useState("");
+  const [state, setState] = useState<WidgetState>("loading");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [retryVersion, setRetryVersion] = useState(0);
   const siteKey = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY?.trim();
 
   useEffect(() => {
@@ -52,48 +96,101 @@ export default function TurnstileField({ action, onToken, onError, className = "
     onErrorRef.current = onError;
   });
 
+  const fail = useCallback((message: string, diagnostic: string) => {
+    setState("failed");
+    setErrorMessage(message);
+    onTokenRef.current("");
+    onErrorRef.current?.(message);
+    console.warn("Turnstile client event", { action, outcome: diagnostic });
+  }, [action]);
+
   useEffect(() => {
     let active = true;
+    let widgetId: string | null = null;
+    setState("loading");
+    setErrorMessage("");
+    onTokenRef.current("");
+
     if (!siteKey || !containerRef.current) return;
 
     loadTurnstile().then(() => {
-      if (!active || !containerRef.current || !window.turnstile) return;
-      widgetIdRef.current = window.turnstile.render(containerRef.current, {
-        sitekey: siteKey,
-        action,
-        theme: "auto",
-        size: "flexible",
-        appearance: "interaction-only",
-        callback: (token: string) => {
-          setLoadError("");
-          onTokenRef.current(token);
-        },
-        "expired-callback": () => {
-          onTokenRef.current("");
-          onErrorRef.current?.("Security check expired. Please verify again.");
-        },
-        "error-callback": () => {
-          onTokenRef.current("");
-          setLoadError("Security verification could not be completed. Please retry.");
-          onErrorRef.current?.("Security verification could not be completed. Please retry.");
-          return true;
-        },
-      });
-    }).catch(() => {
       if (!active) return;
-      setLoadError("Security verification could not load. Check your connection and retry.");
-      onTokenRef.current("");
-      onErrorRef.current?.("Security verification could not load. Check your connection and retry.");
+      const container = containerRef.current;
+      const turnstile = window.turnstile;
+      if (!container || !turnstile) {
+        fail("Security verification could not start. Please retry.", "api_unavailable_after_load");
+        return;
+      }
+
+      // The component owns one explicit widget. Clear leftovers defensively before
+      // rendering so React Strict Mode and route transitions cannot duplicate it.
+      container.replaceChildren();
+      try {
+        widgetId = turnstile.render(container, {
+            sitekey: siteKey,
+            action,
+            theme: "auto",
+            size: "flexible",
+            // Managed mode intentionally allows automatic verification. Cloudflare
+            // only shows an interactive challenge when its risk signals require one.
+            appearance: "interaction-only",
+            callback: (token: string) => {
+              if (!active || !token) return;
+              setState("verified");
+              setErrorMessage("");
+              onTokenRef.current(token);
+            },
+            "expired-callback": () => {
+              if (!active) return;
+              onTokenRef.current("");
+              setState("expired");
+              setErrorMessage("Security check expired. Please verify again.");
+              if (widgetId && window.turnstile) window.turnstile.reset(widgetId);
+            },
+            "error-callback": (errorCode: unknown) => {
+              if (!active) return true;
+              const code = typeof errorCode === "string" ? errorCode.slice(0, 40) : "unknown";
+              fail("Security verification could not be completed. Please retry.", `widget_error:${code}`);
+              return true;
+            },
+            "timeout-callback": () => {
+              if (!active) return;
+              onTokenRef.current("");
+              setState("expired");
+              setErrorMessage("The security check timed out. Please retry.");
+              if (widgetId && window.turnstile) window.turnstile.reset(widgetId);
+            },
+            "unsupported-callback": () => {
+              if (active) fail("This browser cannot complete security verification. Try another browser or update this one.", "unsupported_browser");
+            },
+        });
+        widgetIdRef.current = widgetId;
+        setState("awaiting");
+      } catch {
+        fail("Security verification could not start. Please retry.", "widget_initialization_failed");
+      }
+    }).catch(() => {
+      if (active) fail("Security verification could not load. Check your connection and retry.", "script_load_failed");
     });
 
     return () => {
       active = false;
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.remove(widgetIdRef.current);
-        widgetIdRef.current = null;
-      }
+      if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
+      if (widgetIdRef.current === widgetId) widgetIdRef.current = null;
     };
-  }, [action, siteKey]);
+  }, [action, fail, retryVersion, siteKey]);
+
+  const retry = () => {
+    const widgetId = widgetIdRef.current;
+    if (widgetId && window.turnstile) {
+      window.turnstile.remove(widgetId);
+      widgetIdRef.current = null;
+    }
+    setState("loading");
+    setErrorMessage("");
+    onTokenRef.current("");
+    setRetryVersion((version) => version + 1);
+  };
 
   if (!siteKey) {
     return <p role="alert" className={`text-sm text-red-700 ${className}`}>Security verification is not configured. Please contact support.</p>;
@@ -102,7 +199,14 @@ export default function TurnstileField({ action, onToken, onError, className = "
   return (
     <div className={className}>
       <div ref={containerRef} className="min-h-0" aria-label="Security verification" />
-      {loadError && <p role="alert" className="mt-2 text-sm text-red-700">{loadError}</p>}
+      {state === "loading" && <p role="status" className="mt-2 text-sm text-muted-foreground">Loading security verification…</p>}
+      {state === "expired" && <p role="status" className="mt-2 text-sm text-amber-700">{errorMessage}</p>}
+      {state === "failed" && (
+        <div role="alert" className="mt-2 text-sm text-red-700">
+          <p>{errorMessage}</p>
+          <button type="button" onClick={retry} className="mt-1 underline">Retry security check</button>
+        </div>
+      )}
     </div>
   );
 }

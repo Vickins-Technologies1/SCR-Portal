@@ -151,6 +151,10 @@ export default function LoginPage() {
 
   const handleBiometricLogin = async () => {
     setError(null);
+    if (!turnstileLoginToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setQuickLoading(true);
     try {
       const creds = await getBiometricCredentials("owner");
@@ -177,6 +181,10 @@ export default function LoginPage() {
   const handlePinContinue = async () => {
     setPinError(null);
     setError(null);
+    if (pinMode === "login" && !turnstileLoginToken) {
+      setPinError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setQuickLoading(true);
 
     try {
@@ -235,6 +243,10 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!turnstileLoginToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -293,6 +305,10 @@ export default function LoginPage() {
   };
 
   const verifyOtp = async (submittedCode: string) => {
+    if (!turnstileOtpToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setError(null);
     setIsLoading(true);
 
@@ -349,7 +365,7 @@ export default function LoginPage() {
 
   const verifyOtpWithAuto = useOtpAutoVerify({
     code: otpCode,
-    enabled: otpRequired && !isLoading,
+    enabled: otpRequired && !isLoading && Boolean(turnstileOtpToken),
     onVerify: verifyOtp,
   });
 
@@ -377,6 +393,10 @@ export default function LoginPage() {
 
   const handleResendOtp = async () => {
     if (!otpId || resendLoading || resendCountdown > 0) return;
+    if (!turnstileResendToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setResendLoading(true);
     setError(null);
 
@@ -437,6 +457,10 @@ export default function LoginPage() {
     e.preventDefault();
     setResetError(null);
     setResetMessage(null);
+    if (!turnstileResetToken) {
+      setResetError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setResetLoading(true);
 
     try {

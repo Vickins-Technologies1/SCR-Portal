@@ -28,6 +28,11 @@ function CompletePhoneContent() {
       return;
     }
 
+    if (!turnstileToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/auth/google/complete-phone", {

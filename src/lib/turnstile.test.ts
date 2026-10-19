@@ -10,6 +10,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = originalEnv.secret;
   process.env.TURNSTILE_EXPECTED_HOSTNAMES = originalEnv.hostnames;
+  vi.unstubAllEnvs();
 });
 
 function request(body?: unknown) {
@@ -65,6 +66,25 @@ describe("verifyTurnstile", () => {
     expect(await verifyTurnstile(request({ turnstileToken: "already-used" }), "login")).toEqual({ ok: false, reason: "invalid" });
 
     vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error("timed out"));
+    expect(await verifyTurnstile(request({ turnstileToken: "token" }), "login")).toEqual({ ok: false, reason: "unavailable" });
+  });
+
+  it("rejects oversized tokens and a missing production hostname allowlist before Siteverify", async () => {
+    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "test-secret";
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.TURNSTILE_EXPECTED_HOSTNAMES = "";
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    expect(await verifyTurnstile(request({ turnstileToken: "x".repeat(2049) }), "login")).toEqual({ ok: false, reason: "invalid" });
+    expect(await verifyTurnstile(request({ turnstileToken: "token" }), "login")).toEqual({ ok: false, reason: "unavailable" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for malformed Siteverify responses", async () => {
+    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "test-secret";
+    process.env.TURNSTILE_EXPECTED_HOSTNAMES = "myaccuraterent.com";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not-json", { status: 200 }));
+
     expect(await verifyTurnstile(request({ turnstileToken: "token" }), "login")).toEqual({ ok: false, reason: "unavailable" });
   });
 });

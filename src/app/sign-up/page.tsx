@@ -251,6 +251,10 @@ export default function SignUp() {
       return;
     }
     setError(null);
+    if (!turnstileToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setIsLoading(true);
 
     // Client-side validations

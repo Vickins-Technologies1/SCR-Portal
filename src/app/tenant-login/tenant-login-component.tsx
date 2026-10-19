@@ -95,6 +95,10 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
     e.preventDefault();
     setResetError(null);
     setResetMessage(null);
+    if (!turnstileResetToken) {
+      setResetError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setResetLoading(true);
 
     try {
@@ -216,6 +220,10 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
 
   const handleBiometricLogin = async () => {
     setError(null);
+    if (!turnstileLoginToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setQuickLoading(true);
     try {
       const creds = await getBiometricCredentials("tenant");
@@ -240,6 +248,10 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
   const handlePinContinue = async () => {
     setPinError(null);
     setError(null);
+    if (pinMode === "login" && !turnstileLoginToken) {
+      setPinError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setQuickLoading(true);
     try {
       if (pinMode === "login") {
@@ -303,6 +315,11 @@ export default function TenantLoginPage({ variant = "rental" }: { variant?: Tena
 
     if (!password) {
       setError("Password is required");
+      return;
+    }
+
+    if (!turnstileLoginToken) {
+      setError("Please wait for the security check to finish, then try again.");
       return;
     }
 

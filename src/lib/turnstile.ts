@@ -115,6 +115,7 @@ export async function verifyTurnstile(
   }
 
   if (!token) return { ok: false, reason: "missing" };
+  if (token.length > 2048) return { ok: false, reason: "invalid" };
   if (!secret) return { ok: false, reason: "unavailable" };
 
   const configuredHostnames = (process.env.TURNSTILE_EXPECTED_HOSTNAMES ?? "")
@@ -141,7 +142,10 @@ export async function verifyTurnstile(
       cache: "no-store",
       signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
     });
-    if (!response.ok) return { ok: false, reason: "unavailable" };
+    if (!response.ok) {
+      console.warn("Turnstile Siteverify event", { action: expectedAction, outcome: "http_failure", status: response.status });
+      return { ok: false, reason: "unavailable" };
+    }
 
     const result = await response.json() as SiteverifyResponse;
     if (
@@ -150,10 +154,19 @@ export async function verifyTurnstile(
       typeof result.hostname !== "string" ||
       !allowedHostnames.includes(result.hostname.toLowerCase())
     ) {
+      const codes = Array.isArray(result["error-codes"])
+        ? result["error-codes"].filter((code): code is string => typeof code === "string").slice(0, 5)
+        : [];
+      console.warn("Turnstile Siteverify event", {
+        action: expectedAction,
+        outcome: result.success === true ? "hostname_or_action_mismatch" : "rejected",
+        codes,
+      });
       return { ok: false, reason: "invalid" };
     }
     return { ok: true };
   } catch {
+    console.warn("Turnstile Siteverify event", { action: expectedAction, outcome: "network_or_response_error" });
     return { ok: false, reason: "unavailable" };
   }
 }
@@ -172,8 +185,12 @@ export async function requireTurnstile(request: Request | NextRequest, action: T
     return Response.json({ success: false, code: "AUTH_RATE_LIMITED", message: "Too many attempts. Please wait and try again." }, { status: 429 });
   }
   if (rateLimit === "unavailable") {
+    console.warn("Authentication protection event", { action, outcome: "rate_limit_unavailable" });
     return Response.json({ success: false, code: "AUTH_PROTECTION_UNAVAILABLE", message: "Security protection is temporarily unavailable. Please try again." }, { status: 503 });
   }
   const result = await verifyTurnstile(request, action);
+  if (!result.ok) {
+    console.warn("Authentication protection event", { action, outcome: result.reason });
+  }
   return result.ok ? null : turnstileFailureResponse(result.reason);
 }

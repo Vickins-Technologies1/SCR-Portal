@@ -162,6 +162,10 @@ export default function AdminLogin() {
 
   const handleBiometricLogin = async () => {
     setError(null);
+    if (!turnstileLoginToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setQuickLoading(true);
     try {
       const creds = await getBiometricCredentials("admin");
@@ -186,6 +190,10 @@ export default function AdminLogin() {
   const handlePinContinue = async () => {
     setPinError(null);
     setError(null);
+    if (pinMode === "login" && !turnstileLoginToken) {
+      setPinError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setQuickLoading(true);
     try {
       if (pinMode === "login") {
@@ -249,6 +257,10 @@ export default function AdminLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
+    if (!turnstileLoginToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -287,6 +299,10 @@ export default function AdminLogin() {
 
   const verifyOtp = async (submittedCode: string) => {
     if (otpVerifyInFlightRef.current) return;
+    if (!turnstileOtpToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     otpVerifyInFlightRef.current = true;
     setError(null);
     setIsLoading(true);
@@ -351,6 +367,10 @@ export default function AdminLogin() {
 
   const handleResendOtp = async () => {
     if (!otpId || resendLoading || resendCountdown > 0) return;
+    if (!turnstileResendToken) {
+      setError("Please wait for the security check to finish, then try again.");
+      return;
+    }
     setResendLoading(true);
     setError(null);
 
