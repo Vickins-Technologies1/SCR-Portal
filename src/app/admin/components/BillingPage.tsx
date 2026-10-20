@@ -70,7 +70,7 @@ export default function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [manualPayment, setManualPayment] = useState<ManualPaymentDraft | null>(null);
   const [manualAmount, setManualAmount] = useState("");
-  const [manualMethod, setManualMethod] = useState("mpesa_paybill");
+  const [manualMethod, setManualMethod] = useState("other");
   const [manualReference, setManualReference] = useState("");
   const [manualPaymentDate, setManualPaymentDate] = useState("");
   const [manualNote, setManualNote] = useState("");
@@ -365,7 +365,7 @@ export default function BillingPage() {
   const openManualPayment = (invoice: InvoiceTransaction) => {
     setManualPayment({ invoice, idempotencyKey: crypto.randomUUID() });
     setManualAmount(String(invoice.balanceDue ?? Math.max(0, invoice.amount - (invoice.amountPaid || 0))));
-    setManualMethod("mpesa_paybill");
+    setManualMethod("other");
     setManualReference("");
     setManualPaymentDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16));
     setManualNote("");
@@ -831,7 +831,7 @@ export default function BillingPage() {
                                   </>
                                 )}
                               </button>
-                              {p.status !== "completed" && (p.balanceDue ?? p.amount) > 0 && p.status !== "failed" && (
+                              {p.status !== "completed" && (p.balanceDue ?? p.amount) > 0 && (
                                 <button
                                   onClick={() => openManualPayment(p)}
                                   className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700"
@@ -904,14 +904,14 @@ export default function BillingPage() {
                 </div>
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   <label className="text-xs font-medium">Amount received (KES)<input type="number" min="0.01" max={manualPayment.invoice.balanceDue ?? manualPayment.invoice.amount} step="0.01" value={manualAmount} onChange={(event) => { setManualAmount(event.target.value); setManualConfirmed(false); }} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
-                  <label className="text-xs font-medium">Payment method<select value={manualMethod} onChange={(event) => setManualMethod(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"><option value="mpesa_paybill">M-Pesa Paybill</option><option value="mpesa_till">M-Pesa Till</option><option value="bank_transfer">Bank transfer</option><option value="cash">Cash</option><option value="other">Other verified method</option></select></label>
-                  <label className="text-xs font-medium sm:col-span-2">Payment reference {manualMethod !== "cash" && <span className="text-red-600">(required)</span>}<input value={manualReference} onChange={(event) => setManualReference(event.target.value)} maxLength={120} placeholder="M-Pesa code, bank reference, or receipt number" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
+                  <label className="text-xs font-medium">Payment method<select value={manualMethod} onChange={(event) => setManualMethod(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"><option value="other">Other verified method</option><option value="mpesa_paybill">M-Pesa Paybill</option><option value="mpesa_till">M-Pesa Till</option><option value="bank_transfer">Bank transfer</option><option value="cash">Cash</option></select></label>
+                  <label className="text-xs font-medium sm:col-span-2">Payment reference (optional)<input value={manualReference} onChange={(event) => setManualReference(event.target.value)} maxLength={120} placeholder="M-Pesa code, bank reference, or receipt number" className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
                   <label className="text-xs font-medium sm:col-span-2">Payment date and time<input type="datetime-local" value={manualPaymentDate} onChange={(event) => setManualPaymentDate(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
                   <label className="text-xs font-medium sm:col-span-2">Reconciliation note (optional)<textarea value={manualNote} onChange={(event) => setManualNote(event.target.value)} maxLength={500} rows={2} className="mt-1 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm" /></label>
                 </div>
                 <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5">Amount to record: <strong>Ksh {Number(manualAmount || 0).toLocaleString("en-KE")}</strong>. The server will recheck the live outstanding balance before saving.</p>
                 <label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={manualConfirmed} onChange={(event) => setManualConfirmed(event.target.checked)} className="mt-0.5" /><span>I verified that this payment was received and want to record it in the invoice payment history.</span></label>
-                <div className="mt-5 flex flex-col-reverse justify-end gap-2 sm:flex-row"><button type="button" onClick={() => setManualPayment(null)} disabled={isRecordingManualPayment} className="rounded-lg border border-border px-4 py-2 text-sm">Cancel</button><button type="button" onClick={submitManualPayment} disabled={isRecordingManualPayment || !manualConfirmed || !manualAmount || Number(manualAmount) <= 0 || Number(manualAmount) > (manualPayment.invoice.balanceDue ?? manualPayment.invoice.amount) || !manualPaymentDate || (manualMethod !== "cash" && !manualReference.trim())} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isRecordingManualPayment ? "Recording payment…" : "Confirm and record payment"}</button></div>
+                <div className="mt-5 flex flex-col-reverse justify-end gap-2 sm:flex-row"><button type="button" onClick={() => setManualPayment(null)} disabled={isRecordingManualPayment} className="rounded-lg border border-border px-4 py-2 text-sm">Cancel</button><button type="button" onClick={submitManualPayment} disabled={isRecordingManualPayment || !manualConfirmed || !manualAmount || Number(manualAmount) <= 0 || Number(manualAmount) > (manualPayment.invoice.balanceDue ?? manualPayment.invoice.amount) || !manualPaymentDate} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isRecordingManualPayment ? "Recording payment…" : "Confirm and record payment"}</button></div>
               </section>
             </div>
           )}

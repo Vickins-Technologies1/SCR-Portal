@@ -21,6 +21,11 @@ vi.mock("@/lib/financial-reporting", () => ({
     balanceDue: invoice.balanceDue ?? invoice.amount - (invoice.amountPaid || 0),
     status: invoice.amountPaid ? "PARTIALLY PAID" : "DUE",
   })),
+  reconcileInvoiceFinancialState: vi.fn(async (db: unknown, invoiceId: string) => {
+    void db;
+    void invoiceId;
+    return { total: 1200, amountPaid: 1200, balanceDue: 0, status: "PAID" };
+  }),
 }));
 vi.mock("@/lib/verified-payment-posting", () => ({
   postVerifiedPayment: vi.fn(async ({ paymentId }: any) => {
@@ -113,9 +118,17 @@ describe("admin manual invoice payment", () => {
     const { POST } = await import("./route");
     const overpayment = await POST(request(validBody({ amount: 1200.01 })));
     expect(overpayment.status).toBe(400);
-    const missingReference = await POST(request(validBody({ reference: "" })));
-    expect(missingReference.status).toBe(400);
-    expect(state.payments).toHaveLength(0);
+    const noReference = await POST(request(validBody({ reference: "" })));
+    expect(noReference.status).toBe(200);
+    expect(state.payments[0]).toMatchObject({ reference: null });
+  });
+
+  it("uses the live balance when amount and method details are omitted", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(request({ invoiceId }));
+    expect(response.status).toBe(200);
+    expect(state.payments[0]).toMatchObject({ amount: 1200, paymentMethod: "other", reference: null });
+    expect(state.payments[0].invoiceStatusAfter).toBe("PAID");
   });
 
   it("allows a partial cash payment without a reference", async () => {

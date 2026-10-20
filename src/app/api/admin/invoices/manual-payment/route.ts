@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { requireAdmin } from "@/lib/admin-auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
-import { calculateInvoiceFinancialState } from "@/lib/financial-reporting";
+import { calculateInvoiceFinancialState, reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
 import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 
 const METHODS = ["mpesa_paybill", "mpesa_till", "bank_transfer", "cash", "other"] as const;
-const REFERENCE_OPTIONAL_METHODS = new Set(["cash"]);
 const cents = (value: number) => Math.round(value * 100);
+
+async function refreshInvoiceStatus(db: Awaited<ReturnType<typeof connectToDatabase>>["db"], invoiceId: string) {
+  return reconcileInvoiceFinancialState(db, invoiceId);
+}
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request, "admin:payments:manage");
@@ -18,29 +22,27 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const invoiceId = typeof body.invoiceId === "string" ? body.invoiceId : "";
-    const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
-    const method = typeof body.method === "string" ? body.method : "";
+    const idempotencyKey = typeof body.idempotencyKey === "string" && body.idempotencyKey.length <= 100
+      ? body.idempotencyKey.trim() || randomUUID()
+      : randomUUID();
+    const method = typeof body.method === "string" && METHODS.includes(body.method as typeof METHODS[number])
+      ? body.method
+      : "other";
     const reference = typeof body.reference === "string" ? body.reference.trim().slice(0, 120) : "";
     const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : "";
-    const amount = Number(body.amount);
-    const paymentDate = typeof body.paymentDate === "string" ? new Date(body.paymentDate) : null;
+    const requestedAmount = body.amount == null || body.amount === "" ? null : Number(body.amount);
+    const submittedPaymentDate = typeof body.paymentDate === "string" ? new Date(body.paymentDate) : null;
 
-    if (!ObjectId.isValid(invoiceId) || !/^[0-9a-f-]{36}$/i.test(idempotencyKey) || !METHODS.includes(method as typeof METHODS[number])) {
-      return NextResponse.json({ success: false, message: "Invalid invoice or payment details." }, { status: 400 });
+    if (!ObjectId.isValid(invoiceId)) {
+      return NextResponse.json({ success: false, message: "Invalid invoice." }, { status: 400 });
     }
-    if (!Number.isFinite(amount) || amount <= 0 || !paymentDate || Number.isNaN(paymentDate.getTime())) {
-      return NextResponse.json({ success: false, message: "Enter a valid amount and payment date." }, { status: 400 });
+    if (requestedAmount !== null && (!Number.isFinite(requestedAmount) || requestedAmount <= 0)) {
+      return NextResponse.json({ success: false, message: "Enter a valid payment amount." }, { status: 400 });
     }
-    if (Math.abs(amount * 100 - Math.round(amount * 100)) > 0.000001) {
-      return NextResponse.json({ success: false, message: "Payment amount can have at most two decimal places." }, { status: 400 });
+    if (submittedPaymentDate && Number.isNaN(submittedPaymentDate.getTime())) {
+      return NextResponse.json({ success: false, message: "Enter a valid payment date." }, { status: 400 });
     }
-    if (paymentDate.getTime() > Date.now()) return NextResponse.json({ success: false, message: "Payment date cannot be in the future." }, { status: 400 });
-    if (!REFERENCE_OPTIONAL_METHODS.has(method) && !reference) {
-      return NextResponse.json({ success: false, message: "A payment reference is required for this method." }, { status: 400 });
-    }
-    if (reference && !/^[\p{L}\p{N} ._/#-]+$/u.test(reference)) {
-      return NextResponse.json({ success: false, message: "The payment reference contains unsupported characters." }, { status: 400 });
-    }
+    const paymentDate = submittedPaymentDate || new Date();
 
     const { db } = await connectToDatabase();
     const paymentId = `admin-manual:${idempotencyKey}`;
@@ -50,23 +52,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: "This payment request has already been used." }, { status: 409 });
       }
       if (existingRequest.financialPostingStatus === "posted" || existingRequest.financialEffectsApplied === true) {
-        return NextResponse.json({ success: true, message: "Payment was already recorded.", invoiceId, status: existingRequest.invoiceStatusAfter || "PARTIALLY PAID" });
+        const state = await refreshInvoiceStatus(db, invoiceId);
+        await db.collection("payments").updateOne({ _id: existingRequest._id }, { $set: { invoiceStatusAfter: state?.status || "UNKNOWN", auditUpdatedAt: new Date().toISOString() } });
+        return NextResponse.json({ success: true, message: "Payment was already recorded.", invoiceId, status: state?.status || existingRequest.invoiceStatusAfter });
       }
       await postVerifiedPayment({ db, paymentId: existingRequest._id });
       const recovered = await db.collection("payments").findOne({ paymentId }, { projection: { financialPostingStatus: 1, financialEffectsApplied: 1 } });
       if (recovered?.financialPostingStatus !== "posted" && recovered?.financialEffectsApplied !== true) {
         return NextResponse.json({ success: false, message: "This payment needs review before another attempt." }, { status: 409 });
       }
-      return NextResponse.json({ success: true, message: "Manual payment posting recovered.", invoiceId });
+      const state = await refreshInvoiceStatus(db, invoiceId);
+      await db.collection("payments").updateOne({ _id: existingRequest._id }, { $set: { invoiceStatusAfter: state?.status || "UNKNOWN", auditUpdatedAt: new Date().toISOString() } });
+      return NextResponse.json({ success: true, message: "Manual payment posting recovered.", invoiceId, status: state?.status });
     }
 
     const invoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
     if (!invoice) return NextResponse.json({ success: false, message: "Invoice not found." }, { status: 404 });
     const ownerId = String(invoice.userId || invoice.ownerId || "");
-    const owner = ObjectId.isValid(ownerId) ? await db.collection("propertyOwners").findOne({ _id: new ObjectId(ownerId) }, { projection: { name: 1, email: 1 } }) : null;
-    if (!owner) return NextResponse.json({ success: false, message: "Invoice owner could not be verified." }, { status: 409 });
-
     const calculation = await calculateInvoiceFinancialState(db, invoice);
+    const amount = requestedAmount ?? calculation.balanceDue;
     const referenceKey = reference.toLocaleUpperCase("en-US");
     if (referenceKey) {
       const duplicate = await db.collection("payments").findOne({
@@ -76,20 +80,16 @@ export async function POST(request: NextRequest) {
         const sameManualReceipt = duplicate.paymentRail === "property_owner_invoice_manual"
           && String(duplicate.invoiceId) === invoiceId
           && cents(Number(duplicate.amount)) === cents(amount)
-          && duplicate.paymentMethod === method
-          && new Date(duplicate.paymentDate).getTime() === paymentDate.getTime();
+          && (duplicate.paymentMethod || "other") === method
+          && (!duplicate.paymentDate || new Date(duplicate.paymentDate).getTime() === paymentDate.getTime());
         if (sameManualReceipt && duplicate.financialPostingStatus !== "quarantined") {
           if (duplicate.financialPostingStatus !== "posted" && duplicate.financialEffectsApplied !== true) {
             await postVerifiedPayment({ db, paymentId: duplicate._id });
           }
           const recovered = await db.collection("payments").findOne({ _id: duplicate._id });
           if (recovered?.financialPostingStatus === "posted" || recovered?.financialEffectsApplied === true) {
-            const currentInvoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
-            const currentState = currentInvoice ? await calculateInvoiceFinancialState(db, currentInvoice) : null;
-            await db.collection("payments").updateOne(
-              { _id: duplicate._id },
-              { $set: { invoiceStatusAfter: currentState?.status || "UNKNOWN", auditUpdatedAt: new Date().toISOString() } },
-            );
+            const currentState = await refreshInvoiceStatus(db, invoiceId);
+            await db.collection("payments").updateOne({ _id: duplicate._id }, { $set: { invoiceStatusAfter: currentState?.status || "UNKNOWN", auditUpdatedAt: new Date().toISOString() } });
             return NextResponse.json({ success: true, message: "This payment had already been recorded and is now confirmed.", invoiceId, status: currentState?.status });
           }
           return NextResponse.json({ success: false, message: "This payment reference is already attached to a receipt that needs review. Contact support before recording it again." }, { status: 409 });
@@ -140,8 +140,7 @@ export async function POST(request: NextRequest) {
     if (posting.outcome !== "posted" && recordedPayment?.financialPostingStatus !== "posted" && recordedPayment?.financialEffectsApplied !== true) {
       return NextResponse.json({ success: false, message: "The payment could not be safely posted. Contact support before retrying." }, { status: 409 });
     }
-    const refreshedInvoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
-    const finalCalculation = refreshedInvoice ? await calculateInvoiceFinancialState(db, refreshedInvoice) : null;
+    const finalCalculation = await refreshInvoiceStatus(db, invoiceId);
     await db.collection("payments").updateOne(
       { paymentId },
       { $set: { invoiceStatusAfter: finalCalculation?.status || "UNKNOWN", auditUpdatedAt: new Date().toISOString() } },
