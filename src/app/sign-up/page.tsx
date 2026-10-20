@@ -19,7 +19,6 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { countries } from "countries-list";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
-import TurnstileField from "@/components/auth/TurnstileField";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { buildGoogleAuthStartUrl, signInWithGoogleNative } from "@/lib/google-auth-client";
 
@@ -70,8 +69,6 @@ export default function SignUp() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [csrfToken, setCsrfToken] = useState("");
-  const [turnstileToken, setTurnstileToken] = useState("");
-  const [turnstileVersion, setTurnstileVersion] = useState(0);
   const [step, setStep] = useState(0);
   const [managementType, setManagementType] = useState<"rentals" | "airbnb" | null>(null);
   const [lifetimePricing, setLifetimePricing] = useState<{ minimumUnits: number; maximumUnits: number | null; currency: string; tiers: Array<{ minUnits: number; maxUnits: number | null; price: number; currency: string; active: boolean }> } | null>(null);
@@ -251,10 +248,6 @@ export default function SignUp() {
       return;
     }
     setError(null);
-    if (!turnstileToken) {
-      setError("Please wait for the security check to finish, then try again.");
-      return;
-    }
     setIsLoading(true);
 
     // Client-side validations
@@ -328,7 +321,6 @@ export default function SignUp() {
           referralOnly,
           acceptedTermsAndPrivacy,
           csrfToken,
-          turnstileToken,
         }),
         credentials: "include",
       });
@@ -362,8 +354,6 @@ export default function SignUp() {
     } catch (err: any) {
       setError(err.message || "An error occurred. Please try again.");
     } finally {
-      setTurnstileToken("");
-      setTurnstileVersion((version) => version + 1);
       setIsLoading(false);
     }
   };
@@ -922,7 +912,6 @@ export default function SignUp() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4 pt-1">
-              {step === steps.length - 1 && <TurnstileField key={turnstileVersion} action="signup" onToken={setTurnstileToken} />}
               <AnimatePresence mode="wait">
                 {false && (
                   <motion.div

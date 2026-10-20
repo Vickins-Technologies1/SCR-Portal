@@ -25,7 +25,7 @@ import {
 } from "../../../lib/otp";
 import { appendOwnerActivity } from "../../../lib/owner-activity";
 import { buildLoginIdentifierQuery, normalizeLoginIdentifier } from "../../../lib/login-identifier";
-import { requireTurnstile } from "../../../lib/turnstile";
+import { requireAuthRateLimit } from "@/lib/auth-rate-limit";
 
 const OTP_COLLECTION = "otpChallenges";
 
@@ -94,8 +94,8 @@ async function resolveOwnerTier(
 }
 
 export async function POST(request: NextRequest) {
-  const turnstileFailure = await requireTurnstile(request, "login");
-  if (turnstileFailure) return turnstileFailure;
+  const rateLimitFailure = await requireAuthRateLimit(request, "login");
+  if (rateLimitFailure) return rateLimitFailure;
   try {
     const body = await request.json();
     const { email, password, role: providedRole, userId, portal } = body;

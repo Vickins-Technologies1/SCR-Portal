@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { requireTurnstile } from "@/lib/turnstile";
+import { requireAuthRateLimit } from "@/lib/auth-rate-limit";
 import { deliverOtp } from "@/lib/otp-delivery";
 import {
   generateOtpCode,
@@ -32,8 +32,8 @@ type OtpDoc = {
 };
 
 export async function POST(request: Request) {
-  const turnstileFailure = await requireTurnstile(request, "otp_resend");
-  if (turnstileFailure) return turnstileFailure;
+  const rateLimitFailure = await requireAuthRateLimit(request, "otp_resend");
+  if (rateLimitFailure) return rateLimitFailure;
   try {
     const body = await request.json();
     const otpId = body?.otpId?.toString();

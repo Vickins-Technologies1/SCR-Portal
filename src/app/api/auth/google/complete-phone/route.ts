@@ -4,7 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { createSessionToken, getSessionCookieOptions } from "@/lib/session";
 import { generateCsrfToken, setCsrfCookie } from "@/lib/csrf";
 import { verifyGooglePendingToken } from "@/lib/google-auth";
-import { requireTurnstile } from "@/lib/turnstile";
+import { requireAuthRateLimit } from "@/lib/auth-rate-limit";
 import {
   generateOtpCode,
   hashOtpCode,
@@ -93,8 +93,8 @@ async function createOtpChallenge(params: {
 }
 
 export async function POST(request: Request) {
-  const turnstileFailure = await requireTurnstile(request, "google_auth");
-  if (turnstileFailure) return turnstileFailure;
+  const rateLimitFailure = await requireAuthRateLimit(request, "google_auth");
+  if (rateLimitFailure) return rateLimitFailure;
   try {
     const body = await request.json().catch(() => ({}));
     const token = typeof body?.token === "string" ? body.token : "";

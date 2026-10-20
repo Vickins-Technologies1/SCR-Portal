@@ -7,7 +7,7 @@ import { hashOtpCode } from "@/lib/otp";
 import { createSessionToken, getSessionCookieOptions } from "@/lib/session";
 import { generateCsrfToken, setCsrfCookie } from "@/lib/csrf";
 import { resolveAccountTier, type AccountTier } from "@/lib/tier";
-import { requireTurnstile } from "@/lib/turnstile";
+import { requireAuthRateLimit } from "@/lib/auth-rate-limit";
 
 type OtpDoc = {
   _id: ObjectId;
@@ -39,8 +39,8 @@ const normalizeManagementType = (value: unknown): "rentals" | "airbnb" => {
 const normalizeOwnerTier = (value: unknown): AccountTier => resolveAccountTier(value, "premium");
 
 export async function POST(request: Request) {
-  const turnstileFailure = await requireTurnstile(request, "otp_verify");
-  if (turnstileFailure) return turnstileFailure;
+  const rateLimitFailure = await requireAuthRateLimit(request, "otp_verify");
+  if (rateLimitFailure) return rateLimitFailure;
   try {
     const body = await request.json();
     const otpId = body?.otpId?.toString();

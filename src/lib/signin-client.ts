@@ -63,9 +63,9 @@ function persistClientCookies(params: { userId: string; role: string; permission
   }
 }
 
-export async function signInOwner(params: { email: string; password: string; appHash?: string; turnstileToken?: string }): Promise<SignInResult> {
+export async function signInOwner(params: { email: string; password: string; appHash?: string }): Promise<SignInResult> {
   const appHash = await resolveAppHash(params.appHash);
-  const { ok, data } = await postJson("/api/signin", { email: params.email, password: params.password, appHash, turnstileToken: params.turnstileToken });
+  const { ok, data } = await postJson("/api/signin", { email: params.email, password: params.password, appHash });
   const result = data as SignInResult;
   if (result?.success && result.userId && result.role) {
     persistClientCookies({ userId: result.userId, role: result.role, permissions: result.permissions, adminName: result.adminName });
@@ -75,7 +75,7 @@ export async function signInOwner(params: { email: string; password: string; app
   return result;
 }
 
-export async function signInTenant(params: { email: string; password: string; portal?: "rental" | "airbnb"; appHash?: string; turnstileToken?: string }): Promise<SignInResult> {
+export async function signInTenant(params: { email: string; password: string; portal?: "rental" | "airbnb"; appHash?: string }): Promise<SignInResult> {
   const appHash = await resolveAppHash(params.appHash);
   const { ok, data } = await postJson("/api/signin", {
     email: params.email,
@@ -83,7 +83,6 @@ export async function signInTenant(params: { email: string; password: string; po
     appHash,
     role: "tenant",
     portal: params.portal || "rental",
-    turnstileToken: params.turnstileToken,
   });
   const result = data as SignInResult;
   if (result?.success && result.userId && result.role) {
@@ -93,9 +92,9 @@ export async function signInTenant(params: { email: string; password: string; po
   return result;
 }
 
-export async function signInAdmin(params: { email: string; password: string; appHash?: string; turnstileToken?: string }): Promise<SignInResult> {
+export async function signInAdmin(params: { email: string; password: string; appHash?: string }): Promise<SignInResult> {
   const appHash = await resolveAppHash(params.appHash);
-  const { ok, data } = await postJson("/api/admin/login", { email: params.email, password: params.password, appHash, role: "admin", turnstileToken: params.turnstileToken });
+  const { ok, data } = await postJson("/api/admin/login", { email: params.email, password: params.password, appHash, role: "admin" });
   const result = data as SignInResult;
   if (result?.success && result.userId && result.role) {
     persistClientCookies({ userId: result.userId, role: result.role, permissions: result.permissions, adminName: result.adminName });

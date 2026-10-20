@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
-import { requireTurnstile } from "../../../../lib/turnstile";
+import { requireAuthRateLimit } from "@/lib/auth-rate-limit";
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export async function POST(req: NextRequest) {
-  const turnstileFailure = await requireTurnstile(req, "password_reset");
-  if (turnstileFailure) return turnstileFailure;
+  const rateLimitFailure = await requireAuthRateLimit(req, "password_reset");
+  if (rateLimitFailure) return rateLimitFailure;
   try {
     const { token, email, newPassword } = await req.json();
 

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 const baseUrl = process.env.E2E_BASE_URL || "http://localhost:3000";
 const ownerEmail = process.env.E2E_OWNER_EMAIL;
 const ownerPassword = process.env.E2E_OWNER_PASSWORD;
-const turnstileToken = process.env.E2E_TURNSTILE_TOKEN;
 
 type CookieJar = Map<string, string>;
 
@@ -29,19 +28,8 @@ const cookieHeader = (jar: CookieJar) =>
     .join("; ");
 
 describe("support CSRF middleware (E2E)", () => {
-  it("rejects direct login API calls without a Turnstile token", async () => {
-    const response = await fetch(`${baseUrl}/api/signin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "unknown@example.invalid", password: "not-a-real-password" }),
-    });
-    const data = await response.json().catch(() => ({}));
-    expect([403, 503]).toContain(response.status);
-    expect(["TURNSTILE_REQUIRED", "AUTH_PROTECTION_UNAVAILABLE"]).toContain(data.code);
-  });
-
-  if (!ownerEmail || !ownerPassword || !turnstileToken) {
-    it.skip("CSRF session flow requires staging credentials and a staging Turnstile token", () => {});
+  if (!ownerEmail || !ownerPassword) {
+    it.skip("CSRF session flow requires staging credentials", () => {});
     return;
   }
 
@@ -53,7 +41,7 @@ describe("support CSRF middleware (E2E)", () => {
       const signinRes = await fetch(`${baseUrl}/api/signin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: ownerEmail, password: ownerPassword, turnstileToken }),
+        body: JSON.stringify({ email: ownerEmail, password: ownerPassword }),
       });
 
       applyCookies(jar, signinRes);

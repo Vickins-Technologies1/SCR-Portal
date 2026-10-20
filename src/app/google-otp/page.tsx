@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import PublicThemeWrapper from "@/components/PublicThemeWrapper";
 import OtpCodeField from "@/components/auth/OtpCodeField";
-import TurnstileField from "@/components/auth/TurnstileField";
 import { useAndroidSmsRetriever } from "@/lib/android-sms-retriever";
 import { useOtpAutoVerify } from "@/lib/use-otp-auto-verify";
 import { AuthLoadingFallback } from "@/components/ui/LoadingSkeletons";
@@ -20,8 +19,6 @@ function GoogleOtpContent() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState("");
-  const [turnstileVersion, setTurnstileVersion] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   useAndroidSmsRetriever({ enabled: true, onCode: setCode });
 
@@ -38,18 +35,13 @@ function GoogleOtpContent() {
       return;
     }
 
-    if (!turnstileToken) {
-      setError("Please wait for the security check to finish, then try again.");
-      return;
-    }
-
     setLoading(true);
     try {
       const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ otpId, code: submittedCode, turnstileToken }),
+        body: JSON.stringify({ otpId, code: submittedCode }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -65,15 +57,13 @@ function GoogleOtpContent() {
     } catch (err: any) {
       setError(err?.message || "OTP verification failed.");
     } finally {
-      setTurnstileToken("");
-      setTurnstileVersion((version) => version + 1);
       setLoading(false);
     }
-  }, [otpId, returnTo, router, turnstileToken]);
+  }, [otpId, returnTo, router]);
 
   const verifyOtp = useOtpAutoVerify({
     code,
-    enabled: !loading && Boolean(turnstileToken),
+    enabled: !loading,
     onVerify: submitOtp,
   });
 
@@ -103,7 +93,6 @@ function GoogleOtpContent() {
           </div>
 
           <form onSubmit={handleVerify} className="mt-6 space-y-4">
-            <TurnstileField key={turnstileVersion} action="otp_verify" onToken={setTurnstileToken} />
             {error && (
               <div className="auth-status-error rounded-xl border px-4 py-3 text-sm">
                 {error}

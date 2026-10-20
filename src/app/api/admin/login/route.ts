@@ -15,13 +15,13 @@ import {
   shouldBypassOtp,
 } from "../../../../lib/otp";
 import { buildLoginIdentifierQuery, normalizeLoginIdentifier } from "../../../../lib/login-identifier";
-import { requireTurnstile } from "../../../../lib/turnstile";
+import { requireAuthRateLimit } from "@/lib/auth-rate-limit";
 
 const OTP_COLLECTION = "otpChallenges";
 
 export async function POST(request: Request) {
-  const turnstileFailure = await requireTurnstile(request, "login");
-  if (turnstileFailure) return turnstileFailure;
+  const rateLimitFailure = await requireAuthRateLimit(request, "login");
+  if (rateLimitFailure) return rateLimitFailure;
   let loginIdentifier: string | null = null;
 
   try {

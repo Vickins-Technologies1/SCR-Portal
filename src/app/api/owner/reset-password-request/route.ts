@@ -7,7 +7,7 @@ import crypto from "crypto";
 import validator from "validator";
 import logger from "../../../../lib/logger";
 import { sendOwnerPasswordResetEmail } from "../../../../lib/email";
-import { requireTurnstile } from "../../../../lib/turnstile";
+import { requireAuthRateLimit } from "@/lib/auth-rate-limit";
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -38,8 +38,8 @@ function rateLimit(ip: string): { ok: boolean; remaining: number } {
 }
 
 export async function POST(request: NextRequest) {
-  const turnstileFailure = await requireTurnstile(request, "password_reset_request");
-  if (turnstileFailure) return turnstileFailure;
+  const rateLimitFailure = await requireAuthRateLimit(request, "password_reset_request");
+  if (rateLimitFailure) return rateLimitFailure;
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
   try {
