@@ -28,6 +28,7 @@ const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render
 const SCRIPT_TIMEOUT_MS = 15_000;
 const TURNSTILE_ENABLED = process.env.NEXT_PUBLIC_TURNSTILE_ENABLED === "true";
 const TURNSTILE_DISABLED_SENTINEL = "turnstile-temporarily-disabled";
+const TURNSTILE_DISABLED_ACTIONS = new Set(["otp_verify", "otp_resend"]);
 
 function loadTurnstile(): Promise<void> {
   if (window.turnstile) return Promise.resolve();
@@ -92,6 +93,7 @@ export default function TurnstileField({ action, onToken, onError, className = "
   const [errorMessage, setErrorMessage] = useState("");
   const [retryVersion, setRetryVersion] = useState(0);
   const siteKey = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY?.trim();
+  const enabledForAction = TURNSTILE_ENABLED && !TURNSTILE_DISABLED_ACTIONS.has(action);
 
   useEffect(() => {
     onTokenRef.current = onToken;
@@ -99,10 +101,10 @@ export default function TurnstileField({ action, onToken, onError, className = "
   });
 
   useEffect(() => {
-    if (TURNSTILE_ENABLED) return;
+    if (enabledForAction) return;
     setState("verified");
     onTokenRef.current(TURNSTILE_DISABLED_SENTINEL);
-  }, []);
+  }, [enabledForAction]);
 
   const fail = useCallback((message: string, diagnostic: string) => {
     setState("failed");
@@ -113,7 +115,7 @@ export default function TurnstileField({ action, onToken, onError, className = "
   }, [action]);
 
   useEffect(() => {
-    if (!TURNSTILE_ENABLED) return;
+    if (!enabledForAction) return;
     let active = true;
     let widgetId: string | null = null;
     setState("loading");
@@ -187,7 +189,7 @@ export default function TurnstileField({ action, onToken, onError, className = "
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
       if (widgetIdRef.current === widgetId) widgetIdRef.current = null;
     };
-  }, [action, fail, retryVersion, siteKey]);
+  }, [action, enabledForAction, fail, retryVersion, siteKey]);
 
   const retry = () => {
     const widgetId = widgetIdRef.current;
@@ -201,7 +203,7 @@ export default function TurnstileField({ action, onToken, onError, className = "
     setRetryVersion((version) => version + 1);
   };
 
-  if (!TURNSTILE_ENABLED) {
+  if (!enabledForAction) {
     return null;
   }
 

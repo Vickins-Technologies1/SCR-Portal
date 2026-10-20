@@ -23,7 +23,7 @@ When `NEXT_PUBLIC_TURNSTILE_ENABLED=true`, `requireTurnstile` is the shared serv
 
 ## Deployment configuration
 
-- `NEXT_PUBLIC_TURNSTILE_ENABLED` controls both the browser widget and server verification. It currently defaults to `false` as a temporary bypass; set it to `true` to restore Turnstile. Authentication rate limits remain active while it is disabled.
+- `NEXT_PUBLIC_TURNSTILE_ENABLED` controls both the browser widget and server verification. It currently defaults to `false` as a temporary bypass; set it to `true` to restore Turnstile on other protected actions. OTP verify and resend remain bypassed while their section is temporarily exempt. Authentication rate limits remain active.
 - `NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY` must be the public sitekey paired with the server-side `CLOUDFLARE_TURNSTILE_SECRET_KEY`.
 - Production must set `TURNSTILE_EXPECTED_HOSTNAMES` to an explicit comma-separated allowlist containing every configured canonical hostname, normally `myaccuraterent.com,www.myaccuraterent.com` if both serve the application. The verifier does not infer production hostnames from an incoming `Host` header.
 - Production must also configure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`; auth endpoints fail closed if their shared rate limiter is unavailable.
