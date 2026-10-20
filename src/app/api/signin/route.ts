@@ -5,7 +5,13 @@ import bcrypt from "bcrypt";
 import { Db, ObjectId } from "mongodb";
 import { getDefaultPermissions } from "../../../lib/permissions";
 import { deliverOtp } from "../../../lib/otp-delivery";
-import { createSessionToken, getSessionCookieOptions } from "../../../lib/session";
+import {
+  createSessionToken,
+  getSessionCookieOptions,
+  matchesSessionIdentity,
+  SESSION_COOKIE_NAME,
+  verifySessionToken,
+} from "../../../lib/session";
 import { generateCsrfToken, setCsrfCookie } from "../../../lib/csrf";
 import { resolveAccountTier, type AccountTier } from "../../../lib/tier";
 import { getOwnerDueStatus } from "../../../lib/billing";
@@ -120,6 +126,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // This legacy continuation path must never turn a public account ID into
+      // a login credential. It may only refresh the same account's signed session.
+      const existingSessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+      const existingSession = existingSessionToken ? await verifySessionToken(existingSessionToken) : null;
+      if (!matchesSessionIdentity(existingSession, userId)) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+      }
+
       console.log("Validating userId:", userId);
       let user = null;
       let redirectPath = "";
@@ -158,6 +172,10 @@ export async function POST(request: NextRequest) {
       }
 
       if (user) {
+        if (!matchesSessionIdentity(existingSession, userId, finalRole)) {
+          return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+        }
+
         if (!userCollection) {
           return NextResponse.json(
             { success: false, message: "Unable to resolve user collection" },

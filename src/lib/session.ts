@@ -52,6 +52,15 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
+/** True only when an already verified session belongs to the requested account. */
+export function matchesSessionIdentity(
+  session: SessionPayload | null,
+  userId: string,
+  role?: string,
+): boolean {
+  return Boolean(session && session.sub === userId && (!role || session.role === role));
+}
+
 export function getSessionCookieOptions(maxAgeSeconds: number = SESSION_MAX_AGE_SECONDS) {
   return {
     httpOnly: true,
