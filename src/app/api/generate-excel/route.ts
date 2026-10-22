@@ -6,7 +6,8 @@ import { format } from "date-fns";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
-import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { categorizeFinancialPaymentRows, getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { identityValues } from "@/lib/payment-query";
 
 interface Report {
@@ -96,7 +97,7 @@ export async function POST(
     if (role === "teamMember" && assignedPropertyIds?.length) {
       propertiesQuery._id = { $in: assignedPropertyIds.map((id) => new ObjectId(id)) };
     }
-    const properties = await db.collection("properties").find(propertiesQuery).project({ _id: 1, name: 1 }).toArray();
+    const properties = await db.collection("properties").find(propertiesQuery).toArray();
     const propertyIds = properties.map((property) => String(property._id));
     if (selectedPropertyId !== "all" && !propertyIds.includes(selectedPropertyId)) {
       return NextResponse.json({ success: false, message: "Unauthorized: Property not owned" }, { status: 403 });
@@ -106,36 +107,48 @@ export async function POST(
       if (!value) return undefined;
       return new Date(`${value.slice(0, 10)}${endOfDay ? "T23:59:59.999+03:00" : "T00:00:00.000+03:00"}`);
     };
+    const tenants = await db.collection("tenants")
+      .find({ propertyId: { $in: identityValues(selectedPropertyId === "all" ? propertyIds : [selectedPropertyId]) } })
+      .toArray();
+    const selectedProperties = properties.filter((property) =>
+      selectedPropertyId === "all" || String(property._id) === selectedPropertyId
+    );
+    const propertyForTenantMap = new Map(selectedProperties.map((property: any) => [String(property._id), property]));
+    const tenantStates = await Promise.all(tenants.map((tenant: any) =>
+      calculateTenantFinancialState(db, tenant, { property: propertyForTenantMap.get(String(tenant.propertyId)), asOf: new Date() })
+    ));
+    const allocationOverrides = new Map<string, any>();
+    for (const state of tenantStates) {
+      for (const [paymentId, allocation] of state.paymentAllocations) allocationOverrides.set(paymentId, allocation);
+    }
     const rows = await getFinancialPaymentRows({
       db,
       propertyIds: selectedPropertyId === "all" ? propertyIds : [selectedPropertyId],
+      tenantIdsForLegacyPropertyless: tenants.map((tenant: any) => tenant._id),
       start: parseBusinessDate(startDate),
       end: parseBusinessDate(endDate, true),
     });
-    const tenantDocs = await db.collection("tenants")
-      .find({ propertyId: { $in: identityValues(propertyIds) } })
-      .project({ name: 1, paymentStatus: 1, unitType: 1 })
-      .toArray();
-    const tenantMap = new Map(tenantDocs.map((tenant) => [String(tenant._id), tenant]));
+    const tenantMap = new Map(tenants.map((tenant) => [String(tenant._id), tenant]));
     const propertyMap = new Map(properties.map((property) => [String(property._id), property]));
-    const reports: Report[] = rows
-      .filter(({ payment }) => !paymentType || paymentType === "all" || String(payment.type || "Unknown") === paymentType)
-      .map(({ payment, eventDate, netAmount }) => {
+    const reports: Report[] = categorizeFinancialPaymentRows(rows, allocationOverrides)
+      .filter(({ type }) => !paymentType || paymentType === "all" || type === paymentType)
+      .map(({ row, type, amount }) => {
+        const { payment, eventDate } = row;
         const tenant = payment.tenantId ? tenantMap.get(String(payment.tenantId)) : null;
-        const propertyId = String(payment.propertyId || "");
+        const propertyId = String(payment.propertyId || tenant?.propertyId || "");
         return {
-          _id: String(payment._id),
+          _id: `${String(payment._id)}:${type}`,
           propertyId,
           propertyName: propertyMap.get(propertyId)?.name || "Unassigned",
           tenantId: payment.tenantId ? String(payment.tenantId) : null,
           tenantName: tenant?.name || payment.tenantName || "Unknown",
-          revenue: netAmount,
+          revenue: amount,
           date: (eventDate || new Date(0)).toISOString(),
           status: String(payment.status || "completed"),
           ownerId: effectiveOwnerId,
           tenantPaymentStatus: tenant?.paymentStatus || "Unknown",
           unitType: tenant?.unitType || payment.unitType || "N/A",
-          type: payment.type || "Unknown",
+          type,
           transactionId: payment.transactionId,
           reference: payment.reference,
           mpesaCode: payment.mpesaCode,

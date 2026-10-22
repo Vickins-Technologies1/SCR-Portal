@@ -294,7 +294,7 @@ export default function PropertyOwnerDashboard() {
         borderRadius: 6,
       },
       {
-        label: "Deposit",
+        label: "Deposit Collection",
         data: chartData?.depositPayments || [],
         backgroundColor: "rgba(245,158,11,0.7)",
         borderRadius: 6,
@@ -765,7 +765,7 @@ export default function PropertyOwnerDashboard() {
                   {isFree ? (
                     <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
                       {[
-                        { title: "Payment Trends", body: "Monthly rent, utilities, and deposits over time." },
+                        { title: "Payment Trends", body: "Net posted receipts by transaction month. Deposit collections are separate from rent, utilities, and the deposit outstanding balance." },
                         { title: "Tenant Payment Status", body: "Breakdown of current vs overdue tenants." },
                       ].map((c) => (
                         <div key={c.title} className="surface-card rounded-3xl p-5 sm:p-6 border border-amber-200 bg-amber-50/40">

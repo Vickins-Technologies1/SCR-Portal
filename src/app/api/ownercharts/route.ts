@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { WithId, ObjectId } from "mongodb";
-import { getFinancialReportSummary } from "@/lib/financial-reporting";
+import { ObjectId } from "mongodb";
+import { getFinancialPaymentRows, summarizeFinancialPaymentPeriods } from "@/lib/financial-reporting";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 
 interface ChartData {
   months: string[];
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest) {
 
     const properties = await db
       .collection("properties")
-      .find<WithId<{ _id: string }>>(propertyQuery, { projection: { _id: 1 } })
+      .find<any>(propertyQuery)
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
 
@@ -151,36 +152,48 @@ export async function GET(request: NextRequest) {
     const otherPayments: number[] = [];
     const walletCreditPayments: number[] = [];
 
-    const monthSummaries = await Promise.all(
-      Array.from({ length: 6 }, async (_, i) => {
-        const monthDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));
-        const monthLabel = monthDate.toLocaleString("en-US", {
-          month: "short",
-          year: "2-digit",
-          timeZone: "Africa/Nairobi",
-        });
-        const startOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1) - 3 * 60 * 60 * 1000);
-        const endOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1) - 3 * 60 * 60 * 1000 - 1);
-        const summary = await getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth });
+    // The saved payment allocation is a snapshot and can be stale when an
+    // earlier payment was reallocated after a lease or utility change. Use
+    // the same tenant ledger calculation as the owner dashboard cards.
+    const tenants = await db.collection("tenants").find({ propertyId: { $in: propertyIds } }).toArray();
+    const propertyMap = new Map(properties.map((property) => [String(property._id), property]));
+    const tenantStates = await Promise.all(tenants.map(async (tenant: any) =>
+      calculateTenantFinancialState(db, tenant, { property: propertyMap.get(String(tenant.propertyId)), asOf: today })
+    ));
+    const allocationOverrides = new Map<string, any>();
+    for (const state of tenantStates) {
+      for (const [paymentId, allocation] of state.paymentAllocations) {
+        allocationOverrides.set(paymentId, allocation);
+      }
+    }
 
-        return {
-          monthLabel,
-          rent: summary.rentReceived,
-          utility: summary.utilityReceived,
-          deposit: summary.depositReceived,
-          other: summary.otherReceived,
-          walletCredit: summary.unappliedCredit,
-        };
-      })
-    );
+    const monthBuckets = Array.from({ length: 6 }, (_, i) => {
+      const monthDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));
+      const start = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1) - 3 * 60 * 60 * 1000);
+      const monthEnd = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1) - 3 * 60 * 60 * 1000 - 1);
+      return {
+        key: `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, "0")}`,
+        label: monthDate.toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "Africa/Nairobi" }),
+        start,
+        end: i === 0 ? today : monthEnd,
+      };
+    }).reverse();
+    const paymentRows = await getFinancialPaymentRows({
+      db,
+      propertyIds,
+      tenantIdsForLegacyPropertyless: tenants.map((tenant: any) => tenant._id),
+      start: monthBuckets[0].start,
+      end: today,
+    });
 
-    for (const summary of monthSummaries.reverse()) {
-      months.push(summary.monthLabel);
-      rentPayments.push(summary.rent);
-      utilityPayments.push(summary.utility);
-      depositPayments.push(summary.deposit);
-      otherPayments.push(summary.other);
-      walletCreditPayments.push(summary.walletCredit);
+    const monthlySummaries = summarizeFinancialPaymentPeriods(paymentRows, monthBuckets, allocationOverrides);
+    for (const { label, summary } of monthlySummaries) {
+      months.push(label);
+      rentPayments.push(summary.rentReceived);
+      utilityPayments.push(summary.utilityReceived);
+      depositPayments.push(summary.depositReceived);
+      otherPayments.push(summary.otherReceived);
+      walletCreditPayments.push(summary.unappliedCredit);
     }
 
     const chartData: ChartData = {

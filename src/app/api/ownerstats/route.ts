@@ -6,7 +6,7 @@ import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount } from "@/lib/tenant-payment-allocation";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
-import { getFinancialReportSummary } from "@/lib/financial-reporting";
+import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 
 interface Property {
   _id: string;
@@ -212,6 +212,7 @@ export async function GET(request: NextRequest) {
       totalUnitsResult,
       rentOverrideMap,
       totalTenants,
+      tenantsForFinancials,
       activeTenantsForOccupancy,
       activeTenantsForMonth,
     ] = await Promise.all([
@@ -230,6 +231,7 @@ export async function GET(request: NextRequest) {
         .toArray(),
       fetchActiveRentOverridesByPropertyIds(db, propertyIds),
       tenantCollection.countDocuments({ propertyId: { $in: propertyIds } }),
+      tenantCollection.find({ propertyId: { $in: propertyIds } }).toArray(),
       fetchTenantsActiveOnDay<TenantDoc>(db, propertyIds, today),
       fetchTenantsOverlappingRange<TenantDoc>(db, propertyIds, startOfMonth, endOfMonth),
     ]);
@@ -242,10 +244,35 @@ export async function GET(request: NextRequest) {
       0
     );
 
-    const [monthlySummary, lifetimeSummary] = await Promise.all([
-      getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth }),
-      getFinancialReportSummary({ db, propertyIds }),
+    const [monthlyRows, lifetimeRows] = await Promise.all([
+      getFinancialPaymentRows({
+        db,
+        propertyIds,
+        tenantIdsForLegacyPropertyless: tenantsForFinancials.map((tenant: any) => tenant._id),
+        start: startOfMonth,
+        end: today,
+      }),
+      getFinancialPaymentRows({
+        db,
+        propertyIds,
+        tenantIdsForLegacyPropertyless: tenantsForFinancials.map((tenant: any) => tenant._id),
+        end: today,
+      }),
     ]);
+
+    // Recalculate payment allocations from the tenant ledger before summing
+    // categories so this endpoint agrees with payment trends and tenant
+    // balances, even if a legacy saved allocation snapshot is stale.
+    const allTenantStates = await Promise.all(tenantsForFinancials.map(async (tenant: any) => ({
+      tenant,
+      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(String(tenant.propertyId)), asOf: today }),
+    })));
+    const allocationOverrides = new Map<string, any>();
+    for (const { state } of allTenantStates) {
+      for (const [paymentId, allocation] of state.paymentAllocations) allocationOverrides.set(paymentId, allocation);
+    }
+    const monthlySummary = summarizeFinancialPaymentRows(monthlyRows, allocationOverrides);
+    const lifetimeSummary = summarizeFinancialPaymentRows(lifetimeRows, allocationOverrides);
     const rentCollectedThisMonth = roundMoney(monthlySummary.rentReceived);
 
     const totalMonthlyRent = rentCollectedThisMonth;
@@ -262,10 +289,8 @@ export async function GET(request: NextRequest) {
     let totalPenaltyAmount = 0;
     let totalDepositDue = 0;
 
-    const tenantStates = await Promise.all(activeTenantsForDues.map(async (tenant) => ({
-      tenant,
-      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(tenant.propertyId), asOf: today }),
-    })));
+    const activeTenantIds = new Set(activeTenantsForDues.map((tenant) => String(tenant._id)));
+    const tenantStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
     const bulkOps = tenantStates.map(({ tenant, state }) => {
       totalPenaltyAmount += state.penalties;
       totalDepositDue += state.depositOutstanding;
@@ -295,7 +320,9 @@ export async function GET(request: NextRequest) {
     // Deposits must come from the same tenant ledger used for dues. Summing
     // raw payments with type "Deposit" incorrectly counts overpayments and
     // ignores payments whose allocation was split across charges.
-    const totalDepositPaid = roundMoney(sumTenantDepositPaid(tenantStates.map(({ state }) => state)));
+    // Deposits remain held after tenancy ends, so the collected metric includes
+    // every tenant ledger attached to an active owner property.
+    const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantStates.map(({ state }) => state)));
     const totalOverdueFromComponents = roundMoney(sumTenantOverdueAmount(tenantStates.map(({ state }) => state)));
 
     if (bulkOps.length > 0) {

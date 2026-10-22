@@ -37,6 +37,102 @@ export type FinancialPaymentRow = {
   };
 };
 
+export type FinancialPaymentAllocation = FinancialPaymentRow["allocation"];
+
+export type CategorizedFinancialPaymentRow = {
+  row: FinancialPaymentRow;
+  type: "Rent" | "Utility" | "Deposit" | "Other" | "Wallet Credit";
+  amount: number;
+};
+
+/**
+ * Summarize posted payment rows, optionally replacing persisted allocation
+ * snapshots with the current tenant-ledger projection. Repeated copies of the
+ * same payment document are ignored; distinct payment documents remain
+ * separate even when a provider reference was reused by legacy records.
+ */
+export function summarizeFinancialPaymentRows(
+  rows: FinancialPaymentRow[],
+  allocationOverrides: ReadonlyMap<string, Partial<FinancialPaymentAllocation>> = new Map(),
+): FinancialReportSummary {
+  const summary: FinancialReportSummary = {
+    totalReceived: 0,
+    rentReceived: 0,
+    utilityReceived: 0,
+    depositReceived: 0,
+    otherReceived: 0,
+    unappliedCredit: 0,
+    netReceived: 0,
+    legacyUnallocatedPayments: 0,
+  };
+  const seenPaymentIds = new Set<string>();
+
+  for (const row of rows) {
+    const paymentId = String(row.payment?._id ?? "");
+    if (paymentId && seenPaymentIds.has(paymentId)) continue;
+    if (paymentId) seenPaymentIds.add(paymentId);
+
+    const override = paymentId ? allocationOverrides.get(paymentId) : undefined;
+    const allocation = override ? { ...row.allocation, ...override } : row.allocation;
+    summary.totalReceived += row.originalAmount;
+    summary.netReceived += row.netAmount;
+    summary.rentReceived += allocation.rent || 0;
+    summary.utilityReceived += allocation.utilities || 0;
+    summary.depositReceived += allocation.deposit || 0;
+    summary.otherReceived += allocation.other || 0;
+    summary.unappliedCredit += allocation.walletCredit || 0;
+    if (!row.payment.allocation && !row.payment.type) summary.legacyUnallocatedPayments += row.netAmount;
+  }
+
+  for (const key of Object.keys(summary) as Array<keyof FinancialReportSummary>) {
+    summary[key] = money(summary[key]);
+  }
+  return summary;
+}
+
+export function summarizeFinancialPaymentPeriods<T extends { key: string; start: Date; end: Date }>(
+  rows: FinancialPaymentRow[],
+  periods: T[],
+  allocationOverrides: ReadonlyMap<string, Partial<FinancialPaymentAllocation>> = new Map(),
+) {
+  return periods.map((period) => ({
+    ...period,
+    summary: summarizeFinancialPaymentRows(
+      rows.filter((row) => row.eventDate && row.eventDate >= period.start && row.eventDate <= period.end),
+      allocationOverrides,
+    ),
+  }));
+}
+
+/** Split a receipt across its ledger categories for detailed financial reports. */
+export function categorizeFinancialPaymentRows(
+  rows: FinancialPaymentRow[],
+  allocationOverrides: ReadonlyMap<string, Partial<FinancialPaymentAllocation>> = new Map(),
+): CategorizedFinancialPaymentRow[] {
+  const seenPaymentIds = new Set<string>();
+  const categorized: CategorizedFinancialPaymentRow[] = [];
+  const categories = [
+    ["Rent", "rent"],
+    ["Utility", "utilities"],
+    ["Deposit", "deposit"],
+    ["Other", "other"],
+    ["Wallet Credit", "walletCredit"],
+  ] as const;
+
+  for (const row of rows) {
+    const paymentId = String(row.payment?._id ?? "");
+    if (paymentId && seenPaymentIds.has(paymentId)) continue;
+    if (paymentId) seenPaymentIds.add(paymentId);
+    const override = paymentId ? allocationOverrides.get(paymentId) : undefined;
+    const allocation = override ? { ...row.allocation, ...override } : row.allocation;
+    for (const [type, field] of categories) {
+      const amount = money(allocation[field]);
+      if (amount > 0) categorized.push({ row, type, amount });
+    }
+  }
+  return categorized;
+}
+
 function reversalIdentityValues(paymentIds: any[]) {
   return paymentIds.flatMap((paymentId) => identityValues(paymentId));
 }
@@ -79,6 +175,8 @@ export async function getFinancialPaymentRows(params: {
   db: Db;
   propertyIds?: Array<string | ObjectId>;
   tenantIds?: Array<string | ObjectId>;
+  /** Include legacy tenant-linked payments that have no propertyId set. */
+  tenantIdsForLegacyPropertyless?: Array<string | ObjectId>;
   invoiceIds?: Array<string | ObjectId>;
   start?: Date;
   end?: Date;
@@ -87,7 +185,22 @@ export async function getFinancialPaymentRows(params: {
 
   if (params.propertyIds) {
     if (!params.propertyIds.length) return [];
-    and.push(identityFilter("propertyId", params.propertyIds));
+    const propertyMatch = identityFilter("propertyId", params.propertyIds);
+    if (params.tenantIdsForLegacyPropertyless?.length) {
+      and.push({
+        $or: [
+          propertyMatch,
+          {
+            $and: [
+              identityFilter("tenantId", params.tenantIdsForLegacyPropertyless),
+              { $or: [{ propertyId: { $exists: false } }, { propertyId: null }] },
+            ],
+          },
+        ],
+      });
+    } else {
+      and.push(propertyMatch);
+    }
   }
   if (params.tenantIds) {
     if (!params.tenantIds.length) return [];
@@ -127,34 +240,10 @@ export async function getFinancialReportSummary(params: {
   propertyIds?: Array<string | ObjectId>;
   start?: Date;
   end?: Date;
+  allocationOverrides?: ReadonlyMap<string, Partial<FinancialPaymentAllocation>>;
 }): Promise<FinancialReportSummary> {
   const rows = await getFinancialPaymentRows(params);
-  const summary: FinancialReportSummary = {
-    totalReceived: 0,
-    rentReceived: 0,
-    utilityReceived: 0,
-    depositReceived: 0,
-    otherReceived: 0,
-    unappliedCredit: 0,
-    netReceived: 0,
-    legacyUnallocatedPayments: 0,
-  };
-
-  for (const row of rows) {
-    summary.totalReceived += row.originalAmount;
-    summary.netReceived += row.netAmount;
-    summary.rentReceived += row.allocation.rent;
-    summary.utilityReceived += row.allocation.utilities;
-    summary.depositReceived += row.allocation.deposit;
-    summary.otherReceived += row.allocation.other;
-    summary.unappliedCredit += row.allocation.walletCredit;
-    if (!row.payment.allocation && !row.payment.type) summary.legacyUnallocatedPayments += row.netAmount;
-  }
-
-  for (const key of Object.keys(summary) as Array<keyof FinancialReportSummary>) {
-    summary[key] = money(summary[key]);
-  }
-  return summary;
+  return summarizeFinancialPaymentRows(rows, params.allocationOverrides);
 }
 
 export async function getInvoicePostedAmount(db: Db, invoiceId: string) {

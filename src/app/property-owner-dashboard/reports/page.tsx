@@ -893,6 +893,7 @@ function ReportsAndInvoicesPageInner() {
                   <option value="Utility">Utility</option>
                   <option value="Deposit">Deposit</option>
                   <option value="Other">Other</option>
+                  <option value="Wallet Credit">Wallet Credit</option>
                 </select>
               </div>
               <div>
