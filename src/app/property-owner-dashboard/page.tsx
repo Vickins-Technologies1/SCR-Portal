@@ -804,7 +804,7 @@ export default function PropertyOwnerDashboard() {
                                   align: "end",
                                   clamp: true,
                                   color: "#334155",
-                                  font: { size: 9, weight: "600" },
+                                  font: { size: 9, weight: 600 },
                                 },
                               },
                             }}
