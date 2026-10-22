@@ -101,7 +101,13 @@ export async function GET(request: NextRequest) {
           : null;
 
     // Fetch properties for the owner (optionally filtered by assignment / selection)
-    const propertyQuery: Record<string, unknown> = { ownerId: effectiveOwnerId };
+    const propertyQuery: Record<string, unknown> = {
+      ownerId: effectiveOwnerId,
+      $or: [
+        { status: { $in: ["Active", "active"] } },
+        { status: { $exists: false } },
+      ],
+    };
     if (allowedPropertyIds) {
       propertyQuery._id = { $in: allowedPropertyIds.map((id) => new ObjectId(id)) };
     }

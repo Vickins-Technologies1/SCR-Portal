@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import Cookies from "js-cookie";
 import { Bar, Pie } from "react-chartjs-2";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 import { motion } from "framer-motion";
 import {
   Chart as ChartJS,
@@ -40,7 +41,7 @@ import { usePermissions } from "@/hooks/usePermissions"; // ← import your perm
 import PaymentModal from "./components/PaymentModal";
 import { useAccountTier } from "@/hooks/useAccountTier";
 
-ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
+ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement, ChartDataLabels);
 
 interface ChartData {
   months: string[];
@@ -783,7 +784,28 @@ export default function PropertyOwnerDashboard() {
                               responsive: true,
                               maintainAspectRatio: false,
                               scales: {
-                                y: { beginAtZero: true },
+                                y: {
+                                  beginAtZero: true,
+                                  ticks: {
+                                    callback: (value) => `Ksh ${Number(value).toLocaleString("en-KE")}`,
+                                  },
+                                },
+                              },
+                              plugins: {
+                                tooltip: {
+                                  callbacks: {
+                                    label: (context) => `${context.dataset.label}: Ksh ${Number(context.raw).toLocaleString("en-KE")}`,
+                                  },
+                                },
+                                datalabels: {
+                                  display: (context) => Number(context.dataset.data[context.dataIndex]) > 0,
+                                  formatter: (value) => `Ksh ${Number(value).toLocaleString("en-KE")}`,
+                                  anchor: "end",
+                                  align: "end",
+                                  clamp: true,
+                                  color: "#334155",
+                                  font: { size: 9, weight: "600" },
+                                },
                               },
                             }}
                           />
