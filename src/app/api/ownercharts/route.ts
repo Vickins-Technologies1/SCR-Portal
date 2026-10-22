@@ -9,6 +9,8 @@ interface ChartData {
   rentPayments: number[];
   utilityPayments: number[];
   depositPayments: number[];
+  otherPayments: number[];
+  walletCreditPayments: number[];
 }
 
 export async function GET(request: NextRequest) {
@@ -126,25 +128,8 @@ export async function GET(request: NextRequest) {
           rentPayments: [],
           utilityPayments: [],
           depositPayments: [],
-        },
-      });
-    }
-
-    // Fetch all tenants for the owner's properties
-    const tenants = await db
-      .collection("tenants")
-      .find<WithId<{ _id: string }>>({ propertyId: { $in: propertyIds } }, { projection: { _id: 1 } })
-      .toArray();
-    const tenantIds = tenants.map((t) => t._id.toString());
-
-    if (tenantIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        chartData: {
-          months: [],
-          rentPayments: [],
-          utilityPayments: [],
-          depositPayments: [],
+          otherPayments: [],
+          walletCreditPayments: [],
         },
       });
     }
@@ -163,6 +148,8 @@ export async function GET(request: NextRequest) {
     const rentPayments: number[] = [];
     const utilityPayments: number[] = [];
     const depositPayments: number[] = [];
+    const otherPayments: number[] = [];
+    const walletCreditPayments: number[] = [];
 
     const monthSummaries = await Promise.all(
       Array.from({ length: 6 }, async (_, i) => {
@@ -181,6 +168,8 @@ export async function GET(request: NextRequest) {
           rent: summary.rentReceived,
           utility: summary.utilityReceived,
           deposit: summary.depositReceived,
+          other: summary.otherReceived,
+          walletCredit: summary.unappliedCredit,
         };
       })
     );
@@ -190,6 +179,8 @@ export async function GET(request: NextRequest) {
       rentPayments.push(summary.rent);
       utilityPayments.push(summary.utility);
       depositPayments.push(summary.deposit);
+      otherPayments.push(summary.other);
+      walletCreditPayments.push(summary.walletCredit);
     }
 
     const chartData: ChartData = {
@@ -197,6 +188,8 @@ export async function GET(request: NextRequest) {
       rentPayments,
       utilityPayments,
       depositPayments,
+      otherPayments,
+      walletCreditPayments,
     };
 
     return NextResponse.json({ success: true, chartData });

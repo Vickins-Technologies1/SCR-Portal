@@ -48,6 +48,8 @@ interface ChartData {
   rentPayments: number[];
   utilityPayments: number[];
   depositPayments: number[];
+  otherPayments: number[];
+  walletCreditPayments: number[];
 }
 
 export default function PropertyOwnerDashboard() {
@@ -295,6 +297,18 @@ export default function PropertyOwnerDashboard() {
         label: "Deposit",
         data: chartData?.depositPayments || [],
         backgroundColor: "rgba(245,158,11,0.7)",
+        borderRadius: 6,
+      },
+      {
+        label: "Other",
+        data: chartData?.otherPayments || [],
+        backgroundColor: "rgba(147,51,234,0.7)",
+        borderRadius: 6,
+      },
+      {
+        label: "Wallet Credit",
+        data: chartData?.walletCreditPayments || [],
+        backgroundColor: "rgba(100,116,139,0.7)",
         borderRadius: 6,
       },
     ],
