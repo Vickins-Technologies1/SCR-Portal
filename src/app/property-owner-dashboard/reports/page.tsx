@@ -186,16 +186,45 @@ function ReportsAndInvoicesPageInner() {
 
   // Generate all months between two dates
   const getAllMonths = (start: string, end: string): string[] => {
-    const startDate = isValidDate(start)
-      ? new Date(start)
-      : new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1);
-    const endDate = isValidDate(end) ? new Date(end) : new Date();
+    const now = new Date();
+    const reportMonthValues = reports.flatMap((report) => {
+      const date = new Date(report.date);
+      if (Number.isNaN(date.getTime())) return [];
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Africa/Nairobi",
+        year: "numeric",
+        month: "numeric",
+      }).formatToParts(date);
+      const year = Number(parts.find((part) => part.type === "year")?.value);
+      const month = Number(parts.find((part) => part.type === "month")?.value);
+      return year && month ? [year * 12 + month - 1] : [];
+    });
+    const firstReportMonth = reportMonthValues.length ? Math.min(...reportMonthValues) : null;
+    const lastReportMonth = reportMonthValues.length ? Math.max(...reportMonthValues) : null;
+    const [startYear, startMonth] = isValidDate(start)
+      ? start.split("-").map(Number)
+      : firstReportMonth !== null
+        ? [Math.floor(firstReportMonth / 12), (firstReportMonth % 12) + 1]
+        : [now.getFullYear() - 1, now.getMonth() + 1];
+    const [endYear, endMonth] = isValidDate(end)
+      ? end.split("-").map(Number)
+      : lastReportMonth !== null
+        ? [Math.floor(lastReportMonth / 12), (lastReportMonth % 12) + 1]
+        : [now.getFullYear(), now.getMonth() + 1];
     const months: string[] = [];
-    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-
-    while (current <= endDate) {
-      months.push(current.toLocaleString("default", { year: "numeric", month: "short" }));
-      current.setMonth(current.getMonth() + 1);
+    let year = startYear;
+    let month = startMonth;
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      months.push(new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        timeZone: "UTC",
+      }));
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
     }
     return months;
   };
@@ -640,7 +669,11 @@ function ReportsAndInvoicesPageInner() {
       .filter((r) => {
         if (selectedPropertyId !== "all" && r.propertyId !== selectedPropertyId) return false;
         if (paymentType !== "all" && r.type !== paymentType) return false;
-        const rMonth = new Date(r.date).toLocaleString("default", { year: "numeric", month: "short" });
+        const rMonth = new Date(r.date).toLocaleString("en-US", {
+          year: "numeric",
+          month: "short",
+          timeZone: "Africa/Nairobi",
+        });
         return rMonth === month;
       })
       .reduce((sum, r) => sum + r.revenue, 0);

@@ -194,8 +194,15 @@ export async function GET(request: NextRequest) {
 
     const today = new Date();
     const todayISO = today.toISOString();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    const nairobiParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Africa/Nairobi",
+      year: "numeric",
+      month: "numeric",
+    }).formatToParts(today);
+    const currentYear = Number(nairobiParts.find((part) => part.type === "year")?.value);
+    const currentMonth = Number(nairobiParts.find((part) => part.type === "month")?.value) - 1;
+    const startOfMonth = new Date(Date.UTC(currentYear, currentMonth, 1) - 3 * 60 * 60 * 1000);
+    const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1) - 3 * 60 * 60 * 1000 - 1);
 
     const tenantCollection = db.collection<TenantDoc>("tenants");
     // These reads are independent after the property list is known. Keep the

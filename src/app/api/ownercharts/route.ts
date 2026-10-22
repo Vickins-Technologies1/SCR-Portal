@@ -143,8 +143,16 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Define the last six months range
+    // Match report dates and the per-property chart: payment months are
+    // calendar months in the application's Nairobi business timezone.
     const today = new Date();
+    const nairobiParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Africa/Nairobi",
+      year: "numeric",
+      month: "numeric",
+    }).formatToParts(today);
+    const currentYear = Number(nairobiParts.find((part) => part.type === "year")?.value);
+    const currentMonth = Number(nairobiParts.find((part) => part.type === "month")?.value) - 1;
     const months: string[] = [];
     const rentPayments: number[] = [];
     const utilityPayments: number[] = [];
@@ -152,10 +160,14 @@ export async function GET(request: NextRequest) {
 
     const monthSummaries = await Promise.all(
       Array.from({ length: 6 }, async (_, i) => {
-        const monthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const monthLabel = monthDate.toLocaleString("en-US", { month: "short", year: "2-digit" });
-        const startOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-        const endOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        const monthDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));
+        const monthLabel = monthDate.toLocaleString("en-US", {
+          month: "short",
+          year: "2-digit",
+          timeZone: "Africa/Nairobi",
+        });
+        const startOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1) - 3 * 60 * 60 * 1000);
+        const endOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1) - 3 * 60 * 60 * 1000 - 1);
         const summary = await getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth });
 
         return {
