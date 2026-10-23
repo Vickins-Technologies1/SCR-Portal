@@ -71,6 +71,7 @@ interface UpcomingReminder {
   rentDue: number;
   utilityDue: number;
   depositDue: number;
+  penaltiesDue: number;
   totalDue: number;
   dueDate: string;
   reminderType: "fiveDaysBefore" | "paymentDate";
@@ -653,7 +654,8 @@ export default function NotificationsPage() {
                 <div><p className="font-medium text-gray-600">Rent Due</p><p>Ksh. {selectedReminder.rentDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Utilities Due</p><p>Ksh. {selectedReminder.utilityDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Deposit Due</p><p>Ksh. {selectedReminder.depositDue.toFixed(2)}</p></div>
-                <div><p className="font-medium text-gray-600">Total Due</p><p className="font-bold text-primary">Ksh. {selectedReminder.totalDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Penalties</p><p>Ksh. {selectedReminder.penaltiesDue.toFixed(2)}</p></div>
+                <div><p className="font-medium text-gray-600">Total Amount Due</p><p className="font-bold text-primary">Ksh. {selectedReminder.totalDue.toFixed(2)}</p></div>
                 <div><p className="font-medium text-gray-600">Due Date</p><p>{selectedReminder.dueDate}</p></div>
               </div>
             )}

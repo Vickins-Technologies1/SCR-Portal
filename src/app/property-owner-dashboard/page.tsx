@@ -646,7 +646,7 @@ export default function PropertyOwnerDashboard() {
                           icon: AlertCircle,
                           color: "red",
                           subtitle: `${stats.overduePayments} tenants overdue`,
-                          explanation: "Total unpaid rent + deposits that are currently past due across all tenants.",
+          explanation: "Past-due rent and utilities across active tenants. Security deposits and penalties are excluded.",
                         },
                         {
                           title: "Late Payment Penalties",

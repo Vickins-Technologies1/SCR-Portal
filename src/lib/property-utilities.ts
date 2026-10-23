@@ -1,5 +1,6 @@
 import { Db, ObjectId } from "mongodb";
 import { PropertyUtility } from "@/types/property";
+import { businessDateIsBefore, businessDueDate, businessMonthStart, businessDateParts } from "@/lib/business-time";
 
 export interface UtilityCharge {
   _id?: ObjectId;
@@ -30,7 +31,10 @@ export interface SanitizedUtilityInput {
   active?: boolean;
 }
 
-const monthStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+const monthStart = (date: Date) => {
+  const { year, month } = businessDateParts(date);
+  return businessMonthStart(year, month - 1);
+};
 
 const parseDate = (value?: string | Date | null): Date | null => {
   if (!value) return null;
@@ -39,8 +43,8 @@ const parseDate = (value?: string | Date | null): Date | null => {
 };
 
 export const toBillingPeriod = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const { year, month: monthNumber } = businessDateParts(date);
+  const month = String(monthNumber).padStart(2, "0");
   return `${year}-${month}`;
 };
 
@@ -49,8 +53,7 @@ export const getUtilityDueDate = (billingPeriod: string, paymentDay = 1): Date |
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]) - 1;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  return new Date(year, month, Math.min(Math.max(1, Math.trunc(paymentDay || 1)), daysInMonth));
+  return businessDueDate(year, month, paymentDay);
 };
 
 export const defaultUtilityStartDate = (date: Date = new Date()): string =>
@@ -75,7 +78,9 @@ export const countUtilityBillableMonths = ({
   const end = monthStart(today);
   if (end < start) return 0;
 
-  return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+  const startParts = businessDateParts(start);
+  const endParts = businessDateParts(end);
+  return (endParts.year - startParts.year) * 12 + (endParts.month - startParts.month) + 1;
 };
 
 export const getTenantUtilityUnitCount = (tenant: {
@@ -215,7 +220,7 @@ const addUtilityAmount = (breakdown: UtilityDueBreakdown, amount: number, dueDat
   const safeAmount = Math.max(0, Math.round(amount || 0));
   if (!safeAmount) return;
   breakdown.charged += safeAmount;
-  if (dueDate && dueDate.getTime() < new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) {
+  if (dueDate && businessDateIsBefore(dueDate, today)) {
     breakdown.overdueCharged += safeAmount;
   } else {
     breakdown.currentCharged += safeAmount;
@@ -251,13 +256,15 @@ export const calculateFixedUtilityBreakdown = ({
     const configuredStart = parseDate(utility.startsAt);
     const start = monthStart(configuredStart && configuredStart > leaseStart ? configuredStart : leaseStart);
     const end = monthStart(today);
-    for (let cursor = new Date(start); cursor <= end; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)) {
+    for (let cursor = new Date(start); cursor <= end; ) {
       addUtilityAmount(
         breakdown,
         Math.max(0, Number(utility.amount) || 0) * unitCount,
         getUtilityDueDate(toBillingPeriod(cursor), paymentDay),
         today
       );
+      const period = businessDateParts(cursor);
+      cursor = businessMonthStart(period.year, period.month);
     }
   }
   return breakdown;

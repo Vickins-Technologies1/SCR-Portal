@@ -274,7 +274,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           depositDues: state.depositOutstanding,
           utilityDues: state.utilitiesOutstanding,
           totalRemainingDues: state.totalOutstanding,
-          paymentStatus: state.totalOutstanding > 0 ? "overdue" : "up-to-date",
+          paymentStatus: state.overdueAmount > 0 ? "overdue" : "up-to-date",
           monthsStayed: state.monthsStayed,
           walletApplied: 0,
           walletRemaining: state.walletBalance,
@@ -287,9 +287,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
         finalMessage =
           `Payment Notice for ${tenant.name}:\n` +
-          `Outstanding balance as of ${today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.\n` +
-          `Rent: Ksh ${dues.rentDues.toFixed(2)}, Deposit: Ksh ${dues.depositDues.toFixed(2)}, Utility: Ksh ${dues.utilityDues.toFixed(2)}.\n` +
-          `Total Due: Ksh ${dues.totalRemainingDues.toFixed(2)}.\n` +
+          `Outstanding balance as of ${today.toLocaleDateString("en-US", { timeZone: "Africa/Nairobi", month: "long", day: "numeric", year: "numeric" })}.\n` +
+          `Rent outstanding: Ksh ${state.rentOutstanding.toFixed(2)}. Utilities outstanding: Ksh ${state.utilitiesOutstanding.toFixed(2)}.\n` +
+          `Security deposit outstanding: Ksh ${state.depositOutstanding.toFixed(2)}. Penalties: Ksh ${state.penalties.toFixed(2)}.\n` +
+          `Total amount due: Ksh ${state.totalOutstanding.toFixed(2)}.\n` +
           `Please settle by your scheduled payment date via the tenant portal. If you have already paid, kindly disregard this notice.`;
       } else {
         const templates: Record<string, string> = {
@@ -301,6 +302,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       const effectiveMethod = deliveryMethod;
+
+      if (type === "payment") {
+        const latestState = await calculateTenantFinancialState(db, tenant, {
+          asOf: new Date(),
+          property: propertyMap.get(tenant.propertyId),
+          rentOverrideMap,
+        });
+        if (latestState.overdueAmount <= 0) continue;
+        finalMessage =
+          `Payment Reminder for ${tenant.name}:\n` +
+          `Rent outstanding: Ksh ${latestState.rentOutstanding.toFixed(2)}. Utilities outstanding: Ksh ${latestState.utilitiesOutstanding.toFixed(2)}.\n` +
+          `Security deposit outstanding: Ksh ${latestState.depositOutstanding.toFixed(2)}. Penalties: Ksh ${latestState.penalties.toFixed(2)}.\n` +
+          `Total amount due: Ksh ${latestState.totalOutstanding.toFixed(2)}.`;
+      }
 
       // === SEND SMS (BlessedTexts) ===
       if (["sms", "both"].includes(effectiveMethod) && tenant.phone) {

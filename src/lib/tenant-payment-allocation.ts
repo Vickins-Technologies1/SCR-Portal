@@ -4,6 +4,7 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { getFinancialPaymentRows } from "@/lib/financial-reporting";
 import { identityValues, isSuccessfulPaymentStatus, paymentEventDate } from "@/lib/payment-query";
+import { businessDateParts } from "@/lib/business-time";
 
 export type PaymentAllocation = {
   deposit: number;
@@ -26,6 +27,7 @@ export type LedgerPayment = {
   paymentDate?: string;
   createdAt?: string;
   allocation?: Partial<PaymentAllocation>;
+  allocationPolicyVersion?: string;
 };
 
 export type TenantFinancialState = {
@@ -95,6 +97,11 @@ export function sumTenantOverdueAmount(
   return money(total);
 }
 
+/** Payment status means past-due rent/utilities, not any outstanding balance. */
+export function tenantOverdueStatus(state: Pick<TenantFinancialState, "overdueAmount">): "overdue" | "up-to-date" {
+  return state.overdueAmount > 0 ? "overdue" : "up-to-date";
+}
+
 const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
 const amountOf = (value: unknown) => (Number.isFinite(Number(value)) ? money(Number(value)) : 0);
 
@@ -122,25 +129,11 @@ type AllocationField = "deposit" | "rent" | "utilities" | "other";
 const defaultAllocationPriority: AllocationField[] = ["deposit", "rent", "utilities", "other"];
 
 /**
- * A payment's declared category is its first allocation target. Any amount
- * left after that target is satisfied must cascade through the tenant's other
- * outstanding obligations before it can become wallet credit. This prevents
- * an overpaid Utility/Deposit/Rent payment from being shown in the wallet
- * while rent, deposit, or utilities are still due.
+ * New receipts always clear obligations in deposit-first order. A declared
+ * category does not override the deposit-first policy.
  */
-function allocationPriority(category: PaymentCategory | undefined): AllocationField[] {
-  const categoryField: AllocationField | undefined = category === "Deposit"
-    ? "deposit"
-    : category === "Rent"
-      ? "rent"
-      : category === "Utility"
-        ? "utilities"
-        : category === "Other"
-          ? "other"
-          : undefined;
-
-  if (!categoryField) return [...defaultAllocationPriority];
-  return [categoryField, ...defaultAllocationPriority.filter((field) => field !== categoryField)];
+function allocationPriority(): AllocationField[] {
+  return [...defaultAllocationPriority];
 }
 
 export function allocatePaymentLedger(params: {
@@ -190,9 +183,63 @@ export function allocatePaymentLedger(params: {
       other: 0,
     };
 
+    // A persisted allocation is the historical receipt classification. Keep
+    // it fixed when current obligations/configuration change. Legacy payments
+    // without a snapshot use the declared category fallback supplied by the
+    // financial projection; only new unsnapshotted payments are allocated
+    // against current dues below.
+    if (payment.allocation) {
+      let remainingReceipt = paymentAmount;
+      for (const field of defaultAllocationPriority) {
+        const fixed = amountOf(payment.allocation[field]);
+        const accepted = money(Math.min(fixed, remainingReceipt));
+        allocationByField[field] = accepted;
+        remainingReceipt = money(remainingReceipt - accepted);
+      }
+      const fixedWalletCredit = amountOf(payment.allocation.walletCredit);
+      const walletCredit = money(Math.min(fixedWalletCredit || remainingReceipt, remainingReceipt));
+      remainingReceipt = money(remainingReceipt - walletCredit);
+      const fixedAllocation = { ...allocationByField };
+
+      // Wallet applications are balance uses, not part of the historical
+      // receipt classification. Reapply available wallet funds to current
+      // obligations while leaving the original receipt categories untouched.
+      const applyWallet = (available: number) => {
+        let remaining = money(available);
+        for (const field of defaultAllocationPriority) {
+          if (remaining <= 0) break;
+          const outstanding = money(Math.max(0, dueByField[field] - paidByField[field] - allocationByField[field]));
+          const applied = money(Math.min(outstanding, remaining));
+          allocationByField[field] += applied;
+          remaining = money(remaining - applied);
+        }
+        return { allocated: money(available - remaining), remaining };
+      };
+      const walletResult = previousWallet > 0 ? applyWallet(previousWallet) : { allocated: 0, remaining: 0 };
+      walletApplied = walletResult.allocated;
+      deposit = allocationByField.deposit;
+      rent = allocationByField.rent;
+      utilities = allocationByField.utilities;
+      other = allocationByField.other;
+      wallet = money(walletResult.remaining + walletCredit + remainingReceipt);
+      depositPaid += deposit;
+      rentPaid += rent;
+      utilitiesPaid += utilities;
+      otherPaid += other;
+      allocations.set(payment._id.toString(), {
+        deposit: money(fixedAllocation.deposit),
+        rent: money(fixedAllocation.rent),
+        utilities: money(fixedAllocation.utilities),
+        other: money(fixedAllocation.other),
+        walletCredit: money(walletCredit + remainingReceipt),
+        walletApplied: money(walletApplied),
+      });
+      continue;
+    }
+
     const applyFunds = (available: number) => {
       let remaining = money(available);
-      for (const field of allocationPriority(payment.type)) {
+      for (const field of allocationPriority()) {
         if (remaining <= 0) break;
         const outstanding = money(Math.max(0, dueByField[field] - paidByField[field] - allocationByField[field]));
         const applied = money(Math.min(outstanding, remaining));
@@ -253,6 +300,7 @@ export function deriveTenantFinancialState(params: {
   monthsStayed: number;
   utilityBreakdown: UtilityDueBreakdown;
   depositDue: number;
+  overdueRentCharged?: number;
   payments: LedgerPayment[];
   reversedByPayment?: ReadonlyMap<string, number>;
   property?: any;
@@ -279,8 +327,10 @@ export function deriveTenantFinancialState(params: {
     payments: eligiblePayments,
   });
   const utilityOverdueCharged = money(params.utilityBreakdown.overdueCharged);
+  const overdueRentCharged = money(params.overdueRentCharged ?? params.rentDue);
+  const overdueRent = money(Math.max(0, overdueRentCharged - ledger.rentPaid));
   const penalties = money(calculateOverduePenalty({
-    rentDues: money(Math.max(0, params.rentDue - ledger.rentPaid)),
+    rentDues: overdueRent,
     today: params.asOf,
     rentPaymentDate: params.property?.rentPaymentDate,
     leaseStartDate: params.tenant.leaseStartDate,
@@ -292,7 +342,6 @@ export function deriveTenantFinancialState(params: {
   const utilitiesOutstanding = money(Math.max(0, params.utilityBreakdown.charged - ledger.utilitiesPaid));
   const utilitiesOverdueOutstanding = money(Math.min(utilitiesOutstanding, Math.max(0, utilityOverdueCharged - ledger.utilitiesPaid)));
   const utilitiesCurrentOutstanding = money(Math.max(0, utilitiesOutstanding - utilitiesOverdueOutstanding));
-  const overdueRent = rentOutstanding;
   const overdueUtilities = utilitiesOverdueOutstanding;
   return {
     monthsStayed: params.monthsStayed,
@@ -339,7 +388,9 @@ export async function calculateTenantFinancialState(
       )
     : null);
   const overrides = options.rentOverrideMap ?? await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)]);
-  const { rentDue, monthsStayed } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides });
+  const leaseStart = tenant.leaseStartDate ? new Date(tenant.leaseStartDate) : null;
+  const paymentDay = property?.rentPaymentDate ?? (leaseStart && !Number.isNaN(leaseStart.getTime()) ? businessDateParts(leaseStart).day : 1);
+  const { rentDue, overdueRentDue, monthsStayed } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides, paymentDay });
   const fixedUtilities = calculateFixedUtilityBreakdown({
     utilities: property?.utilities,
     tenant,
@@ -368,6 +419,7 @@ export async function calculateTenantFinancialState(
     ...row.payment,
     amount: row.netAmount,
     postedAmount: row.netAmount,
+    allocation: row.payment.allocation || (row.payment.allocationPolicyVersion === "deposit-first-v1" ? undefined : row.allocation),
   })) as LedgerPayment[];
   return deriveTenantFinancialState({
     tenant,
@@ -376,6 +428,7 @@ export async function calculateTenantFinancialState(
     monthsStayed,
     utilityBreakdown,
     depositDue,
+    overdueRentCharged: overdueRentDue,
     payments,
     property,
   });
@@ -468,7 +521,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
       totalDepositPaid: money(depositPaid),
       totalOtherPaid: money(otherPaid),
       walletBalance: money(wallet),
-      paymentStatus: totalOutstanding > 0 ? "overdue" : "up-to-date",
+      paymentStatus: tenantOverdueStatus(state),
       updatedAt: today.toISOString(),
     } }
   );
@@ -490,6 +543,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string)
     utilitiesOverdueOutstanding: state.utilitiesOverdueOutstanding,
     utilityStatus: state.utilityStatus,
     penalties: state.penalties,
+    overdueAmount: state.overdueAmount,
     depositOutstanding,
     otherOutstanding,
     totalOutstanding,

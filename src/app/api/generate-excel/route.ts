@@ -7,8 +7,8 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import { categorizeFinancialPaymentRows, getFinancialPaymentRows } from "@/lib/financial-reporting";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { identityValues } from "@/lib/payment-query";
+import { businessDateTime, businessMonthKey } from "@/lib/business-time";
 
 interface Report {
   _id: string;
@@ -50,7 +50,7 @@ function groupByMonth(
   const map = new Map<string, Report[]>();
 
   reports.forEach((r) => {
-    const monthKey = r.date.slice(0, 7);
+    const monthKey = businessMonthKey(new Date(r.date));
     if (!map.has(monthKey)) map.set(monthKey, []);
     map.get(monthKey)!.push(r);
   });
@@ -105,7 +105,9 @@ export async function POST(
 
     const parseBusinessDate = (value: string, endOfDay = false) => {
       if (!value) return undefined;
-      return new Date(`${value.slice(0, 10)}${endOfDay ? "T23:59:59.999+03:00" : "T00:00:00.000+03:00"}`);
+      const date = value.slice(0, 10);
+      const parts = { year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)), day: Number(date.slice(8, 10)) };
+      return endOfDay ? businessDateTime(parts, 23, 59, 59, 999) : businessDateTime(parts);
     };
     const tenants = await db.collection("tenants")
       .find({ propertyId: { $in: identityValues(selectedPropertyId === "all" ? propertyIds : [selectedPropertyId]) } })
@@ -113,14 +115,6 @@ export async function POST(
     const selectedProperties = properties.filter((property) =>
       selectedPropertyId === "all" || String(property._id) === selectedPropertyId
     );
-    const propertyForTenantMap = new Map(selectedProperties.map((property: any) => [String(property._id), property]));
-    const tenantStates = await Promise.all(tenants.map((tenant: any) =>
-      calculateTenantFinancialState(db, tenant, { property: propertyForTenantMap.get(String(tenant.propertyId)), asOf: new Date() })
-    ));
-    const allocationOverrides = new Map<string, any>();
-    for (const state of tenantStates) {
-      for (const [paymentId, allocation] of state.paymentAllocations) allocationOverrides.set(paymentId, allocation);
-    }
     const rows = await getFinancialPaymentRows({
       db,
       propertyIds: selectedPropertyId === "all" ? propertyIds : [selectedPropertyId],
@@ -130,7 +124,7 @@ export async function POST(
     });
     const tenantMap = new Map(tenants.map((tenant) => [String(tenant._id), tenant]));
     const propertyMap = new Map(properties.map((property) => [String(property._id), property]));
-    const reports: Report[] = categorizeFinancialPaymentRows(rows, allocationOverrides)
+    const reports: Report[] = categorizeFinancialPaymentRows(rows)
       .filter(({ type }) => !paymentType || paymentType === "all" || type === paymentType)
       .map(({ row, type, amount }) => {
         const { payment, eventDate } = row;

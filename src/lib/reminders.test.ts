@@ -35,14 +35,14 @@ describe("buildReminderMessages (SMS)", () => {
       123456.78
     );
 
-    expect(smsMessage).toContain("Rent reminder:");
+    expect(smsMessage).toContain("Payment reminder:");
     expect(smsMessage).toContain("03 May");
     expect(smsMessage).toContain("(B-1002)");
     expect(smsMessage).toContain("A Very Very Very Very Very Very Very Long Property Name That Will Not Fit In A Single SMS");
     expect(smsMessage).toContain("Pay portal. If paid, ignore.");
   });
 
-  it("keeps the displayed total consistent with a rent penalty included in rent due", () => {
+  it("itemizes penalties separately and reconciles the displayed total", () => {
     const { whatsappMessage, smsMessage } = buildReminderMessages(
       "paymentDate",
       "Jane Doe",
@@ -50,16 +50,20 @@ describe("buildReminderMessages (SMS)", () => {
       "A12",
       "May 3, 2026",
       "03 May",
-      10_500,
+      10_000,
       1_500,
       0,
-      12_000,
+      11_500,
+      500,
     );
 
-    expect(whatsappMessage).toContain("Rent: Ksh 10500.00");
+    expect(whatsappMessage).toContain("Rent: Ksh 10000.00");
     expect(whatsappMessage).toContain("Utilities: Ksh 1500.00");
-    expect(whatsappMessage).toContain("Total: Ksh 12000.00");
-    expect(smsMessage).toContain("Ksh 12000");
+    expect(whatsappMessage).toContain("Penalties: Ksh 500.00");
+    expect(whatsappMessage).toContain("Total amount due: Ksh 12000.00");
+    expect(smsMessage).toContain("Payment reminder:");
+    expect(smsMessage).toContain("Penalties Ksh 500.00");
+    expect(smsMessage).toContain("Ksh 12000.00");
   });
 });
 

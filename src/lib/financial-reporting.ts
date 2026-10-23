@@ -53,7 +53,6 @@ export type CategorizedFinancialPaymentRow = {
  */
 export function summarizeFinancialPaymentRows(
   rows: FinancialPaymentRow[],
-  allocationOverrides: ReadonlyMap<string, Partial<FinancialPaymentAllocation>> = new Map(),
 ): FinancialReportSummary {
   const summary: FinancialReportSummary = {
     totalReceived: 0,
@@ -72,8 +71,7 @@ export function summarizeFinancialPaymentRows(
     if (paymentId && seenPaymentIds.has(paymentId)) continue;
     if (paymentId) seenPaymentIds.add(paymentId);
 
-    const override = paymentId ? allocationOverrides.get(paymentId) : undefined;
-    const allocation = override ? { ...row.allocation, ...override } : row.allocation;
+    const allocation = row.allocation;
     summary.totalReceived += row.originalAmount;
     summary.netReceived += row.netAmount;
     summary.rentReceived += allocation.rent || 0;
@@ -93,13 +91,11 @@ export function summarizeFinancialPaymentRows(
 export function summarizeFinancialPaymentPeriods<T extends { key: string; start: Date; end: Date }>(
   rows: FinancialPaymentRow[],
   periods: T[],
-  allocationOverrides: ReadonlyMap<string, Partial<FinancialPaymentAllocation>> = new Map(),
 ) {
   return periods.map((period) => ({
     ...period,
     summary: summarizeFinancialPaymentRows(
       rows.filter((row) => row.eventDate && row.eventDate >= period.start && row.eventDate <= period.end),
-      allocationOverrides,
     ),
   }));
 }
@@ -107,7 +103,6 @@ export function summarizeFinancialPaymentPeriods<T extends { key: string; start:
 /** Split a receipt across its ledger categories for detailed financial reports. */
 export function categorizeFinancialPaymentRows(
   rows: FinancialPaymentRow[],
-  allocationOverrides: ReadonlyMap<string, Partial<FinancialPaymentAllocation>> = new Map(),
 ): CategorizedFinancialPaymentRow[] {
   const seenPaymentIds = new Set<string>();
   const categorized: CategorizedFinancialPaymentRow[] = [];
@@ -123,8 +118,7 @@ export function categorizeFinancialPaymentRows(
     const paymentId = String(row.payment?._id ?? "");
     if (paymentId && seenPaymentIds.has(paymentId)) continue;
     if (paymentId) seenPaymentIds.add(paymentId);
-    const override = paymentId ? allocationOverrides.get(paymentId) : undefined;
-    const allocation = override ? { ...row.allocation, ...override } : row.allocation;
+    const allocation = row.allocation;
     for (const [type, field] of categories) {
       const amount = money(allocation[field]);
       if (amount > 0) categorized.push({ row, type, amount });
@@ -147,13 +141,15 @@ export function projectFinancialPaymentRows(payments: any[], reversalRows: Array
     const storedAllocation = payment.allocation
       ? prorateAllocation(payment.allocation, originalAmount, netAmount)
       : null;
-    const allocation = storedAllocation || {
-      rent: payment.type === "Rent" ? netAmount : 0,
-      utilities: payment.type === "Utility" ? netAmount : 0,
-      deposit: payment.type === "Deposit" ? netAmount : 0,
-      other: payment.type === "Other" ? netAmount : 0,
-      walletCredit: payment.type ? 0 : netAmount,
-    };
+    const allocation = storedAllocation || (payment.allocationPolicyVersion
+      ? { rent: 0, utilities: 0, deposit: 0, other: 0, walletCredit: netAmount }
+      : {
+          rent: payment.type === "Rent" ? netAmount : 0,
+          utilities: payment.type === "Utility" ? netAmount : 0,
+          deposit: payment.type === "Deposit" ? netAmount : 0,
+          other: payment.type === "Other" ? netAmount : 0,
+          walletCredit: !payment.type || payment.type === "General" ? netAmount : 0,
+        });
 
     return {
       payment,
@@ -240,10 +236,9 @@ export async function getFinancialReportSummary(params: {
   propertyIds?: Array<string | ObjectId>;
   start?: Date;
   end?: Date;
-  allocationOverrides?: ReadonlyMap<string, Partial<FinancialPaymentAllocation>>;
 }): Promise<FinancialReportSummary> {
   const rows = await getFinancialPaymentRows(params);
-  return summarizeFinancialPaymentRows(rows, params.allocationOverrides);
+  return summarizeFinancialPaymentRows(rows);
 }
 
 export async function getInvoicePostedAmount(db: Db, invoiceId: string) {

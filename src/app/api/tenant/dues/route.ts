@@ -5,7 +5,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, reconcileTenantPaymentAllocation, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
 import { getFinancialReportSummary } from "@/lib/financial-reporting";
 import { identityValues } from "@/lib/payment-query";
 
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
           filter: { _id: tenantObjectId },
           update: {
             $set: {
-              paymentStatus: totalOverdue > 0 ? "overdue" : "up-to-date",
+              paymentStatus: tenantOverdueStatus(state),
               updatedAt: today.toISOString(),
             },
           },
@@ -297,9 +297,10 @@ export async function POST(request: NextRequest) {
       utilityCurrentDues: state.utilitiesCurrentOutstanding,
       utilityOverdueDues: state.utilitiesOverdueOutstanding,
       utilityStatus: state.utilityStatus,
+      overdueAmount: state.overdueAmount,
       otherDues: state.otherOutstanding,
       totalRemainingDues: state.totalOutstanding,
-      paymentStatus: state.totalOutstanding > 0 ? "overdue" : "up-to-date",
+      paymentStatus: tenantOverdueStatus(state),
       monthsStayed: state.monthsStayed,
       totalPaid: state.rentPaid + state.utilityPaid + state.depositPaid + state.otherPaid + state.walletBalance,
       walletApplied: state.walletApplied,
@@ -315,7 +316,7 @@ export async function POST(request: NextRequest) {
           totalRentPaid: state.rentPaid,
           totalDepositPaid: state.depositPaid,
           totalUtilityPaid: state.utilityPaid,
-          paymentStatus: dues.totalRemainingDues > 0 ? "overdue" : "up-to-date",
+          paymentStatus: dues.paymentStatus,
           updatedAt: today.toISOString(),
         },
       }

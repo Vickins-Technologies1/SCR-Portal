@@ -4,9 +4,10 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
+import { businessMonthStart } from "@/lib/business-time";
 
 interface Property {
   _id: string;
@@ -201,8 +202,8 @@ export async function GET(request: NextRequest) {
     }).formatToParts(today);
     const currentYear = Number(nairobiParts.find((part) => part.type === "year")?.value);
     const currentMonth = Number(nairobiParts.find((part) => part.type === "month")?.value) - 1;
-    const startOfMonth = new Date(Date.UTC(currentYear, currentMonth, 1) - 3 * 60 * 60 * 1000);
-    const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1) - 3 * 60 * 60 * 1000 - 1);
+    const startOfMonth = businessMonthStart(currentYear, currentMonth);
+    const endOfMonth = new Date(businessMonthStart(currentYear, currentMonth + 1).getTime() - 1);
 
     const tenantCollection = db.collection<TenantDoc>("tenants");
     // These reads are independent after the property list is known. Keep the
@@ -260,19 +261,14 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Recalculate payment allocations from the tenant ledger before summing
-    // categories so this endpoint agrees with payment trends and tenant
-    // balances, even if a legacy saved allocation snapshot is stale.
+    // Historical receipt categories use posted snapshots; current tenant
+    // states are independently recalculated for outstanding balances.
     const allTenantStates = await Promise.all(tenantsForFinancials.map(async (tenant: any) => ({
       tenant,
       state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(String(tenant.propertyId)), asOf: today }),
     })));
-    const allocationOverrides = new Map<string, any>();
-    for (const { state } of allTenantStates) {
-      for (const [paymentId, allocation] of state.paymentAllocations) allocationOverrides.set(paymentId, allocation);
-    }
-    const monthlySummary = summarizeFinancialPaymentRows(monthlyRows, allocationOverrides);
-    const lifetimeSummary = summarizeFinancialPaymentRows(lifetimeRows, allocationOverrides);
+    const monthlySummary = summarizeFinancialPaymentRows(monthlyRows);
+    const lifetimeSummary = summarizeFinancialPaymentRows(lifetimeRows);
     const rentCollectedThisMonth = roundMoney(monthlySummary.rentReceived);
 
     const totalMonthlyRent = rentCollectedThisMonth;
@@ -309,7 +305,7 @@ export async function GET(request: NextRequest) {
               // financial state. The overdue metric intentionally excludes
               // deposits/penalties, but a tenant with any outstanding
               // obligation is not up to date.
-              paymentStatus: state.totalOutstanding > 0 ? "overdue" : "up-to-date",
+              paymentStatus: tenantOverdueStatus(state),
               updatedAt: todayISO,
             },
           },

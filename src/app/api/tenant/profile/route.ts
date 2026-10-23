@@ -216,7 +216,7 @@ export async function GET(request: NextRequest) {
       const totalRemainingDues = state.totalOutstanding;
       const totalPaid = rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance;
 
-      const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
+      const paymentStatus = state.overdueAmount > 0 ? "overdue" : "up-to-date";
 
       await db.collection("tenants").updateOne(
         { _id: new ObjectId(targetTenantId) },

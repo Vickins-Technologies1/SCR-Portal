@@ -81,7 +81,7 @@ async function calculateTenantDues(db: Db, tenantId: string, today = new Date())
   const depositDues = allocation.depositOutstanding;
   const utilityDues = allocation.utilitiesOutstanding;
   const totalRemainingDues = allocation.totalOutstanding;
-  const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
+  const paymentStatus = allocation.overdueAmount > 0 ? "overdue" : "up-to-date";
 
   await db.collection<Tenant>("tenants").updateOne(
     { _id: new ObjectId(tenantId) },
@@ -161,7 +161,7 @@ function buildTenantDuesResponse(
     rentOverrideMap,
   });
   const totalRemainingDues = state.totalOutstanding;
-  const paymentStatus = totalRemainingDues > 0 ? "overdue" : "up-to-date";
+  const paymentStatus = state.overdueAmount > 0 ? "overdue" : "up-to-date";
 
   return {
     tenant: {
@@ -341,7 +341,7 @@ export async function GET(request: NextRequest) {
     })));
 
     const bulkUpdates = states.map(({ tenant, state }) => {
-      const totalDue = state.totalOutstanding;
+      const totalDue = state.overdueAmount;
       if (totalDue > 0) {
         overdueCount++;
         totalOverdueAmount += totalDue;

@@ -3,7 +3,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { ObjectId } from "mongodb";
 import { getFinancialPaymentRows, summarizeFinancialPaymentPeriods } from "@/lib/financial-reporting";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { businessMonthStart } from "@/lib/business-time";
 
 interface ChartData {
   months: string[];
@@ -156,21 +156,12 @@ export async function GET(request: NextRequest) {
     // earlier payment was reallocated after a lease or utility change. Use
     // the same tenant ledger calculation as the owner dashboard cards.
     const tenants = await db.collection("tenants").find({ propertyId: { $in: propertyIds } }).toArray();
-    const propertyMap = new Map(properties.map((property) => [String(property._id), property]));
-    const tenantStates = await Promise.all(tenants.map(async (tenant: any) =>
-      calculateTenantFinancialState(db, tenant, { property: propertyMap.get(String(tenant.propertyId)), asOf: today })
-    ));
-    const allocationOverrides = new Map<string, any>();
-    for (const state of tenantStates) {
-      for (const [paymentId, allocation] of state.paymentAllocations) {
-        allocationOverrides.set(paymentId, allocation);
-      }
-    }
 
     const monthBuckets = Array.from({ length: 6 }, (_, i) => {
       const monthDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));
-      const start = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1) - 3 * 60 * 60 * 1000);
-      const monthEnd = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1) - 3 * 60 * 60 * 1000 - 1);
+      const start = businessMonthStart(monthDate.getUTCFullYear(), monthDate.getUTCMonth());
+      const nextMonthStart = businessMonthStart(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1);
+      const monthEnd = new Date(nextMonthStart.getTime() - 1);
       return {
         key: `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, "0")}`,
         label: monthDate.toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "Africa/Nairobi" }),
@@ -186,7 +177,7 @@ export async function GET(request: NextRequest) {
       end: today,
     });
 
-    const monthlySummaries = summarizeFinancialPaymentPeriods(paymentRows, monthBuckets, allocationOverrides);
+    const monthlySummaries = summarizeFinancialPaymentPeriods(paymentRows, monthBuckets);
     for (const { label, summary } of monthlySummaries) {
       months.push(label);
       rentPayments.push(summary.rentReceived);

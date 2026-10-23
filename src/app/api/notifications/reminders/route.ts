@@ -14,6 +14,7 @@ import { Tenant } from "../../../../types/tenant";
 import { getUpcomingPaymentReminders, sendPaymentReminders } from "../../../../lib/reminders";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState } from "../../../../lib/tenant-payment-allocation";
+import { calculateReminderDueAmounts } from "../../../../lib/reminder-calculations";
 
 interface Notification {
   _id: string;
@@ -28,6 +29,21 @@ interface Notification {
   deliveryStatus?: "pending" | "success" | "failed";
   reminderType?: "fiveDaysBefore" | "paymentDate";
   dueDate?: string;
+  dueAmounts?: { rentDue: number; utilityDue: number; depositDue: number; penaltiesDue: number; totalDue: number };
+}
+
+function buildManualPaymentReminderMessage(
+  name: string,
+  amounts: { rentDue: number; utilityDue: number; depositDue: number; penaltiesDue: number; totalDue: number },
+) {
+  return [
+    `Payment Reminder for ${name}`,
+    `Rent outstanding: Ksh ${amounts.rentDue.toFixed(2)}`,
+    `Utilities outstanding: Ksh ${amounts.utilityDue.toFixed(2)}`,
+    `Security deposit outstanding: Ksh ${amounts.depositDue.toFixed(2)}`,
+    `Penalties: Ksh ${amounts.penaltiesDue.toFixed(2)}`,
+    `Total amount due: Ksh ${amounts.totalDue.toFixed(2)}`,
+  ].join("\n");
 }
 
 const transporter = nodemailer.createTransport({
@@ -327,6 +343,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     for (const tenant of tenants) {
       let finalMessage = message ? sanitizeInput(message) : "";
+      let paymentDueAmounts: { rentDue: number; utilityDue: number; depositDue: number; penaltiesDue: number; totalDue: number } | undefined;
       const tenantName = tenant.name;
       let effectiveDeliveryMethod = deliveryMethod;
 
@@ -336,15 +353,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       if (type === "payment") {
         const state = await calculateTenantFinancialState(db, tenant, { asOf: today, rentOverrideMap });
-        finalMessage = state.totalOutstanding > 0
-          ? `Payment of Ksh. ${state.totalOutstanding.toFixed(2)} is due for ${tenant.name}`
-          : `Payment reminder for ${tenant.name}`;
+        const amounts = calculateReminderDueAmounts({
+          rentAmount: state.rentOutstanding,
+          utilityAmount: state.utilitiesOutstanding,
+          depositAmount: state.depositOutstanding,
+          penaltiesAmount: state.penalties,
+        });
+        paymentDueAmounts = amounts;
+        finalMessage = buildManualPaymentReminderMessage(tenant.name, amounts);
       } else if (type === "maintenance") {
         finalMessage = finalMessage || "Scheduled maintenance for your property";
       } else if (type === "tenant") {
         finalMessage = finalMessage || "Important tenant update";
       } else {
         finalMessage = finalMessage || "Important information from your property manager";
+      }
+
+      if (type === "payment") {
+        const latestState = await calculateTenantFinancialState(db, tenant, { asOf: new Date(), rentOverrideMap });
+        const amounts = calculateReminderDueAmounts({
+          rentAmount: latestState.rentOutstanding,
+          utilityAmount: latestState.utilitiesOutstanding,
+          depositAmount: latestState.depositOutstanding,
+          penaltiesAmount: latestState.penalties,
+        });
+        if (amounts.totalDue <= 0) continue;
+        paymentDueAmounts = amounts;
+        finalMessage = buildManualPaymentReminderMessage(tenant.name, amounts);
       }
 
       let deliveryStatus: Notification["deliveryStatus"] = "pending";
@@ -442,6 +477,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         ownerId: effectiveOwnerId,
         deliveryMethod: effectiveDeliveryMethod,
         deliveryStatus: effectiveDeliveryMethod === "app" ? "success" : deliveryStatus,
+        ...(paymentDueAmounts ? { dueAmounts: paymentDueAmounts } : {}),
       };
 
       await db.collection<Notification>("notifications").insertOne(newNotification);

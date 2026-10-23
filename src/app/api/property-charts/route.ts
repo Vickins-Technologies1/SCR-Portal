@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { getFinancialPaymentRows, summarizeFinancialPaymentPeriods } from "@/lib/financial-reporting";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { businessMonthStart } from "@/lib/business-time";
 
 interface ChartData {
   months: string[];
@@ -72,17 +72,10 @@ export async function GET(request: NextRequest) {
     const currentYear = Number(nairobiParts.find((part) => part.type === "year")?.value);
     const currentMonth = Number(nairobiParts.find((part) => part.type === "month")?.value) - 1;
     const tenants = await db.collection("tenants").find({ propertyId: { $in: [propertyId, new ObjectId(propertyId)] } }).toArray();
-    const tenantStates = await Promise.all(tenants.map((tenant: any) =>
-      calculateTenantFinancialState(db, tenant, { property, asOf: today })
-    ));
-    const allocationOverrides = new Map<string, any>();
-    for (const state of tenantStates) {
-      for (const [paymentId, allocation] of state.paymentAllocations) allocationOverrides.set(paymentId, allocation);
-    }
     const periods = Array.from({ length: 6 }, (_, index) => {
       const monthDate = new Date(Date.UTC(currentYear, currentMonth - 5 + index, 1));
-      const start = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1) - 3 * 60 * 60 * 1000);
-      const monthEnd = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1) - 3 * 60 * 60 * 1000 - 1);
+      const start = businessMonthStart(monthDate.getUTCFullYear(), monthDate.getUTCMonth());
+      const monthEnd = new Date(businessMonthStart(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1).getTime() - 1);
       return {
         key: `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, "0")}`,
         label: monthDate.toLocaleString("en-US", { month: "short", year: "2-digit", timeZone: "Africa/Nairobi" }),
@@ -97,7 +90,7 @@ export async function GET(request: NextRequest) {
       start: periods[0].start,
       end: today,
     });
-    const summaries = summarizeFinancialPaymentPeriods(rows, periods, allocationOverrides);
+    const summaries = summarizeFinancialPaymentPeriods(rows, periods);
     const months = summaries.map(({ label }) => label);
     const rentPayments = summaries.map(({ summary }) => summary.rentReceived);
     const utilityPayments = summaries.map(({ summary }) => summary.utilityReceived);

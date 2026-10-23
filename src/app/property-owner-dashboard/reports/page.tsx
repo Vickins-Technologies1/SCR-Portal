@@ -10,6 +10,7 @@ import PaymentModal from "../components/PaymentModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAccountTier } from "@/hooks/useAccountTier";
 import PremiumGate from "@/components/PremiumGate";
+import { addBusinessDays, businessDateKey, businessDateParts, businessMonthKey } from "@/lib/business-time";
 import { CardGridSkeleton, PageContentSkeleton, Skeleton, TableRowsSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Bar } from "react-chartjs-2";
 import {
@@ -162,15 +163,14 @@ function ReportsAndInvoicesPageInner() {
 
   const formatDate = (dateString: string): string => {
     if (!isValidDate(dateString)) return "N/A";
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" });
   };
 
-  const formatDateInput = (date: Date) => date.toISOString().slice(0, 10);
+  const formatDateInput = businessDateKey;
 
   const applyDatePreset = (days: number) => {
     const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - (days - 1));
+    const start = addBusinessDays(end, -(days - 1));
     setStartDate(formatDateInput(start));
     setEndDate(formatDateInput(end));
     setError(null);
@@ -186,7 +186,7 @@ function ReportsAndInvoicesPageInner() {
 
   // Generate all months between two dates
   const getAllMonths = (start: string, end: string): string[] => {
-    const now = new Date();
+    const now = businessDateParts(new Date());
     const reportMonthValues = reports.flatMap((report) => {
       const date = new Date(report.date);
       if (Number.isNaN(date.getTime())) return [];
@@ -205,21 +205,17 @@ function ReportsAndInvoicesPageInner() {
       ? start.split("-").map(Number)
       : firstReportMonth !== null
         ? [Math.floor(firstReportMonth / 12), (firstReportMonth % 12) + 1]
-        : [now.getFullYear() - 1, now.getMonth() + 1];
+        : [now.year - 1, now.month];
     const [endYear, endMonth] = isValidDate(end)
       ? end.split("-").map(Number)
       : lastReportMonth !== null
         ? [Math.floor(lastReportMonth / 12), (lastReportMonth % 12) + 1]
-        : [now.getFullYear(), now.getMonth() + 1];
+        : [now.year, now.month];
     const months: string[] = [];
     let year = startYear;
     let month = startMonth;
     while (year < endYear || (year === endYear && month <= endMonth)) {
-      months.push(new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        timeZone: "UTC",
-      }));
+      months.push(`${year}-${String(month).padStart(2, "0")}`);
       month += 1;
       if (month > 12) {
         month = 1;
@@ -644,7 +640,7 @@ function ReportsAndInvoicesPageInner() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `Monthly_Contributions_${new Date().toISOString().split("T")[0]}.xlsx`;
+        link.download = `Monthly_Contributions_${businessDateKey(new Date())}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -663,24 +659,25 @@ function ReportsAndInvoicesPageInner() {
   }, [canExportReports, reports, selectedPropertyId, paymentType, startDate, endDate, totalRevenue, properties, csrfToken]);
 
   // Chart data (unchanged)
-  const chartLabels = getAllMonths(startDate, endDate);
-  const chartDataMap = chartLabels.reduce((acc, month) => {
+  const chartMonthKeys = getAllMonths(startDate, endDate);
+  const chartLabels = chartMonthKeys.map((key) => new Date(`${key}-01T00:00:00.000Z`).toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }));
+  const chartDataMap = chartMonthKeys.reduce((acc, month) => {
     acc[month] = reports
       .filter((r) => {
         if (selectedPropertyId !== "all" && r.propertyId !== selectedPropertyId) return false;
         if (paymentType !== "all" && r.type !== paymentType) return false;
-        const rMonth = new Date(r.date).toLocaleString("en-US", {
-          year: "numeric",
-          month: "short",
-          timeZone: "Africa/Nairobi",
-        });
+        const rMonth = businessMonthKey(new Date(r.date));
         return rMonth === month;
       })
       .reduce((sum, r) => sum + r.revenue, 0);
     return acc;
   }, {} as Record<string, number>);
 
-  const chartValues = chartLabels.map((m) => chartDataMap[m] || 0);
+  const chartValues = chartMonthKeys.map((m) => chartDataMap[m] || 0);
 
   const barChartData = {
     labels: chartLabels,
@@ -1130,7 +1127,7 @@ function ReportsAndInvoicesPageInner() {
                         <td className="px-4 py-3">{i.reference}</td>
                         <td className="px-4 py-3">{i.description}</td>
                         <td className="px-4 py-3">Ksh {i.amount.toFixed(2)}</td>
-                        <td className="px-4 py-3">{new Date(i.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">{new Date(i.createdAt).toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" })}</td>
                         <td className="px-4 py-3">{i.status}</td>
                         <td className="px-4 py-3">
                           {role === "propertyOwner" && i.status === "pending" ? (

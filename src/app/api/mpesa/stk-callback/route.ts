@@ -272,6 +272,7 @@ export async function POST(request: NextRequest) {
       tenant: tenant as any,
       today: new Date(),
       rentOverrideMap,
+      paymentDay: (property as any).rentPaymentDate,
     });
 
     const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);

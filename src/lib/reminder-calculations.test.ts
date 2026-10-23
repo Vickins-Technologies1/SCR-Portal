@@ -38,4 +38,17 @@ describe("calculateReminderDueAmounts", () => {
     expect(result.utilityDue).toBe(0);
     expect(result.totalDue).toBe(600);
   });
+
+  it("adds each reminder component exactly once", () => {
+    const result = calculateReminderDueAmounts({
+      rentAmount: 1000,
+      rentPaid: 0,
+      utilityAmount: 200,
+      utilityPaid: 0,
+      depositAmount: 500,
+      depositPaid: 0,
+      penaltiesAmount: 50,
+    });
+    expect(result).toEqual({ rentDue: 1000, utilityDue: 200, depositDue: 500, penaltiesDue: 50, totalDue: 1750 });
+  });
 });

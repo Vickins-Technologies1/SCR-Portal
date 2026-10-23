@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount } from "./tenant-payment-allocation";
+import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "./tenant-payment-allocation";
+import { calculateTenantRentDueToDate } from "./utils";
 
 const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type });
 describe("tenant payment allocation", () => {
@@ -32,41 +33,64 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ rent: 10_000, utilities: 3_000, walletCredit: 0 });
   });
 
-  it("allocates a rent payment to rent before cascading to deposit", () => {
+  it("allocates a rent payment deposit-first regardless of declared category", () => {
     const result = allocatePaymentLedger({
       depositDue: 20_000,
       rentDue: 10_000,
       utilityDue: 3_000,
       payments: [payment(13_000, new ObjectId(), "Rent")],
     });
-    expect(result.depositPaid).toBe(3_000);
-    expect(result.rentPaid).toBe(10_000);
+    expect(result.depositPaid).toBe(13_000);
+    expect(result.rentPaid).toBe(0);
     expect(result.utilitiesPaid).toBe(0);
     expect(result.walletBalance).toBe(0);
   });
 
-  it("keeps explicit utility payments out of rent", () => {
+  it.each(["Rent", "Utility", "Deposit", "Other", "General"] as const)(
+    "applies the same deposit-first cascade to %s receipts",
+    (type) => {
+      const result = allocatePaymentLedger({
+        depositDue: 500,
+        rentDue: 1_000,
+        utilityDue: 100,
+        payments: [payment(700, new ObjectId(), type)],
+      });
+      expect(result.allocations.values().next().value).toMatchObject({
+        deposit: 500,
+        rent: 200,
+        utilities: 0,
+        other: 0,
+        walletCredit: 0,
+      });
+      expect(result.depositPaid).toBe(500);
+      expect(result.rentPaid).toBe(200);
+      expect(result.utilitiesPaid).toBe(0);
+      expect(result.walletBalance).toBe(0);
+    },
+  );
+
+  it("does not let the utility category bypass rent", () => {
     const result = allocatePaymentLedger({
       rentDue: 20_000,
       utilityDue: 3_000,
       payments: [payment(2_000, new ObjectId(), "Utility")],
     });
-    expect(result.rentPaid).toBe(0);
-    expect(result.utilitiesPaid).toBe(2_000);
-    expect(result.allocations.values().next().value).toMatchObject({ rent: 0, utilities: 2_000 });
+    expect(result.rentPaid).toBe(2_000);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 2_000, utilities: 0 });
   });
 
-  it("cascades excess utility payments into rent instead of wallet credit", () => {
+  it("clears rent before utilities even when categorized as utility", () => {
     const result = allocatePaymentLedger({
       depositDue: 0,
       rentDue: 10_000,
       utilityDue: 2_000,
       payments: [payment(5_000, new ObjectId(), "Utility")],
     });
-    expect(result.utilitiesPaid).toBe(2_000);
-    expect(result.rentPaid).toBe(3_000);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.rentPaid).toBe(5_000);
     expect(result.walletBalance).toBe(0);
-    expect(result.allocations.values().next().value).toMatchObject({ rent: 3_000, utilities: 2_000, walletCredit: 0 });
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 5_000, utilities: 0, walletCredit: 0 });
   });
 
   it("cascades excess deposit payments into rent instead of wallet credit", () => {
@@ -283,6 +307,11 @@ describe("tenant payment allocation", () => {
     expect(sumTenantOverdueAmount([rentAndUtilities])).toBe(15_000);
   });
 
+  it("classifies only rent and utility arrears as overdue", () => {
+    expect(tenantOverdueStatus({ overdueAmount: 0 })).toBe("up-to-date");
+    expect(tenantOverdueStatus({ overdueAmount: 1 })).toBe("overdue");
+  });
+
   it("aggregates overdue rent and utilities across tenants without deposits", () => {
     expect(sumTenantOverdueAmount([
       { overdueRent: 15_000, overdueUtilities: 3_000 },
@@ -390,5 +419,48 @@ describe("tenant payment allocation", () => {
 
     expect(state.rentPaid).toBe(0);
     expect(state.rentOutstanding).toBe(10_000);
+  });
+
+  it("preserves historical posted category allocations when current dues change", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 500,
+      rentDue: 0,
+      utilityDue: 300,
+      payments: [{
+        ...payment(100, new ObjectId(), "Rent"),
+        allocation: { rent: 100, deposit: 0, utilities: 0, other: 0, walletCredit: 0 },
+      }],
+    });
+    expect(result.rentPaid).toBe(100);
+    expect(result.depositPaid).toBe(0);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 100, deposit: 0, utilities: 0 });
+  });
+
+  it("computes rent overdue after the Nairobi due date and clamps February due dates", () => {
+    const tenant: any = {
+      leaseStartDate: "2026-10-01",
+      leasedUnits: [{ unitIdentifier: "A1", unitType: "Studio", houseNumber: "A1", price: 1000, deposit: 0 }],
+    };
+    const before = calculateTenantRentDueToDate({ tenant, today: new Date("2026-10-03T21:00:00.000Z"), paymentDay: 5 });
+    const dueDay = calculateTenantRentDueToDate({ tenant, today: new Date("2026-10-04T21:00:00.000Z"), paymentDay: 5 });
+    const after = calculateTenantRentDueToDate({ tenant, today: new Date("2026-10-05T21:00:00.000Z"), paymentDay: 5 });
+    expect(before.rentDue).toBe(1000);
+    expect(before.overdueRentDue).toBe(0);
+    expect(dueDay.overdueRentDue).toBe(0);
+    expect(after.overdueRentDue).toBe(1000);
+
+    const priorArrearsTenant = { ...tenant, leaseStartDate: "2026-09-01" };
+    const currentRentNotDue = calculateTenantRentDueToDate({
+      tenant: priorArrearsTenant,
+      today: new Date("2026-10-03T21:00:00.000Z"),
+      paymentDay: 5,
+    });
+    expect(currentRentNotDue.rentDue).toBe(2000);
+    expect(currentRentNotDue.overdueRentDue).toBe(1000);
+
+    const leapTenant = { ...tenant, leaseStartDate: "2024-02-01" };
+    const leap = calculateTenantRentDueToDate({ tenant: leapTenant, today: new Date("2024-03-01T21:00:00.000Z"), paymentDay: 31 });
+    expect(leap.overdueRentDue).toBe(1000);
   });
 });

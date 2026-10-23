@@ -70,7 +70,7 @@ async function syncTenantAfterUtilityDelete(db: Db, tenantId: string) {
     {
       $set: {
         walletBalance: state.walletBalance,
-        paymentStatus: totalRemainingDues > 0 ? "overdue" : "up-to-date",
+        paymentStatus: state.overdueAmount > 0 ? "overdue" : "up-to-date",
         updatedAt: now.toISOString(),
       },
     }

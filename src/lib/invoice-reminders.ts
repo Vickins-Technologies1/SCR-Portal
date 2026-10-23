@@ -6,6 +6,7 @@ import logger from "@/lib/logger";
 import { sendInvoiceEmail } from "@/lib/email";
 import { generateInvoicePdf } from "@/lib/invoice-pdf";
 import { calculateInvoiceFinancialState } from "@/lib/financial-reporting";
+import { addBusinessDays, businessDateKey, businessDateTime, businessDayEnd, businessDayStart } from "@/lib/business-time";
 
 type InvoiceReminderType = "fiveDaysBefore" | "dueDate";
 
@@ -29,26 +30,17 @@ export function isInvoiceReminderStatusEligible(status: unknown): boolean {
   return !["completed", "failed", "cancelled", "paid"].includes(String(status || "").trim().toLowerCase());
 }
 
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-const endOfDay = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-
-const addDays = (date: Date, days: number) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-};
-
-const toDateKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const startOfDay = businessDayStart;
+const endOfDay = businessDayEnd;
+const addDays = addBusinessDays;
+const toDateKey = businessDateKey;
 
 const parseDate = (value: unknown): Date | null => {
   if (!value) return null;
-  const parsed = value instanceof Date ? value : new Date(String(value));
+  const text = String(value);
+  const parsed = value instanceof Date ? value : /^\d{4}-\d{2}-\d{2}$/.test(text)
+    ? businessDateTime({ year: Number(text.slice(0, 4)), month: Number(text.slice(5, 7)), day: Number(text.slice(8, 10)) })
+    : new Date(text);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -178,6 +170,7 @@ export async function sendInvoiceReminders(params: { today?: Date } = {}) {
     }
 
     const dueDatePretty = dueAt.toLocaleDateString("en-KE", {
+      timeZone: "Africa/Nairobi",
       weekday: "short",
       year: "numeric",
       month: "short",

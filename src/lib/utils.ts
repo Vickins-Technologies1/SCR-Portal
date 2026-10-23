@@ -5,6 +5,7 @@ import { RentPriceOverride } from '../types/rent-price-override';
 import { Db, ObjectId } from 'mongodb';
 import { buildOverrideKey, filterOverridesForUnit } from './rent-overrides';
 import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from './property-utilities';
+import { businessDateTime, businessDueDate, businessMonthStart, businessDateParts, businessDateKey, businessDateIsBefore } from './business-time';
 
 interface LogMeta {
   [key: string]: unknown;
@@ -161,6 +162,7 @@ export interface WalletAutoApplyResult {
 
 export interface RentDueResult {
   rentDue: number;
+  overdueRentDue: number;
   monthsStayed: number;
   daysInMonth: number;
   daysElapsedInMonth: number;
@@ -188,7 +190,7 @@ const parseLocalDateLikeString = (value: string): Date | null => {
   if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > 31) return null;
-  const date = new Date(year, month - 1, day);
+  const date = businessDateTime({ year, month, day });
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
@@ -203,29 +205,32 @@ const toValidDate = (value?: Date | string): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const toMonthStart = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
-const startOfDay = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+const toMonthStart = (date: Date): Date => {
+  const { year, month } = businessDateParts(date);
+  return businessMonthStart(year, month - 1);
+};
+const startOfDay = (date: Date): Date => businessDateTime(businessDateParts(date));
 
 const getDueDateForMonth = (year: number, month: number, paymentDay: number): Date => {
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const day = Math.min(Math.max(1, paymentDay), daysInMonth);
-  return new Date(year, month, day);
+  return businessDueDate(year, month, paymentDay);
 };
 
 const getMostRecentDueDate = (today: Date, paymentDay: number): Date => {
-  const currentMonthDue = getDueDateForMonth(today.getFullYear(), today.getMonth(), paymentDay);
-  if (startOfDay(today) >= startOfDay(currentMonthDue)) {
+  const { year, month } = businessDateParts(today);
+  const currentMonthDue = getDueDateForMonth(year, month - 1, paymentDay);
+  if (businessDateKey(today) >= businessDateKey(currentMonthDue)) {
     return currentMonthDue;
   }
-  const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  return getDueDateForMonth(prevMonth.getFullYear(), prevMonth.getMonth(), paymentDay);
+  const prevMonth = new Date(Date.UTC(year, month - 2, 1));
+  return getDueDateForMonth(prevMonth.getUTCFullYear(), prevMonth.getUTCMonth(), paymentDay);
 };
 
 const getNextDueDate = (today: Date, paymentDay: number): Date => {
-  const currentMonthDue = getDueDateForMonth(today.getFullYear(), today.getMonth(), paymentDay);
-  if (startOfDay(today) > startOfDay(currentMonthDue)) {
-    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-    return getDueDateForMonth(nextMonth.getFullYear(), nextMonth.getMonth(), paymentDay);
+  const { year, month } = businessDateParts(today);
+  const currentMonthDue = getDueDateForMonth(year, month - 1, paymentDay);
+  if (businessDateKey(today) > businessDateKey(currentMonthDue)) {
+    const nextMonth = new Date(Date.UTC(year, month, 1));
+    return getDueDateForMonth(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth(), paymentDay);
   }
   return currentMonthDue;
 };
@@ -380,18 +385,21 @@ export const calculateTenantRentDueToDate = ({
   tenant,
   today = new Date(),
   rentOverrideMap,
+  paymentDay = 1,
 }: {
   tenant: Tenant;
   today?: Date;
   rentOverrideMap?: Map<string, RentPriceOverride[]>;
+  paymentDay?: number;
 }): RentDueResult => {
   const leaseUnits = getTenantLeaseUnits(tenant);
-  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const todayParts = businessDateParts(today);
+  const daysInCurrentMonth = new Date(Date.UTC(todayParts.year, todayParts.month, 0)).getUTCDate();
 
   if (!tenant.leaseStartDate || leaseUnits.length === 0) {
     return {
       rentDue: 0,
+      overdueRentDue: 0,
       monthsStayed: 0,
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
@@ -403,6 +411,7 @@ export const calculateTenantRentDueToDate = ({
   if (Number.isNaN(start.getTime()) || today < start) {
     return {
       rentDue: 0,
+      overdueRentDue: 0,
       monthsStayed: 0,
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
@@ -410,16 +419,18 @@ export const calculateTenantRentDueToDate = ({
     };
   }
 
-  const startMonthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+  const startParts = businessDateParts(start);
   const monthDiff =
-    (currentMonthStart.getFullYear() - startMonthStart.getFullYear()) * 12 +
-    (currentMonthStart.getMonth() - startMonthStart.getMonth());
+    (todayParts.year - startParts.year) * 12 + (todayParts.month - startParts.month);
 
   const monthsStayed = Math.max(1, monthDiff + 1);
 
   let rentDueTotal = 0;
+  let overdueRentDue = 0;
+  const effectivePaymentDay = Math.max(1, Math.trunc(Number(paymentDay) || 1));
   for (let i = 0; i < monthsStayed; i += 1) {
-    const monthStart = new Date(startMonthStart.getFullYear(), startMonthStart.getMonth() + i, 1);
+    const monthStart = businessMonthStart(startParts.year, startParts.month - 1 + i);
+    const period = new Date(Date.UTC(startParts.year, startParts.month - 1 + i, 1));
     const tenantOverride = resolveTenantOverrideForDate({
       overrides: tenant.rentPaymentOverrides,
       date: monthStart,
@@ -434,14 +445,14 @@ export const calculateTenantRentDueToDate = ({
           resolveMonthlyRentForLeaseUnit({ unit, date: monthStart, rentOverrideMap, propertyId: tenant.propertyId }),
         0
       );
-      rentDueTotal += monthRent;
+    rentDueTotal += monthRent;
+    const periodDueDate = businessDueDate(period.getUTCFullYear(), period.getUTCMonth(), effectivePaymentDay);
+    const firstDueDate = i === 0 ? getNextDueDate(start, effectivePaymentDay) : periodDueDate;
+    if (businessDateIsBefore(firstDueDate, today)) overdueRentDue += monthRent;
     }
   }
 
-  const currentTenantOverride = resolveTenantOverrideForDate({
-    overrides: tenant.rentPaymentOverrides,
-    date: today,
-  });
+  const currentTenantOverride = resolveTenantOverrideForDate({ overrides: tenant.rentPaymentOverrides, date: today });
 
   const currentMonthlyRent = currentTenantOverride
     ? Math.max(0, Number(currentTenantOverride.price) || 0)
@@ -453,9 +464,10 @@ export const calculateTenantRentDueToDate = ({
 
   return {
     rentDue: roundCurrency(rentDueTotal),
+    overdueRentDue: roundCurrency(overdueRentDue),
     monthsStayed,
     daysInMonth: daysInCurrentMonth,
-    daysElapsedInMonth: Math.min(daysInCurrentMonth, today.getDate()),
+    daysElapsedInMonth: Math.min(daysInCurrentMonth, todayParts.day),
     dailyRent: currentMonthlyRent > 0 ? currentMonthlyRent / daysInCurrentMonth : 0,
   };
 };
@@ -493,9 +505,9 @@ export const calculateOverduePenalty = ({
     }
   }
 
-  const daysOverdue = Math.floor(
-    (todayStart.getTime() - startOfDay(dueDate).getTime()) / MS_PER_DAY
-  );
+  const todayParts = businessDateParts(todayStart);
+  const dueParts = businessDateParts(dueDate);
+  const daysOverdue = Math.floor((Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day) - Date.UTC(dueParts.year, dueParts.month - 1, dueParts.day)) / MS_PER_DAY);
   if (daysOverdue <= 0) return 0;
 
   const periodsOverdue =
@@ -640,6 +652,7 @@ export const calculateRentDueToDate = ({
   if (!leaseStartDate || (!hasOverrides && safeMonthlyRent <= 0)) {
     return {
       rentDue: 0,
+      overdueRentDue: 0,
       monthsStayed: 0,
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
@@ -651,6 +664,7 @@ export const calculateRentDueToDate = ({
   if (Number.isNaN(start.getTime()) || today < start) {
     return {
       rentDue: 0,
+      overdueRentDue: 0,
       monthsStayed: 0,
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
@@ -680,6 +694,7 @@ export const calculateRentDueToDate = ({
 
   return {
     rentDue,
+    overdueRentDue: rentDue,
     monthsStayed,
     daysInMonth: daysInCurrentMonth,
     daysElapsedInMonth: Math.min(daysInCurrentMonth, today.getDate()),

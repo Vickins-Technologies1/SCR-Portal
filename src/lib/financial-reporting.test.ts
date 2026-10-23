@@ -36,7 +36,7 @@ describe("financial report payment projection", () => {
     expect(row.allocation).toEqual({ rent: 0, utilities: 0, deposit: 0, other: 0, walletCredit: 0 });
   });
 
-  it("uses ledger allocation overrides and counts each payment document once", () => {
+  it("uses persisted posted allocation and counts each payment document once", () => {
     const paymentId = new ObjectId();
     const first = projectFinancialPaymentRows([{
       _id: paymentId,
@@ -51,14 +51,12 @@ describe("financial report payment projection", () => {
       type: "Rent",
       paymentDate: "2026-10-01T00:00:00.000Z",
     }], [])[0];
-    const overrides = new Map([[String(paymentId), { deposit: 250, rent: 750 }]]);
-
-    const result = summarizeFinancialPaymentRows([first, duplicate, second], overrides);
+    const result = summarizeFinancialPaymentRows([first, duplicate, second]);
     expect(result).toMatchObject({
       totalReceived: 1_500,
       netReceived: 1_500,
-      depositReceived: 250,
-      rentReceived: 1_250,
+      depositReceived: 1_000,
+      rentReceived: 500,
     });
   });
 
@@ -68,15 +66,9 @@ describe("financial report payment projection", () => {
       _id: paymentId,
       amount: 2_000,
       type: "Deposit",
-      allocation: { deposit: 2_000, rent: 0, utilities: 0, other: 0, walletCredit: 0 },
+      allocation: { deposit: 500, rent: 1_000, utilities: 300, other: 100, walletCredit: 100 },
     }], [])[0];
-    const categories = categorizeFinancialPaymentRows([row], new Map([[String(paymentId), {
-      deposit: 500,
-      rent: 1_000,
-      utilities: 300,
-      other: 100,
-      walletCredit: 100,
-    }]]));
+    const categories = categorizeFinancialPaymentRows([row]);
 
     expect(categories.map(({ type, amount }) => [type, amount])).toEqual([
       ["Rent", 1_000],

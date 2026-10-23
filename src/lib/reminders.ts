@@ -9,6 +9,8 @@ import { Property } from "../types/property";
 import { Tenant } from "../types/tenant";
 import { calculateTenantFinancialState } from "./tenant-payment-allocation";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
+import { addBusinessDays, businessDateKey, businessDateTime, businessDateIsBefore, businessDayEnd, businessDayStart, businessDueDate, businessDateParts } from "./business-time";
+import { calculateReminderDueAmounts } from "./reminder-calculations";
 
 type ReminderType = "fiveDaysBefore" | "paymentDate";
 
@@ -32,6 +34,7 @@ interface ReminderNotification {
     rentDue: number;
     utilityDue: number;
     depositDue: number;
+    penaltiesDue: number;
     totalDue: number;
   };
 }
@@ -50,49 +53,38 @@ export interface UpcomingReminder {
   rentDue: number;
   utilityDue: number;
   depositDue: number;
+  penaltiesDue: number;
   totalDue: number;
   dueDate: string;
   reminderType: ReminderType;
 }
 
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-const endOfDay = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-const isSameDay = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
-const toDateKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const startOfDay = businessDayStart;
+const endOfDay = businessDayEnd;
+const isSameDay = (a: Date, b: Date) => businessDateKey(a) === businessDateKey(b);
+const toDateKey = businessDateKey;
 
 const getDueDateForMonth = (year: number, month: number, paymentDay: number) => {
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const day = Math.min(Math.max(1, paymentDay), daysInMonth);
-  return new Date(year, month, day);
+  return businessDueDate(year, month, paymentDay);
 };
 
 const getNextDueDate = (today: Date, paymentDay: number) => {
   const todayStart = startOfDay(today);
-  const dueThisMonth = getDueDateForMonth(todayStart.getFullYear(), todayStart.getMonth(), paymentDay);
-  if (todayStart > dueThisMonth) {
-    return getDueDateForMonth(todayStart.getFullYear(), todayStart.getMonth() + 1, paymentDay);
+  const { year, month } = businessDateParts(todayStart);
+  const dueThisMonth = getDueDateForMonth(year, month - 1, paymentDay);
+  if (businessDateIsBefore(dueThisMonth, todayStart)) {
+    return getDueDateForMonth(year, month, paymentDay);
   }
   return dueThisMonth;
 };
 
-const addDays = (date: Date, days: number) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-};
+const addDays = addBusinessDays;
 
 const parseDate = (value?: string) => {
   if (!value) return null;
-  const parsed = new Date(value);
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? businessDateTime({ year: Number(value.slice(0, 4)), month: Number(value.slice(5, 7)), day: Number(value.slice(8, 10)) })
+    : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -122,28 +114,31 @@ export const buildReminderMessages = (
   rentDue: number,
   utilityDue: number,
   depositDue: number,
-  totalDue: number
+  totalDue: number,
+  penaltiesDue = 0
 ) => {
   const whenText = reminderType === "fiveDaysBefore" ? `by ${formattedDueDate}` : `today (${formattedDueDate})`;
   const safeAmount = (value: number) => Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0;
   rentDue = safeAmount(rentDue);
   utilityDue = safeAmount(utilityDue);
   depositDue = safeAmount(depositDue);
-  totalDue = safeAmount(totalDue);
+  penaltiesDue = safeAmount(penaltiesDue);
+  totalDue = safeAmount(rentDue + utilityDue + depositDue + penaltiesDue);
   const shortTotal = totalDue.toFixed(2);
 
   const normalizeSms = (value: string) => value.replace(/\s+/g, " ").trim();
 
   const shortBreakdown = [
-    rentDue > 0 ? `R${rentDue.toFixed(0)}` : null,
-    utilityDue > 0 ? `U${utilityDue.toFixed(0)}` : null,
-    depositDue > 0 ? `D${depositDue.toFixed(0)}` : null,
+    rentDue > 0 ? `Rent Ksh ${rentDue.toFixed(2)}` : null,
+    utilityDue > 0 ? `Utilities Ksh ${utilityDue.toFixed(2)}` : null,
+    depositDue > 0 ? `Deposit Ksh ${depositDue.toFixed(2)}` : null,
+    penaltiesDue > 0 ? `Penalties Ksh ${penaltiesDue.toFixed(2)}` : null,
   ].filter(Boolean).join(" ");
 
-  const smsTotal = totalDue.toFixed(0);
+  const smsTotal = totalDue.toFixed(2);
   const smsWhen = reminderType === "fiveDaysBefore" ? smsDueDate : `${smsDueDate} (today)`;
-  const smsCore = `Rent reminder: Ksh ${smsTotal} due ${smsWhen} ${propertyName} (${houseNumber}).`;
-  const smsWithBreakdown = shortBreakdown ? `${smsCore} [${shortBreakdown}]` : smsCore;
+  const smsCore = `Payment reminder: Ksh ${smsTotal} total due ${smsWhen} ${propertyName} (${houseNumber}).`;
+  const smsWithBreakdown = `${smsCore} ${shortBreakdown || "No balance components."}`;
   const smsWithFooter = `${smsWithBreakdown} Pay portal. If paid, ignore.`;
   const smsMessage = normalizeSms(smsWithFooter);
 
@@ -151,6 +146,7 @@ export const buildReminderMessages = (
     rentDue > 0 ? `Rent: Ksh ${rentDue.toFixed(2)}` : null,
     utilityDue > 0 ? `Utilities: Ksh ${utilityDue.toFixed(2)}` : null,
     depositDue > 0 ? `Deposit: Ksh ${depositDue.toFixed(2)}` : null,
+    penaltiesDue > 0 ? `Penalties: Ksh ${penaltiesDue.toFixed(2)}` : null,
   ].filter(Boolean);
 
   const whatsappMessage =
@@ -159,10 +155,10 @@ export const buildReminderMessages = (
     `Amount due ${whenText}: Ksh ${shortTotal}\n\n` +
     `Breakdown:\n` +
     `${breakdownLines.length > 0 ? `${breakdownLines.join("\n")}\n` : ""}` +
-    `Total: Ksh ${totalDue.toFixed(2)}\n\n` +
+    `Total amount due: Ksh ${totalDue.toFixed(2)}\n\n` +
     `Kindly settle your payment via the tenant portal. If you have already paid, please ignore this notice.`;
 
-  const appMessage = `Payment notice: Ksh ${shortTotal} due ${whenText} for ${propertyName} (${houseNumber}).`;
+  const appMessage = `Payment Reminder: Ksh ${shortTotal} total due ${whenText} for ${propertyName} (${houseNumber}).`;
 
   return { smsMessage, whatsappMessage, appMessage };
 };
@@ -223,7 +219,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     if (!isLeaseActiveOn(tenant, todayStart)) continue;
 
     const leaseStart = parseDate(tenant.leaseStartDate);
-    const paymentDay = property.rentPaymentDate ?? leaseStart?.getDate();
+    const paymentDay = property.rentPaymentDate ?? (leaseStart ? businessDateParts(leaseStart).day : undefined);
     if (!paymentDay) continue;
 
     let dueDate = getNextDueDate(todayStart, paymentDay);
@@ -320,10 +316,13 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       continue;
     }
 
-    const rentDue = state.rentOutstanding + state.penalties;
-    const utilityDue = state.utilitiesOutstanding;
-    const depositDue = state.depositOutstanding;
-    const totalDue = rentDue + utilityDue + depositDue;
+    const amounts = calculateReminderDueAmounts({
+      rentAmount: state.rentOutstanding,
+      utilityAmount: state.utilitiesOutstanding,
+      depositAmount: state.depositOutstanding,
+      penaltiesAmount: state.penalties,
+    });
+    const { rentDue, utilityDue, depositDue, penaltiesDue, totalDue } = amounts;
 
     if (totalDue <= 0) {
       skipped += 1;
@@ -331,11 +330,12 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     }
 
     const formattedDueDate = dueDate.toLocaleDateString("en-US", {
+      timeZone: "Africa/Nairobi",
       month: "long",
       day: "numeric",
       year: "numeric",
     });
-    const smsDueDate = dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    const smsDueDate = dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Africa/Nairobi" });
 
     const unitLabel = (tenant.leasedUnits && tenant.leasedUnits.length > 0)
       ? tenant.leasedUnits.map((unit) => unit.houseNumber).filter(Boolean).join(", ")
@@ -352,7 +352,8 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       rentDue,
       utilityDue,
       depositDue,
-      totalDue
+      totalDue,
+      penaltiesDue
     );
 
     const deliveryMethod = tenant.deliveryMethod || "both";
@@ -384,6 +385,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
         rentDue,
         utilityDue,
         depositDue,
+        penaltiesDue,
         totalDue,
       },
     };
@@ -462,6 +464,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
             rentDue,
             utilityDue,
             depositDue,
+            penaltiesDue,
             totalDue,
             dueDate: formattedDueDate,
             reminderType,
@@ -563,7 +566,7 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     if (!isLeaseActiveOn(tenant, todayStart)) continue;
 
     const leaseStart = parseDate(tenant.leaseStartDate);
-    const paymentDay = property.rentPaymentDate ?? leaseStart?.getDate();
+    const paymentDay = property.rentPaymentDate ?? (leaseStart ? businessDateParts(leaseStart).day : undefined);
     if (!paymentDay) continue;
 
     let dueDate = getNextDueDate(todayStart, paymentDay);
@@ -601,16 +604,20 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
       property,
       rentOverrideMap,
     });
-    const rentDue = state.rentOutstanding + state.penalties;
-    const utilityDue = state.utilitiesOutstanding;
-    const depositDue = state.depositOutstanding;
-    const totalDue = rentDue + utilityDue + depositDue;
+    const amounts = calculateReminderDueAmounts({
+      rentAmount: state.rentOutstanding,
+      utilityAmount: state.utilitiesOutstanding,
+      depositAmount: state.depositOutstanding,
+      penaltiesAmount: state.penalties,
+    });
+    const { rentDue, utilityDue, depositDue, penaltiesDue, totalDue } = amounts;
 
     if (totalDue <= 0) {
       continue;
     }
 
     const formattedDueDate = dueDate.toLocaleDateString("en-US", {
+      timeZone: "Africa/Nairobi",
       month: "long",
       day: "numeric",
       year: "numeric",
@@ -628,6 +635,7 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
       rentDue,
       utilityDue,
       depositDue,
+      penaltiesDue,
       totalDue,
       dueDate: formattedDueDate,
       reminderType,

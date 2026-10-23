@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { businessDateKey } from "./business-time";
 import {
   calculateFixedUtilityBreakdown,
   calculateMeteredUtilityAmount,
@@ -31,7 +32,7 @@ describe("property utility lifecycle calculations", () => {
   });
 
   it("uses the configured payment day and clamps invalid month days", () => {
-    expect(getUtilityDueDate("2026-09", 30)?.getDate()).toBe(30);
-    expect(getUtilityDueDate("2026-02", 31)?.getDate()).toBe(28);
+    expect(businessDateKey(getUtilityDueDate("2026-09", 30)!)).toBe("2026-09-30");
+    expect(businessDateKey(getUtilityDueDate("2026-02", 31)!)).toBe("2026-02-28");
   });
 });

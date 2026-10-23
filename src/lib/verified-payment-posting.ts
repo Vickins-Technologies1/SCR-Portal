@@ -170,6 +170,7 @@ export async function postVerifiedPayment(params: {
         ...(providerTransactionId ? { providerTransactionId } : {}),
         ...(providerReceipt ? { mpesaCode: providerReceipt } : {}),
         financialPostingStatus: "processing",
+        allocationPolicyVersion: "deposit-first-v1",
         financialPostingClaim: claimToken,
         financialPostingClaimAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

@@ -29,6 +29,7 @@ interface ReminderEmailOptions {
   rentDue: number;
   utilityDue: number;
   depositDue: number;
+  penaltiesDue: number;
   totalDue: number;
   dueDate: string;
   reminderType: "fiveDaysBefore" | "paymentDate";
@@ -368,6 +369,7 @@ export async function sendReminderEmail({
   rentDue,
   utilityDue,
   depositDue,
+  penaltiesDue,
   totalDue,
   dueDate,
   reminderType,
@@ -377,19 +379,20 @@ export async function sendReminderEmail({
       throw new Error("SMTP credentials are missing");
     }
 
-    const title = reminderType === "fiveDaysBefore" ? "Payment Schedule Reminder" : "Payment Due Notice";
+    const title = "Payment Reminder";
     const intro =
       reminderType === "fiveDaysBefore"
-        ? `This is an official reminder that your payment for ${propertyName} is due on ${dueDate}.`
-        : `This is an official notice that your payment for ${propertyName} is due today (${dueDate}).`;
+      ? `This is an official reminder that payment for ${propertyName} is due on ${dueDate}.`
+        : `This is an official payment reminder for ${propertyName} due today (${dueDate}).`;
 
     const detailItems = [
       `<li><strong>Property:</strong> ${propertyName}</li>`,
       `<li><strong>Unit/House:</strong> ${houseNumber}</li>`,
-      rentDue > 0 ? `<li><strong>Rent Due:</strong> Ksh. ${rentDue.toFixed(2)}</li>` : "",
-      utilityDue > 0 ? `<li><strong>Utilities Due:</strong> Ksh. ${utilityDue.toFixed(2)}</li>` : "",
-      depositDue > 0 ? `<li><strong>Deposit Due:</strong> Ksh. ${depositDue.toFixed(2)}</li>` : "",
-      `<li><strong>Total Due:</strong> Ksh. ${totalDue.toFixed(2)}</li>`,
+      `<li><strong>Rent outstanding:</strong> Ksh. ${rentDue.toFixed(2)}</li>`,
+      `<li><strong>Utilities outstanding:</strong> Ksh. ${utilityDue.toFixed(2)}</li>`,
+      `<li><strong>Security deposit outstanding:</strong> Ksh. ${depositDue.toFixed(2)}</li>`,
+      `<li><strong>Penalties:</strong> Ksh. ${penaltiesDue.toFixed(2)}</li>`,
+      `<li><strong>Total amount due:</strong> Ksh. ${totalDue.toFixed(2)}</li>`,
       `<li><strong>Due Date:</strong> ${dueDate}</li>`,
       `<li><strong>Action:</strong> Please make your payment by the due date to keep your account in good standing.</li>`,
     ].filter(Boolean).join("");
