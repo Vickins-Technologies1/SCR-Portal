@@ -118,6 +118,7 @@ export default function Sidebar() {
   const paymentsPath = "/property-owner-dashboard/payments";
   const expensesPath = "/property-owner-dashboard/expenses";
   const integrationsPath = "/property-owner-dashboard/integrations";
+  const tenantInvoicesPath = "/property-owner-dashboard/invoices";
 
   const propertiesActive = pathname === propertiesPath || pathname.startsWith(`${propertiesPath}/`);
   const propertyReportActive = pathname === propertiesReportPath || pathname.startsWith(`${propertiesReportPath}/`);
@@ -131,8 +132,10 @@ export default function Sidebar() {
     pathname === expensesPath ||
     pathname.startsWith(`${expensesPath}/`) ||
     pathname === integrationsPath ||
-    pathname.startsWith(`${integrationsPath}/`);
-  const invoicesActive = pathname === reportsPath && (financeTab === "invoices" || isDue);
+    pathname.startsWith(`${integrationsPath}/`) ||
+    pathname === tenantInvoicesPath ||
+    pathname.startsWith(`${tenantInvoicesPath}/`);
+  const invoicesActive = pathname === tenantInvoicesPath || (pathname === reportsPath && (financeTab === "invoices" || isDue));
   const reportsActive = pathname === reportsPath && !invoicesActive;
   const paymentsActive = pathname === paymentsPath || pathname.startsWith(`${paymentsPath}/`);
   const expensesActive = pathname === expensesPath || pathname.startsWith(`${expensesPath}/`);
@@ -159,6 +162,7 @@ export default function Sidebar() {
       children: [
         { key: "reports", href: "/property-owner-dashboard/reports", label: "Reports", icon: <BarChart size={18} />, requiredPermission: "reports:view" },
         { key: "invoices", href: "/property-owner-dashboard/reports?tab=invoices", label: "Invoices", icon: <Receipt size={18} />, requiredPermission: "reports:view" },
+        { key: "tenant-invoices", href: tenantInvoicesPath, label: "Tenant Invoices", icon: <Receipt size={18} />, requiredPermission: "reports:view" },
         { key: "payments", href: paymentsPath, label: "Payments", icon: <CreditCard size={18} />, requiredPermission: "payments:view" },
         { key: "expenses", href: expensesPath, label: "Expenses", icon: <Receipt size={18} />, requiredPermission: "expenses:view" },
         { key: "integrations", href: integrationsPath, label: "Integrations", icon: <PlugZap size={18} />, requiredPermission: "integrations:view" },

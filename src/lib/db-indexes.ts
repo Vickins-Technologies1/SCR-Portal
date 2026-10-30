@@ -165,6 +165,15 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "tenantInvoices",
+    indexes: [
+      { key: { landlordId: 1, status: 1, dueDate: 1 }, name: "tenantInvoices_landlord_status_due" },
+      { key: { tenantId: 1, status: 1, dueDate: 1 }, name: "tenantInvoices_tenant_status_due" },
+      { key: { tenancyId: 1, billingPeriod: 1 }, name: "tenantInvoices_tenancy_period_unique", unique: true },
+      { key: { invoiceNumber: 1 }, name: "tenantInvoices_invoiceNumber_unique", unique: true },
+    ],
+  },
+  {
     collection: "invoiceReminderLogs",
     indexes: [
       { key: { reminderKey: 1 }, name: "invoiceReminderLogs_reminder_unique", unique: true, partialFilterExpression: { reminderKey: { $type: "string" } } },
