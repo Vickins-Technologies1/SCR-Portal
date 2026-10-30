@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Cookies from "js-cookie";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
 
 type Settings = { invoicingEnabled: boolean; automaticGeneration: boolean; automaticIssuing: boolean; automaticSending: boolean; manualApproval: boolean; generationDay: number; defaultDueDay: number; eligiblePropertyIds: string[]; eligibleTenantIds: string[]; excludedTenantIds: string[]; invoicePrefix: string; invoiceBrandName: string; invoiceBrandColor: string; remindersEnabled: boolean; reminderBeforeDays: number; reminderOnDueDate: boolean; overdueReminderEveryDays: number };
 type Tenant = { _id: string; name: string; propertyId: string; unit: string };
@@ -12,22 +14,41 @@ export default function BillingSettingsPage() {
   const [properties, setProperties] = useState<Array<{_id:string;name:string}>>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  useEffect(() => { fetch("/api/tenant-invoices/settings", { credentials: "include", cache: "no-store" }).then((r) => r.json()).then((d) => { if (d.success) { setSettings({ ...defaults, ...d.settings }); setProperties(d.properties || []); setTenants(d.tenants || []); } }).catch(() => setMessage("Unable to load billing settings")); }, []);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/tenant-invoices/settings", { credentials: "include", cache: "no-store" });
+      let data: any;
+      try { data = await response.json(); } catch { throw new Error(response.statusText || "Unable to load billing settings"); }
+      if (!response.ok || !data?.success) throw new Error(data?.message || "Unable to load billing settings");
+      setSettings({ ...defaults, ...data.settings }); setProperties(data.properties || []); setTenants(data.tenants || []); setLoadError("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load billing settings";
+      setLoadError(message); toast.error(message);
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void loadSettings(); }, [loadSettings]);
   const toggle = (key: keyof Settings) => setSettings((current) => ({ ...current, [key]: !current[key] }));
   const save = async (event: FormEvent) => {
-    event.preventDefault(); setSaving(true); setMessage("");
+    event.preventDefault(); setSaving(true);
     try {
       const response = await fetch("/api/tenant-invoices/settings", { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json", "X-CSRF-Token": Cookies.get("csrf-token") || "" }, body: JSON.stringify(settings) });
-      const data = await response.json(); if (!response.ok || !data.success) throw new Error(data.message || "Unable to save settings");
-      setMessage("Billing settings saved.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save settings"); }
+      let data: any;
+      try { data = await response.json(); } catch { throw new Error(response.statusText || "Unable to save settings"); }
+      if (!response.ok || !data?.success) throw new Error(data?.message || "Unable to save settings");
+      toast.success("Billing settings saved.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to save settings"); }
     finally { setSaving(false); }
   };
   const check = (label: string, key: keyof Settings, description: string) => <label className="flex gap-3 rounded-xl border border-border p-4"><input type="checkbox" checked={Boolean(settings[key])} onChange={() => toggle(key)} className="mt-1"/><span><span className="block text-sm font-medium">{label}</span><span className="mt-1 block text-xs text-muted-foreground">{description}</span></span></label>;
+  const toaster = <Toaster position="top-right" toastOptions={{ duration: 4200, style: { background: "var(--card)", color: "var(--foreground)", border: "1px solid var(--border)", borderRadius: "16px", boxShadow: "0 12px 36px rgba(0,0,0,.14)" } }} />;
+  if (loading) return <div className="mx-auto max-w-4xl space-y-5">{toaster}<header><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Settings</p><h1 className="mt-1 text-2xl font-semibold">Billing & Invoicing</h1><p className="mt-1 text-sm text-muted-foreground">Loading your invoice and reminder preferences…</p></header><div role="status" aria-label="Loading billing settings" className="space-y-3 rounded-2xl border border-border bg-card p-5"><div className="h-5 w-44 animate-pulse rounded bg-muted"/>{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-12 animate-pulse rounded-xl bg-muted/70"/>)}<span className="sr-only">Loading billing settings…</span></div></div>;
+  if (loadError) return <div className="mx-auto max-w-4xl space-y-5">{toaster}<header><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Settings</p><h1 className="mt-1 text-2xl font-semibold">Billing & Invoicing</h1></header><div role="alert" className="rounded-2xl border border-destructive/30 bg-card p-8 text-center"><AlertTriangle className="mx-auto text-destructive" size={28}/><p className="mt-3 font-medium">Settings could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{loadError}</p><button type="button" onClick={() => void loadSettings()} className="mt-4 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted">Try again</button></div></div>;
   return <form onSubmit={save} className="mx-auto max-w-4xl space-y-6">
+    {toaster}
     <header><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Settings</p><h1 className="mt-1 text-2xl font-semibold">Billing & Invoicing</h1><p className="mt-1 text-sm text-muted-foreground">Control tenant invoices and rent reminders independently.</p></header>
-    {message && <p role="status" className="rounded-xl border border-border bg-card p-3 text-sm">{message}</p>}
     <section className="space-y-3 rounded-2xl border border-border bg-card p-5"><h2 className="font-semibold">Invoice generation</h2>{check("Enable tenant invoicing", "invoicingEnabled", "Allow rent invoices to be generated for your tenants.")}{check("Generate invoices automatically", "automaticGeneration", "Generate monthly rent drafts on the configured day.")}{check("Issue generated invoices automatically", "automaticIssuing", "Issue generated invoices when the approval setting permits it.")}{check("Send issued invoices automatically", "automaticSending", "Email invoice PDFs to tenants after automatic issue.")}{check("Require manual approval", "manualApproval", "Keep automatic invoices as drafts until a manager issues them.")}
       <div className="grid gap-4 pt-2 sm:grid-cols-2"><label className="text-sm">Generate on day<input type="number" min={1} max={28} value={settings.generationDay} onChange={(e) => setSettings({ ...settings, generationDay: Number(e.target.value) })} className="mt-1 block w-full rounded-xl border border-border bg-background px-3 py-2"/></label><label className="text-sm">Default due day<input type="number" min={1} max={28} value={settings.defaultDueDay} onChange={(e) => setSettings({ ...settings, defaultDueDay: Number(e.target.value) })} className="mt-1 block w-full rounded-xl border border-border bg-background px-3 py-2"/></label></div>
     </section>
@@ -36,6 +57,6 @@ export default function BillingSettingsPage() {
     <section className="space-y-3 rounded-2xl border border-border bg-card p-5"><h2 className="font-semibold">Excluded tenants</h2><p className="text-xs text-muted-foreground">Selected tenants will be skipped by automatic and bulk monthly invoice generation.</p>{tenants.map((tenant) => <label key={tenant._id} className="flex items-center gap-3 text-sm"><input type="checkbox" checked={settings.excludedTenantIds.includes(tenant._id)} onChange={(e) => setSettings({ ...settings, excludedTenantIds: e.target.checked ? [...settings.excludedTenantIds, tenant._id] : settings.excludedTenantIds.filter((id) => id !== tenant._id) })}/>{tenant.name} · {properties.find((property) => property._id === tenant.propertyId)?.name || "Property"} {tenant.unit}</label>)}</section>
     <section className="grid gap-4 rounded-2xl border border-border bg-card p-5 sm:grid-cols-3"><h2 className="sm:col-span-3 font-semibold">Invoice branding and numbering</h2><label className="text-sm">Brand name<input maxLength={80} value={settings.invoiceBrandName} onChange={(e) => setSettings({ ...settings, invoiceBrandName: e.target.value })} className="mt-1 block w-full rounded-xl border border-border bg-background px-3 py-2"/></label><label className="text-sm">Invoice number prefix<input maxLength={21} value={settings.invoicePrefix} onChange={(e) => setSettings({ ...settings, invoicePrefix: e.target.value.toUpperCase() })} className="mt-1 block w-full rounded-xl border border-border bg-background px-3 py-2" placeholder="RENT"/></label><label className="text-sm">Brand color<input type="color" value={settings.invoiceBrandColor} onChange={(e) => setSettings({ ...settings, invoiceBrandColor: e.target.value })} className="mt-1 block h-10 w-full rounded-xl border border-border bg-background p-1"/></label></section>
     <section className="space-y-3 rounded-2xl border border-border bg-card p-5"><h2 className="font-semibold">Reminders</h2>{check("Enable invoice reminders", "remindersEnabled", "This setting is separate from your existing rent reminder preferences.")}{check("Send reminder on due date", "reminderOnDueDate", "Reminders stop when invoice balances are settled.")}<div className="grid gap-4 sm:grid-cols-2"><label className="text-sm">Days before due date<input type="number" min={0} max={30} value={settings.reminderBeforeDays} onChange={(e) => setSettings({ ...settings, reminderBeforeDays: Number(e.target.value) })} className="mt-1 block w-full rounded-xl border border-border bg-background px-3 py-2"/></label><label className="text-sm">Overdue interval (days)<input type="number" min={1} max={60} value={settings.overdueReminderEveryDays} onChange={(e) => setSettings({ ...settings, overdueReminderEveryDays: Number(e.target.value) })} className="mt-1 block w-full rounded-xl border border-border bg-background px-3 py-2"/></label></div></section>
-    <button disabled={saving} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">{saving ? "Saving…" : "Save billing settings"}</button>
+    <button disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">{saving ? <><Loader2 size={16} className="animate-spin"/>Saving…</> : "Save billing settings"}</button>
   </form>;
 }
