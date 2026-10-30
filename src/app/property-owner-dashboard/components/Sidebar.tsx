@@ -170,6 +170,7 @@ export default function Sidebar() {
     },
     { key: "referrals", href: "/property-owner-dashboard/referrals", label: "Referrals", icon: <Gift size={20} />, requiredPermission: "dashboard:view" },
     { key: "settings", href: "/property-owner-dashboard/settings", label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
+    { key: "billing-settings", href: "/property-owner-dashboard/settings/billing", label: "Billing & Invoicing", icon: <Receipt size={20} />, requiredPermission: "settings:edit" },
     { key: "billing", href: "/account/billing", label: "Billing & Access", icon: <CreditCard size={20} />, requiredPermission: "settings:view" },
   ];
 

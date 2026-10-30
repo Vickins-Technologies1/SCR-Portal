@@ -73,6 +73,11 @@ interface InvoiceEstimate {
   items: InvoiceEstimateItem[];
 }
 
+interface TenantInvoiceSummary {
+  totalInvoices: number; draftInvoices: number; totalInvoicedMinor: number; totalCollectedMinor: number; outstandingMinor: number;
+  paidInvoices: number; partiallyPaidInvoices: number; unpaidInvoices: number; overdueInvoices: number; settlementRate: number;
+}
+
 interface Property {
   _id: string;
   name: string;
@@ -113,6 +118,7 @@ function ReportsAndInvoicesPageInner() {
     setActiveTab(tab === "invoices" ? "invoices" : "reports");
   }, [searchParams]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [tenantInvoiceSummary, setTenantInvoiceSummary] = useState<TenantInvoiceSummary | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
@@ -380,6 +386,9 @@ function ReportsAndInvoicesPageInner() {
       } else {
         setError(data.message || "Failed to fetch reports.");
       }
+      const invoiceSummary = await fetch(`/api/tenant-invoices/summary?${new URLSearchParams({ propertyId: selectedPropertyId, ...(startDate && isValidDate(startDate) ? { startDate } : {}), ...(endDate && isValidDate(endDate) ? { endDate } : {}) })}`, { headers: { "x-csrf-token": csrfToken }, credentials: "include", cache: "no-store" });
+      const invoiceData = await invoiceSummary.json();
+      if (invoiceSummary.ok && invoiceData.success) setTenantInvoiceSummary(invoiceData.summary);
     } catch {
       setError("Failed to connect to server.");
     } finally {
@@ -932,6 +941,16 @@ function ReportsAndInvoicesPageInner() {
           {activeTab === "reports" && (
             <>
               {/* Total Revenue */}
+              {tenantInvoiceSummary && <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5" aria-label="Tenant invoice settlement summary">{[
+                ["Tenant invoices", String(tenantInvoiceSummary.totalInvoices)],
+                ["Billed", `Ksh ${(tenantInvoiceSummary.totalInvoicedMinor / 100).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`],
+                ["Collected", `Ksh ${(tenantInvoiceSummary.totalCollectedMinor / 100).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`],
+                ["Outstanding", `Ksh ${(tenantInvoiceSummary.outstandingMinor / 100).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`],
+                ["Settlement rate", `${tenantInvoiceSummary.settlementRate}%`],
+                ["Partially paid", String(tenantInvoiceSummary.partiallyPaidInvoices)],
+                ["Unpaid", String(tenantInvoiceSummary.unpaidInvoices)],
+                ["Overdue", String(tenantInvoiceSummary.overdueInvoices)],
+              ].map(([label, value]) => <div key={label} className="surface-card rounded-2xl p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-2 text-lg font-semibold text-foreground">{value}</p></div>)}</section>}
               <div className="surface-card rounded-2xl p-5 sm:p-6">
                 <h2 className="text-base sm:text-lg font-semibold text-foreground">Total Revenue</h2>
                 <p className="text-xl sm:text-2xl font-semibold text-primary">

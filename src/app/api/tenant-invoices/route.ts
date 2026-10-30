@@ -3,13 +3,15 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
 import { identityValues } from "@/lib/payment-query";
+import { addInvoicePaymentStates, invoiceTotals, serializeTenantInvoice, validObjectId } from "@/lib/tenant-invoices";
 
-type InvoiceLine = { description: string; quantity: number; unitAmount: number; amount: number };
+type InvoiceLine = { description: string; quantity: number; unitAmount: number; amount: number; category?: "rent" | "utilities" | "other" };
 type TenantInvoice = {
   landlordId: string; tenantId: string; tenancyId: string; propertyId: string;
   unitLabel: string; tenantName: string; propertyName: string; billingPeriod: string;
-  invoiceNumber: string; issueDate: Date; dueDate: Date; items: InvoiceLine[];
-  totalMinor: number; status: "draft"; createdAt: Date; updatedAt: Date;
+  invoiceNumber: string; issueDate: Date | null; dueDate: Date; items: InvoiceLine[];
+  totalMinor: number; status: "draft" | "issued" | "cancelled"; createdAt: Date; updatedAt: Date;
+  billingPeriodLabel?: string | null;
 };
 
 const validPeriod = (period: unknown): period is string => typeof period === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
@@ -24,8 +26,8 @@ export async function GET(request: NextRequest) {
   if (!userId || !ObjectId.isValid(userId)) return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 });
   const { db } = await connectToDatabase();
   if (role === "tenant") {
-    const rows = await db.collection<TenantInvoice>("tenantInvoices").find({ tenantId: userId, status: { $ne: "draft" } }).sort({ issueDate: -1 }).limit(100).toArray();
-    return NextResponse.json({ success: true, invoices: rows.map(serialize) });
+    const rows = await db.collection<TenantInvoice>("tenantInvoices").find({ tenantId: userId, status: "issued" }).sort({ issueDate: -1 }).limit(100).toArray();
+    return NextResponse.json({ success: true, invoices: await addInvoicePaymentStates(db, rows) });
   }
   if (!["propertyOwner", "teamMember"].includes(role || "")) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
   let landlordId = userId;
@@ -34,15 +36,61 @@ export async function GET(request: NextRequest) {
     const ownerId = request.cookies.get("ownerId")?.value;
     const member = ownerId && ObjectId.isValid(ownerId) ? await db.collection("teamMembers").findOne({ _id: new ObjectId(userId), ownerId: new ObjectId(ownerId), active: true }) : null;
     if (!member) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    const permissions = Array.isArray(member.permissions) ? member.permissions : [];
+    if (role === "teamMember" && !permissions.includes("payments:view") && !permissions.includes("reports:view") && !permissions.includes("tenants:view")) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
     landlordId = ownerId!;
     assignedPropertyIds = Array.isArray(member.assignedPropertyIds) ? member.assignedPropertyIds.map(String) : [];
   }
   const properties = await db.collection("properties").find({ ownerId: { $in: identityValues(landlordId) } }).project({ _id: 1 }).toArray();
   const propertyIds = properties.map((p) => p._id.toString()).filter((id) => assignedPropertyIds === null || assignedPropertyIds.includes(id));
-  const rows = propertyIds.length ? await db.collection<TenantInvoice>("tenantInvoices").find({ landlordId, propertyId: { $in: propertyIds } }).sort({ issueDate: -1 }).limit(500).toArray() : [];
-  const period = new URL(request.url).searchParams.get("period");
-  const filtered = period ? rows.filter((row) => row.billingPeriod === period) : rows;
-  return NextResponse.json({ success: true, invoices: filtered.map(serialize) });
+  const params = new URL(request.url).searchParams;
+  const period = params.get("period");
+  const propertyId = params.get("propertyId");
+  const tenantId = params.get("tenantId");
+  if (propertyId && !propertyIds.includes(propertyId)) return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
+  if (tenantId && !ObjectId.isValid(tenantId)) return NextResponse.json({ success: false, message: "Invalid tenantId" }, { status: 400 });
+  const statuses = ["all", "draft", "issued", "partially_paid", "paid", "overdue", "cancelled"];
+  if (params.has("status") && !statuses.includes(params.get("status") || "")) return NextResponse.json({ success: false, message: "Invalid invoice status" }, { status: 400 });
+  const baseFilter: Record<string, any> = { landlordId, propertyId: propertyId ? propertyId : { $in: propertyIds } };
+  if (tenantId) baseFilter.tenantId = tenantId;
+  if (period) baseFilter.$or = [{ billingPeriod: period }, { billingPeriodLabel: period }];
+  const term = params.get("search")?.trim().slice(0, 100);
+  if (term) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const searchClause = { $or: [{ invoiceNumber: { $regex: escaped, $options: "i" } }, { tenantName: { $regex: escaped, $options: "i" } }, { propertyName: { $regex: escaped, $options: "i" } }, { unitLabel: { $regex: escaped, $options: "i" } }] };
+    if (baseFilter.$or) { baseFilter.$and = [{ $or: baseFilter.$or }, searchClause]; delete baseFilter.$or; }
+    else Object.assign(baseFilter, searchClause);
+  }
+  const parsedLimit = Number(params.get("limit")), parsedPage = Number(params.get("page"));
+  const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? Math.min(1000, parsedLimit) : 500;
+  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const offset = Math.min(100_000, (page - 1) * limit);
+  const rows = propertyIds.length ? await db.collection<TenantInvoice>("tenantInvoices").find(baseFilter).sort({ issueDate: -1, createdAt: -1, _id: -1 }).limit(2000).toArray() : [];
+  let calculated = await addInvoicePaymentStates(db, rows);
+  const wantedStatus = params.get("status");
+  if (wantedStatus && wantedStatus !== "all") calculated = calculated.filter((row) => row.status === wantedStatus);
+  const startDate = params.get("startDate"), endDate = params.get("endDate");
+  const validDateKey = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime()) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+  if ((startDate && !validDateKey(startDate)) || (endDate && !validDateKey(endDate)) || (startDate && endDate && endDate < startDate)) return NextResponse.json({ success: false, message: "Invalid date range" }, { status: 400 });
+  if (startDate || endDate) calculated = calculated.filter((row) => {
+    const date = String(row.issueDate || row.createdAt || "").slice(0, 10);
+    return (!startDate || date >= startDate) && (!endDate || date <= endDate);
+  });
+  const total = calculated.length;
+  const deliveryRows = calculated.length ? await db.collection("tenantInvoiceDeliveries").find({ invoiceId: { $in: calculated.map((invoice) => invoice._id) } }).sort({ createdAt: -1, _id: -1 }).project({ invoiceId: 1, channel: 1, status: 1 }).toArray() : [];
+  const latestDelivery = new Map<string, any>();
+  for (const delivery of deliveryRows) {
+    const key = `${delivery.invoiceId}:${delivery.channel}`;
+    if (!latestDelivery.has(key)) latestDelivery.set(key, delivery);
+  }
+  const retryable = new Map<string, Set<string>>();
+  for (const delivery of latestDelivery.values()) if (delivery.status === "failed" || delivery.status === "queued" && Date.now() - new Date(delivery.createdAt).getTime() >= 15 * 60_000) {
+    const invoiceId = String(delivery.invoiceId);
+    const channels = retryable.get(invoiceId) || new Set<string>();
+    channels.add(String(delivery.channel));
+    retryable.set(invoiceId, channels);
+  }
+  return NextResponse.json({ success: true, invoices: calculated.slice(offset, offset + limit), page, limit, total, hasMore: offset + limit < total, truncated: rows.length === 2000, retryableChannels: Object.fromEntries([...retryable].map(([id, channels]) => [id, [...channels]])) });
 }
 
 export async function POST(request: NextRequest) {
@@ -51,7 +99,8 @@ export async function POST(request: NextRequest) {
   if (!userId || !ObjectId.isValid(userId) || !["propertyOwner", "teamMember"].includes(role || "")) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
   if (!validateCsrfToken(request, request.headers.get("x-csrf-token"))) return buildInvalidCsrfResponse(request);
   const body = await request.json().catch(() => null);
-  if (!validPeriod(body?.billingPeriod)) return NextResponse.json({ success: false, message: "billingPeriod must use YYYY-MM format" }, { status: 400 });
+  if (body?.action !== "manual" && !validPeriod(body?.billingPeriod)) return NextResponse.json({ success: false, message: "billingPeriod must use YYYY-MM format" }, { status: 400 });
+  if (body?.action === "manual" && body.billingPeriod !== undefined && !validPeriod(body.billingPeriod)) return NextResponse.json({ success: false, message: "billingPeriod must use YYYY-MM format" }, { status: 400 });
   if (body.tenantIds !== undefined && (!Array.isArray(body.tenantIds) || body.tenantIds.length > 500 || body.tenantIds.some((id: unknown) => typeof id !== "string" || !ObjectId.isValid(id)))) {
     return NextResponse.json({ success: false, message: "tenantIds must be a list of valid tenant IDs" }, { status: 400 });
   }
@@ -69,24 +118,68 @@ export async function POST(request: NextRequest) {
     const ownerId = request.cookies.get("ownerId")?.value;
     const member = ownerId && ObjectId.isValid(ownerId) ? await db.collection("teamMembers").findOne({ _id: new ObjectId(userId), ownerId: new ObjectId(ownerId), active: true }) : null;
     if (!member) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    const permissions = Array.isArray(member.permissions) ? member.permissions : [];
+    if (!permissions.includes("payments:record") && !permissions.includes("tenants:edit")) return NextResponse.json({ success: false, message: "You do not have permission to manage invoices" }, { status: 403 });
     landlordId = ownerId!;
     assignedPropertyIds = Array.isArray(member.assignedPropertyIds) ? member.assignedPropertyIds.map(String) : [];
   }
+  const billingSettings = await db.collection("landlordBillingSettings").findOne({ landlordId });
+  const eligibleSettingsPropertyIds = Array.isArray(billingSettings?.eligiblePropertyIds) ? billingSettings.eligiblePropertyIds.map(String) : [];
   const propertyFilter: Record<string, unknown> = { ownerId: { $in: identityValues(landlordId) } };
+  if (body.action !== "manual" && eligibleSettingsPropertyIds.length && body.propertyId && !eligibleSettingsPropertyIds.includes(body.propertyId)) {
+    return NextResponse.json({ success: false, message: "Property is excluded from invoicing settings" }, { status: 403 });
+  }
   if (assignedPropertyIds !== null && body.propertyId && !assignedPropertyIds.includes(body.propertyId)) {
     return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
   }
   if (body.propertyId) propertyFilter._id = new ObjectId(body.propertyId);
   else if (assignedPropertyIds !== null) propertyFilter._id = { $in: assignedPropertyIds.filter(ObjectId.isValid).map((id) => new ObjectId(id)) };
+  if (body.action !== "manual" && eligibleSettingsPropertyIds.length && !body.propertyId) {
+    const eligible = eligibleSettingsPropertyIds.filter((id: string) => ObjectId.isValid(id) && (assignedPropertyIds === null || assignedPropertyIds.includes(id)));
+    propertyFilter._id = { $in: eligible.map((id: string) => new ObjectId(id)) };
+  }
   const properties = await db.collection("properties").find(propertyFilter).toArray();
   if (body.propertyId && properties.length === 0) return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
   const propertyIds = properties.map((p) => p._id.toString());
   if (!propertyIds.length) return NextResponse.json({ success: false, message: "No properties found" }, { status: 400 });
+  if (body.action === "manual") {
+    if (!validObjectId(body.tenantId) || !Array.isArray(body.items) || body.items.length < 1 || body.items.length > 50 || typeof body.dueDate !== "string" || Number.isNaN(new Date(body.dueDate).getTime())) {
+      return NextResponse.json({ success: false, message: "Tenant, valid due date, and 1–50 charge items are required" }, { status: 400 });
+    }
+    const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(body.tenantId), propertyId: { $in: identityValues(propertyIds) } });
+    const property = tenant && properties.find((p) => String(p._id) === String(tenant.propertyId));
+    if (!tenant || !property) return NextResponse.json({ success: false, message: "Tenant not found for an authorized property" }, { status: 404 });
+    const inputItems = body.items.map((item: any) => ({
+      description: typeof item?.description === "string" ? item.description.trim().slice(0, 120) : "",
+      quantity: Number(item?.quantity), unitAmount: amountMinor(item?.unitPrice),
+      category: item?.category === "utilities" || item?.category === "other" ? item.category : "rent",
+    }));
+    if (inputItems.some((item: any) => !item.description || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > 10000 || !item.unitAmount)) {
+      return NextResponse.json({ success: false, message: "Each item needs a description, positive quantity, and unit price" }, { status: 400 });
+    }
+    const calculated = invoiceTotals(inputItems);
+    const invoiceId = new ObjectId();
+    const doc: any = {
+      _id: invoiceId, landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
+      unitLabel: String(tenant.houseNumber || tenant.unitIdentifier || tenant.unitType || "—"), tenantName: String(tenant.name || "Tenant"),
+      propertyName: String(property.name || "Property"), billingPeriod: `MANUAL-${invoiceId.toString()}`, billingPeriodLabel: validPeriod(body.billingPeriod) ? body.billingPeriod : null,
+      invoiceNumber: `DRAFT-${invoiceId.toString().toUpperCase()}`, issueDate: null, dueDate: new Date(body.dueDate),
+      items: calculated.items.map((item, index) => ({ ...item, category: inputItems[index].category })), totalMinor: calculated.totalMinor,
+      status: "draft", notes: typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) : "", createdBy: userId,
+      createdAt: new Date(), updatedAt: new Date(),
+    };
+    await db.collection("tenantInvoices").insertOne(doc);
+    await db.collection("tenantInvoiceActivity").insertOne({ invoiceId: invoiceId.toString(), landlordId, tenantId: tenant._id.toString(), event: "draft_created", actorId: userId, actorRole: role, createdAt: new Date() });
+    return NextResponse.json({ success: true, invoice: serializeTenantInvoice(doc) }, { status: 201 });
+  }
   const tenants = await db.collection("tenants").find({ propertyId: { $in: identityValues(propertyIds) } }).toArray();
+  const excludedTenantIds = new Set((Array.isArray(billingSettings?.excludedTenantIds) ? billingSettings.excludedTenantIds : []).map(String));
+  const eligibleTenantIds = new Set((Array.isArray(billingSettings?.eligibleTenantIds) ? billingSettings.eligibleTenantIds : []).map(String));
   const [year, month] = body.billingPeriod.split("-").map(Number);
-  const issueDate = new Date(Date.UTC(year, month - 1, 1));
   const now = new Date();
   const eligible = tenants.filter((tenant) => {
+    if (excludedTenantIds.has(tenant._id.toString())) return false;
+    if (eligibleTenantIds.size && !eligibleTenantIds.has(tenant._id.toString())) return false;
     if (body.tenantIds && Array.isArray(body.tenantIds) && !body.tenantIds.includes(tenant._id.toString())) return false;
     if (tenant.invoiceEnabled === false || tenant.status === "inactive" || tenant.status === "vacated") return false;
     const leaseEnd = tenant.leaseEndDate ? new Date(tenant.leaseEndDate) : null;
@@ -100,15 +193,21 @@ export async function POST(request: NextRequest) {
     const property = properties.find((p) => String(p._id) === String(tenant.propertyId));
     const rent = amountMinor(tenant.price);
     if (!property || !rent) { skipped++; continue; }
-    const day = Math.min(28, Math.max(1, Number(property.rentPaymentDate) || 1));
+    const day = Math.min(28, Math.max(1, Number(billingSettings?.defaultDueDay) || Number(property.rentPaymentDate) || 5));
     const dueDate = new Date(Date.UTC(year, month - 1, day));
     const invoiceNumber = `R-${landlordId.slice(-5).toUpperCase()}-${body.billingPeriod.replace("-", "")}-${tenant._id.toString().toUpperCase()}`;
+    const utilityCharges = await db.collection("utilityCharges").find({ tenantId: tenant._id.toString(), propertyId: property._id.toString(), billingPeriod: body.billingPeriod, status: "posted" }).toArray();
+    const items: InvoiceLine[] = [{ description: `Monthly rent — ${body.billingPeriod}`, quantity: 1, unitAmount: rent, amount: rent, category: "rent" }];
+    for (const charge of utilityCharges) {
+      const utilityAmount = amountMinor(charge.amount);
+      if (utilityAmount) items.push({ description: `${String(charge.utilityName || "Utility")} — ${body.billingPeriod}`, quantity: 1, unitAmount: utilityAmount, amount: utilityAmount, category: "utilities" });
+    }
     const doc: TenantInvoice = {
       landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
       unitLabel: String(tenant.houseNumber || tenant.unitIdentifier || tenant.unitType || "—"),
       tenantName: String(tenant.name || "Tenant"), propertyName: String(property.name || "Property"), billingPeriod: body.billingPeriod,
-      invoiceNumber, issueDate, dueDate, items: [{ description: `Monthly rent — ${body.billingPeriod}`, quantity: 1, unitAmount: rent, amount: rent }],
-      totalMinor: rent, status: "draft", createdAt: now, updatedAt: now,
+      invoiceNumber, issueDate: null, dueDate, items,
+      totalMinor: items.reduce((sum, item) => sum + item.amount, 0), status: "draft", createdAt: now, updatedAt: now,
     };
     try {
       const result = await db.collection<TenantInvoice>("tenantInvoices").updateOne(
@@ -122,8 +221,4 @@ export async function POST(request: NextRequest) {
     }
   }
   return NextResponse.json({ success: true, billingPeriod: body.billingPeriod, created, duplicate, skipped });
-}
-
-function serialize(row: TenantInvoice) {
-  return { ...row, _id: (row as any)._id?.toString(), issueDate: new Date(row.issueDate).toISOString(), dueDate: new Date(row.dueDate).toISOString(), createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString(), total: row.totalMinor / 100 };
 }

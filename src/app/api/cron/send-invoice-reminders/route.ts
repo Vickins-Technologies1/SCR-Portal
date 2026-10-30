@@ -3,6 +3,7 @@ import { sendInvoiceReminders } from "@/lib/invoice-reminders";
 import { authorizeCronRequest } from "@/lib/cron-auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import { withCronJobLock } from "@/lib/cron-lock";
+import { sendTenantInvoiceReminders } from "@/lib/tenant-invoice-reminders";
 
 export async function GET(request: Request) {
   const authorization = authorizeCronRequest(request);
@@ -13,13 +14,19 @@ export async function GET(request: Request) {
 
   try {
     const { db } = await connectToDatabase();
-    const run = await withCronJobLock(db, "send-invoice-reminders", () => sendInvoiceReminders({}));
+    const run = await withCronJobLock(db, "send-invoice-reminders", async () => {
+      const platformInvoices = await sendInvoiceReminders({});
+      const tenantInvoices = await sendTenantInvoiceReminders();
+      return { platformInvoices, tenantInvoices };
+    });
     if (!run.acquired) return NextResponse.json({ success: true, skipped: true, reason: "already_running" });
-    const { sent, skipped } = run.result;
+    const sent = run.result.platformInvoices.sent + run.result.tenantInvoices.sent;
+    const skipped = run.result.platformInvoices.skipped + run.result.tenantInvoices.skipped;
 
     return NextResponse.json({
       success: true,
       message: `Invoice reminders job completed. Sent ${sent}, skipped ${skipped}.`,
+      tenantInvoiceReminders: run.result.tenantInvoices,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

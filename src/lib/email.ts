@@ -41,7 +41,7 @@ interface InvoiceEmailOptions {
   propertyName: string;
   amount: number;
   dueDate: string;
-  reminderType: "fiveDaysBefore" | "dueDate" | "manual";
+  reminderType: "fiveDaysBefore" | "dueDate" | "overdue" | "manual";
   dashboardUrl: string;
   invoiceNumber: string;
   pdfBytes?: Uint8Array | Buffer;
@@ -496,13 +496,13 @@ export async function sendInvoiceEmail({
         ? "Invoice Copy"
         : reminderType === "fiveDaysBefore"
           ? "Invoice Reminder"
-          : "Invoice Due Today";
+          : reminderType === "overdue" ? "Overdue Invoice Reminder" : "Invoice Due Today";
     const intro =
       reminderType === "manual"
         ? `Attached is a copy of your invoice for ${propertyName}.`
         : reminderType === "fiveDaysBefore"
           ? `This is a reminder that your invoice for ${propertyName} is due on ${dueDate}.`
-          : `Your invoice for ${propertyName} is due today (${dueDate}).`;
+          : reminderType === "overdue" ? `Your invoice for ${propertyName} is overdue. The due date was ${dueDate}.` : `Your invoice for ${propertyName} is due today (${dueDate}).`;
 
     const html = generateStyledTemplate({
       name: ownerName || "Property Owner",

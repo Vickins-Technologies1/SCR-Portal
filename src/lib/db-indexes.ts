@@ -174,6 +174,31 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "tenantInvoiceActivity",
+    indexes: [
+      { key: { invoiceId: 1, createdAt: -1 }, name: "tenantInvoiceActivity_invoice_created" },
+      { key: { landlordId: 1, createdAt: -1 }, name: "tenantInvoiceActivity_landlord_created" },
+    ],
+  },
+  {
+    collection: "tenantInvoiceDeliveries",
+    indexes: [
+      { key: { invoiceId: 1, createdAt: -1 }, name: "tenantInvoiceDeliveries_invoice_created" },
+      { key: { tenantId: 1, status: 1, createdAt: -1 }, name: "tenantInvoiceDeliveries_tenant_status" },
+    ],
+  },
+  {
+    collection: "tenantInvoiceReminderLogs",
+    indexes: [
+      { key: { reminderKey: 1 }, name: "tenantInvoiceReminderLogs_key_unique", unique: true },
+      { key: { invoiceId: 1, status: 1, createdAt: -1 }, name: "tenantInvoiceReminderLogs_invoice_status" },
+    ],
+  },
+  {
+    collection: "landlordBillingSettings",
+    indexes: [{ key: { landlordId: 1 }, name: "landlordBillingSettings_landlord_unique", unique: true }],
+  },
+  {
     collection: "invoiceReminderLogs",
     indexes: [
       { key: { reminderKey: 1 }, name: "invoiceReminderLogs_reminder_unique", unique: true, partialFilterExpression: { reminderKey: { $type: "string" } } },
