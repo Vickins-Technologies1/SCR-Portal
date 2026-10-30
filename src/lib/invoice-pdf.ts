@@ -1,7 +1,24 @@
 import "server-only";
 
-import { PDFDocument, PDFPage, rgb, StandardFonts } from "pdf-lib";
-import { A4_PAGE_SIZE, applyPdfTemplate } from "@/lib/pdf-template";
+import { PDFDocument, PDFPage } from "pdf-lib";
+import {
+  A4_PAGE_SIZE,
+  applyPdfTemplate,
+  drawPdfTableHeader,
+  drawPdfTableRow,
+  drawPdfWrappedText,
+  embedPdfFonts,
+  embedTemplateImage,
+  finalizePdfDocument,
+  formatPdfDate,
+  formatPdfMoney,
+  measurePdfTableRow,
+  PDF_COLORS,
+  PDF_TEMPLATE_SAFE_AREA,
+  type PdfFonts,
+  type PdfTableColumn,
+  sanitizePdfText,
+} from "@/lib/pdf-template";
 import { getPdfTemplateBytes } from "@/lib/pdf-template.server";
 import { calculateInvoiceTotals, type InvoiceCalculation } from "@/lib/invoice-calculations";
 
@@ -14,11 +31,6 @@ export type InvoicePdfInvoice = {
   discount?: number | null; tax?: number | null; dueDate?: Date | string | null; amountPaid?: number | null;
 };
 
-const navy = rgb(0.03, 0.16, 0.29), slate = rgb(0.34, 0.40, 0.47), light = rgb(0.94, 0.96, 0.98);
-const green = rgb(0.08, 0.48, 0.28), amber = rgb(0.65, 0.39, 0.04), red = rgb(0.68, 0.16, 0.14);
-const money = (value: number) => `Ksh ${value.toFixed(2)}`;
-const safeText = (value: unknown, fallback = "—") => String(value ?? "").trim() || fallback;
-const truncate = (text: string, max: number) => text.length > max ? `${text.slice(0, Math.max(1, max - 1)).trimEnd()}…` : text;
 function resolveInvoicePrefix(invoice: InvoicePdfInvoice): string {
   const plan = String(invoice.billingPlan || "").toLowerCase();
   if (plan === "fullmanagement" || plan.includes("full management")) return "FM";
@@ -28,11 +40,25 @@ function resolveInvoicePrefix(invoice: InvoicePdfInvoice): string {
   return referencePrefix?.toUpperCase() || "INV";
 }
 
-function drawRight(page: PDFPage, text: string, right: number, y: number, size: number, font: any, color = navy) {
-  page.drawText(text, { x: right - font.widthOfTextAtSize(text, size), y, size, font, color });
+const tableColumns: PdfTableColumn[] = [
+  { label: "Description", width: 255 },
+  { label: "Qty", width: 48, align: "right" },
+  { label: "Unit price", width: 100, align: "right" },
+  { label: "Amount", width: 104, align: "right" },
+];
+
+function drawPair(page: PDFPage, fonts: PdfFonts, label: string, value: string, x: number, y: number, valueRight: number) {
+  page.drawText(label, { x, y, size: 7, font: fonts.regular, color: PDF_COLORS.muted });
+  const safe = sanitizePdfText(value);
+  const valueSize = 8;
+  const valueWidth = Math.min(112, valueRight - x - 68);
+  drawPdfWrappedText(page, safe, { x: valueRight - valueWidth, y, width: valueWidth, font: fonts.regular, size: valueSize, lineHeight: 9, color: PDF_COLORS.navy });
 }
-function drawLabel(page: PDFPage, text: string, x: number, y: number, font: any) {
-  page.drawText(text, { x, y, size: 7.5, font, color: slate });
+
+async function addPage(pdfDoc: PDFDocument, logoBytes: Uint8Array, logo: Awaited<ReturnType<typeof embedTemplateImage>>) {
+  const page = pdfDoc.addPage(A4_PAGE_SIZE);
+  const area = await applyPdfTemplate({ pdfDoc, page, backgroundBytes: logoBytes, backgroundImage: logo });
+  return { page, top: area.contentTopY, bottom: area.contentBottomY };
 }
 
 export async function generateInvoicePdf(params: {
@@ -41,66 +67,97 @@ export async function generateInvoicePdf(params: {
   const { invoice, owner, property } = params;
   const now = params.now ?? new Date();
   const calculation = calculateInvoiceTotals({ ...invoice, now });
-  const invoiceNumber = safeText(invoice.reference, "INV");
+  const invoiceNumber = sanitizePdfText(invoice.reference, "INV");
   const invoiceIdDigits = invoiceNumber.replace(/\D/g, "");
   const displayInvoiceId = `${resolveInvoicePrefix(invoice)}-${(invoiceIdDigits.slice(-8) || "0").padStart(8, "0")}`;
   const pdfDoc = await PDFDocument.create();
-  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica), bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const page = pdfDoc.addPage(A4_PAGE_SIZE);
-  const { safeArea } = await applyPdfTemplate({ pdfDoc, page, backgroundBytes: getPdfTemplateBytes() });
-  const left = safeArea.left, right = A4_PAGE_SIZE[0] - safeArea.right, width = right - left;
-  let y = A4_PAGE_SIZE[1] - safeArea.top - 4;
+  const fonts = await embedPdfFonts(pdfDoc);
+  const logoBytes = getPdfTemplateBytes();
+  const logo = await embedTemplateImage(pdfDoc, logoBytes);
+  const left = PDF_TEMPLATE_SAFE_AREA.left;
+  const right = A4_PAGE_SIZE[0] - PDF_TEMPLATE_SAFE_AREA.right;
+  const badgeColor = calculation.status === "PAID" ? PDF_COLORS.green : calculation.status === "OVERDUE" ? PDF_COLORS.red : PDF_COLORS.amber;
 
-  page.drawText("INVOICE", { x: left, y, size: 22, font: bold, color: navy });
-  const badgeColor = calculation.status === "PAID" ? green : calculation.status === "OVERDUE" ? red : amber;
-  const badgeWidth = bold.widthOfTextAtSize(calculation.status, 8) + 22;
-  page.drawRectangle({ x: right - badgeWidth, y: y - 2, width: badgeWidth, height: 18, color: badgeColor });
-  page.drawText(calculation.status, { x: right - badgeWidth + 11, y: y + 3, size: 8, font: bold, color: rgb(1, 1, 1) });
-  y -= 24; page.drawLine({ start: { x: left, y }, end: { x: right, y }, thickness: 0.8, color: light }); y -= 18;
-  const metaX = right - 190;
-  drawLabel(page, "INVOICE NUMBER", metaX, y, regular); drawRight(page, displayInvoiceId, right, y, 9, bold); y -= 15;
-  drawLabel(page, "ISSUE DATE", metaX, y, regular); drawRight(page, now.toLocaleDateString("en-KE"), right, y, 9, regular); y -= 15;
-  drawLabel(page, "DUE DATE", metaX, y, regular);
-  const dueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
-  drawRight(page, dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toLocaleDateString("en-KE") : "Not specified", right, y, 9, regular);
+  const drawHeader = async (page: PDFPage, top: number, continued: boolean) => {
+    page.drawText(continued ? "MANAGEMENT INVOICE - CONTINUED" : "MANAGEMENT INVOICE", {
+      x: left, y: top - 8, size: continued ? 14 : 16, font: fonts.bold, color: PDF_COLORS.navy,
+    });
+    if (continued) {
+      page.drawText(`Invoice ${displayInvoiceId}`, { x: left, y: top - 27, size: 8, font: fonts.regular, color: PDF_COLORS.muted });
+      return drawPdfTableHeader(page, left, top - 44, tableColumns, fonts.bold);
+    }
 
-  y -= 30; page.drawRectangle({ x: left, y: y - 56, width, height: 66, color: light, opacity: 0.48 });
-  drawLabel(page, "BILL TO", left + 14, y - 7, bold);
-  page.drawText(truncate(safeText(owner.name, "Property Owner"), 48), { x: left + 14, y: y - 25, size: 11, font: bold, color: navy });
-  page.drawText(truncate(safeText(property?.name, "Property"), 52), { x: left + 14, y: y - 40, size: 8.5, font: regular, color: navy });
-  if (property?.address) page.drawText(truncate(property.address, 52), { x: left + 14, y: y - 52, size: 8, font: regular, color: slate });
-  page.drawText(truncate(safeText(owner.email), 42), { x: left + 260, y: y - 25, size: 8.5, font: regular, color: navy });
-  page.drawText(truncate(safeText(owner.phone), 32), { x: left + 260, y: y - 40, size: 8.5, font: regular, color: slate });
-  y -= 82;
+    const badgeWidth = fonts.bold.widthOfTextAtSize(calculation.status, 7) + 14;
+    page.drawRectangle({ x: right - badgeWidth, y: top - 22, width: badgeWidth, height: 15, color: badgeColor });
+    page.drawText(calculation.status, { x: right - badgeWidth + 7, y: top - 17, size: 7, font: fonts.bold, color: PDF_COLORS.white });
+    drawPair(page, fonts, "INVOICE NO.", displayInvoiceId, right - 190, top - 8, right);
+    drawPair(page, fonts, "ISSUED", formatPdfDate(now), right - 190, top - 23, right);
+    drawPair(page, fonts, "DUE DATE", formatPdfDate(invoice.dueDate), right - 190, top - 38, right);
 
-  const cols = { rate: left + 375, total: right };
-  page.drawRectangle({ x: left, y: y - 5, width, height: 20, color: navy });
-  page.drawText("DESCRIPTION", { x: left + 9, y: y + 2, size: 7.5, font: bold, color: rgb(1, 1, 1) });
-  drawRight(page, "QTY", cols.rate - 24, y + 2, 7.5, bold, rgb(1, 1, 1));
-  drawRight(page, "UNIT PRICE", cols.total - 75, y + 2, 7.5, bold, rgb(1, 1, 1));
-  drawRight(page, "TOTAL", right - 9, y + 2, 7.5, bold, rgb(1, 1, 1)); y -= 20;
-  const items = invoice.items?.length ? invoice.items : [{ description: invoice.description || "Property Management Fee", qty: 1, rate: invoice.amount }];
-  items.forEach((item, index) => {
-    const rowY = y - index * 19;
-    if (index % 2 === 0) page.drawRectangle({ x: left, y: rowY - 5, width, height: 19, color: rgb(0.985, 0.99, 1) });
-    page.drawText(truncate(safeText(item.description, "Service"), 55), { x: left + 9, y: rowY + 1, size: 8.5, font: regular, color: navy });
-    drawRight(page, String(Number(item.qty) || 0), cols.rate - 24, rowY + 1, 8.5, regular);
-    drawRight(page, money(Math.max(0, Number(item.rate) || 0)), cols.total - 75, rowY + 1, 8.5, regular);
-    drawRight(page, money(Math.max(0, (Number(item.qty) || 0) * (Number(item.rate) || 0))), right - 9, rowY + 1, 8.5, regular);
-  });
-  y -= items.length * 19 + 18;
-
-  const summaryX = right - 205;
-  page.drawLine({ start: { x: summaryX, y: y + 7 }, end: { x: right, y: y + 7 }, thickness: 0.7, color: light });
-  const summaryRow = (label: string, amount: number, emphasis = false) => {
-    page.drawText(label, { x: summaryX, y, size: emphasis ? 10 : 8.5, font: emphasis ? bold : regular, color: emphasis ? navy : slate });
-    drawRight(page, money(amount), right, y, emphasis ? 10 : 8.5, emphasis ? bold : regular, emphasis ? navy : slate); y -= emphasis ? 19 : 15;
+    page.drawLine({ start: { x: left, y: top - 52 }, end: { x: right, y: top - 52 }, thickness: 0.6, color: PDF_COLORS.line });
+    let infoY = top - 67;
+    page.drawText("BILL TO", { x: left, y: infoY, size: 7, font: fonts.bold, color: PDF_COLORS.muted });
+    page.drawText("PROPERTY", { x: left + 266, y: infoY, size: 7, font: fonts.bold, color: PDF_COLORS.muted });
+    infoY -= 14;
+    const ownerName = drawPdfWrappedText(page, owner.name || "Property Owner", { x: left, y: infoY, width: 242, font: fonts.bold, size: 9, lineHeight: 11, color: PDF_COLORS.ink });
+    const propertyName = drawPdfWrappedText(page, property?.name || "Property", { x: left + 266, y: infoY, width: 240, font: fonts.bold, size: 9, lineHeight: 11, color: PDF_COLORS.ink });
+    let blockY = Math.min(ownerName.nextY, propertyName.nextY) - 3;
+    const ownerDetails = [owner.email, owner.phone].filter(Boolean).map((value) => sanitizePdfText(value));
+    const propertyDetails = [property?.address].filter(Boolean).map((value) => sanitizePdfText(value));
+    for (const value of ownerDetails) {
+      const row = drawPdfWrappedText(page, value, { x: left, y: blockY, width: 242, font: fonts.regular, size: 7.5, lineHeight: 9, color: PDF_COLORS.muted });
+      blockY = row.nextY - 2;
+    }
+    let propertyY = Math.min(ownerName.nextY, propertyName.nextY) - 3;
+    for (const value of propertyDetails) {
+      const row = drawPdfWrappedText(page, value, { x: left + 266, y: propertyY, width: 240, font: fonts.regular, size: 7.5, lineHeight: 9, color: PDF_COLORS.muted });
+      propertyY = row.nextY - 2;
+    }
+    const detailBottom = Math.min(blockY, propertyY);
+    const tableY = detailBottom - 15;
+    page.drawLine({ start: { x: left, y: tableY + 7 }, end: { x: right, y: tableY + 7 }, thickness: 0.6, color: PDF_COLORS.line });
+    return drawPdfTableHeader(page, left, tableY - 7, tableColumns, fonts.bold);
   };
-  summaryRow("Subtotal", calculation.subtotal); summaryRow("Discount", calculation.discount); summaryRow("Tax", calculation.tax);
-  summaryRow("TOTAL", calculation.total, true); summaryRow("Amount Paid", calculation.amountPaid); summaryRow("Balance Due", calculation.balanceDue, true);
 
-  const footerY = safeArea.bottom + 10;
-  page.drawText("Thank you for your business.", { x: left, y: footerY + 12, size: 9, font: bold, color: navy });
-  page.drawText("My Accurate Rent  ·  support@soranapropertymanagers.com", { x: left, y: footerY, size: 6.5, font: regular, color: slate });
+  let { page, top, bottom } = await addPage(pdfDoc, logoBytes, logo);
+  let y = await drawHeader(page, top, false);
+  const items = invoice.items?.length ? invoice.items : [{ description: invoice.description || "Property Management Fee", qty: 1, rate: invoice.amount }];
+  let rowIndex = 0;
+  for (const item of items) {
+    const quantity = Number(item.qty) || 0;
+    const unitRate = Number(item.rate) || 0;
+    const values = [sanitizePdfText(item.description, "Service"), String(quantity), formatPdfMoney(unitRate), formatPdfMoney(quantity * unitRate)];
+    const rowHeight = measurePdfTableRow(values, tableColumns, fonts.regular, 8);
+    if (y - rowHeight < bottom + 15) {
+      ({ page, top, bottom } = await addPage(pdfDoc, logoBytes, logo));
+      y = await drawHeader(page, top, true);
+    }
+    y = drawPdfTableRow(page, left, y, values, tableColumns, fonts.regular, rowIndex++);
+  }
+
+  if (y < bottom + 155) {
+    ({ page, top, bottom } = await addPage(pdfDoc, logoBytes, logo));
+    y = await drawHeader(page, top, true);
+  }
+  y -= 18;
+  const summaryWidth = 232;
+  const summaryX = right - summaryWidth;
+  page.drawRectangle({ x: summaryX, y: y - 112, width: summaryWidth, height: 118, color: PDF_COLORS.surface });
+  page.drawLine({ start: { x: summaryX, y: y + 2 }, end: { x: right, y: y + 2 }, thickness: 0.7, color: PDF_COLORS.line });
+  let summaryY = y - 14;
+  const summaryRow = (label: string, amount: number, emphasize = false) => {
+    page.drawText(label, { x: summaryX + 12, y: summaryY, size: emphasize ? 9 : 8, font: emphasize ? fonts.bold : fonts.regular, color: emphasize ? PDF_COLORS.navy : PDF_COLORS.muted });
+    const text = formatPdfMoney(amount);
+    page.drawText(text, { x: right - 12 - fonts.regular.widthOfTextAtSize(text, 8), y: summaryY, size: emphasize ? 9 : 8, font: emphasize ? fonts.bold : fonts.regular, color: emphasize ? PDF_COLORS.navy : PDF_COLORS.ink });
+    summaryY -= emphasize ? 19 : 15;
+  };
+  summaryRow("Subtotal", calculation.subtotal);
+  summaryRow("Discount", calculation.discount);
+  summaryRow("Tax", calculation.tax);
+  summaryRow("Invoice total", calculation.total, true);
+  summaryRow("Amount paid", calculation.amountPaid);
+  summaryRow("Balance due", calculation.balanceDue, true);
+
+  await finalizePdfDocument(pdfDoc, fonts, { title: `Management Invoice ${displayInvoiceId}`, reference: invoiceNumber, contact: owner.email || owner.phone || undefined });
   return { pdfBytes: await pdfDoc.save(), invoiceNumber, calculation };
 }

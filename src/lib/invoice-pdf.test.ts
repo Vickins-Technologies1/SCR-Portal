@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PDFDocument } from "pdf-lib";
 import { generateInvoicePdf } from "./invoice-pdf";
 
 describe("generateInvoicePdf", () => {
@@ -33,5 +34,22 @@ describe("generateInvoicePdf", () => {
     });
     expect(result.calculation.status).toBe("OVERDUE");
     expect(result.calculation.balanceDue).toBe(950);
+  });
+
+  it("paginates long invoices and wraps long charge descriptions", async () => {
+    const items = Array.from({ length: 72 }, (_, index) => ({
+      description: `Monthly property management and scheduled maintenance charge ${index + 1} for a long-named commercial property`,
+      qty: 1,
+      rate: 100,
+    }));
+    const result = await generateInvoicePdf({
+      invoice: { reference: "FM-LONG-202610", amount: 7200, items, dueDate: "2026-10-31" },
+      owner: { name: "The Most Generous Property Owner With a Long Name", email: "property.manager@example.com" },
+      property: { name: "The Very Longly Named Commercial Property and Residential Estate", address: "A long street address with building and area details, Nairobi, Kenya" },
+      now: new Date("2026-10-01T00:00:00.000Z"),
+    });
+    const pdf = await PDFDocument.load(result.pdfBytes);
+    expect(pdf.getPageCount()).toBeGreaterThan(2);
+    expect(pdf.getTitle()).toContain("Management Invoice");
   });
 });

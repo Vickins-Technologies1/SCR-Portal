@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       : `${route.paymentType === "till" ? "M-Pesa Till" : "M-Pesa Paybill"}: ${route.shortcode}\nAccount/reference: ${invoice.invoiceNumber}`;
   } catch { /* omit unavailable destinations */ }
   const { pdfBytes } = await generateTenantInvoicePdf({
-    invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, dueDate: invoice.dueDate, billingPeriod: invoice.billingPeriodLabel || invoice.billingPeriod,
+    invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, dueDate: invoice.dueDate, billingPeriod: invoice.billingPeriodLabel || invoice.billingPeriod, status: financial?.status || invoice.status,
     tenantName: tenant?.name || invoice.tenantName, tenantEmail: tenant?.email, propertyName: property?.name || invoice.propertyName,
     propertyAddress: property?.address, unitLabel: invoice.unitLabel, items: invoiceItemsForDisplay(invoice), totalMinor: financial?.totalMinor ?? invoice.totalMinor,
     amountPaidMinor: financial?.amountPaidMinor || 0, previousOutstandingMinor, creditsAndAdjustmentsMinor: (invoice.adjustments || []).reduce((sum: number, row: any) => sum + Number(row.amountMinor || 0), 0),

@@ -5,9 +5,8 @@ import Cookies from "js-cookie";
 import { useRouter, useParams } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ArrowLeft } from "lucide-react";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { A4_PAGE_SIZE, PDF_TEMPLATE_SAFE_AREA, embedTemplateImage } from "@/lib/pdf-template";
 import { fetchPdfTemplateBytes } from "@/lib/pdf-template.client";
+import { generateTenantPaymentReportPdf } from "@/lib/tenant-payment-report-pdf";
 
 import { ResponseTenant } from "@/types/tenant";
 import Navbar from "../../components/Navbar";
@@ -273,158 +272,14 @@ export default function TenantDetailsPage() {
     currentProperty: Property | null
   ) => {
     const unitSummary = getTenantUnitSummary(currentTenant);
-    const sanitizePdfText = (input: string) =>
-      input
-        .replace(/→/g, "->")
-        .replace(/•/g, "-")
-        .replace(/—|–/g, "-")
-        .replace(/[“”]/g, "\"")
-        .replace(/[’]/g, "'")
-        .replace(/[^\x20-\x7E]/g, "");
-
-    const pdfDoc = await PDFDocument.create();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const pageSize: [number, number] = A4_PAGE_SIZE;
-    const marginX = PDF_TEMPLATE_SAFE_AREA.left;
-    const marginTop = PDF_TEMPLATE_SAFE_AREA.top;
-    const bottomMargin = PDF_TEMPLATE_SAFE_AREA.bottom;
-    const lineHeight = 14;
-
-    const templateBytes = await fetchPdfTemplateBytes();
-    const templateImage = await embedTemplateImage(pdfDoc, templateBytes);
-
-    const createPage = () => {
-      const newPage = pdfDoc.addPage(pageSize);
-      newPage.drawImage(templateImage, {
-        x: 0,
-        y: 0,
-        width: newPage.getWidth(),
-        height: newPage.getHeight(),
-      });
-      return newPage;
-    };
-
-    let page = createPage();
-    let y = page.getHeight() - marginTop;
-
-    const ensureSpace = (height: number) => {
-      if (y - height < bottomMargin + 20) {
-        page = createPage();
-        y = page.getHeight() - marginTop;
-      }
-    };
-
-    const drawTextLine = (
-      text: string,
-      options: { size?: number; font?: any; color?: any; x?: number } = {}
-    ) => {
-      ensureSpace(lineHeight);
-      const safeText = sanitizePdfText(text);
-      page.drawText(safeText, {
-        x: options.x ?? marginX,
-        y,
-        size: options.size ?? 11,
-        font: options.font ?? font,
-        color: options.color ?? rgb(0.15, 0.2, 0.3),
-      });
-      y -= lineHeight;
-    };
-
-    const drawSectionTitle = (title: string) => {
-      ensureSpace(18);
-      page.drawText(title, {
-        x: marginX,
-        y,
-        size: 12,
-        font: bold,
-        color: rgb(0.05, 0.2, 0.25),
-      });
-      y -= 18;
-    };
-
-    drawTextLine("Tenant Payment Report", { font: bold, size: 18, color: rgb(0.02, 0.2, 0.25) });
-    drawTextLine(`Generated: ${report.generatedAt}`, { size: 10, color: rgb(0.45, 0.45, 0.45) });
-    y -= 4;
-
-    drawSectionTitle("Summary");
-    [
-      ["Tenant", currentTenant.name],
-      ["Property", currentProperty?.name || "—"],
-      ["Units", unitSummary.unitNumbers],
-      ["Lease", report.leaseRange],
-      ["Payment status", report.paymentStatusLabel],
-      ["Overdue balance", formatCurrency(report.overdueBalance)],
-      ["Total paid", formatCurrency(report.totalPaid)],
-      ["Collection rate", `${report.collectionRate}%`],
-      ["Wallet balance", formatCurrency(report.walletBalance)],
-    ].forEach(([label, value]) => {
-      drawTextLine(`${label}: ${value}`);
+    const logoBytes = await fetchPdfTemplateBytes();
+    return generateTenantPaymentReportPdf({
+      report,
+      tenant: { name: currentTenant.name },
+      property: currentProperty ? { name: currentProperty.name } : null,
+      unitNumbers: unitSummary.unitNumbers,
+      logoBytes,
     });
-    y -= 6;
-
-    drawSectionTitle("Insights");
-    report.insights.forEach((insight) => {
-      drawTextLine(`• ${insight}`, { size: 10, color: rgb(0.25, 0.3, 0.4) });
-    });
-    y -= 6;
-
-    drawSectionTitle("Payment Statements");
-    if (!report.statements.length) {
-      drawTextLine("No payments recorded.", { size: 10, color: rgb(0.35, 0.35, 0.35) });
-    } else {
-      const colX = {
-        date: marginX,
-        type: marginX + 90,
-        amount: marginX + 190,
-        status: marginX + 290,
-        ref: marginX + 380,
-      };
-
-      const drawTableHeader = () => {
-        ensureSpace(16);
-        page.drawText("Date", { x: colX.date, y, size: 9, font: bold, color: rgb(0.1, 0.2, 0.3) });
-        page.drawText("Type", { x: colX.type, y, size: 9, font: bold, color: rgb(0.1, 0.2, 0.3) });
-        page.drawText("Amount", { x: colX.amount, y, size: 9, font: bold, color: rgb(0.1, 0.2, 0.3) });
-        page.drawText("Status", { x: colX.status, y, size: 9, font: bold, color: rgb(0.1, 0.2, 0.3) });
-        page.drawText("Reference", { x: colX.ref, y, size: 9, font: bold, color: rgb(0.1, 0.2, 0.3) });
-        y -= 14;
-        page.drawLine({
-          start: { x: marginX, y: y + 4 },
-          end: { x: page.getWidth() - marginX, y: y + 4 },
-          thickness: 0.5,
-          color: rgb(0.8, 0.82, 0.85),
-        });
-      };
-
-      drawTableHeader();
-
-      report.statements.forEach((statement) => {
-        ensureSpace(14);
-        if (y < bottomMargin + 30) {
-          page = createPage();
-          y = page.getHeight() - marginTop;
-          drawTableHeader();
-        }
-
-        const date = new Date(statement.paymentDate).toLocaleDateString();
-        const type = statement.type || "Other";
-        const amount = formatCurrency(statement.amount);
-        const {status} = statement;
-        const ref = getStatementReference(statement).toString();
-        const trimmedRef = ref.length > 18 ? `${ref.slice(0, 15)}...` : ref;
-
-        page.drawText(sanitizePdfText(date), { x: colX.date, y, size: 9, font });
-        page.drawText(sanitizePdfText(type), { x: colX.type, y, size: 9, font });
-        page.drawText(sanitizePdfText(amount), { x: colX.amount, y, size: 9, font });
-        page.drawText(sanitizePdfText(status), { x: colX.status, y, size: 9, font });
-        page.drawText(sanitizePdfText(trimmedRef), { x: colX.ref, y, size: 9, font });
-
-        y -= 14;
-      });
-    }
-
-    return pdfDoc.save();
   };
 
   const handleDownloadReport = async () => {

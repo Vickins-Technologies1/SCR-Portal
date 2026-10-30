@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveTenantContext } from "@/lib/impersonation";
 import { resolveAirbnbBookingReference, resolveAirbnbPaymentMethod } from "@/lib/airbnb-booking-workflow";
+import { generateAirbnbBookingReceiptPdf } from "@/lib/airbnb-booking-receipt-pdf";
 
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get("userId")?.value;
@@ -48,65 +48,25 @@ export async function GET(request: NextRequest) {
   const bookingReference = resolveAirbnbBookingReference(booking as any);
   const paymentMethod = resolveAirbnbPaymentMethod(latestPayment as any);
 
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595, 842]);
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  const draw = (text: string, x: number, y: number, size = 11, bold = false, color = rgb(0.08, 0.12, 0.2)) => {
-    page.drawText(text, {
-      x,
-      y,
-      size,
-      font: bold ? boldFont : font,
-      color,
-    });
-  };
-
-  page.drawRectangle({ x: 0, y: 780, width: 595, height: 62, color: rgb(0.07, 0.13, 0.29) });
-  draw("Booking Receipt", 40, 800, 22, true, rgb(1, 1, 1));
-  draw("My Accurate Rent", 40, 780, 11, false, rgb(0.93, 0.96, 1));
-
-  const checkIn = booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("en-KE", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "—";
-  const checkOut = booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("en-KE", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "—";
-  const paymentDate = latestPayment?.paymentDate
-    ? new Date(latestPayment.paymentDate).toLocaleString("en-KE")
-    : new Date().toLocaleString("en-KE");
-
-  const details = [
-    ["Booking Reference", bookingReference],
-    ["Property", String(booking.listingName || "Airbnb Stay")],
-    ["Guest", String(booking.guestName || tenant.name || "Guest")],
-    ["Check-in", checkIn],
-    ["Check-out", checkOut],
-    ["Nights", String(booking.nights || 0)],
-    ["Amount Paid", `KES ${Number(latestPayment?.amount ?? booking.amountPaid ?? booking.total ?? 0).toLocaleString("en-KE")}`],
-    ["Payment Method", paymentMethod],
-    ["M-Pesa Ref", String(latestPayment?.mpesaCode || latestPayment?.reference || "—")],
-    ["Host", String(owner?.name || "Host")],
-    ["Host Contact", String(owner?.phone || booking.guestPhone || "—")],
-    ["Payment Date", paymentDate],
-  ];
-
-  let y = 730;
-  for (const [label, value] of details) {
-    draw(`${label}:`, 40, y, 11, true);
-    draw(value, 180, y, 11, false, rgb(0.16, 0.16, 0.2));
-    y -= 28;
-  }
-
-  draw(
-    booking.status === "confirmed" && String(booking.payoutStatus || "").toLowerCase() === "paid"
-      ? "Status: Booking confirmed"
-      : "Status: Payment verification pending",
-    40,
-    70,
-    11,
-    true,
-    rgb(0.04, 0.43, 0.25)
-  );
-
-  const pdfBytes = await pdfDoc.save();
+  const pdfBytes = await generateAirbnbBookingReceiptPdf({
+    reference: bookingReference,
+    propertyName: String(booking.listingName || "Airbnb Stay"),
+    guestName: String(booking.guestName || tenant.name || "Guest"),
+    guestPhone: String(booking.guestPhone || ""),
+    checkIn: booking.checkIn,
+    checkOut: booking.checkOut,
+    nights: Number(booking.nights || 0),
+    bookingAmount: Number(booking.amountPaid ?? booking.total ?? 0),
+    verifiedAmount: Number(latestPayment?.amount || 0),
+    paymentMethod,
+    paymentReference: String(latestPayment?.mpesaCode || latestPayment?.reference || ""),
+    hostName: String(owner?.name || "Host"),
+    hostPhone: String(owner?.phone || ""),
+    hostEmail: String(owner?.email || ""),
+    paymentDate: latestPayment?.paymentDate || null,
+    bookingStatus: booking.status === "confirmed" ? "Confirmed" : String(booking.status || "Pending"),
+    payoutStatus: String(booking.payoutStatus || "Payment verification pending"),
+  });
   const fileName = `airbnb-receipt-${bookingReference}.pdf`;
 
   return new NextResponse(Buffer.from(pdfBytes), {

@@ -19,7 +19,7 @@ const API_ROOT_CLASS: Record<string, string> = {
   reports: "session", "revert-impersonation": "impersonation-session-transition", settings: "owner", signin: "authentication", signout: "session-transition",
   signup: "authentication", stripe: "signed-provider-callback", support: "session",
   "system-errors": "ingest-or-admin", "team-members": "owner", tenant: "tenant",
-  tenants: "owner-or-tenant", "transaction-status": "session", tuma: "held-unverified-provider-callback",
+  "tenant-invoices": "tenant-or-owner", tenants: "owner-or-tenant", "transaction-status": "session", tuma: "held-unverified-provider-callback",
   "update-wallet": "owner", upload: "session", user: "session", "utility-charges": "owner",
 };
 

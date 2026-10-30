@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { calculateAdr, calculateOccupancyRate, calculateRevpar } from "@/lib/airbnb-metrics";
@@ -7,8 +6,7 @@ import { endOfDay, getMonthRange, parseDate, startOfDay } from "@/lib/airbnb-uti
 import { calculateAirbnbTaxes } from "@/lib/airbnb-taxes";
 import { sumAirbnbRevenueForRange } from "@/lib/airbnb-billing";
 import { ObjectId } from "mongodb";
-import { A4_PAGE_SIZE, applyPdfTemplate } from "@/lib/pdf-template";
-import { getPdfTemplateBytes } from "@/lib/pdf-template.server";
+import { generateAirbnbTaxReportPdf } from "@/lib/airbnb-tax-report-pdf";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -98,66 +96,7 @@ export async function GET(request: NextRequest) {
     ? await db.collection("propertyOwners").findOne({ _id: new ObjectId(ownerId) })
     : null;
 
-  const pdfDoc = await PDFDocument.create();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  const page = pdfDoc.addPage(A4_PAGE_SIZE);
-
-  const { contentTopY } = await applyPdfTemplate({
-    pdfDoc,
-    page,
-    backgroundBytes: getPdfTemplateBytes(),
-  });
-
-  page.drawText("Airbnb Tax & Performance Report", {
-    x: 50,
-    y: contentTopY,
-    size: 20,
-    font: bold,
-    color: rgb(0.01, 0.16, 0.29),
-  });
-  page.drawText(
-    `Period: ${start.toLocaleDateString("en-KE", { month: "short", day: "numeric", year: "numeric" })} - ${end.toLocaleDateString("en-KE", { month: "short", day: "numeric", year: "numeric" })}`,
-    { x: 50, y: contentTopY - 25, size: 10, font }
-  );
-  page.drawText(`Owner: ${owner?.name || "Property Owner"}`, { x: 50, y: contentTopY - 40, size: 9, font });
-
-  let y = contentTopY - 90;
-  const drawMetric = (label: string, value: string) => {
-    page.drawText(label, { x: 50, y, size: 10, font: bold });
-    page.drawText(value, { x: 260, y, size: 10, font });
-    y -= 18;
-  };
-
-  drawMetric("Revenue (KES)", `Ksh ${summary.revenue.toLocaleString("en-KE")}`);
-  drawMetric("Occupancy Rate", `${summary.occupancyRate}%`);
-  drawMetric("Average Daily Price", `Ksh ${summary.adr.toLocaleString("en-KE")}`);
-  drawMetric("Revenue Per Room", `Ksh ${summary.revpar.toLocaleString("en-KE")}`);
-
-  y -= 12;
-  page.drawText("Tax Breakdown", { x: 50, y, size: 12, font: bold, color: rgb(0.01, 0.16, 0.29) });
-  y -= 18;
-
-  const drawTax = (label: string, rate: number, amount: number) => {
-    page.drawText(`${label} (${(rate * 100).toFixed(1)}%)`, { x: 50, y, size: 10, font });
-    page.drawText(`Ksh ${Math.round(amount).toLocaleString("en-KE")}`, { x: 260, y, size: 10, font: bold });
-    y -= 16;
-  };
-
-  drawTax("Tourism Levy", taxes.rates.tourismLevy, taxes.tourismLevy);
-  drawTax("VAT", taxes.rates.vat, taxes.vat);
-  drawTax("Digital Service Tax", taxes.rates.dst, taxes.dst);
-
-  y -= 10;
-  page.drawText(`Total Tax Estimate: Ksh ${Math.round(taxes.total).toLocaleString("en-KE")}`, {
-    x: 50,
-    y,
-    size: 11,
-    font: bold,
-  });
-
-  const pdfBytes = await pdfDoc.save();
+  const pdfBytes = await generateAirbnbTaxReportPdf({ start, end, ownerName: owner?.name || "Property Owner", summary, taxes });
   return NextResponse.json({
     success: true,
     pdf: Buffer.from(pdfBytes).toString("base64"),

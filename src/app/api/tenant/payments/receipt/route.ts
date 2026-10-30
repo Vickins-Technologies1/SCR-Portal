@@ -3,9 +3,7 @@ import { connectToDatabase } from "../../../../../lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { A4_PAGE_SIZE, applyPdfTemplate } from "@/lib/pdf-template";
-import { getPdfTemplateBytes } from "@/lib/pdf-template.server";
+import { generateTenantPaymentReceiptPdf } from "@/lib/tenant-payment-receipt-pdf";
 
 interface Payment {
   _id: ObjectId;
@@ -19,6 +17,10 @@ interface Payment {
   type?: "Rent" | "Utility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference?: string;
+  mpesaCode?: string;
+  method?: string;
+  provider?: string;
+  remainingBalance?: number;
 }
 
 interface Tenant {
@@ -32,12 +34,15 @@ interface Tenant {
   paymentStatus: string;
   leaseStartDate: string;
   walletBalance: number;
+  houseNumber?: string;
+  unit?: string;
 }
 
 interface Property {
   _id: ObjectId;
   ownerId: string;
   name: string;
+  address?: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -88,55 +93,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
-    // Generate PDF
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage(A4_PAGE_SIZE);
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontSize = 12;
-    const titleFontSize = 24;
-    const margin = 50;
-
-    const { safeArea, contentTopY } = await applyPdfTemplate({
-      pdfDoc,
-      page,
-      backgroundBytes: getPdfTemplateBytes(),
+    const pdfBytes = await generateTenantPaymentReceiptPdf({
+      payment: {
+        receiptNumber: payment._id.toString(), amount: payment.amount, propertyId: payment.propertyId,
+        paymentDate: payment.paymentDate, transactionId: payment.transactionId, status: payment.status,
+        type: payment.type, phoneNumber: payment.phoneNumber, reference: payment.reference,
+        mpesaCode: payment.mpesaCode, method: payment.method || payment.provider || (payment.mpesaCode ? "M-Pesa" : "Recorded payment"),
+        remainingBalance: payment.remainingBalance,
+      },
+      tenant: { name: tenant.name, email: tenant.email, phone: tenant.phone, houseNumber: tenant.houseNumber },
+      property: { name: property.name, address: property.address },
     });
-
-    const titleColor = rgb(0.0039, 0.1647, 0.2902);
-    const textColor = rgb(0, 0, 0); // Black text for contrast
-
-    page.drawText("Payment Receipt", {
-      x: margin,
-      y: contentTopY,
-      size: titleFontSize,
-      font: boldFont,
-      color: titleColor,
-    });
-
-    const details = [
-      { label: "Receipt ID", value: payment._id.toString() },
-      { label: "Tenant Name", value: tenant.name || "Unknown" },
-      { label: "Email", value: tenant.email || "N/A" },
-      { label: "Phone", value: tenant.phone || "N/A" },
-      { label: "Property", value: property.name || "N/A" },
-      { label: "Amount", value: `KES ${payment.amount.toFixed(2)}` },
-      { label: "Payment Type", value: payment.type || "Other" },
-      { label: "Status", value: payment.status.charAt(0).toUpperCase() + payment.status.slice(1) },
-      { label: "Transaction ID", value: payment.transactionId },
-      { label: "Payment Date", value: new Date(payment.paymentDate).toLocaleDateString() },
-      { label: "Reference", value: payment.reference || "N/A" },
-    ];
-
-    let y = contentTopY - titleFontSize - 26;
-    for (const { label, value } of details) {
-      if (y < safeArea.bottom + 20) break;
-      page.drawText(`${label}:`, { x: margin, y, size: fontSize, font: boldFont, color: textColor });
-      page.drawText(value, { x: margin + 100, y, size: fontSize, font, color: textColor });
-      y -= fontSize + 10;
-    }
-
-    const pdfBytes = await pdfDoc.save();
     const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
 
     logger.debug("Receipt generated successfully", { paymentId, userId, role });

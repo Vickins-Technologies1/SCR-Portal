@@ -181,7 +181,7 @@ async function deliverInvoice({ db, invoice, channel, actorId }: { db: any; invo
       : `${routing.paymentType === "till" ? "M-Pesa Till" : "M-Pesa Paybill"}: ${routing.shortcode}\nAccount/reference: ${invoice.invoiceNumber}`;
   } catch { /* do not block issue or send when payment settings are incomplete */ }
   const pdf = await generateTenantInvoicePdf({
-    invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, dueDate: invoice.dueDate, billingPeriod: invoice.billingPeriodLabel || invoice.billingPeriod,
+    invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, dueDate: invoice.dueDate, billingPeriod: invoice.billingPeriodLabel || invoice.billingPeriod, status: financial?.status || invoice.status,
     tenantName: tenant.name || invoice.tenantName, tenantEmail: tenant.email, propertyName: property.name || invoice.propertyName, propertyAddress: property.address,
     unitLabel: invoice.unitLabel, items: invoiceItemsForDisplay(invoice), totalMinor: financial?.totalMinor ?? invoice.totalMinor, amountPaidMinor: financial?.amountPaidMinor || 0, landlordName: landlord?.name, landlordEmail: landlord?.email,
     landlordPhone: landlord?.phone, brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor,
