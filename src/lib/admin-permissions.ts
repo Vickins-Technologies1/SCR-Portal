@@ -115,8 +115,8 @@ export const ADMIN_PERMISSION_GROUPS: AdminPermissionGroup[] = [
     items: [
       {
         key: "admin:settings:manage",
-        label: "Manage billing settings",
-        description: "Change the software leasing percentage.",
+        label: "Manage platform settings",
+        description: "Manage billing and platform integration settings.",
       },
       {
         key: "admin:payments:view",

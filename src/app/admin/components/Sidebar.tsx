@@ -196,7 +196,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       href: "/admin/integrations",
       label: "Integrations",
       icon: <Plug size={20} />,
-      requiredPermission: "admin:payments:view",
+      requiredPermission: "admin:settings:manage",
     },
     {
       key: "support",

@@ -246,6 +246,14 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "whatsappMessageAttempts",
+    indexes: [
+      { key: { idempotencyKey: 1 }, name: "whatsapp_attempt_idempotency_unique", unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } },
+      { key: { createdAt: -1 }, name: "whatsapp_attempt_createdAt" },
+      { key: { status: 1, updatedAt: 1 }, name: "whatsapp_attempt_status_updatedAt" },
+    ],
+  },
+  {
     collection: "systemSettings",
     indexes: [
       { key: { key: 1 }, name: "systemSettings_key" },
