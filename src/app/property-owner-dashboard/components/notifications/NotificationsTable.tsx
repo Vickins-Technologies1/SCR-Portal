@@ -19,6 +19,8 @@ interface TableRow {
   _id?: string;
   id?: string;
   message?: string;
+  title?: string;
+  categoryLabel?: string;
   type?: string;
   tenantName: string;
   createdAt?: string;
@@ -63,7 +65,7 @@ export default function NotificationsTable({
     const statusConfig =
       status === "success"
         ? {
-            label: "Delivered",
+            label: "Sent",
             classes: "bg-emerald-50 text-emerald-700 ring-emerald-200",
             Icon: CheckCircle2,
           }
@@ -168,10 +170,11 @@ export default function NotificationsTable({
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Message</p>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">{item.title ? "Notification" : "Message"}</p>
                   <p className="mt-2 text-sm font-semibold text-foreground">
-                    {item.message?.slice(0, 80) || "—"}
+                    {item.title || item.message?.slice(0, 80) || "—"}
                   </p>
+                  {item.title && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">{item.message}</p>}
                 </div>
                 <span
                   className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-semibold ${
@@ -188,7 +191,7 @@ export default function NotificationsTable({
 
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
                 <span className="rounded-full bg-slate-50 px-2 py-1 font-semibold capitalize ring-1 ring-slate-200">
-                  {item.type || "—"}
+                {(item.categoryLabel || item.type || "—").replaceAll("_", " ")}
                 </span>
                 <span className="rounded-full bg-slate-50 px-2 py-1 font-semibold ring-1 ring-slate-200">
                   {item.tenantName}
@@ -309,11 +312,12 @@ export default function NotificationsTable({
                     {viewMode === "sent" ? (
                       <>
                         <td className="align-top text-xs sm:text-sm">
-                          <div className="truncate max-w-full" title={item.message}>
-                            {item.message?.slice(0, 50)}...
+                          <div className="truncate max-w-full" title={item.title || item.message}>
+                            <span className="block font-semibold">{item.title || item.message?.slice(0, 50) || "—"}</span>
+                            {item.title && <span className="block text-xs text-muted-foreground">{item.message?.slice(0, 50)}{(item.message?.length || 0) > 50 ? "…" : ""}</span>}
                           </div>
                         </td>
-                        <td className="capitalize align-top text-xs sm:text-sm">{item.type || "—"}</td>
+                        <td className="capitalize align-top text-xs sm:text-sm">{(item.categoryLabel || item.type || "—").replaceAll("_", " ")}</td>
                         <td className="align-top text-xs sm:text-sm">{item.tenantName}</td>
                         <td className="align-top text-xs sm:text-sm">
                           {item.createdAt ? format(new Date(item.createdAt), "MMM d, yyyy") : "—"}

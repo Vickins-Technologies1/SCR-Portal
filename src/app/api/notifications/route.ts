@@ -16,11 +16,14 @@ import { TenantDues } from "../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { resolveAccountTier } from "@/lib/tier";
+import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 
 export const maxDuration = 60;
 
 interface Notification {
   _id: ObjectId;
+  title?: string;
+  categoryLabel?: string;
   message: string;
   type: "payment" | "maintenance" | "tenant" | "other";
   createdAt: string;
@@ -52,6 +55,15 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS,
   },
 });
+
+const htmlEntityMap: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => htmlEntityMap[character] || character);
 
 const authenticateUser = async (
   req: NextRequest,
@@ -95,15 +107,6 @@ const authenticateUser = async (
   }
 
   return { isValid: true, userId: loggedInUserId, effectiveOwnerId };
-};
-
-const validateTenantOwnership = async (db: Db, tenantId: string, effectiveOwnerId: string): Promise<boolean> => {
-  if (tenantId === "all") return true;
-  const tenant = await db.collection<Tenant>("tenants").findOne({
-    _id: new ObjectId(tenantId),
-    ownerId: effectiveOwnerId,
-  });
-  return !!tenant;
 };
 
 const assertOwnerNotificationsEnabled = async (db: Db, effectiveOwnerId: string) => {
@@ -199,6 +202,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const body = await req.json();
     const { message, tenantId, type = "other", deliveryMethod = "app" } = body;
+    const title = typeof body.title === "string" ? body.title.replace(/[\r\n]+/g, " ").trim() : "";
+    const categoryLabel = typeof body.categoryLabel === "string" ? body.categoryLabel.trim() : "";
 
     // === VALIDATION ===
     if (!tenantId) return NextResponse.json({ success: false, message: "tenantId is required" }, { status: 400 });
@@ -212,6 +217,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     if (!message && type !== "payment") {
       return NextResponse.json({ success: false, message: "message is required" }, { status: 400 });
+    }
+    if (title.length > 80 || categoryLabel.length > 80 || (body.requireActiveTenant === true && !title)) {
+      return NextResponse.json({ success: false, message: "A title of up to 80 characters is required." }, { status: 400 });
+    }
+    if ((message !== undefined && message !== null && typeof message !== "string") || (typeof message === "string" && message.length > 3000) || (body.requireActiveTenant === true && (typeof message !== "string" || !message.trim()))) {
+      return NextResponse.json({ success: false, message: "Message must contain 1 to 3,000 characters." }, { status: 400 });
+    }
+    if (categoryLabel && !["announcement", "rent_reminder", "payment_update", "maintenance", "important", "emergency", "other"].includes(categoryLabel)) {
+      return NextResponse.json({ success: false, message: "Invalid notification category." }, { status: 400 });
     }
 
     ({ db } = await connectToDatabase());
@@ -228,17 +242,44 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (!(await validateTenantOwnership(db, tenantId, effectiveOwnerId))) {
-      return NextResponse.json({ success: false, message: "Unauthorized tenant access" }, { status: 403 });
+    const actorRole = (await cookies()).get("role")?.value;
+    let assignedPropertyIds: string[] | null = null;
+    if (actorRole === "teamMember") {
+      const teamMember = await db.collection("teamMembers").findOne({ _id: new ObjectId(auth.userId!), active: true });
+      if (!teamMember || !Array.isArray((teamMember as any).permissions) || !(teamMember as any).permissions.includes("notifications:send")) {
+        return NextResponse.json({ success: false, message: "You do not have permission to send notifications." }, { status: 403 });
+      }
+      assignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+        ? (teamMember as any).assignedPropertyIds.map((value: unknown) => String(value))
+        : [];
     }
+    const ownedProperties = await db.collection("properties").find(
+      { ownerId: effectiveOwnerId },
+      { projection: { _id: 1 } },
+    ).toArray();
+    const ownedPropertyIds = new Set(ownedProperties.map((property) => property._id.toString()));
+    const authorizedPropertyIds = assignedPropertyIds && assignedPropertyIds.length > 0
+      ? new Set([...ownedPropertyIds].filter((id) => assignedPropertyIds!.includes(id)))
+      : ownedPropertyIds;
 
-    // === FETCH TENANTS ===
+    // Resolve recipients from owned properties and require active leases for composer sends.
     let tenants: Tenant[] = [];
     if (tenantId === "all") {
-      tenants = await db.collection<Tenant>("tenants").find({ ownerId: effectiveOwnerId }).toArray();
+      tenants = (await fetchTenantsActiveOnDay<Tenant>(db, [...authorizedPropertyIds], new Date()))
+        .filter((tenant) => (tenant as any).accountType !== "airbnb_guest");
     } else {
-      const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId) });
-      if (!tenant) return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+      if (!ObjectId.isValid(tenantId)) return NextResponse.json({ success: false, message: "Invalid tenant ID" }, { status: 400 });
+      const tenant = await db.collection<Tenant>("tenants").findOne({ _id: new ObjectId(tenantId), ownerId: effectiveOwnerId, accountType: { $ne: "airbnb_guest" } });
+      if (!tenant) return NextResponse.json({ success: false, message: "Tenant not found or unauthorized" }, { status: 404 });
+      if (!authorizedPropertyIds.has(String(tenant.propertyId))) {
+        return NextResponse.json({ success: false, message: "You cannot send notifications to tenants outside your assigned properties." }, { status: 403 });
+      }
+      if (body.requireActiveTenant === true) {
+        const active = await fetchTenantsActiveOnDay<Tenant>(db, [String(tenant.propertyId)], new Date(), { _id: 1 });
+        if (!active.some((activeTenant) => activeTenant._id.toString() === tenant._id.toString())) {
+          return NextResponse.json({ success: false, message: "This tenant does not have an active tenancy." }, { status: 400 });
+        }
+      }
       tenants = [tenant];
     }
 
@@ -322,10 +363,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           `Total amount due: Ksh ${latestState.totalOutstanding.toFixed(2)}.`;
       }
 
+      const channelMessage = title ? `${title}\n\n${finalMessage}` : finalMessage;
+
       // === SEND SMS (BlessedTexts) ===
       if (["sms", "both"].includes(effectiveMethod) && tenant.phone) {
         try {
-          await sendWelcomeSms({ phone: tenant.phone, message: finalMessage });
+          await sendWelcomeSms({ phone: tenant.phone, message: channelMessage });
           deliveryStatus = "success";
           logger.info("SMS sent", { phone: tenant.phone });
         } catch (err: any) {
@@ -338,21 +381,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // === SEND EMAIL ===
       if (["email", "both"].includes(effectiveMethod) && tenant.email) {
         try {
-          const title =
-            type === "payment" ? "Payment Notice" :
+          const emailSubject = title || (type === "payment" ? "Payment Notice" :
             type === "maintenance" ? "Maintenance Notice" :
             type === "tenant" ? "Tenancy Update" :
-            "Official Notice";
+            "Official Notice");
           const intro =
             type === "payment"
               ? "This is an official payment notice from My Accurate Rent."
               : "This is an official notice from My Accurate Rent.";
           const html = generateStyledTemplate({
             name: tenant.name,
-            title,
+            title: escapeHtml(emailSubject),
             intro,
             details: `
-              <p>${finalMessage.replace(/\n/g, "<br />")}</p>
+              <p>${escapeHtml(finalMessage).replace(/\n/g, "<br />")}</p>
               ${
                 dues
                   ? `<ul>
@@ -369,7 +411,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           await transporter.sendMail({
             from: `"My Accurate Rent" <${process.env.SMTP_USER}>`,
             to: tenant.email,
-            subject: title,
+            subject: emailSubject,
             html,
           });
           if (deliveryStatus !== "failed") deliveryStatus = "success";
@@ -390,13 +432,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const waResult = await sendWhatsAppMessage({ 
           phone: tenant.phone, 
-          message: finalMessage,
+          message: channelMessage,
           type: "tenant_notification",
           recipientType: "tenant",
           recipientId: tenant._id.toString(),
           notificationId: notificationId.toHexString(),
           immediate: true,
-          idempotencyKey: `notification:${tenant._id.toString()}:${String(type)}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(finalMessage).digest("hex")}`,
+          idempotencyKey: `notification:${tenant._id.toString()}:${String(type)}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(channelMessage).digest("hex")}`,
         });
 
         if (waResult.success) {
@@ -432,6 +474,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // === SAVE NOTIFICATION ===
       const notification: Notification = {
         _id: notificationId,
+        ...(title ? { title } : {}),
+        ...(categoryLabel ? { categoryLabel } : {}),
         message: finalMessage,
         type,
         createdAt: new Date().toISOString(),

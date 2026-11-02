@@ -69,7 +69,7 @@ export default function PropertyOwnerDashboardLayout({ children }: { children: R
     },
     {
       title: "Finance",
-      body: "Open reports, invoices, payments, expenses, and integrations from the Finance dropdown.",
+      body: "Open reports, invoices, payments, and expenses from the Finance dropdown.",
       selector: '[data-tour="owner-nav-finance"]',
       placement: "right",
     },

@@ -134,15 +134,12 @@ export default function Sidebar() {
     pathname.startsWith(`${reconciliationPath}/`) ||
     pathname === expensesPath ||
     pathname.startsWith(`${expensesPath}/`) ||
-    pathname === integrationsPath ||
-    pathname.startsWith(`${integrationsPath}/`) ||
     pathname === tenantInvoicesPath ||
     pathname.startsWith(`${tenantInvoicesPath}/`);
   const invoicesActive = pathname === tenantInvoicesPath || (pathname === reportsPath && (financeTab === "invoices" || isDue));
   const reportsActive = pathname === reportsPath && !invoicesActive;
   const paymentsActive = pathname === paymentsPath || pathname.startsWith(`${paymentsPath}/`);
   const expensesActive = pathname === expensesPath || pathname.startsWith(`${expensesPath}/`);
-  const integrationsActive = pathname === integrationsPath || pathname.startsWith(`${integrationsPath}/`);
 
   const allLinks: NavItem[] = [
     { key: "dashboard", href: "/property-owner-dashboard", label: "Overview", icon: <LayoutDashboard size={20} />, requiredPermission: "dashboard:view" },
@@ -158,6 +155,7 @@ export default function Sidebar() {
     },
     { key: "tenants", href: "/property-owner-dashboard/tenants", label: "Tenants", icon: <Users size={20} />, requiredPermission: "tenants:view" },
     { key: "users", href: "/property-owner-dashboard/users", label: "Users", icon: <UserCog size={20} />, requiredPermission: "users:view" },
+    { key: "integrations", href: integrationsPath, label: "Integrations", icon: <PlugZap size={20} />, requiredPermission: "integrations:view" },
     {
       key: "finance",
       label: "Finance",
@@ -169,7 +167,6 @@ export default function Sidebar() {
         { key: "payments", href: paymentsPath, label: "Payments", icon: <CreditCard size={18} />, requiredPermission: "payments:view" },
         { key: "payment-reconciliation", href: reconciliationPath, label: "Payment Reconciliation", icon: <CreditCard size={18} />, requiredPermission: "payments:view" },
         { key: "expenses", href: expensesPath, label: "Expenses", icon: <Receipt size={18} />, requiredPermission: "expenses:view" },
-        { key: "integrations", href: integrationsPath, label: "Integrations", icon: <PlugZap size={18} />, requiredPermission: "integrations:view" },
       ],
     },
     { key: "referrals", href: "/property-owner-dashboard/referrals", label: "Referrals", icon: <Gift size={20} />, requiredPermission: "dashboard:view" },
@@ -379,9 +376,7 @@ export default function Sidebar() {
                                   ? paymentsActive
                                   : child.key === "expenses"
                                     ? expensesActive
-                                    : child.key === "integrations"
-                                      ? integrationsActive
-                                      : child.key === "properties"
+                                    : child.key === "properties"
                                         ? propertiesActive
                                       : child.key === "properties-report"
                                           ? propertyReportActive

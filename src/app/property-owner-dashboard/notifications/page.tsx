@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Bell, Plus, Send, Trash2, ChevronLeft, ChevronRight, RefreshCw, ChevronDown } from "lucide-react";
+import { Bell } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
@@ -14,6 +14,7 @@ import PaginationControls from "../components/notifications/PaginationControls";
 import PremiumGate from "@/components/PremiumGate";
 import { useAccountTier } from "@/hooks/useAccountTier";
 import { Skeleton } from "@/components/ui/LoadingSkeletons";
+import NotificationComposerModal, { type ComposerTenant, type NotificationDraft } from "./NotificationComposerModal";
 
 // Interfaces
 interface Tenant {
@@ -24,6 +25,7 @@ interface Tenant {
   phone: string;
   role: string;
   propertyId: string;
+  propertyName?: string;
   unitType: string;
   unitIdentifier?: string;
   price: number;
@@ -51,6 +53,8 @@ interface Tenant {
 
 interface Notification {
   _id: string;
+  title?: string;
+  categoryLabel?: string;
   message: string;
   type: "payment" | "maintenance" | "tenant" | "other";
   createdAt: string;
@@ -91,27 +95,24 @@ interface ApiResponse<T = any> {
   csrfToken?: string;
 }
 
-const resolveTenantLeaseUnits = (tenant: Tenant) => {
-  if (Array.isArray(tenant.leasedUnits) && tenant.leasedUnits.length > 0) {
-    return tenant.leasedUnits;
-  }
-  return [
-    {
-      unitIdentifier: tenant.unitIdentifier || tenant.unitType,
-      unitType: tenant.unitType,
-      houseNumber: tenant.houseNumber,
-      price: tenant.price,
-      deposit: tenant.deposit,
-    },
-  ];
-};
+interface PropertyListResponse {
+  success: boolean;
+  properties?: Array<{ _id: string; name: string }>;
+  pagination?: { total: number; page: number; limit: number; hasMore: boolean };
+}
 
-const resolveTenantUnitNumbers = (tenant: Tenant) => {
-  const numbers = resolveTenantLeaseUnits(tenant)
-    .map((unit) => unit.houseNumber)
-    .filter(Boolean);
-  return numbers.length > 0 ? numbers.join(", ") : "—";
-};
+const INACTIVE_TENANT_STATUSES = new Set(["terminated", "inactive", "moved out", "evicted"]);
+
+function isTenantActive(tenant: Tenant, today = new Date()) {
+  if (INACTIVE_TENANT_STATUSES.has(String(tenant.status || "").trim().toLowerCase())) return false;
+  const start = new Date(tenant.leaseStartDate);
+  const end = new Date(tenant.leaseEndDate);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return false;
+  const day = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const startDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  return startDay <= day && endDay >= day;
+}
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -140,14 +141,8 @@ export default function NotificationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  const [newNotification, setNewNotification] = useState({
-    message: "",
-    tenantIds: [] as string[],
-    type: "other" as Notification["type"],
-    deliveryMethod: "app" as Notification["deliveryMethod"],
-  });
+  const [isCreatingNotification, setIsCreatingNotification] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchCsrfToken = useCallback(async () => {
     try {
@@ -273,13 +268,27 @@ export default function NotificationsPage() {
         setIsLoading(false);
         return;
       }
-      setError(null);
-      const fetchedTenants = tenantsData.tenants;
-      setTenants(fetchedTenants);
-      setNewNotification((prev) => ({
-        ...prev,
-        tenantIds: fetchedTenants.length > 0 ? ["all"] : [],
+      const firstPage = tenantsData.tenants;
+      const pageCount = Math.ceil((tenantsData.total || firstPage.length) / 100);
+      const laterPages = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, async (_, index) => {
+        const page = index + 2;
+        const response = await makeAuthenticatedRequest(
+          `/api/tenants?userId=${encodeURIComponent(effectiveOwnerId)}&page=${page}&limit=100`,
+          { method: "GET" }
+        );
+        const data: ApiResponse<Tenant[]> = await response.json();
+        return data.success ? data.tenants || [] : [];
       }));
+      const allTenants = [...firstPage, ...laterPages.flat()];
+      const activeTenants = allTenants.filter((tenant) => isTenantActive(tenant));
+      const propertiesResponse = await makeAuthenticatedRequest(
+        `/api/properties?userId=${encodeURIComponent(effectiveOwnerId)}&page=1&limit=500`,
+        { method: "GET" }
+      );
+      const propertiesData: PropertyListResponse = await propertiesResponse.json();
+      const propertyLookup = Object.fromEntries((propertiesData.properties || []).map((property) => [property._id, property.name]));
+      setError(null);
+      setTenants(activeTenants.map((tenant) => ({ ...tenant, propertyName: propertyLookup[tenant.propertyId] })));
     } catch (err) {
       setError("Unable to fetch tenant or reminder data.");
     } finally {
@@ -397,15 +406,18 @@ export default function NotificationsPage() {
       const response = await makeAuthenticatedRequest("/api/notifications", {
         method: "POST",
         body: JSON.stringify({
+          title: notification.title,
+          categoryLabel: notification.categoryLabel,
           message: notification.message,
           tenantId: notification.tenantId,
           type: notification.type,
           deliveryMethod: notification.deliveryMethod,
         }),
       });
-      const data: ApiResponse<Notification> = await response.json();
-      if (data.success && data.data) {
-        setNotifications((prev) => [data.data!, ...prev.filter((n) => n._id !== notificationId)]);
+      const data: ApiResponse<{ notifications?: Notification[] }> = await response.json();
+      const retriedNotification = data.data?.notifications?.[0];
+      if (response.ok && data.success && retriedNotification) {
+        setNotifications((prev) => [retriedNotification, ...prev.filter((n) => n._id !== notificationId)]);
       }
     } catch (err) {
       setError("Failed to retry notification.");
@@ -414,48 +426,76 @@ export default function NotificationsPage() {
     }
   };
 
-  const createNotification = async () => {
-    if (!effectiveOwnerId || !csrfToken || newNotification.tenantIds.length === 0) return;
+  const createNotification = async (draft: NotificationDraft): Promise<{ failedIds: string[]; errorMessage?: string }> => {
+    if (!effectiveOwnerId || !csrfToken || draft.tenantIds.length === 0) return { failedIds: draft.tenantIds, errorMessage: "Your session has expired. Refresh the page and try again." };
     if (!canSendNotifications) {
       setError("You do not have permission to send notifications.");
-      return;
+      return { failedIds: draft.tenantIds, errorMessage: "You do not have permission to send notifications." };
     }
-    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+    setIsCreatingNotification(true);
+    const successful: Notification[] = [];
+    const failedTenantIds: string[] = [];
+    const failureReasons: string[] = [];
     try {
-      const tenantIds = newNotification.tenantIds.includes("all")
-        ? tenants.map((t) => t._id)
-        : newNotification.tenantIds;
-
-      const responses = await Promise.all(
-        tenantIds.map(async (tenantId) => {
-          const response = await makeAuthenticatedRequest("/api/notifications", {
-            method: "POST",
-            body: JSON.stringify({
-              message: newNotification.message,
-              tenantId,
-              type: newNotification.type,
-              deliveryMethod: newNotification.deliveryMethod,
-            }),
-          });
-          return { tenantId, data: await response.json() as ApiResponse<Notification> };
-        })
-      );
-
-      const successful: Notification[] = [];
-      responses.forEach(({ data }) => {
-        if (data.success && data.data) successful.push(data.data);
-      });
+      const uniqueTenantIds = Array.from(new Set(draft.tenantIds));
+      for (let index = 0; index < uniqueTenantIds.length; index += 4) {
+        const chunk = uniqueTenantIds.slice(index, index + 4);
+        const outcomes = await Promise.all(chunk.map(async (tenantId) => {
+          try {
+            const response = await makeAuthenticatedRequest("/api/notifications", {
+              method: "POST",
+              body: JSON.stringify({
+                title: draft.title,
+                categoryLabel: draft.category,
+                message: draft.message,
+                tenantId,
+                requireActiveTenant: true,
+                type: draft.type,
+                deliveryMethod: draft.deliveryMethod,
+              }),
+            });
+            const data: ApiResponse<{ notifications?: Notification[] }> = await response.json();
+            const created = data.data?.notifications || [];
+            return response.ok && data.success && created.length > 0
+              ? { tenantId, notifications: created, failure: false, reason: "" }
+              : { tenantId, notifications: [], failure: true, reason: data.message || `Request failed (${response.status})` };
+          } catch (requestError) {
+            return { tenantId, notifications: [], failure: true, reason: requestError instanceof Error ? requestError.message : "Network error" };
+          }
+        }));
+        for (const outcome of outcomes) {
+          if (outcome.failure) {
+            failedTenantIds.push(outcome.tenantId);
+            if (outcome.reason) failureReasons.push(outcome.reason);
+          }
+          else successful.push(...outcome.notifications);
+        }
+      }
 
       if (successful.length > 0) {
-        setNotifications((prev) => [...successful, ...prev]);
-        setIsCreateModalOpen(false);
-        setNewNotification({ message: "", tenantIds: tenants.length > 0 ? ["all"] : [], type: "other", deliveryMethod: "app" });
+        setNotifications((previous) => [...successful, ...previous]);
         await fetchNotifications();
       }
+      const recipientsWithDeliveryFailure = successful.filter((notification) => notification.deliveryStatus === "failed").length;
+      if (failedTenantIds.length === 0) {
+        setIsCreateModalOpen(false);
+        setSuccessMessage(`Notification created for ${successful.length} tenant${successful.length === 1 ? "" : "s"}.${recipientsWithDeliveryFailure ? ` ${recipientsWithDeliveryFailure} delivery${recipientsWithDeliveryFailure === 1 ? " needs" : "ies need"} attention in Sent notifications.` : " Delivery status is tracked in Sent notifications."}`);
+      } else {
+        setError(`${successful.length} of ${uniqueTenantIds.length} notification${successful.length === 1 ? " was" : "s were"} created. ${failedTenantIds.length} could not be submitted; ${failureReasons[0] || "please check the tenant details and try again"}`);
+      }
+      return {
+        failedIds: failedTenantIds,
+        errorMessage: failedTenantIds.length > 0
+          ? `${failedTenantIds.length} notification${failedTenantIds.length === 1 ? " was" : "s were"} not submitted. ${failureReasons[0] || "Check the tenant details and try again."}`
+          : undefined,
+      };
     } catch (err) {
       setError("Failed to create notification.");
+      return { failedIds: failedTenantIds.length > 0 ? failedTenantIds : draft.tenantIds, errorMessage: "The request failed before all recipients were processed. Your message is still here; try again." };
     } finally {
-      setIsLoading(false);
+      setIsCreatingNotification(false);
     }
   };
 
@@ -508,9 +548,10 @@ export default function NotificationsPage() {
   const getDeliveryStatusText = (notification: Notification) => {
     const method = notification.deliveryMethod || "app";
     const status = notification.deliveryStatus || "pending";
+    const displayStatus = status === "success" ? "sent" : status;
     const error = notification.errorDetails || "";
     const base = method === "both" ? "SMS, Email & WhatsApp" : method.charAt(0).toUpperCase() + method.slice(1);
-    return error.includes("1007") ? `${base} - Verify Device ID` : `${base} (${status})`;
+    return error.includes("1007") ? `${base} - Verify Device ID` : `${base} (${displayStatus})`;
   };
 
   return (
@@ -538,6 +579,8 @@ export default function NotificationsPage() {
                     setError("You do not have permission to send notifications.");
                     return;
                   }
+                  setError(null);
+                  setSuccessMessage(null);
                   setIsCreateModalOpen(true);
                 }}
                 onSendReminders={!isFree && viewMode === "upcoming" && canTriggerReminders ? triggerReminders : undefined}
@@ -549,6 +592,11 @@ export default function NotificationsPage() {
               {error && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-red-700 shadow-md text-xs sm:text-sm">
                   {error}
+                </div>
+              )}
+              {successMessage && (
+                <div role="status" className="rounded-2xl border border-emerald-300/50 bg-emerald-50 p-3 text-emerald-900 shadow-sm dark:bg-emerald-950/30 dark:text-emerald-100 text-xs sm:text-sm">
+                  {successMessage}
                 </div>
               )}
 
@@ -609,10 +657,12 @@ export default function NotificationsPage() {
           >
             {selectedNotification && (
               <div className="space-y-4">
+                {selectedNotification.title && <div><p className="font-medium text-gray-600">Title</p><p className="mt-1 font-semibold">{selectedNotification.title}</p></div>}
                 <div>
                   <p className="font-medium text-gray-600">Message</p>
-                  <p className="mt-1">{selectedNotification.message}</p>
+                  <p className="mt-1 whitespace-pre-wrap">{selectedNotification.message}</p>
                 </div>
+                {selectedNotification.categoryLabel && <div><p className="font-medium text-gray-600">Category</p><p className="mt-1 capitalize">{selectedNotification.categoryLabel.replaceAll("_", " ")}</p></div>}
                 <div>
                   <p className="font-medium text-gray-600">Type</p>
                   <p className="mt-1 capitalize">{selectedNotification.type}</p>
@@ -661,119 +711,13 @@ export default function NotificationsPage() {
             )}
           </Modal>
 
-          {/* Create Notification Modal */}
-          <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Notification">
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Recipients</label>
-                <div className="relative">
-                  <button
-                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-left text-xs sm:text-sm flex justify-between items-center bg-white/80 hover:bg-gray-50 transition-colors"
-                  >
-                    <span>
-                      {newNotification.tenantIds.length === 0
-                        ? "Select tenants"
-                        : newNotification.tenantIds.includes("all")
-                        ? "All Tenants"
-                        : `${newNotification.tenantIds.length} tenant${newNotification.tenantIds.length > 1 ? "s" : ""} selected`}
-                    </span>
-                    <ChevronDown className={`w-5 h-5 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {isDropdownOpen && (
-                    <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
-                      <label className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs sm:text-sm">
-                        <input
-                          type="checkbox"
-                          checked={newNotification.tenantIds.includes("all")}
-                          onChange={(e) => setNewNotification({ ...newNotification, tenantIds: e.target.checked ? ["all"] : [] })}
-                          className="w-4 h-4 text-primary rounded focus:ring-primary/40"
-                        />
-                        <span className="font-semibold">All Tenants</span>
-                      </label>
-                      {tenants.map((tenant) => (
-                        <label key={tenant._id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs sm:text-sm">
-                          <input
-                            type="checkbox"
-                            checked={newNotification.tenantIds.includes(tenant._id)}
-                            disabled={newNotification.tenantIds.includes("all")}
-                            onChange={(e) =>
-                              setNewNotification({
-                                ...newNotification,
-                                tenantIds: e.target.checked
-                                  ? [...newNotification.tenantIds, tenant._id]
-                                  : newNotification.tenantIds.filter((id) => id !== tenant._id),
-                              })
-                            }
-                            className="w-4 h-4 text-primary rounded focus:ring-primary/40"
-                          />
-                          <span>{tenant.name} ({resolveTenantUnitNumbers(tenant)})</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Notification Type</label>
-                <select
-                  value={newNotification.type}
-                  onChange={(e) => setNewNotification({ ...newNotification, type: e.target.value as Notification["type"] })}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
-                >
-                  <option value="payment">Payment</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="tenant">Tenant Update</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Delivery Method</label>
-                <select
-                  value={newNotification.deliveryMethod}
-                  onChange={(e) => setNewNotification({ ...newNotification, deliveryMethod: e.target.value as Notification["deliveryMethod"] })}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
-                >
-                  <option value="app">In-App</option>
-                  <option value="sms">SMS</option>
-                  <option value="email">Email</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="both">SMS, Email & WhatsApp</option>
-                </select>
-              </div>
-
-              {newNotification.type !== "payment" && (
-                <div>
-                  <label className="block text-xs sm:text-sm font-semibold text-primary mb-2">Message</label>
-                  <textarea
-                    value={newNotification.message}
-                    onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
-                    rows={5}
-                    placeholder="Enter your message..."
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 bg-white/80 text-xs sm:text-sm focus:ring-4 focus:ring-primary/30 focus:border-primary"
-                  />
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-6 py-2.5 border border-gray-300 rounded-xl text-primary text-xs sm:text-sm font-semibold hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={createNotification}
-                  disabled={isLoading || newNotification.tenantIds.length === 0}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold hover:scale-105 transition-transform shadow-md disabled:opacity-50"
-                >
-                  {isLoading ? "Sending..." : "Send Notification"}
-                </button>
-              </div>
-            </div>
-          </Modal>
+          <NotificationComposerModal
+            isOpen={isCreateModalOpen}
+            tenants={tenants as ComposerTenant[]}
+            isSending={isCreatingNotification}
+            onClose={() => setIsCreateModalOpen(false)}
+            onSubmit={createNotification}
+          />
 
           {/* Delete Confirmation Modal */}
           <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion">

@@ -1,7 +1,7 @@
 import "server-only";
 import { Db } from "mongodb";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
-import { addInvoicePaymentStates } from "@/lib/tenant-invoices";
+import { calculateTenantFinancialState, type TenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { addInvoicePaymentStates, invoiceCategoryTotals } from "@/lib/tenant-invoices";
 import { identityValues } from "@/lib/payment-query";
 import { getTenantUtilityUnitCount, getUtilityDueDate, toBillingPeriod } from "@/lib/property-utilities";
 
@@ -26,6 +26,9 @@ export type TenantInvoiceDues = {
   utilitiesMinor: number;
   otherMinor: number;
   totalMinor: number;
+  overdueRentMinor: number;
+  overdueUtilitiesMinor: number;
+  overdueAmountMinor: number;
   walletBalanceMinor: number;
   lines: Array<{ description: string; quantity: number; unitAmount: number; amount: number; category: "rent" | "utilities" | "other"; dueDate: Date; obligationRef: string; billingPeriod: string; originalAmountMinor: number; amountPaidMinor: number; amountAllocatedMinor: number; overdueDays: number }>;
   obligations: TenantDueObligation[];
@@ -38,8 +41,8 @@ const moneyMinor = (amount: unknown) => Math.max(0, Math.round(Number(amount || 
 const businessDay = (date: Date) => new Date(new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit" }).format(date)).getTime();
 
 /** Ledger-derived obligations, allocated oldest-first in the same category order as tenant payments. */
-export async function calculateTenantInvoiceDues(db: Db, tenant: any, property: any, asOf = new Date(), options: { excludeInvoiceIds?: string[] } = {}): Promise<TenantInvoiceDues> {
-  const state = await calculateTenantFinancialState(db, tenant, { asOf, property });
+export async function calculateTenantInvoiceDues(db: Db, tenant: any, property: any, asOf = new Date(), options: { excludeInvoiceIds?: string[]; financialState?: TenantFinancialState } = {}): Promise<TenantInvoiceDues> {
+  const state = options.financialState ?? await calculateTenantFinancialState(db, tenant, { asOf, property });
   const obligations: TenantDueObligation[] = [];
   let rentPaidLeft = moneyMinor(state.rentPaid);
   for (const rent of [...(state.rentObligations || [])].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())) {
@@ -96,27 +99,48 @@ export async function calculateTenantInvoiceDues(db: Db, tenant: any, property: 
   }
 
   const eligible = obligations.filter((obligation) => obligation.eligible);
-  const invoices = await db.collection("tenantInvoices").find({ tenantId: String(tenant._id), propertyId: String(property._id), status: { $in: ["issued", "partially_paid", "paid", "overdue"] }, ...(options.excludeInvoiceIds?.length ? { _id: { $nin: options.excludeInvoiceIds } } : {}) } as any).toArray();
+  const invoices = await db.collection("tenantInvoices").find({ tenantId: { $in: identityValues(tenant._id) }, propertyId: { $in: identityValues(property._id) }, status: { $in: ["issued", "partially_paid", "paid", "overdue"] }, ...(options.excludeInvoiceIds?.length ? { _id: { $nin: options.excludeInvoiceIds } } : {}) } as any).toArray();
   const calculated = await addInvoicePaymentStates(db, invoices);
   const coveredRefs = new Set<string>();
   const coveredByCategory = { rent: 0, utilities: 0, other: 0 };
   const existingInvoiceIds: string[] = [];
   let existingInvoiceBalanceMinor = 0;
-  for (const invoice of calculated) {
+  let overdueInvoiceRentMinor = 0;
+  let overdueInvoiceUtilitiesMinor = 0;
+  const walletRemaining = { rent: 0, utilities: 0, other: 0 };
+  for (const allocation of state.paymentAllocations?.values?.() || []) {
+    walletRemaining.rent += moneyMinor(allocation.walletAllocation?.rent);
+    walletRemaining.utilities += moneyMinor(allocation.walletAllocation?.utilities);
+    walletRemaining.other += moneyMinor(allocation.walletAllocation?.other);
+  }
+  const orderedInvoices = [...calculated].sort((a, b) => String(a.billingPeriod || a.issueDate || "").localeCompare(String(b.billingPeriod || b.issueDate || "")) || String(a._id).localeCompare(String(b._id)));
+  for (const invoice of orderedInvoices) {
     const balance = Math.max(0, Number(invoice.balanceMinor) || 0);
     if (!balance) continue;
     existingInvoiceIds.push(String(invoice._id));
     existingInvoiceBalanceMinor += balance;
+    const totals = invoiceCategoryTotals(invoice);
+    const paidByCategory = { rent: 0, utilities: 0, other: 0 };
+    for (const allocation of invoice.paymentAllocations || []) {
+      if (allocation.category in paidByCategory) {
+        paidByCategory[allocation.category as keyof typeof paidByCategory] += Math.max(0, Number(allocation.amountMinor) || 0);
+      }
+    }
+    const overdueInvoiceOpen = { rent: 0, utilities: 0, other: 0 };
+    for (const category of ["rent", "utilities", "other"] as const) {
+      const unpaid = Math.max(0, totals[category] - paidByCategory[category]);
+      const walletApplied = Math.min(unpaid, walletRemaining[category]);
+      walletRemaining[category] -= walletApplied;
+      overdueInvoiceOpen[category] = unpaid - walletApplied;
+    }
+    const invoiceDueDate = invoice.dueDate ? new Date(invoice.dueDate) : null;
+    if (invoiceDueDate && Number.isFinite(invoiceDueDate.getTime()) && businessDay(invoiceDueDate) < businessDay(asOf)) {
+      overdueInvoiceRentMinor += overdueInvoiceOpen.rent;
+      overdueInvoiceUtilitiesMinor += overdueInvoiceOpen.utilities;
+    }
     for (const ref of invoice.obligationRefs || []) coveredRefs.add(String(ref));
     if (!(invoice.obligationRefs || []).length) {
-      const paidByCategory = { rent: 0, utilities: 0, other: 0 };
-      for (const allocation of invoice.paymentAllocations || []) paidByCategory[allocation.category as keyof typeof paidByCategory] += Math.max(0, Number(allocation.amountMinor) || 0);
-      for (const item of invoice.items || []) {
-        const category = item.category === "utilities" ? "utilities" : item.category === "other" ? "other" : "rent";
-        const amount = Math.max(0, Math.round(Number(item.amount) || 0));
-        const paid = Math.min(amount, paidByCategory[category]); paidByCategory[category] -= paid;
-        coveredByCategory[category] += amount - paid;
-      }
+      for (const category of ["rent", "utilities", "other"] as const) coveredByCategory[category] += overdueInvoiceOpen[category];
     }
   }
   const coveredLeft = { ...coveredByCategory };
@@ -131,6 +155,8 @@ export async function calculateTenantInvoiceDues(db: Db, tenant: any, property: 
   const rentMinor = proposed.filter((item) => item.chargeType === "rent").reduce((sum, item) => sum + item.outstandingMinor, 0);
   const utilitiesMinor = proposed.filter((item) => item.chargeType === "utilities").reduce((sum, item) => sum + item.outstandingMinor, 0);
   const otherMinor = proposed.filter((item) => item.chargeType === "other").reduce((sum, item) => sum + item.outstandingMinor, 0);
+  const overdueRentMinor = proposed.filter((item) => item.chargeType === "rent").reduce((sum, item) => sum + item.outstandingMinor, 0) + overdueInvoiceRentMinor;
+  const overdueUtilitiesMinor = proposed.filter((item) => item.chargeType === "utilities").reduce((sum, item) => sum + item.outstandingMinor, 0) + overdueInvoiceUtilitiesMinor;
   const lines = proposed.map((item) => ({ description: `${item.description} · ${item.billingPeriod} · original KES ${(item.originalAmountMinor / 100).toFixed(2)} · paid KES ${(item.amountPaidMinor / 100).toFixed(2)} · due ${item.dueDate.toISOString().slice(0, 10)}`, quantity: 1, unitAmount: item.outstandingMinor, amount: item.outstandingMinor, category: item.chargeType, dueDate: item.dueDate, obligationRef: item.reference, billingPeriod: item.billingPeriod, originalAmountMinor: item.originalAmountMinor, amountPaidMinor: item.amountPaidMinor, amountAllocatedMinor: item.amountAllocatedMinor, overdueDays: item.overdueDays }));
-  return { tenantId: String(tenant._id), propertyId: String(property._id), rentMinor, utilitiesMinor, otherMinor, totalMinor: rentMinor + utilitiesMinor + otherMinor, walletBalanceMinor: moneyMinor(state.walletBalance), lines, obligations: [...obligations.filter((item) => !item.eligible), ...evaluated], paymentsAllocatedMinor: moneyMinor(state.rentPaid + state.utilitiesPaid + state.depositPaid + state.otherPaid), existingInvoiceIds, existingInvoiceBalanceMinor };
+  return { tenantId: String(tenant._id), propertyId: String(property._id), rentMinor, utilitiesMinor, otherMinor, totalMinor: rentMinor + utilitiesMinor + otherMinor, overdueRentMinor, overdueUtilitiesMinor, overdueAmountMinor: overdueRentMinor + overdueUtilitiesMinor, walletBalanceMinor: moneyMinor(state.walletBalance), lines, obligations: [...obligations.filter((item) => !item.eligible), ...evaluated], paymentsAllocatedMinor: moneyMinor(state.rentPaid + state.utilitiesPaid + state.depositPaid + state.otherPaid), existingInvoiceIds, existingInvoiceBalanceMinor };
 }

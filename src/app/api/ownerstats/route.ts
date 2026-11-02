@@ -4,10 +4,11 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
-import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
+import { calculateTenantFinancialState, sumTenantDepositPaid, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
+import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
 interface Property {
   _id: string;
@@ -170,6 +171,8 @@ export async function GET(request: NextRequest) {
       .find<WithId<Property>>(propertyFilter)
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
+    const propertyIdCandidates = buildPropertyIdCandidates(propertyIds);
+    const tenantPropertyFilter = { propertyId: { $in: propertyIdCandidates } } as any;
     const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
 
     if (properties.length === 0) {
@@ -231,8 +234,8 @@ export async function GET(request: NextRequest) {
         ])
         .toArray(),
       fetchActiveRentOverridesByPropertyIds(db, propertyIds),
-      tenantCollection.countDocuments({ propertyId: { $in: propertyIds } }),
-      tenantCollection.find({ propertyId: { $in: propertyIds } }).toArray(),
+      tenantCollection.countDocuments(tenantPropertyFilter),
+      tenantCollection.find(tenantPropertyFilter).toArray(),
       fetchTenantsActiveOnDay<TenantDoc>(db, propertyIds, today),
       fetchTenantsOverlappingRange<TenantDoc>(db, propertyIds, startOfMonth, endOfMonth),
     ]);
@@ -287,14 +290,17 @@ export async function GET(request: NextRequest) {
 
     const activeTenantIds = new Set(activeTenantsForDues.map((tenant) => String(tenant._id)));
     const tenantStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
+    const tenantDues = await Promise.all(tenantStates.map(({ tenant, state }) => calculateTenantInvoiceDues(
+      db,
+      tenant,
+      propertyMap.get(String(tenant.propertyId)),
+      today,
+      { financialState: state },
+    )));
+    overduePayments = tenantDues.filter((dues) => dues.overdueAmountMinor > 0).length;
     const bulkOps = tenantStates.map(({ tenant, state }) => {
       totalPenaltyAmount += state.penalties;
       totalDepositDue += state.depositOutstanding;
-      const roundedOverdue = state.overdueAmount;
-
-      if (roundedOverdue > 0) {
-        overduePayments += 1;
-      }
 
       return {
         updateOne: {
@@ -319,7 +325,7 @@ export async function GET(request: NextRequest) {
     // Deposits remain held after tenancy ends, so the collected metric includes
     // every tenant ledger attached to an active owner property.
     const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantStates.map(({ state }) => state)));
-    const totalOverdueFromComponents = roundMoney(sumTenantOverdueAmount(tenantStates.map(({ state }) => state)));
+    const totalOverdueFromComponents = Math.round(tenantDues.reduce((sum, dues) => sum + dues.overdueAmountMinor, 0)) / 100;
 
     if (bulkOps.length > 0) {
       await tenantCollection.bulkWrite(bulkOps);
