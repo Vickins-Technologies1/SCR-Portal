@@ -1,4 +1,4 @@
-import { Db, ObjectId } from "mongodb";
+import { ClientSession, Db, ObjectId } from "mongodb";
 import { calculateInvoiceTotals, type InvoiceCalculation } from "@/lib/invoice-calculations";
 import {
   eligibleFinancialPaymentFilter,
@@ -176,6 +176,7 @@ export async function getFinancialPaymentRows(params: {
   invoiceIds?: Array<string | ObjectId>;
   start?: Date;
   end?: Date;
+  session?: ClientSession;
 }): Promise<FinancialPaymentRow[]> {
   const and: any[] = [eligibleFinancialPaymentFilter()];
 
@@ -210,7 +211,7 @@ export async function getFinancialPaymentRows(params: {
   if (dateRange) and.push(dateRange);
 
   const payments = await params.db.collection("payments")
-    .find({ $and: and })
+    .find({ $and: and }, params.session ? { session: params.session } : undefined)
     .sort({ paymentDate: -1, createdAt: -1, _id: -1 })
     .toArray();
 
@@ -226,7 +227,7 @@ export async function getFinancialPaymentRows(params: {
       },
     },
     { $group: { _id: "$sourcePaymentId", total: { $sum: "$amount" } } },
-  ]).toArray();
+  ], params.session ? { session: params.session } : undefined).toArray();
   return projectFinancialPaymentRows(payments, reversalRows);
 }
 
@@ -241,16 +242,16 @@ export async function getFinancialReportSummary(params: {
   return summarizeFinancialPaymentRows(rows);
 }
 
-export async function getInvoicePostedAmount(db: Db, invoiceId: string) {
-  const rows = await getFinancialPaymentRows({ db, invoiceIds: [invoiceId] });
+export async function getInvoicePostedAmount(db: Db, invoiceId: string, session?: ClientSession) {
+  const rows = await getFinancialPaymentRows({ db, invoiceIds: [invoiceId], session });
   return money(rows.reduce((sum, row) => sum + row.netAmount, 0));
 }
 
 export type InvoiceFinancialState = InvoiceCalculation;
 
 /** Recalculate an invoice from its immutable billing data and current posted payments. */
-export async function calculateInvoiceFinancialState(db: Db, invoice: any): Promise<InvoiceFinancialState> {
-  const amountPaid = await getInvoicePostedAmount(db, String(invoice._id));
+export async function calculateInvoiceFinancialState(db: Db, invoice: any, session?: ClientSession): Promise<InvoiceFinancialState> {
+  const amountPaid = await getInvoicePostedAmount(db, String(invoice._id), session);
   return calculateInvoiceTotals({
     amount: Number(invoice.amount || 0),
     items: invoice.items,
@@ -261,11 +262,14 @@ export async function calculateInvoiceFinancialState(db: Db, invoice: any): Prom
   });
 }
 
-export async function reconcileInvoiceFinancialState(db: Db, invoiceId: string) {
+export async function reconcileInvoiceFinancialState(db: Db, invoiceId: string, session?: ClientSession) {
   if (!ObjectId.isValid(invoiceId)) return null;
-  const invoice = await db.collection("invoices").findOne({ _id: new ObjectId(invoiceId) });
+  const invoice = await db.collection("invoices").findOne(
+    { _id: new ObjectId(invoiceId) },
+    session ? { session } : undefined,
+  );
   if (!invoice) return null;
-  const calculation = await calculateInvoiceFinancialState(db, invoice);
+  const calculation = await calculateInvoiceFinancialState(db, invoice, session);
   await db.collection("invoices").updateOne(
     { _id: invoice._id },
     {
@@ -277,6 +281,7 @@ export async function reconcileInvoiceFinancialState(db: Db, invoiceId: string) 
         updatedAt: new Date().toISOString(),
       },
     },
+    session ? { session } : undefined,
   );
   return calculation;
 }

@@ -2,7 +2,7 @@ import "server-only";
 import { ObjectId, type Db } from "mongodb";
 import { identityValues } from "@/lib/payment-query";
 
-export type TenantInvoiceStatus = "draft" | "issued" | "partially_paid" | "paid" | "overdue" | "cancelled";
+export type TenantInvoiceStatus = "draft" | "issued" | "partially_paid" | "paid" | "overdue" | "cancelled" | "voided" | "superseded";
 export type InvoiceChargeCategory = "rent" | "utilities" | "other";
 
 export function invoiceTotals(items: Array<{ quantity: number; unitAmount: number }>) {
@@ -49,7 +49,7 @@ export async function addInvoicePaymentStates(db: Db, invoices: any[]) {
   const pairFilters = [...groups.values()].map((group) => ({
     tenantId: { $in: identityValues(group[0].tenantId) },
     propertyId: { $in: identityValues(group[0].propertyId) },
-    status: { $nin: ["draft", "cancelled"] },
+    status: { $nin: ["draft", "cancelled", "voided", "superseded"] },
   }));
   const relatedInvoices = pairFilters.length
     ? await db.collection("tenantInvoices").find({ $or: pairFilters }).toArray()
@@ -90,7 +90,7 @@ export async function addInvoicePaymentStates(db: Db, invoices: any[]) {
     }
     const orderedPayments = [...payments.values()].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.paymentId.localeCompare(b.paymentId));
     for (const payment of orderedPayments) for (const category of ["rent", "utilities", "other"] as const) payment.available[category] = Math.max(0, payment.available[category]);
-    const ordered = [...group].filter((invoice) => !["draft", "cancelled"].includes(invoice.status)).sort((a, b) => String(a.billingPeriod || a.issueDate).localeCompare(String(b.billingPeriod || b.issueDate)) || String(a._id).localeCompare(String(b._id)));
+    const ordered = [...group].filter((invoice) => !["draft", "cancelled", "voided", "superseded"].includes(invoice.status)).sort((a, b) => String(a.billingPeriod || a.issueDate).localeCompare(String(b.billingPeriod || b.issueDate)) || String(a._id).localeCompare(String(b._id)));
     for (const invoice of ordered) {
       const allocationHistory: Array<{ paymentId: string; reference?: string; category: InvoiceChargeCategory; amountMinor: number; occurredAt: Date }> = [];
       const categoryTotals = invoiceCategoryTotals(invoice);
@@ -112,7 +112,7 @@ export async function addInvoicePaymentStates(db: Db, invoices: any[]) {
       const status: TenantInvoiceStatus = balanceMinor === 0 ? "paid" : Number.isFinite(due) && due < Date.now() ? "overdue" : amountPaidMinor > 0 ? "partially_paid" : "issued";
       results.set(String(invoice._id), { ...invoice, totalMinor, amountPaidMinor, balanceMinor, status, paymentAllocations: allocationHistory, displayItems: invoiceItemsForDisplay(invoice) });
     }
-    for (const invoice of group.filter((row) => ["draft", "cancelled"].includes(row.status))) {
+    for (const invoice of group.filter((row) => ["draft", "cancelled", "voided", "superseded"].includes(row.status))) {
       results.set(String(invoice._id), { ...invoice, amountPaidMinor: 0, balanceMinor: Number(invoice.totalMinor) || 0, status: invoice.status });
     }
   }

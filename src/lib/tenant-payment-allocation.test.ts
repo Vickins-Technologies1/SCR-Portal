@@ -160,6 +160,45 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ walletCredit: 2_000 });
   });
 
+  it("applies a saved wallet credit to current rent without needing a newer payment", () => {
+    const sourcePayment = {
+      ...payment(10_000),
+      allocation: { deposit: 0, rent: 0, utilities: 0, other: 0, walletCredit: 10_000 },
+    };
+    const result = allocatePaymentLedger({ rentDue: 15_000, utilityDue: 0, payments: [sourcePayment] });
+    const allocation = result.allocations.get(sourcePayment._id.toString());
+
+    expect(result.rentPaid).toBe(10_000);
+    expect(result.walletBalance).toBe(0);
+    expect(allocation).toMatchObject({ walletCredit: 10_000, walletApplied: 10_000, walletAllocation: { rent: 10_000 } });
+  });
+
+  it("retains only the excess saved wallet credit after eligible rent is settled", () => {
+    const sourcePayment = {
+      ...payment(20_000),
+      allocation: { deposit: 0, rent: 0, utilities: 0, other: 0, walletCredit: 20_000 },
+    };
+    const result = allocatePaymentLedger({ rentDue: 15_000, utilityDue: 0, payments: [sourcePayment] });
+
+    expect(result.rentPaid).toBe(15_000);
+    expect(result.walletBalance).toBe(5_000);
+    expect(result.allocations.get(sourcePayment._id.toString())).toMatchObject({ walletCredit: 20_000, walletApplied: 15_000, walletAllocation: { rent: 15_000 } });
+  });
+
+  it("tracks wallet credit consumption against its original payment across the established priority", () => {
+    const sourcePayment = {
+      ...payment(22_000),
+      allocation: { deposit: 0, rent: 0, utilities: 0, other: 0, walletCredit: 22_000 },
+    };
+    const result = allocatePaymentLedger({ depositDue: 5_000, rentDue: 15_000, utilityDue: 2_000, payments: [sourcePayment] });
+
+    expect(result).toMatchObject({ depositPaid: 5_000, rentPaid: 15_000, utilitiesPaid: 2_000, walletBalance: 0 });
+    expect(result.allocations.get(sourcePayment._id.toString())).toMatchObject({
+      walletApplied: 22_000,
+      walletAllocation: { deposit: 5_000, rent: 15_000, utilities: 2_000 },
+    });
+  });
+
   it("does not count a later general payment twice when wallet credit already exists", () => {
     const result = allocatePaymentLedger({
       rentDue: 20_000,

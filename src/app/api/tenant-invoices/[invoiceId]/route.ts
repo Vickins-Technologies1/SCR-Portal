@@ -7,6 +7,7 @@ import { generateTenantInvoicePdf } from "@/lib/tenant-invoice-pdf";
 import { sendInvoiceEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
+import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
 type Ctx = { params: Promise<{ invoiceId: string }> };
 
@@ -126,6 +127,23 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     return NextResponse.json({ success: true, status: "cancelled" });
   }
   if (invoice.status !== "draft") return NextResponse.json({ success: false, message: "Invoice has already been issued" }, { status: 409 });
+  if (invoice.invoiceBasis === "overdue_tenant_dues_v1") {
+    const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(invoice.tenantId) });
+    const property = await db.collection("properties").findOne({ _id: ObjectId.isValid(String(invoice.propertyId)) ? new ObjectId(String(invoice.propertyId)) : invoice.propertyId });
+    if (!tenant || !property) return NextResponse.json({ success: false, message: "Tenant or property details are unavailable" }, { status: 409 });
+    const dues = await calculateTenantInvoiceDues(db, tenant, property);
+    const sameRefs = JSON.stringify([...(invoice.obligationRefs || [])].sort()) === JSON.stringify(dues.lines.map((line) => line.obligationRef).sort());
+    const existingLines = (invoice.items || []).map((line: any) => ({ ref: String(line.obligationRef || ""), amount: Number(line.amount) || 0, dueDate: line.dueDate ? new Date(line.dueDate).toISOString() : "" })).sort((a: any, b: any) => a.ref.localeCompare(b.ref));
+    const currentLines = dues.lines.map((line) => ({ ref: line.obligationRef, amount: line.amount, dueDate: line.dueDate.toISOString() })).sort((a, b) => a.ref.localeCompare(b.ref));
+    const sameLines = JSON.stringify(existingLines) === JSON.stringify(currentLines);
+    if (dues.totalMinor <= 0) return NextResponse.json({ success: false, message: "The tenant's overdue balance has been settled; this draft cannot be issued" }, { status: 409 });
+    if (Number(invoice.totalMinor) !== dues.totalMinor || !sameRefs || !sameLines) {
+      const dueDate = dues.lines.reduce((earliest, line) => line.dueDate < earliest ? line.dueDate : earliest, dues.lines[0].dueDate);
+      await db.collection("tenantInvoices").updateOne({ _id: invoice._id, status: "draft" }, { $set: { items: dues.lines, obligationRefs: dues.lines.map((line) => line.obligationRef), totalMinor: dues.totalMinor, dueDate, updatedAt: new Date() } });
+      await audit(db, scoped, "dues_preview_refreshed_before_issue", { totalMinor: dues.totalMinor, obligationRefs: dues.lines.map((line) => line.obligationRef) });
+      return NextResponse.json({ success: false, refreshed: true, message: "The tenant balance changed. Review the refreshed draft before issuing.", totalMinor: dues.totalMinor, lines: dues.lines }, { status: 409 });
+    }
+  }
   const now = new Date();
   const settings = await db.collection("landlordBillingSettings").findOne({ landlordId: invoice.landlordId });
   const prefix = String(settings?.invoicePrefix || "R").replace(/[^A-Z0-9-]/gi, "").toUpperCase().slice(0, 21) || "R";

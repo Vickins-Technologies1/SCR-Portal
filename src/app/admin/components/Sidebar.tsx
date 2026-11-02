@@ -164,6 +164,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       requiredPermission: "admin:payments:view",
     },
     {
+      key: "payment-reconciliation",
+      href: "/admin/payments/reconciliation",
+      label: "Payment Reconciliation",
+      icon: <CreditCard size={20} />,
+      requiredPermission: "admin:payments:view",
+    },
+    {
       key: "lifetime",
       href: "/admin/lifetime",
       label: "Lifetime Package",

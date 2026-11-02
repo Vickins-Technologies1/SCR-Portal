@@ -835,9 +835,6 @@ export default function PropertyOwnersPage() {
                         Status
                       </th>
                       <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Account
-                      </th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Actions
                       </th>
                     </tr>
@@ -845,7 +842,7 @@ export default function PropertyOwnersPage() {
                   <tbody>
                     {propertyOwners.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-10 text-center text-xs text-muted-foreground">
+                        <td colSpan={7} className="py-10 text-center text-xs text-muted-foreground">
                           No property owners found.
                         </td>
                       </tr>
@@ -872,17 +869,6 @@ export default function PropertyOwnersPage() {
                             </td>
                             <td className="py-3 px-4 text-xs text-muted-foreground">
                               {owner.createdAt}
-                            </td>
-                            <td className="py-3 px-4 text-xs">
-                              <span
-                                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                  isOwnerApproved(owner)
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                                }`}
-                              >
-                                {isOwnerApproved(owner) ? "Approved" : "Pending"}
-                              </span>
                             </td>
                             <td className="py-3 px-4 text-xs">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${owner.accountStatus === "suspended" ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}>

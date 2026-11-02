@@ -12,7 +12,7 @@ const API_ROOT_CLASS: Record<string, string> = {
   kopokopo: "signed-provider-callback", lifetime: "session", "list-properties": "owner",
   mpesa: "provider-callback-or-session", notifications: "session", "owner-dues": "owner",
   owner: "owner-or-provider-callback", ownercharts: "owner", ownerstats: "owner",
-  payments: "session", "pending-invoices": "owner", properties: "session",
+  payments: "session", "payment-reconciliation": "session-csrf-and-financial-scope", "pending-invoices": "owner", properties: "session",
   "property-charts": "owner", "property-owner-data": "owner", "property-owners": "owner",
   "public-bookings": "public-input-validation", "public-properties": "public-read",
   public: "public-input-validation", referrals: "session", "rent-price-overrides": "owner",
