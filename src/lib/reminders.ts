@@ -488,7 +488,11 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
         try {
           const waResult = await sendWhatsAppMessage({ phone: tenant.phone, message: whatsappMessage, type: `rent_reminder_${reminderType}`, recipientType: "tenant", recipientId: tenantId, idempotencyKey: reminderKey });
           if (!waResult.success) {
-            recordFailure(`WhatsApp failed: ${waResult.error?.message || "Unknown error"}`);
+            if (waResult.status === "skipped_owner_whatsapp_not_connected" && deliveryMethod !== "whatsapp") {
+              logger.info("WhatsApp reminder skipped because the property owner has not connected an account", { tenantId });
+            } else {
+              recordFailure(`WhatsApp failed: ${waResult.error?.message || "Unknown error"}`);
+            }
           } else if (deliveryStatus === "pending" && waResult.status !== "queued" && waResult.status !== "duplicate") {
             deliveryStatus = "success";
           }

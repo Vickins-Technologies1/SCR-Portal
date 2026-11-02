@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { ObjectId, type Db } from "mongodb";
 import { decryptWhatsAppApiKey, encryptWhatsAppApiKey, hashWhatsAppConsentPhone } from "@/lib/whatsapp-crypto";
 import { normalizeWhatsAppPhone } from "@/lib/listing-contact";
+import { requestOwnerWhatsApp } from "@/lib/owner-whatsapp";
 
 const SETTINGS_ID = "openwa";
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -124,7 +125,7 @@ export async function getOpenWaQr(db: Db) {
   return typeof body.qrCode === "string" && body.qrCode.startsWith("data:image/") ? body.qrCode : null;
 }
 
-export async function enqueueOpenWaText(db: Db, phone: string, message: string, options: { type: string; recipientType?: string; recipientId?: string; idempotencyKey?: string; authorizedTest?: boolean } = { type: "notification" }) {
+export async function enqueueOpenWaText(db: Db, phone: string, message: string, options: { type: string; recipientType?: string; recipientId?: string; senderOwnerId?: string; idempotencyKey?: string; authorizedTest?: boolean } = { type: "notification" }) {
   const normalized = normalizeWhatsAppPhone(phone);
   if (!normalized || !/^\d{10,15}$/.test(normalized)) return { success: false as const, status: "rejected" as const, error: "Invalid phone number" };
   if (!message.trim() || message.length > 4096) return { success: false as const, status: "rejected" as const, error: "Message must contain 1–4096 characters" };
@@ -148,6 +149,10 @@ export async function enqueueOpenWaText(db: Db, phone: string, message: string, 
         type: options.type,
         recipientType: options.recipientType || "unknown",
         recipientId: options.recipientId || null,
+        ...(options.senderOwnerId ? {
+          senderOwnerId: options.senderOwnerId,
+          senderEnvironment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
+        } : {}),
         authorizedTest: options.authorizedTest === true,
         recipientMasked: `${normalized.slice(0, 3)}••••${normalized.slice(-3)}`,
         status: "queued",
@@ -184,12 +189,22 @@ export async function consumeWhatsAppAdminRateLimit(db: Db, key: string, maximum
 
 export async function processOpenWaOutbox(db: Db, limit = 20, onlyAttemptId?: string) {
   const settings = await readWhatsAppSettings(db);
-  if (settings?.enabled !== true && !onlyAttemptId) return { processed: 0, paused: true };
+  const ownerGatewayConfigured = Boolean(process.env.OPENWA_PROVISIONING_KEY);
+  if (settings?.enabled !== true && !ownerGatewayConfigured && !onlyAttemptId) return { processed: 0, paused: true };
   const attempts = db.collection("whatsappMessageAttempts");
   let processed = 0;
   for (let index = 0; index < limit; index += 1) {
     const now = new Date();
     const filter: Record<string, any> = { status: { $in: ["queued", "retry_wait"] }, nextAttemptAt: { $lte: now } };
+    if (!onlyAttemptId && settings?.enabled === true) {
+      filter.$or = [
+        { senderOwnerId: { $exists: false } },
+        { senderOwnerId: { $type: "string" }, senderEnvironment: "production" },
+      ];
+    } else if (!onlyAttemptId && ownerGatewayConfigured) {
+      filter.senderOwnerId = { $type: "string" };
+      filter.senderEnvironment = "production";
+    }
     if (onlyAttemptId && ObjectId.isValid(onlyAttemptId)) filter._id = new ObjectId(onlyAttemptId);
     const job = await attempts.findOneAndUpdate(
       filter,
@@ -214,7 +229,10 @@ export async function processOpenWaOutbox(db: Db, limit = 20, onlyAttemptId?: st
           continue;
         }
       }
-      const body = await requestGateway(db, "/messages/send-text", {
+      const request = typeof job.senderOwnerId === "string"
+        ? (path: string, init: RequestInit) => requestOwnerWhatsApp(db, job.senderOwnerId, path, init)
+        : (path: string, init: RequestInit) => requestGateway(db, path, init);
+      const body = await request("/messages/send-text", {
         method: "POST",
         headers: { "Idempotency-Key": String(job.idempotencyKey) },
         body: JSON.stringify({ chatId: `${payload.phone}@c.us`, text: payload.message }),

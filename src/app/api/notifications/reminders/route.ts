@@ -464,7 +464,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             });
             if (!waResult.success) {
               logger.warn("WhatsApp reminder was not queued", { tenantId: tenant._id.toString(), status: waResult.status });
-              deliveryStatus = "failed";
+              if (waResult.status !== "skipped_owner_whatsapp_not_connected" || effectiveDeliveryMethod === "whatsapp") deliveryStatus = "failed";
             } else {
               logger.info("WhatsApp reminder accepted", { tenantId: tenant._id.toString(), status: waResult.status });
               if (deliveryStatus !== "failed") deliveryStatus = waResult.status === "queued" || waResult.status === "duplicate" ? "pending" : "success";

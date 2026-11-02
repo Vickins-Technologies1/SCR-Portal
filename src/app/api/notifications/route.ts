@@ -400,18 +400,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           });
           if (deliveryStatus !== "failed") deliveryStatus = waResult.status === "queued" || waResult.status === "duplicate" ? "pending" : "success";
         } else {
-          const waError = waResult.error?.message || "Unknown WhatsApp error";
-          const waCode = waResult.error?.code || 0;
+          if (waResult.status === "skipped_owner_whatsapp_not_connected") {
+            logger.info("WhatsApp skipped because the property owner has not connected an account", { tenantId: tenant._id.toString() });
+            if (effectiveMethod === "whatsapp") {
+              deliveryStatus = "failed";
+              errorDetails = "WhatsApp skipped because the property owner has not connected an account.";
+            }
+          } else {
+            const waError = waResult.error?.message || "Unknown WhatsApp error";
+            const waCode = waResult.error?.code || 0;
 
-          logger.error("WhatsApp delivery failed", { 
-            phone: tenant.phone, 
-            tenantName: tenant.name,
-            error: waError,
-            code: waCode
-          });
+            logger.error("WhatsApp delivery failed", {
+              phone: tenant.phone,
+              tenantName: tenant.name,
+              error: waError,
+              code: waCode,
+            });
 
-          deliveryStatus = "failed";
-          errorDetails = `WhatsApp failed: ${waError}${waCode ? ` (Code: ${waCode})` : ""}`;
+            deliveryStatus = "failed";
+            errorDetails = `WhatsApp failed: ${waError}${waCode ? ` (Code: ${waCode})` : ""}`;
+          }
         }
       }
 

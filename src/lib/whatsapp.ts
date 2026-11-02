@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import logger from "./logger";
 import { connectToDatabase } from "./mongodb";
 import { enqueueOpenWaText, readWhatsAppSettings } from "./whatsapp-gateway";
+import { readOwnerWhatsApp } from "./owner-whatsapp";
 import { normalizeWhatsAppPhone } from "./listing-contact";
 import { hashWhatsAppConsentPhone } from "./whatsapp-crypto";
 
@@ -56,6 +57,34 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
     return normalized && hashWhatsAppConsentPhone(normalized) === consentPhoneHash;
   });
   if (!consentPhoneHash || !consentedRecipients.length || consentedRecipients.length !== recipients.length) return { success: false, status: "skipped_consent", error: { code: 1005, message: "Recipient has not opted in to WhatsApp notifications for this phone number" } };
+
+  if (recipientType === "tenant") {
+    if (process.env.VERCEL_ENV === "preview") return { success: false, status: "skipped_preview", error: { code: 1003, message: "Tenant WhatsApp delivery is disabled on Preview deployments" } };
+    const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(recipientId) }, { projection: { ownerId: 1 } });
+    const senderOwnerId = String(tenant?.ownerId || "");
+    if (!ObjectId.isValid(senderOwnerId)) return { success: false, status: "skipped_owner_whatsapp_not_connected", error: { code: 1003, message: "This property owner has not connected WhatsApp" } };
+    const integration = await readOwnerWhatsApp(db, senderOwnerId);
+    if (integration?.enabled !== true || integration.status !== "ready") {
+      return { success: false, status: "skipped_owner_whatsapp_not_connected", error: { code: 1003, message: "This property owner has not connected WhatsApp" } };
+    }
+    let allSuccess = true;
+    let finalStatus = "queued";
+    for (const [index, recipient] of recipients.entries()) {
+      const result = await enqueueOpenWaText(db, recipient, message, {
+        type,
+        recipientType,
+        recipientId,
+        senderOwnerId,
+        idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey,
+      });
+      if (!result.success) allSuccess = false;
+      if (result.status === "duplicate") finalStatus = "duplicate";
+    }
+    return allSuccess
+      ? { success: true, status: finalStatus }
+      : { success: false, status: "failed", error: { code: 1000, message: "WhatsApp message could not be queued" } };
+  }
+
   if (settings?.enabled) {
     let allSuccess = true;
     let finalStatus = "queued";

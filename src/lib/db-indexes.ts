@@ -276,6 +276,7 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
       { key: { createdAt: -1 }, name: "whatsapp_attempt_createdAt" },
       { key: { status: 1, updatedAt: 1 }, name: "whatsapp_attempt_status_updatedAt" },
       { key: { status: 1, nextAttemptAt: 1, createdAt: 1 }, name: "whatsapp_attempt_outbox_due" },
+      { key: { senderEnvironment: 1, senderOwnerId: 1, status: 1, nextAttemptAt: 1, createdAt: 1 }, name: "whatsapp_attempt_owner_outbox_due" },
     ],
   },
   {
