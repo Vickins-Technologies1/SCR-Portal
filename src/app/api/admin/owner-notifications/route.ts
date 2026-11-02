@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
   const recipients = await db.collection("propertyOwners").find(recipientQuery, { projection: { _id: 1, name: 1, email: 1, phone: 1 } }).toArray();
   if (recipients.length === 0) return NextResponse.json({ success: false, message: "Select at least one property owner" }, { status: 400 });
   const now = new Date();
+  const operationId = new ObjectId().toHexString();
   const results = [];
   for (const owner of recipients) {
     const delivery: Record<string, string> = {};
@@ -47,8 +48,8 @@ export async function POST(request: NextRequest) {
       try { if (!owner.phone) throw new Error("Owner has no phone number"); await sendWelcomeSms({ phone: String(owner.phone), message: `${title}\n${message}` }); delivery.sms = "success"; } catch { delivery.sms = "failed"; }
     }
     if (channels.includes("whatsapp")) {
-      const result = owner.phone ? await sendWhatsAppMessage({ phone: String(owner.phone), message: `${title}\n${message}` }) : { success: false };
-      delivery.whatsapp = result.success ? "success" : "failed";
+      const result = owner.phone ? await sendWhatsAppMessage({ phone: String(owner.phone), message: `${title}\n${message}`, type: "admin_owner_notification", recipientType: "owner", recipientId: owner._id.toString(), idempotencyKey: `admin-owner-notice:${operationId}:${owner._id.toString()}` }) : { success: false };
+      delivery.whatsapp = result.status === "queued" || result.status === "duplicate" ? "queued" : result.success ? "success" : result.status === "skipped_consent" ? "skipped_consent" : "failed";
     }
     if (channels.includes("email")) {
       try { if (!owner.email) throw new Error("Owner has no email address"); await sendAdminNotificationEmail({ to: String(owner.email), name: String(owner.name || "Property Owner"), title, message }); delivery.email = "success"; } catch { delivery.email = "failed"; }

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encryptWhatsAppApiKey } from "./whatsapp-crypto";
-import { normalizeOpenWaStatus, sendOpenWaText, validateGatewayUrl } from "./whatsapp-gateway";
+import { normalizeOpenWaStatus, enqueueOpenWaText, processOpenWaOutbox, validateGatewayUrl } from "./whatsapp-gateway";
+import { ObjectId } from "mongodb";
 
 process.env.WHATSAPP_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+process.env.JWT_SECRET = "test-jwt-secret-with-more-than-32-characters";
 
 describe("OpenWA gateway adapter", () => {
   const originalFetch = globalThis.fetch;
@@ -22,39 +24,40 @@ describe("OpenWA gateway adapter", () => {
     expect(normalizeOpenWaStatus("surprise")).toBe("unknown");
   });
 
-  it("submits a normalized Kenyan phone to the documented OpenWA text route", async () => {
-    const encrypted = encryptWhatsAppApiKey("test-openwa-key");
+  it("queues a normalized Kenyan phone with encrypted content before gateway submission", async () => {
     const updateOne = vi.fn(async () => ({ upsertedCount: 1 }));
-    const attempts = { updateOne, insertOne: vi.fn(async () => ({})) };
-    const db = { collection: (name: string) => name === "systemSettings" ? { findOne: async () => ({ _id: "openwa", gatewayUrl: "https://gateway.example", sessionId: "main", apiKeyEncrypted: encrypted }) } : attempts } as never;
-    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      expect(new Headers(init?.headers).get("X-API-Key")).toBe("test-openwa-key");
-      expect(JSON.parse(String(init?.body))).toEqual({ chatId: "254712345678@c.us", text: "Hello" });
-      return new Response(JSON.stringify({ id: "gateway-id" }), { status: 201 });
-    });
+    const attempts = { updateOne };
+    const db = { collection: () => attempts } as never;
+    const fetch = vi.fn();
     globalThis.fetch = fetch as typeof globalThis.fetch;
 
-    const result = await sendOpenWaText(db, "0712345678", "Hello", { type: "test" });
-    expect(result).toMatchObject({ success: true, status: "submitted", gatewayMessageId: "gateway-id" });
-    expect(String(fetch.mock.calls[0][0])).toBe("https://gateway.example/api/sessions/main/messages/send-text");
-    expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ _id: expect.anything() }), expect.objectContaining({ $set: expect.objectContaining({ status: "submitted" }) }));
+    const result = await enqueueOpenWaText(db, "0712345678", "Hello", { type: "test", authorizedTest: true });
+    expect(result).toMatchObject({ success: true, status: "queued" });
+    expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: expect.any(String) }), expect.objectContaining({ $setOnInsert: expect.objectContaining({ status: "queued", recipientMasked: "254••••678", encryptedPayload: expect.any(String) }) }), { upsert: true });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("records a timeout as unknown instead of resending", async () => {
+  it("records a gateway timeout as unknown instead of blindly resending", async () => {
     const encrypted = encryptWhatsAppApiKey("test-openwa-key");
     const writes: Array<Record<string, unknown>> = [];
-    const attempts = { updateOne: async (_filter: unknown, update: Record<string, unknown>) => { writes.push(update); return { upsertedCount: 1 }; }, insertOne: async () => ({}) };
-    const db = { collection: (name: string) => name === "systemSettings" ? { findOne: async () => ({ gatewayUrl: "https://gateway.example", sessionId: "main", apiKeyEncrypted: encrypted }) } : attempts } as never;
+    const job = { _id: new ObjectId(), idempotencyKey: "attempt-key", encryptedPayload: encryptWhatsAppApiKey(JSON.stringify({ phone: "254712345678", message: "Hello" })), attempts: 0, authorizedTest: true };
+    const attempts = {
+      findOneAndUpdate: async () => job,
+      updateOne: async (_filter: unknown, update: Record<string, unknown>) => { writes.push(update); return { modifiedCount: 1 }; },
+      updateMany: async () => ({ modifiedCount: 0 }),
+    };
+    const events = { find: () => ({ sort: () => ({ toArray: async () => [] }) }) };
+    const db = { collection: (name: string) => name === "systemSettings" ? { findOne: async () => ({ gatewayUrl: "https://gateway.example", sessionId: "main", apiKeyEncrypted: encrypted, enabled: true }) } : name === "whatsappDeliveryEvents" ? events : attempts } as never;
     const timeout = new Error("timeout"); timeout.name = "TimeoutError";
     globalThis.fetch = vi.fn(async () => { throw timeout; }) as typeof globalThis.fetch;
-    const result = await sendOpenWaText(db, "+254712345678", "Hello");
-    expect(result).toMatchObject({ success: false, status: "unknown", error: "submission_outcome_unknown" });
+    const result = await processOpenWaOutbox(db, 1);
+    expect(result).toMatchObject({ processed: 1 });
     expect(writes.some((write) => (write.$set as Record<string, unknown>)?.status === "unknown")).toBe(true);
   });
 
   it("rejects invalid numbers without contacting the gateway", async () => {
     const fetch = vi.fn(); globalThis.fetch = fetch as typeof globalThis.fetch;
-    const result = await sendOpenWaText({ collection: () => ({}) } as never, "123", "Hello");
+    const result = await enqueueOpenWaText({ collection: () => ({}) } as never, "123", "Hello", { type: "test" });
     expect(result).toMatchObject({ success: false, status: "rejected" });
     expect(fetch).not.toHaveBeenCalled();
   });

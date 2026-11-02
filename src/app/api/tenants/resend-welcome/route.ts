@@ -1,5 +1,6 @@
 // src/app/api/tenants/resend-welcome/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
@@ -101,15 +102,7 @@ export async function POST(request: NextRequest) {
     // ────────────────────────────────────────────────
     //  Prepare longer WhatsApp message (up to 4096 chars)
     // ────────────────────────────────────────────────
-    const whatsappMessage = 
-      `Hello ${tenant.name},\n\n` +
-      `A secure link has been generated for you to set or reset your password for your tenant account.\n\n` +
-      `Click here: ${resetLink}\n\n` +
-      `This link expires in 24 hours.\n` +
-      `Property: ${propertyName}\n` +
-      `Unit/House: ${unitSummary}\n\n` +
-      `If you did not request this, please contact your property manager immediately.\n\n` +
-      `Best regards,\nMy Accurate Rent`;
+    const whatsappMessage = `Hello ${tenant.name}, a secure password reset link was generated for your tenant account. Check your email or SMS. If you did not request this, contact your property manager.`;
 
     // ────────────────────────────────────────────────
     //  Send EMAIL
@@ -161,14 +154,20 @@ export async function POST(request: NextRequest) {
     //  Send WhatsApp
     // ────────────────────────────────────────────────
     let whatsappSent = false;
+    let whatsappQueued = false;
     try {
       const result = await sendWhatsAppMessage({
         phone: tenant.phone,
         message: whatsappMessage,
+        type: "tenant_password_reset",
+        recipientType: "tenant",
+        recipientId: tenant._id.toString(),
+        idempotencyKey: `tenant-password-reset:${tenant._id.toString()}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(resetLink).digest("hex")}`,
       });
 
       if (result.success) {
-        whatsappSent = true;
+        whatsappQueued = result.status === "queued" || result.status === "duplicate";
+        whatsappSent = !whatsappQueued;
         logger.info("Password reset WhatsApp sent", {
           tenantId: tenant._id.toString(),
           phone: tenant.phone
@@ -191,7 +190,7 @@ export async function POST(request: NextRequest) {
     // ────────────────────────────────────────────────
     //  Final response
     // ────────────────────────────────────────────────
-    if (!emailSent && !smsSent && !whatsappSent) {
+    if (!emailSent && !smsSent && !whatsappSent && !whatsappQueued) {
       return NextResponse.json(
         { success: false, message: "Failed to send reset link via any channel (email, SMS, WhatsApp)" },
         { status: 500 }
@@ -203,11 +202,12 @@ export async function POST(request: NextRequest) {
       message: "Password reset link sent" +
         (emailSent ? " via email" : "") +
         (smsSent ? `${emailSent ? "," : ""} via SMS` : "") +
-        (whatsappSent ? `${emailSent || smsSent ? "," : ""} via WhatsApp` : ""),
+        (whatsappSent ? `${emailSent || smsSent ? "," : ""} via WhatsApp` : "") +
+        (whatsappQueued ? `${emailSent || smsSent || whatsappSent ? "," : ""} queued for WhatsApp` : ""),
       delivery: {
         email: emailSent ? "sent" : "failed",
         sms: smsSent ? "sent" : "failed",
-        whatsapp: whatsappSent ? "sent" : "failed",
+        whatsapp: whatsappSent ? "sent" : whatsappQueued ? "queued" : "failed",
       },
     });
   } catch (err: any) {

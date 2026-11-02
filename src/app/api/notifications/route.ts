@@ -1,5 +1,6 @@
 // src/app/api/notifications/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { Db, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";
@@ -385,15 +386,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const waResult = await sendWhatsAppMessage({ 
           phone: tenant.phone, 
-          message: finalMessage 
+          message: finalMessage,
+          type: "tenant_notification",
+          recipientType: "tenant",
+          recipientId: tenant._id.toString(),
+          idempotencyKey: `notification:${tenant._id.toString()}:${String(type)}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(finalMessage).digest("hex")}`,
         });
 
         if (waResult.success) {
-          logger.info("WhatsApp message sent successfully", { 
+          logger.info(waResult.status === "queued" || waResult.status === "duplicate" ? "WhatsApp message queued" : "WhatsApp message submitted", {
             phone: tenant.phone, 
             tenantName: tenant.name 
           });
-          if (deliveryStatus !== "failed") deliveryStatus = "success";
+          if (deliveryStatus !== "failed") deliveryStatus = waResult.status === "queued" || waResult.status === "duplicate" ? "pending" : "success";
         } else {
           const waError = waResult.error?.message || "Unknown WhatsApp error";
           const waCode = waResult.error?.code || 0;

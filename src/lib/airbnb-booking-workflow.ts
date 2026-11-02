@@ -183,7 +183,7 @@ export async function reserveAirbnbBookingCalendar(
 }
 
 export async function sendAirbnbBookingStatusNotifications(
-  _db: Db,
+  db: Db,
   params: {
     booking: AirbnbBookingRecord;
     payment?: AirbnbBookingPayment | null;
@@ -194,6 +194,9 @@ export async function sendAirbnbBookingStatusNotifications(
   }
 ): Promise<void> {
   const booking = params.booking;
+  const guestAccount = booking.externalId
+    ? await db.collection("tenants").findOne({ ownerId: booking.ownerId, airbnbBookingId: booking.externalId, accountType: "airbnb_guest" }, { projection: { _id: 1 } })
+    : null;
   const bookingReference = resolveAirbnbBookingReference(booking);
   const checkIn = parseDate(booking.checkIn || null);
   const checkOut = parseDate(booking.checkOut || null);
@@ -281,6 +284,10 @@ export async function sendAirbnbBookingStatusNotifications(
       if (booking.guestPhone) {
         await sendWhatsAppMessage({
           phone: booking.guestPhone,
+          type: "airbnb_booking_confirmation",
+          recipientType: "tenant",
+          recipientId: guestAccount?._id?.toString(),
+          idempotencyKey: `airbnb-confirmation:${booking.externalId || bookingReference}:guest`,
           message:
             `Booking confirmed for ${listingName}\n` +
             `Reference: ${bookingReference}\n` +
@@ -299,6 +306,10 @@ export async function sendAirbnbBookingStatusNotifications(
     try {
       await sendWhatsAppMessage({
         phone: hostContact,
+        type: "airbnb_booking_confirmation",
+        recipientType: "owner",
+        recipientId: ObjectId.isValid(booking.ownerId) ? booking.ownerId : undefined,
+        idempotencyKey: `airbnb-confirmation:${booking.externalId || bookingReference}:owner`,
         message:
           `Booking confirmed for ${listingName}\n` +
           `Reference: ${bookingReference}\n` +

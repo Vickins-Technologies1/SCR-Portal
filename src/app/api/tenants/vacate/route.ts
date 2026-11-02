@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
 
     try {
       if (ownerPhone) {
-        await sendWhatsAppMessage({ phone: ownerPhone, message: waMessage });
+        await sendWhatsAppMessage({ phone: ownerPhone, message: waMessage, type: "tenant_vacate_request", recipientType: "owner", recipientId: owner?._id.toString(), idempotencyKey: `vacate-request:${result.insertedId.toString()}` });
       }
     } catch (err) {
       console.error("Vacate WhatsApp failed:", err);

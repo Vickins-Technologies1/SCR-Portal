@@ -266,9 +266,11 @@ export async function POST(request: NextRequest) {
         deliveries.push({ channel, status: "skipped" });
         continue;
       }
-      const response = await sendWhatsAppMessage({ phone: guestPhone, message: messageBody });
+      const response = await sendWhatsAppMessage({ phone: guestPhone, message: messageBody, type: "airbnb_guest_message" });
       if (response.success) {
-        deliveries.push({ channel, status: "sent", recipient: guestPhone });
+        deliveries.push({ channel, status: response.status === "queued" || response.status === "duplicate" ? "queued" : "sent", recipient: guestPhone });
+      } else if (response.status === "skipped_consent") {
+        deliveries.push({ channel, status: "skipped_consent", recipient: guestPhone });
       } else {
         deliveries.push({
           channel,

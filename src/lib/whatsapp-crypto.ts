@@ -8,6 +8,12 @@ function encryptionKey() {
   return key;
 }
 
+export function hashWhatsAppConsentPhone(normalizedPhone: string) {
+  const secret = process.env.JWT_SECRET || "";
+  if (secret.length < 32) throw new Error("JWT_SECRET must contain at least 32 characters to bind WhatsApp consent to a phone number");
+  return crypto.createHmac("sha256", secret).update(normalizedPhone).digest("hex");
+}
+
 export function encryptWhatsAppApiKey(value: string) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey(), iv);

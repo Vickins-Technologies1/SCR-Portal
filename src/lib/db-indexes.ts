@@ -246,11 +246,34 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "whatsappPreferences",
+    indexes: [
+      { key: { entityType: 1, entityId: 1 }, name: "whatsapp_preferences_entity_unique", unique: true },
+      { key: { enabled: 1, updatedAt: -1 }, name: "whatsapp_preferences_enabled_updatedAt" },
+    ],
+  },
+  {
     collection: "whatsappMessageAttempts",
     indexes: [
       { key: { idempotencyKey: 1 }, name: "whatsapp_attempt_idempotency_unique", unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } },
+      { key: { gatewayMessageId: 1 }, name: "whatsapp_attempt_gatewayMessageId_unique", unique: true, partialFilterExpression: { gatewayMessageId: { $type: "string" } } },
       { key: { createdAt: -1 }, name: "whatsapp_attempt_createdAt" },
       { key: { status: 1, updatedAt: 1 }, name: "whatsapp_attempt_status_updatedAt" },
+      { key: { status: 1, nextAttemptAt: 1, createdAt: 1 }, name: "whatsapp_attempt_outbox_due" },
+    ],
+  },
+  {
+    collection: "whatsappDeliveryEvents",
+    indexes: [
+      { key: { deliveryId: 1 }, name: "whatsapp_delivery_event_unique", unique: true },
+      { key: { gatewayMessageId: 1, receivedAt: -1 }, name: "whatsapp_delivery_event_message" },
+      { key: { expiresAt: 1 }, name: "whatsapp_delivery_event_ttl", expireAfterSeconds: 0 },
+    ],
+  },
+  {
+    collection: "whatsappAdminRateLimits",
+    indexes: [
+      { key: { expiresAt: 1 }, name: "whatsapp_admin_rate_limit_ttl", expireAfterSeconds: 0 },
     ],
   },
   {

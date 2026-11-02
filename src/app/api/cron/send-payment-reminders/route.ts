@@ -16,11 +16,14 @@ export async function GET(request: Request) {
     const { db } = await connectToDatabase();
     const run = await withCronJobLock(db, "send-payment-reminders", () => sendPaymentReminders({}));
     if (!run.acquired) return NextResponse.json({ success: true, skipped: true, reason: "already_running" });
-    const { sent, skipped } = run.result;
+    const { sent, queued, skipped } = run.result;
 
     return NextResponse.json({
       success: true,
-      message: `Payment reminders job completed. Sent ${sent}, skipped ${skipped}.`,
+      message: `Payment reminders job completed. Sent ${sent}, queued ${queued}, skipped ${skipped}.`,
+      sent,
+      queued,
+      skipped,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

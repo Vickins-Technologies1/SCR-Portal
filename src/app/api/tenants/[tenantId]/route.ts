@@ -510,7 +510,7 @@ export async function DELETE(
 
       try {
         if (ownerPhone) {
-          await sendWhatsAppMessage({ phone: ownerPhone, message: waMessage });
+          await sendWhatsAppMessage({ phone: ownerPhone, message: waMessage, type: "tenant_deletion_request", recipientType: "owner", recipientId: owner?._id.toString(), idempotencyKey: `tenant-deletion:${insertResult.insertedId.toString()}` });
         }
       } catch (err) {
         logger.error("Tenant deletion WhatsApp failed", { error: (err as any)?.message || err });

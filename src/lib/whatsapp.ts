@@ -1,9 +1,12 @@
 import "server-only";
+import { ObjectId } from "mongodb";
 import logger from "./logger";
 import { connectToDatabase } from "./mongodb";
-import { readWhatsAppSettings, sendOpenWaText } from "./whatsapp-gateway";
+import { enqueueOpenWaText, readWhatsAppSettings } from "./whatsapp-gateway";
+import { normalizeWhatsAppPhone } from "./listing-contact";
+import { hashWhatsAppConsentPhone } from "./whatsapp-crypto";
 
-interface SendWhatsAppOptions { phone: string | string[]; message: string; type?: string; idempotencyKey?: string; }
+interface SendWhatsAppOptions { phone: string | string[]; message: string; type?: string; idempotencyKey?: string; recipientType?: "tenant" | "owner"; recipientId?: string; }
 
 function normalizeLegacyPhone(value: string) {
   const cleaned = value.replace(/[^\d+]/g, "");
@@ -36,18 +39,33 @@ async function sendLegacyApiWap(phone: string, message: string) {
   }
 }
 
-export async function sendWhatsAppMessage({ phone, message, type = "notification", idempotencyKey }: SendWhatsAppOptions): Promise<{ success: boolean; status?: string; error?: { code: number; message: string } }> {
+export async function sendWhatsAppMessage({ phone, message, type = "notification", idempotencyKey, recipientType, recipientId }: SendWhatsAppOptions): Promise<{ success: boolean; status?: string; error?: { code: number; message: string } }> {
   if (!phone || !message || message.length > 4096) return { success: false, error: { code: 1001, message: "Invalid WhatsApp message" } };
   const { db } = await connectToDatabase();
   const settings = await readWhatsAppSettings(db);
+  const recipients = Array.isArray(phone) ? phone : [phone];
+  if (!recipientType || !recipientId || !ObjectId.isValid(recipientId)) return { success: false, status: "skipped_consent", error: { code: 1005, message: "Recipient identity is required to verify WhatsApp consent" } };
+  const preference = await db.collection("whatsappPreferences").findOne({
+    entityType: recipientType === "owner" ? "owner" : "tenant",
+    entityId: new ObjectId(recipientId),
+    enabled: true,
+  }, { projection: { consentPhoneHash: 1 } });
+  const consentPhoneHash = typeof preference?.consentPhoneHash === "string" ? preference.consentPhoneHash : "";
+  const consentedRecipients = recipients.filter((recipient) => {
+    const normalized = normalizeWhatsAppPhone(recipient);
+    return normalized && hashWhatsAppConsentPhone(normalized) === consentPhoneHash;
+  });
+  if (!consentPhoneHash || !consentedRecipients.length || consentedRecipients.length !== recipients.length) return { success: false, status: "skipped_consent", error: { code: 1005, message: "Recipient has not opted in to WhatsApp notifications for this phone number" } };
   if (settings?.enabled) {
-    const recipients = Array.isArray(phone) ? phone : [phone];
     let allSuccess = true;
-    for (const recipient of recipients) {
-      const result = await sendOpenWaText(db, recipient, message, { type, idempotencyKey });
+    let finalStatus = "queued";
+    for (const [index, recipient] of recipients.entries()) {
+      const result = await enqueueOpenWaText(db, recipient, message, { type, recipientType, recipientId, idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey });
       if (!result.success) allSuccess = false;
+      if (result.status === "skipped_consent") finalStatus = result.status;
+      else if (result.status === "duplicate" && finalStatus !== "skipped_consent") finalStatus = "duplicate";
     }
-    return { success: allSuccess, status: allSuccess ? "submitted" : "failed", ...(!allSuccess ? { error: { code: 1000, message: "WhatsApp submission failed; inspect the admin message history" } } : {}) };
+    return { success: allSuccess, status: allSuccess ? finalStatus : finalStatus === "skipped_consent" ? finalStatus : "failed", ...(!allSuccess ? { error: { code: 1000, message: finalStatus === "skipped_consent" ? "Recipient has not opted in to WhatsApp notifications" : "WhatsApp message could not be queued" } } : {}) };
   }
 
   // An administrator-created settings record is the explicit channel switch.
@@ -55,7 +73,6 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
   if (settings) return { success: false, status: "disabled", error: { code: 1003, message: "WhatsApp notifications are disabled" } };
 
   // Keep the existing ApiWap path operating for installs that already configured it.
-  const recipients = Array.isArray(phone) ? phone : [phone];
   const results = await Promise.all(recipients.map((recipient) => sendLegacyApiWap(recipient, message)));
   const failed = results.find((result) => !result.success);
   if (failed) logger.warn("Legacy WhatsApp submission failed", { errorCode: failed.error?.code });

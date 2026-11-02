@@ -143,8 +143,7 @@ export async function ensureAirbnbGuestPortalAccount(
     `Booking: ${bookingId}\n` +
     `Amount: KES ${amount.toLocaleString("en-KE")}\n\n` +
     `Login: ${loginUrl}\n` +
-    `Email: ${guestEmail}\n` +
-    `Password: ${password}`;
+    `Check your email or SMS for secure account access details.`;
 
   const sendEmail = deliveryMethod === "email" || deliveryMethod === "both";
   const sendSms = deliveryMethod === "sms" || deliveryMethod === "both";
@@ -182,7 +181,7 @@ export async function ensureAirbnbGuestPortalAccount(
 
   if (sendWhatsapp) {
     try {
-      await sendWhatsAppMessage({ phone: guestPhone, message });
+      await sendWhatsAppMessage({ phone: guestPhone, message, type: "airbnb_guest_portal_invite", recipientType: "tenant", recipientId: tenantId, idempotencyKey: `airbnb-guest-portal:${bookingId}:${tenantId}` });
     } catch {
       // ignore
     }

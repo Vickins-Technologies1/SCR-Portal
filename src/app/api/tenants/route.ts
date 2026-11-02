@@ -578,18 +578,6 @@ export async function POST(request: NextRequest) {
       `Password: ${body.password!}\n` +
       `Please change your password after first login.`;
 
-    // Longer version for Email + WhatsApp
-    const fullMessage =
-      `Welcome ${body.name.trim()}!\n\n` +
-      `You've been added as a tenant to ${property.name}.\n` +
-      `Units: ${unitSummary}\n\n` +
-      `Login here: ${loginUrl}\n` +
-      `Email:    ${normalizedEmail}\n` +
-      `Password: ${body.password!}\n\n` +
-      `⚠️ IMPORTANT: Change your password immediately after first login!\n` +
-      `Go to account settings → Change Password.\n` +
-      `Never share this password.`;
-
     try {
         await sendWelcomeEmail({
         to: normalizedEmail,
@@ -612,7 +600,11 @@ export async function POST(request: NextRequest) {
     try {
       await sendWhatsAppMessage({
         phone: body.phone,
-        message: fullMessage,
+        message: `Welcome ${body.name.trim()}! You've been added as a tenant at ${property.name}. Sign in at ${loginUrl} and use the secure account setup flow to create your password.`,
+        type: "tenant_welcome",
+        recipientType: "tenant",
+        recipientId: result.insertedId.toString(),
+        idempotencyKey: `tenant-welcome:${result.insertedId.toString()}`,
       });
     } catch (e) { logger.error("Welcome WhatsApp failed", e); }
 

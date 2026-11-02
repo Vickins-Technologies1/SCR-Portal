@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import { Save, User, Lock, Eye, EyeOff, X, CheckCircle, AlertCircle } from "lucide-react";
+import WhatsAppPreferenceControl from "@/components/WhatsAppPreferenceControl";
 
 interface Tenant {
   name: string;
@@ -271,6 +272,8 @@ export default function SettingsPage() {
               {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
+
+          <WhatsAppPreferenceControl disabled={isImpersonating} />
 
           {/* Password Card */}
           <div className="surface-card rounded-3xl p-5 sm:p-6 space-y-6">

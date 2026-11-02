@@ -63,7 +63,7 @@ export default function AdminIntegrationsPage() {
       const data = await response.json(); if (!response.ok || !data.success) throw new Error(data.message || "WhatsApp operation failed");
       if (name === "status") { setConnection(`${data.gateway === "reachable" ? "Gateway reachable" : "Gateway unavailable"} · session ${data.session}`); setWa((value) => ({ ...value, lastCheckAt: data.lastCheckAt, lastCheckError: data.error })); }
       if (name === "qr") setQr(data.qrCode);
-      if (name === "test") { setWaMessage(`Test request ${data.status}. This confirms gateway submission only, not delivery.`); fetch("/api/admin/whatsapp").then((r) => r.json()).then((result) => result.success && setAttempts(result.attempts || [])).catch(() => {}); }
+      if (name === "test") { setWaMessage(`Test attempt status: ${data.status}. A submitted status confirms gateway acceptance only, not delivery.`); fetch("/api/admin/whatsapp").then((r) => r.json()).then((result) => result.success && setAttempts(result.attempts || [])).catch(() => {}); }
     } catch (error) { setWaMessage(error instanceof Error ? error.message : "WhatsApp operation failed"); if (name === "status") setConnection("Unavailable"); }
     finally { setBusyAction(""); }
   };

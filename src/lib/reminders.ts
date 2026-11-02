@@ -41,6 +41,7 @@ interface ReminderNotification {
 
 interface ReminderResult {
   sent: number;
+  queued: number;
   skipped: number;
   notifications: ReminderNotification[];
 }
@@ -184,7 +185,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
   const properties = await db.collection<Property>("properties").find(propertyFilter).toArray();
 
   if (properties.length === 0) {
-    return { sent: 0, skipped: 0, notifications: [] };
+    return { sent: 0, queued: 0, skipped: 0, notifications: [] };
   }
 
   const propertyMap = new Map<string, Property>();
@@ -201,7 +202,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
   const tenants = await db.collection<Tenant>("tenants").find(tenantFilter).toArray();
 
   if (tenants.length === 0) {
-    return { sent: 0, skipped: 0, notifications: [] };
+    return { sent: 0, queued: 0, skipped: 0, notifications: [] };
   }
 
   const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(
@@ -209,6 +210,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     Array.from(propertyMap.keys())
   );
   let sent = 0;
+  let queued = 0;
   let skipped = 0;
   const createdNotifications: ReminderNotification[] = [];
 
@@ -484,10 +486,10 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     if (deliveryMethod === "whatsapp" || deliveryMethod === "both") {
       if (tenant.phone) {
         try {
-          const waResult = await sendWhatsAppMessage({ phone: tenant.phone, message: whatsappMessage });
+          const waResult = await sendWhatsAppMessage({ phone: tenant.phone, message: whatsappMessage, type: `rent_reminder_${reminderType}`, recipientType: "tenant", recipientId: tenantId, idempotencyKey: reminderKey });
           if (!waResult.success) {
             recordFailure(`WhatsApp failed: ${waResult.error?.message || "Unknown error"}`);
-          } else if (deliveryStatus === "pending") {
+          } else if (deliveryStatus === "pending" && waResult.status !== "queued" && waResult.status !== "duplicate") {
             deliveryStatus = "success";
           }
         } catch (error) {
@@ -506,10 +508,11 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     );
     createdNotifications.push(completedNotification);
     if (deliveryStatus === "success") sent += 1;
+    else if (deliveryStatus === "pending") queued += 1;
     else skipped += 1;
   }
 
-  return { sent, skipped, notifications: createdNotifications };
+  return { sent, queued, skipped, notifications: createdNotifications };
 }
 
 export async function getUpcomingPaymentReminders(params: { ownerId?: string; today?: Date }): Promise<UpcomingReminder[]> {

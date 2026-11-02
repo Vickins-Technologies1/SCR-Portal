@@ -1,5 +1,6 @@
 // src/app/api/notifications/reminders/route.ts
 import { NextResponse, NextRequest } from "next/server";
+import { createHash } from "node:crypto";
 import { Db, ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 import { v4 as uuidv4 } from "uuid";
@@ -258,7 +259,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       (body as { auto?: boolean }).auto === true;
 
     if (isAutoTrigger) {
-      const { sent, skipped, notifications } = await sendPaymentReminders({ ownerId: effectiveOwnerId });
+      const { sent, queued, skipped, notifications } = await sendPaymentReminders({ ownerId: effectiveOwnerId });
       const formatted = notifications.map((notification) => ({
         ...notification,
         _id: notification._id.toString(),
@@ -266,7 +267,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           success: true,
-          message: `Sent ${sent} reminder(s), skipped ${skipped}.`,
+          message: `Sent ${sent} reminder(s), queued ${queued}, skipped ${skipped}.`,
+          sent,
+          queued,
+          skipped,
           data: formatted,
         },
         { status: 200 }
@@ -450,12 +454,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (effectiveDeliveryMethod === "whatsapp" || effectiveDeliveryMethod === "both") {
         if (tenant.phone) {
           try {
-            await sendWhatsAppMessage({
+            const waResult = await sendWhatsAppMessage({
               phone: tenant.phone,
               message: finalMessage,
+              type: "tenant_reminder",
+              recipientType: "tenant",
+              recipientId: tenant._id.toString(),
+              idempotencyKey: `tenant-reminder:${tenant._id.toString()}:${type}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(finalMessage).digest("hex")}`,
             });
-            logger.info("WhatsApp message sent successfully", { tenantId: tenant._id.toString(), phone: tenant.phone });
-            if (deliveryStatus !== "failed") deliveryStatus = "success";
+            if (!waResult.success) {
+              logger.warn("WhatsApp reminder was not queued", { tenantId: tenant._id.toString(), status: waResult.status });
+              deliveryStatus = "failed";
+            } else {
+              logger.info("WhatsApp reminder accepted", { tenantId: tenant._id.toString(), status: waResult.status });
+              if (deliveryStatus !== "failed") deliveryStatus = waResult.status === "queued" || waResult.status === "duplicate" ? "pending" : "success";
+            }
           } catch (err) {
             logger.error("Failed to send WhatsApp message", { tenantId: tenant._id.toString(), phone: tenant.phone, err });
             deliveryStatus = "failed";

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import { Save, User, Lock, Settings, Clock } from "lucide-react";
+import WhatsAppPreferenceControl from "@/components/WhatsAppPreferenceControl";
 import { motion } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast"; // Import react-hot-toast
 import Sidebar from "../components/Sidebar";
@@ -241,6 +242,8 @@ export default function OwnerSettingsPage() {
               {loading ? "Saving..." : "Save Changes"}
             </button>
           </motion.div>
+
+          {isOwnerRole && <WhatsAppPreferenceControl />}
 
           <motion.div
             className="surface-card rounded-2xl p-5 sm:p-6"
