@@ -9,8 +9,8 @@ function encryptionKey() {
 }
 
 export function hashWhatsAppConsentPhone(normalizedPhone: string) {
-  const secret = process.env.JWT_SECRET || "";
-  if (secret.length < 32) throw new Error("JWT_SECRET must contain at least 32 characters to bind WhatsApp consent to a phone number");
+  const secret = process.env.WHATSAPP_CONSENT_SECRET || process.env.JWT_SECRET || "";
+  if (secret.length < 32) throw new Error("WHATSAPP_CONSENT_SECRET must contain at least 32 characters");
   return crypto.createHmac("sha256", secret).update(normalizedPhone).digest("hex");
 }
 

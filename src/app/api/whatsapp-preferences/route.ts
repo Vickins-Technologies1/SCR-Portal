@@ -6,6 +6,7 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 import { normalizeWhatsAppPhone } from "@/lib/listing-contact";
 import { hashWhatsAppConsentPhone } from "@/lib/whatsapp-crypto";
 import { cancelWhatsAppRecipientOutbox } from "@/lib/whatsapp-gateway";
+import logger from "@/lib/logger";
 
 type PreferenceIdentity = { entityType: "tenant" | "owner"; entityId: ObjectId; account: Record<string, unknown> };
 
@@ -35,7 +36,8 @@ export async function GET(request: NextRequest) {
     const phone = normalizeWhatsAppPhone(typeof identity.account.phone === "string" ? identity.account.phone : "");
     const phoneMatchesConsent = Boolean(phone && preference?.consentPhoneHash === hashWhatsAppConsentPhone(phone));
     return NextResponse.json({ success: true, enabled: preference?.enabled === true && phoneMatchesConsent, consentAt: preference?.consentAt || null, revokedAt: preference?.revokedAt || null });
-  } catch {
+  } catch (error) {
+    logger.error("WhatsApp preference could not be loaded", { message: error instanceof Error ? error.message : "Unknown error" });
     return NextResponse.json({ success: false, message: "Unable to load WhatsApp preference" }, { status: 500 });
   }
 }
@@ -58,7 +60,8 @@ export async function PUT(request: NextRequest) {
     if (!body.enabled) await cancelWhatsAppRecipientOutbox(db, identity.entityType, identity.entityId);
     await db.collection("auditLogs").insertOne({ action: body.enabled ? "whatsapp_consent_granted" : "whatsapp_consent_revoked", entityType: identity.entityType, entityId: identity.entityId.toHexString(), timestamp: now.toISOString() });
     return NextResponse.json({ success: true, enabled: body.enabled, updatedAt: now });
-  } catch {
+  } catch (error) {
+    logger.error("WhatsApp preference could not be updated", { message: error instanceof Error ? error.message : "Unknown error" });
     return NextResponse.json({ success: false, message: "Unable to update WhatsApp preference" }, { status: 500 });
   }
 }
