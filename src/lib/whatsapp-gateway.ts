@@ -170,7 +170,7 @@ export async function enqueueOpenWaText(db: Db, phone: string, message: string, 
 export async function consumeWhatsAppAdminRateLimit(db: Db, key: string, maximum: number, windowMs: number) {
   const now = new Date();
   const cutoff = new Date(now.getTime() - windowMs);
-  const result = await db.collection("whatsappAdminRateLimits").findOneAndUpdate(
+  const result = await db.collection<{ _id: string; windowStartedAt?: Date; count?: number; expiresAt?: Date }>("whatsappAdminRateLimits").findOneAndUpdate(
     { _id: key },
     [{ $set: {
       windowStartedAt: { $cond: [{ $gt: ["$windowStartedAt", cutoff] }, "$windowStartedAt", now] },
