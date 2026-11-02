@@ -339,8 +339,8 @@ describe("tenant payment allocation", () => {
   });
 
   it("keeps deposit due and penalties out of overdue amount", () => {
-    const depositOnly = { overdueRent: 0, overdueUtilities: 0, depositOutstanding: 20_000, penalties: 5_000 };
-    const rentAndUtilities = { overdueRent: 10_000, overdueUtilities: 5_000, depositOutstanding: 20_000, penalties: 5_000 };
+    const depositOnly = { overdueAmount: 0, depositOutstanding: 20_000, penalties: 5_000 };
+    const rentAndUtilities = { overdueAmount: 15_000, overdueRent: 10_000, overdueUtilities: 5_000, depositOutstanding: 20_000, penalties: 5_000 };
 
     expect(sumTenantOverdueAmount([depositOnly])).toBe(0);
     expect(sumTenantOverdueAmount([rentAndUtilities])).toBe(15_000);
@@ -353,10 +353,29 @@ describe("tenant payment allocation", () => {
 
   it("aggregates overdue rent and utilities across tenants without deposits", () => {
     expect(sumTenantOverdueAmount([
-      { overdueRent: 15_000, overdueUtilities: 3_000 },
-      { overdueRent: 0, overdueUtilities: 0 },
-      { overdueRent: 10_000, overdueUtilities: 5_000 },
+      { overdueAmount: 18_000 },
+      { overdueAmount: 0 },
+      { overdueAmount: 15_000 },
     ])).toBe(33_000);
+  });
+
+  it("reconciles property subtotals to the owner portfolio using tenant state balances", () => {
+    const ownerTenants = [
+      { ownerId: "owner-a", propertyId: "property-a", overdueAmount: 125.25 },
+      { ownerId: "owner-a", propertyId: "property-a", overdueAmount: 0 },
+      { ownerId: "owner-a", propertyId: "property-b", overdueAmount: 74.5 },
+      { ownerId: "owner-b", propertyId: "property-c", overdueAmount: 999 },
+    ];
+    const ownerAPortfolio = ownerTenants.filter((tenant) => tenant.ownerId === "owner-a");
+    const propertyA = ownerAPortfolio.filter((tenant) => tenant.propertyId === "property-a");
+    const propertyB = ownerAPortfolio.filter((tenant) => tenant.propertyId === "property-b");
+    const ownerBPortfolio = ownerTenants.filter((tenant) => tenant.ownerId === "owner-b");
+
+    expect(sumTenantOverdueAmount(propertyA)).toBe(125.25);
+    expect(sumTenantOverdueAmount(propertyB)).toBe(74.5);
+    expect(sumTenantOverdueAmount(ownerAPortfolio)).toBe(199.75);
+    expect(sumTenantOverdueAmount(ownerBPortfolio)).toBe(999);
+    expect(sumTenantOverdueAmount([ ...propertyA, ...propertyB ])).toBe(sumTenantOverdueAmount(ownerAPortfolio));
   });
 
   it("derives a zero state when the tenant has no charges or payments", () => {

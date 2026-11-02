@@ -4,11 +4,10 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, sumTenantDepositPaid, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
 import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
-import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
 interface Property {
   _id: string;
@@ -290,14 +289,7 @@ export async function GET(request: NextRequest) {
 
     const activeTenantIds = new Set(activeTenantsForDues.map((tenant) => String(tenant._id)));
     const tenantStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
-    const tenantDues = await Promise.all(tenantStates.map(({ tenant, state }) => calculateTenantInvoiceDues(
-      db,
-      tenant,
-      propertyMap.get(String(tenant.propertyId)),
-      today,
-      { financialState: state },
-    )));
-    overduePayments = tenantDues.filter((dues) => dues.overdueAmountMinor > 0).length;
+    overduePayments = tenantStates.filter(({ state }) => state.overdueAmount > 0).length;
     const bulkOps = tenantStates.map(({ tenant, state }) => {
       totalPenaltyAmount += state.penalties;
       totalDepositDue += state.depositOutstanding;
@@ -325,7 +317,7 @@ export async function GET(request: NextRequest) {
     // Deposits remain held after tenancy ends, so the collected metric includes
     // every tenant ledger attached to an active owner property.
     const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantStates.map(({ state }) => state)));
-    const totalOverdueFromComponents = Math.round(tenantDues.reduce((sum, dues) => sum + dues.overdueAmountMinor, 0)) / 100;
+    const totalOverdueFromComponents = sumTenantOverdueAmount(tenantStates.map(({ state }) => state));
 
     if (bulkOps.length > 0) {
       await tenantCollection.bulkWrite(bulkOps);

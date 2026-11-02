@@ -93,10 +93,10 @@ export function sumTenantDepositPaid(states: Iterable<Pick<TenantFinancialState,
 }
 
 export function sumTenantOverdueAmount(
-  states: Iterable<Pick<TenantFinancialState, "overdueRent" | "overdueUtilities">>
+  states: Iterable<Pick<TenantFinancialState, "overdueAmount">>
 ) {
   let total = 0;
-  for (const state of states) total += amountOf(state.overdueRent) + amountOf(state.overdueUtilities);
+  for (const state of states) total += amountOf(state.overdueAmount);
   return money(total);
 }
 
