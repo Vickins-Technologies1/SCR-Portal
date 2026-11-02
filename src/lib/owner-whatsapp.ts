@@ -29,6 +29,13 @@ function provisioningKey() {
   return key;
 }
 
+function ownerWhatsAppWebhookUrl() {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || "https://www.myaccuraterent.com";
+  const webhookUrl = new URL("/api/webhooks/openwa", baseUrl);
+  if (webhookUrl.hostname === "myaccuraterent.com") webhookUrl.hostname = "www.myaccuraterent.com";
+  return webhookUrl.toString();
+}
+
 async function requestWithKey(path: string, apiKey: string, init: RequestInit = {}) {
   const response = await fetch(`${gatewayUrl()}${path}`, {
     ...init,
@@ -102,11 +109,10 @@ export async function connectOwnerWhatsApp(db: Db, ownerId: string) {
     await requestWithKey(`/api/sessions/${encodeURIComponent(sessionId)}/start`, ownerApiKey, { method: "POST" });
     const webhookSecret = process.env.OPENWA_WEBHOOK_SECRET || "";
     if (webhookSecret.length < 16) throw new Error("OpenWA webhook is not configured");
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || "https://www.myaccuraterent.com";
     await requestWithKey(`/api/sessions/${encodeURIComponent(sessionId)}/webhooks`, ownerApiKey, {
       method: "POST",
       body: JSON.stringify({
-        url: `${baseUrl.replace(/\/$/, "")}/api/webhooks/openwa`,
+        url: ownerWhatsAppWebhookUrl(),
         events: ["message.ack", "message.failed", "message.received"],
         secret: webhookSecret,
       }),
