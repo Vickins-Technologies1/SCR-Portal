@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
 import { identityValues } from "@/lib/payment-query";
 import { addInvoicePaymentStates, invoiceTotals, serializeTenantInvoice, validObjectId } from "@/lib/tenant-invoices";
+import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
 type InvoiceLine = { description: string; quantity: number; unitAmount: number; amount: number; category?: "rent" | "utilities" | "other" };
 type TenantInvoice = {
@@ -12,6 +13,9 @@ type TenantInvoice = {
   invoiceNumber: string; issueDate: Date | null; dueDate: Date; items: InvoiceLine[];
   totalMinor: number; status: "draft" | "issued" | "cancelled"; createdAt: Date; updatedAt: Date;
   billingPeriodLabel?: string | null;
+  invoiceBasis?: string;
+  obligationRefs?: string[];
+  obligationInvoiceIds?: string[];
 };
 
 const validPeriod = (period: unknown): period is string => typeof period === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
@@ -49,7 +53,7 @@ export async function GET(request: NextRequest) {
   const tenantId = params.get("tenantId");
   if (propertyId && !propertyIds.includes(propertyId)) return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
   if (tenantId && !ObjectId.isValid(tenantId)) return NextResponse.json({ success: false, message: "Invalid tenantId" }, { status: 400 });
-  const statuses = ["all", "draft", "issued", "partially_paid", "paid", "overdue", "cancelled"];
+  const statuses = ["all", "draft", "issued", "partially_paid", "paid", "overdue", "cancelled", "voided", "superseded"];
   if (params.has("status") && !statuses.includes(params.get("status") || "")) return NextResponse.json({ success: false, message: "Invalid invoice status" }, { status: 400 });
   const baseFilter: Record<string, any> = { landlordId, propertyId: propertyId ? propertyId : { $in: propertyIds } };
   if (tenantId) baseFilter.tenantId = tenantId;
@@ -142,6 +146,39 @@ export async function POST(request: NextRequest) {
   if (body.propertyId && properties.length === 0) return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
   const propertyIds = properties.map((p) => p._id.toString());
   if (!propertyIds.length) return NextResponse.json({ success: false, message: "No properties found" }, { status: 400 });
+  if (body.action === "dues") {
+    if (!validObjectId(body.tenantId)) return NextResponse.json({ success: false, message: "Valid tenantId is required" }, { status: 400 });
+    const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(body.tenantId), propertyId: { $in: identityValues(propertyIds) } });
+    const property = tenant && properties.find((p) => String(p._id) === String(tenant.propertyId));
+    if (!tenant || !property) return NextResponse.json({ success: false, message: "Tenant not found for an authorized property" }, { status: 404 });
+    const settings = await db.collection("landlordBillingSettings").findOne({ landlordId });
+    if (tenant.invoiceEnabled === false || ["inactive", "vacated"].includes(String(tenant.status)) || (settings?.excludedTenantIds || []).map(String).includes(String(tenant._id)) || Array.isArray(settings?.eligibleTenantIds) && settings.eligibleTenantIds.length > 0 && !settings.eligibleTenantIds.map(String).includes(String(tenant._id)) || Array.isArray(settings?.eligiblePropertyIds) && settings.eligiblePropertyIds.length > 0 && !settings.eligiblePropertyIds.map(String).includes(String(property._id))) return NextResponse.json({ success: false, message: "Tenant is not eligible for invoicing" }, { status: 409 });
+    const dues = await calculateTenantInvoiceDues(db, tenant, property);
+    if (dues.totalMinor <= 0) return NextResponse.json({ success: false, message: "Tenant has no overdue eligible charges" }, { status: 409 });
+    const now = new Date();
+    const invoiceId = new ObjectId();
+    const currentPeriod = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit" }).format(now);
+    const billingPeriod = `DUES-${currentPeriod}`;
+    const invoiceNumber = `DRAFT-${invoiceId.toString().toUpperCase()}`;
+    const dueDate = dues.lines.reduce((earliest, line) => line.dueDate < earliest ? line.dueDate : earliest, dues.lines[0].dueDate);
+    const doc: any = {
+      _id: invoiceId, landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
+      unitLabel: String(tenant.houseNumber || tenant.unitIdentifier || tenant.unitType || "—"), tenantName: String(tenant.name || "Tenant"),
+      propertyName: String(property.name || "Property"), billingPeriod, billingPeriodLabel: body.billingPeriod, invoiceNumber, issueDate: null, dueDate,
+      items: dues.lines, totalMinor: dues.totalMinor, status: "draft", invoiceBasis: "overdue_tenant_dues_v1",
+      obligationRefs: dues.lines.map((line) => line.obligationRef), createdAt: now, updatedAt: now,
+    };
+    try {
+      const result = await db.collection("tenantInvoices").updateOne({ tenancyId: doc.tenancyId, billingPeriod }, { $setOnInsert: doc }, { upsert: true });
+      const invoice = result.upsertedCount ? doc : await db.collection("tenantInvoices").findOne({ tenancyId: doc.tenancyId, billingPeriod });
+      if (!result.upsertedCount) return NextResponse.json({ success: false, message: "A dues invoice already exists for this tenant and billing period", invoice: invoice ? serializeTenantInvoice(invoice) : undefined }, { status: 409 });
+      await db.collection("tenantInvoiceActivity").insertOne({ invoiceId: invoiceId.toString(), landlordId, tenantId: tenant._id.toString(), event: "dues_draft_created", actorId: userId, actorRole: role, detail: { obligationRefs: doc.obligationRefs, totalMinor: doc.totalMinor }, createdAt: now });
+      return NextResponse.json({ success: true, invoice: serializeTenantInvoice(doc), dues }, { status: 201 });
+    } catch (error: any) {
+      if (error?.code === 11000) return NextResponse.json({ success: false, message: "A dues invoice already exists for this tenant and billing period" }, { status: 409 });
+      throw error;
+    }
+  }
   if (body.action === "manual") {
     if (!validObjectId(body.tenantId) || !Array.isArray(body.items) || body.items.length < 1 || body.items.length > 50 || typeof body.dueDate !== "string" || Number.isNaN(new Date(body.dueDate).getTime())) {
       return NextResponse.json({ success: false, message: "Tenant, valid due date, and 1–50 charge items are required" }, { status: 400 });
@@ -191,23 +228,18 @@ export async function POST(request: NextRequest) {
   let created = 0; let duplicate = 0; let skipped = 0;
   for (const tenant of eligible) {
     const property = properties.find((p) => String(p._id) === String(tenant.propertyId));
-    const rent = amountMinor(tenant.price);
-    if (!property || !rent) { skipped++; continue; }
-    const day = Math.min(28, Math.max(1, Number(billingSettings?.defaultDueDay) || Number(property.rentPaymentDate) || 5));
-    const dueDate = new Date(Date.UTC(year, month - 1, day));
+    if (!property) { skipped++; continue; }
+    const dues = await calculateTenantInvoiceDues(db, tenant, property, new Date());
+    if (dues.totalMinor <= 0) { skipped++; continue; }
+    const dueDate = dues.lines.reduce((earliest, line) => line.dueDate < earliest ? line.dueDate : earliest, dues.lines[0].dueDate);
     const invoiceNumber = `R-${landlordId.slice(-5).toUpperCase()}-${body.billingPeriod.replace("-", "")}-${tenant._id.toString().toUpperCase()}`;
-    const utilityCharges = await db.collection("utilityCharges").find({ tenantId: tenant._id.toString(), propertyId: property._id.toString(), billingPeriod: body.billingPeriod, status: "posted" }).toArray();
-    const items: InvoiceLine[] = [{ description: `Monthly rent — ${body.billingPeriod}`, quantity: 1, unitAmount: rent, amount: rent, category: "rent" }];
-    for (const charge of utilityCharges) {
-      const utilityAmount = amountMinor(charge.amount);
-      if (utilityAmount) items.push({ description: `${String(charge.utilityName || "Utility")} — ${body.billingPeriod}`, quantity: 1, unitAmount: utilityAmount, amount: utilityAmount, category: "utilities" });
-    }
+    const items: InvoiceLine[] = dues.lines.map((line) => ({ ...line }));
     const doc: TenantInvoice = {
       landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
       unitLabel: String(tenant.houseNumber || tenant.unitIdentifier || tenant.unitType || "—"),
       tenantName: String(tenant.name || "Tenant"), propertyName: String(property.name || "Property"), billingPeriod: body.billingPeriod,
       invoiceNumber, issueDate: null, dueDate, items,
-      totalMinor: items.reduce((sum, item) => sum + item.amount, 0), status: "draft", createdAt: now, updatedAt: now,
+      totalMinor: dues.totalMinor, status: "draft", invoiceBasis: "overdue_tenant_dues_v1", obligationRefs: dues.lines.map((line) => line.obligationRef), obligationInvoiceIds: dues.existingInvoiceIds, createdAt: now, updatedAt: now,
     };
     try {
       const result = await db.collection<TenantInvoice>("tenantInvoices").updateOne(

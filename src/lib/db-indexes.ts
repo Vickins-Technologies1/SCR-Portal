@@ -195,6 +195,13 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "tenantInvoiceReconciliationRuns",
+    indexes: [
+      { key: { migrationKey: 1, mode: 1, previewHash: 1 }, name: "tenant_invoice_migration_key_mode_hash_unique", unique: true, partialFilterExpression: { mode: "execution" } },
+      { key: { migrationKey: 1, createdAt: -1 }, name: "tenant_invoice_migration_history" },
+    ],
+  },
+  {
     collection: "landlordBillingSettings",
     indexes: [{ key: { landlordId: 1 }, name: "landlordBillingSettings_landlord_unique", unique: true }],
   },

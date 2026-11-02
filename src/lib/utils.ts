@@ -167,6 +167,7 @@ export interface RentDueResult {
   daysInMonth: number;
   daysElapsedInMonth: number;
   dailyRent: number;
+  obligations: Array<{ billingPeriod: string; amount: number; dueDate: Date; overdue: boolean }>;
 }
 
 export interface TenantRentContext {
@@ -404,6 +405,7 @@ export const calculateTenantRentDueToDate = ({
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
       dailyRent: 0,
+      obligations: [],
     };
   }
 
@@ -416,6 +418,7 @@ export const calculateTenantRentDueToDate = ({
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
       dailyRent: 0,
+      obligations: [],
     };
   }
 
@@ -427,6 +430,7 @@ export const calculateTenantRentDueToDate = ({
 
   let rentDueTotal = 0;
   let overdueRentDue = 0;
+  const obligations: RentDueResult["obligations"] = [];
   const effectivePaymentDay = Math.max(1, Math.trunc(Number(paymentDay) || 1));
   for (let i = 0; i < monthsStayed; i += 1) {
     const monthStart = businessMonthStart(startParts.year, startParts.month - 1 + i);
@@ -436,20 +440,20 @@ export const calculateTenantRentDueToDate = ({
       date: monthStart,
     });
 
-    if (tenantOverride) {
-      rentDueTotal += Math.max(0, Number(tenantOverride.price) || 0);
-    } else {
-      const monthRent = leaseUnits.reduce(
+    const monthRent = tenantOverride
+      ? Math.max(0, Number(tenantOverride.price) || 0)
+      : leaseUnits.reduce(
         (sum, unit) =>
           sum +
           resolveMonthlyRentForLeaseUnit({ unit, date: monthStart, rentOverrideMap, propertyId: tenant.propertyId }),
         0
       );
-    rentDueTotal += monthRent;
     const periodDueDate = businessDueDate(period.getUTCFullYear(), period.getUTCMonth(), effectivePaymentDay);
     const firstDueDate = i === 0 ? getNextDueDate(start, effectivePaymentDay) : periodDueDate;
-    if (businessDateIsBefore(firstDueDate, today)) overdueRentDue += monthRent;
-    }
+    rentDueTotal += monthRent;
+    const overdue = businessDateIsBefore(firstDueDate, today);
+    if (overdue) overdueRentDue += monthRent;
+    obligations.push({ billingPeriod: `${period.getUTCFullYear()}-${String(period.getUTCMonth() + 1).padStart(2, "0")}`, amount: roundCurrency(monthRent), dueDate: firstDueDate, overdue });
   }
 
   const currentTenantOverride = resolveTenantOverrideForDate({ overrides: tenant.rentPaymentOverrides, date: today });
@@ -469,6 +473,7 @@ export const calculateTenantRentDueToDate = ({
     daysInMonth: daysInCurrentMonth,
     daysElapsedInMonth: Math.min(daysInCurrentMonth, todayParts.day),
     dailyRent: currentMonthlyRent > 0 ? currentMonthlyRent / daysInCurrentMonth : 0,
+    obligations,
   };
 };
 
@@ -657,6 +662,7 @@ export const calculateRentDueToDate = ({
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
       dailyRent: currentDailyRent,
+      obligations: [],
     };
   }
 
@@ -669,6 +675,7 @@ export const calculateRentDueToDate = ({
       daysInMonth: daysInCurrentMonth,
       daysElapsedInMonth: 0,
       dailyRent: currentDailyRent,
+      obligations: [],
     };
   }
 
@@ -699,6 +706,7 @@ export const calculateRentDueToDate = ({
     daysInMonth: daysInCurrentMonth,
     daysElapsedInMonth: Math.min(daysInCurrentMonth, today.getDate()),
     dailyRent: currentDailyRent,
+    obligations: [],
   };
 };
 

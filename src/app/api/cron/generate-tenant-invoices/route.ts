@@ -7,6 +7,7 @@ import { identityValues } from "@/lib/payment-query";
 import { generateTenantInvoicePdf } from "@/lib/tenant-invoice-pdf";
 import { sendInvoiceEmail } from "@/lib/email";
 import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
+import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
 const dateParts = () => {
   const values = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -47,28 +48,24 @@ export async function GET(request: Request) {
           const existingOnRetryDay = !isGenerationDay ? await db.collection("tenantInvoices").findOne({ tenancyId: tenant._id.toString(), billingPeriod: period }) : null;
           if (!isGenerationDay && !existingOnRetryDay) continue;
           const property = properties.find((item: any) => item._id.toString() === String(tenant.propertyId));
-          const rentMinor = Math.round(Number(tenant.price || 0) * 100);
-          if (!property || !Number.isSafeInteger(rentMinor) || rentMinor <= 0) { skipped++; continue; }
+          if (!property) { skipped++; continue; }
           const start = new Date(Date.UTC(today.year, today.month - 1, 1));
           const end = new Date(Date.UTC(today.year, today.month, 0, 23, 59, 59, 999));
           const leaseStart = tenant.leaseStartDate ? new Date(tenant.leaseStartDate) : null;
           const leaseEnd = tenant.leaseEndDate ? new Date(tenant.leaseEndDate) : null;
           if ((leaseStart && !Number.isNaN(leaseStart.getTime()) && leaseStart > end) || (leaseEnd && !Number.isNaN(leaseEnd.getTime()) && leaseEnd < start)) { skipped++; continue; }
-          const day = Math.min(28, Math.max(1, Number(setting.defaultDueDay) || Number(property.rentPaymentDate) || 5));
+          const dues = await calculateTenantInvoiceDues(db, tenant, property, new Date());
+          if (dues.totalMinor <= 0) { skipped++; continue; }
+          const dueDate = dues.lines.reduce((earliest, line) => line.dueDate < earliest ? line.dueDate : earliest, dues.lines[0].dueDate);
           const invoiceId = new ObjectId();
           const invoiceNumber = `DRAFT-${invoiceId.toString().toUpperCase()}`;
-          const items: Array<{ description: string; quantity: number; unitAmount: number; amount: number; category: string }> = [{ description: `Monthly rent — ${period}`, quantity: 1, unitAmount: rentMinor, amount: rentMinor, category: "rent" }];
-          const utilityCharges = await db.collection("utilityCharges").find({ tenantId: tenant._id.toString(), propertyId: property._id.toString(), billingPeriod: period, status: "posted" }).toArray();
-          for (const charge of utilityCharges) {
-            const utilityMinor = Math.round(Number(charge.amount || 0) * 100);
-            if (Number.isSafeInteger(utilityMinor) && utilityMinor > 0) items.push({ description: `${String(charge.utilityName || "Utility")} — ${period}`, quantity: 1, unitAmount: utilityMinor, amount: utilityMinor, category: "utilities" });
-          }
+          const items = dues.lines.map((line) => ({ ...line }));
           const doc = {
             _id: invoiceId, landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
             unitLabel: String(tenant.houseNumber || tenant.unitIdentifier || tenant.unitType || "—"), tenantName: String(tenant.name || "Tenant"),
             propertyName: String(property.name || "Property"), billingPeriod: period, invoiceNumber, issueDate: null,
-            dueDate: new Date(Date.UTC(today.year, today.month - 1, day)), items,
-            totalMinor: items.reduce((sum, item) => sum + item.amount, 0), status: "draft", createdAt: new Date(), updatedAt: new Date(),
+            dueDate, items,
+            totalMinor: dues.totalMinor, status: "draft", invoiceBasis: "overdue_tenant_dues_v1", obligationRefs: dues.lines.map((line) => line.obligationRef), obligationInvoiceIds: dues.existingInvoiceIds, createdAt: new Date(), updatedAt: new Date(),
           };
           let currentInvoice: any = existingOnRetryDay;
           if (isGenerationDay) {

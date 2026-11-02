@@ -55,6 +55,7 @@ export type TenantFinancialState = {
   walletBalance: number;
   walletApplied: number;
   paymentAllocations: Map<string, PaymentAllocation>;
+  rentObligations: Array<{ billingPeriod: string; amount: number; paid: number; outstanding: number; dueDate: Date; overdue: boolean }>;
 };
 
 export type UtilityChargeAllocationTarget = {
@@ -287,6 +288,7 @@ export function deriveTenantFinancialState(params: {
   utilityBreakdown: UtilityDueBreakdown;
   depositDue: number;
   overdueRentCharged?: number;
+  rentObligations?: Array<{ billingPeriod: string; amount: number; dueDate: Date; overdue: boolean }>;
   payments: LedgerPayment[];
   reversedByPayment?: ReadonlyMap<string, number>;
   property?: any;
@@ -329,6 +331,13 @@ export function deriveTenantFinancialState(params: {
   const utilitiesOverdueOutstanding = money(Math.min(utilitiesOutstanding, Math.max(0, utilityOverdueCharged - ledger.utilitiesPaid)));
   const utilitiesCurrentOutstanding = money(Math.max(0, utilitiesOutstanding - utilitiesOverdueOutstanding));
   const overdueUtilities = utilitiesOverdueOutstanding;
+  let unappliedRentPaid = ledger.rentPaid;
+  const rentObligations = (params.rentObligations || []).map((obligation) => {
+    const amount = money(obligation.amount);
+    const paid = money(Math.min(amount, unappliedRentPaid));
+    unappliedRentPaid = money(unappliedRentPaid - paid);
+    return { ...obligation, paid, outstanding: money(amount - paid) };
+  });
   return {
     monthsStayed: params.monthsStayed,
     depositRequired: money(params.depositDue),
@@ -352,6 +361,7 @@ export function deriveTenantFinancialState(params: {
     walletBalance: ledger.walletBalance,
     walletApplied: ledger.walletApplied,
     paymentAllocations: ledger.allocations,
+    rentObligations,
   };
 }
 
@@ -377,7 +387,7 @@ export async function calculateTenantFinancialState(
   const overrides = options.rentOverrideMap ?? await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)], options.session);
   const leaseStart = tenant.leaseStartDate ? new Date(tenant.leaseStartDate) : null;
   const paymentDay = property?.rentPaymentDate ?? (leaseStart && !Number.isNaN(leaseStart.getTime()) ? businessDateParts(leaseStart).day : 1);
-  const { rentDue, overdueRentDue, monthsStayed } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides, paymentDay });
+  const { rentDue, overdueRentDue, monthsStayed, obligations: rentObligations } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides, paymentDay });
   const fixedUtilities = calculateFixedUtilityBreakdown({
     utilities: property?.utilities,
     tenant,
@@ -417,6 +427,7 @@ export async function calculateTenantFinancialState(
     utilityBreakdown,
     depositDue,
     overdueRentCharged: overdueRentDue,
+    rentObligations,
     payments,
     property,
   });

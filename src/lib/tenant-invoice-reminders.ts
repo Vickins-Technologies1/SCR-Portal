@@ -5,6 +5,7 @@ import { addInvoicePaymentStates, getPriorInvoiceOutstandingMinor, invoiceItemsF
 import { generateTenantInvoicePdf } from "@/lib/tenant-invoice-pdf";
 import { sendInvoiceEmail } from "@/lib/email";
 import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
+import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
 function dayKey(date: Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -46,20 +47,35 @@ export async function sendTenantInvoiceReminders(today = new Date()) {
       const tenant = await db.collection("tenants").findOne({ _id: new ObjectId(invoice.tenantId) });
       const property = await db.collection("properties").findOne({ _id: new ObjectId(invoice.propertyId) });
       if (!tenant?.email || !property) throw new Error("Tenant email or property information is unavailable");
+      const currentInvoice = await db.collection("tenantInvoices").findOne({ _id: invoice._id });
+      if (!currentInvoice || currentInvoice.status !== "issued") {
+        await db.collection("tenantInvoiceReminderLogs").updateOne({ reminderKey }, { $set: { status: "skipped_invoice_inactive", updatedAt: new Date() } });
+        skipped++;
+        continue;
+      }
+      const [latestInvoice] = await addInvoicePaymentStates(db, [currentInvoice]);
+      const currentDues = await calculateTenantInvoiceDues(db, tenant, property, today, { excludeInvoiceIds: [String(invoice._id)] });
+      const currentOverdueMinor = currentDues.totalMinor;
+      const reminderBalance = Math.min(Number(latestInvoice?.balanceMinor) || 0, currentOverdueMinor);
+      if (reminderBalance <= 0) {
+        await db.collection("tenantInvoiceReminderLogs").updateOne({ reminderKey }, { $set: { status: "skipped_settled", updatedAt: new Date() } });
+        skipped++;
+        continue;
+      }
       const owner = await db.collection("propertyOwners").findOne({ _id: new ObjectId(invoice.landlordId) });
       const billingSettings = await db.collection("landlordBillingSettings").findOne({ landlordId: invoice.landlordId });
-      const previousOutstandingMinor = await getPriorInvoiceOutstandingMinor(db, invoice);
+      const previousOutstandingMinor = await getPriorInvoiceOutstandingMinor(db, latestInvoice);
       let paymentInstructions: string | undefined;
       try {
         const routing = await resolveOwnerTenantMpesaRouting(db, { landlordId: invoice.landlordId, propertyId: invoice.propertyId });
         paymentInstructions = routing.paymentType === "bank" ? `Bank: ${routing.bank || "configured bank"}\nAccount: ${routing.bankAccount || "contact your manager"}` : `${routing.paymentType === "till" ? "M-Pesa Till" : "M-Pesa Paybill"}: ${routing.shortcode}\nAccount/reference: ${invoice.invoiceNumber}`;
       } catch { /* payment settings are optional */ }
-      const pdf = await generateTenantInvoicePdf({ invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, dueDate: invoice.dueDate, billingPeriod: invoice.billingPeriodLabel || invoice.billingPeriod, status: invoice.status, tenantName: tenant.name, tenantEmail: tenant.email, propertyName: property.name, propertyAddress: property.address, unitLabel: invoice.unitLabel, items: invoiceItemsForDisplay(invoice), totalMinor: invoice.totalMinor, amountPaidMinor: Math.round(invoice.amountPaid * 100), previousOutstandingMinor, creditsAndAdjustmentsMinor: (invoice.adjustments || []).reduce((sum: number, row: any) => sum + Number(row.amountMinor || 0), 0), landlordName: owner?.name, landlordEmail: owner?.email, landlordPhone: owner?.phone, brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor, paymentInstructions });
+      const pdf = await generateTenantInvoicePdf({ invoiceNumber: latestInvoice.invoiceNumber, issueDate: latestInvoice.issueDate, dueDate: latestInvoice.dueDate, billingPeriod: latestInvoice.billingPeriodLabel || latestInvoice.billingPeriod, status: latestInvoice.status, tenantName: tenant.name, tenantEmail: tenant.email, propertyName: property.name, propertyAddress: property.address, unitLabel: latestInvoice.unitLabel, items: invoiceItemsForDisplay(latestInvoice), totalMinor: latestInvoice.totalMinor, amountPaidMinor: latestInvoice.amountPaidMinor, previousOutstandingMinor, creditsAndAdjustmentsMinor: (latestInvoice.adjustments || []).reduce((sum: number, row: any) => sum + Number(row.amountMinor || 0), 0), landlordName: owner?.name, landlordEmail: owner?.email, landlordPhone: owner?.phone, brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor, paymentInstructions });
       const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || process.env.APP_URL || "").replace(/\/$/, "");
       const dueText = due.toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" });
-      await sendInvoiceEmail({ to: tenant.email, ownerName: tenant.name || "Tenant", propertyName: property.name || "Property", amount: invoice.balanceDue, dueDate: dueText, reminderType: kind === "before_due" ? "fiveDaysBefore" : kind === "overdue" ? "overdue" : "dueDate", dashboardUrl: `${baseUrl}/tenant-dashboard/invoices`, invoiceNumber: invoice.invoiceNumber, pdfBytes: pdf.pdfBytes });
+      await sendInvoiceEmail({ to: tenant.email, ownerName: tenant.name || "Tenant", propertyName: property.name || "Property", amount: reminderBalance / 100, dueDate: dueText, reminderType: kind === "before_due" ? "fiveDaysBefore" : kind === "overdue" ? "overdue" : "dueDate", dashboardUrl: `${baseUrl}/tenant-dashboard/invoices`, invoiceNumber: latestInvoice.invoiceNumber, pdfBytes: pdf.pdfBytes });
       await db.collection("tenantInvoiceReminderLogs").updateOne({ reminderKey }, { $set: { status: "sent", sentAt: new Date(), updatedAt: new Date() } });
-      await db.collection("tenantInvoiceActivity").insertOne({ invoiceId: invoice._id, landlordId: invoice.landlordId, tenantId: invoice.tenantId, event: "reminder_sent", detail: { kind, balanceMinor: Math.round(invoice.balanceDue * 100) }, actorRole: "system", createdAt: new Date() });
+      await db.collection("tenantInvoiceActivity").insertOne({ invoiceId: invoice._id, landlordId: invoice.landlordId, tenantId: invoice.tenantId, event: "reminder_sent", detail: { kind, balanceMinor: reminderBalance }, actorRole: "system", createdAt: new Date() });
       sent++;
     } catch (error) {
       await db.collection("tenantInvoiceReminderLogs").updateOne({ reminderKey }, { $set: { status: "failed", error: error instanceof Error ? error.message : "Reminder send failed", updatedAt: new Date() } });
