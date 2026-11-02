@@ -2,12 +2,12 @@ import "server-only";
 import { ObjectId } from "mongodb";
 import logger from "./logger";
 import { connectToDatabase } from "./mongodb";
-import { enqueueOpenWaText, readWhatsAppSettings } from "./whatsapp-gateway";
+import { enqueueOpenWaText, processOpenWaOutbox, readWhatsAppSettings } from "./whatsapp-gateway";
 import { readOwnerWhatsApp } from "./owner-whatsapp";
 import { normalizeWhatsAppPhone } from "./listing-contact";
 import { hashWhatsAppConsentPhone } from "./whatsapp-crypto";
 
-interface SendWhatsAppOptions { phone: string | string[]; message: string; type?: string; idempotencyKey?: string; recipientType?: "tenant" | "owner"; recipientId?: string; notificationId?: string; }
+interface SendWhatsAppOptions { phone: string | string[]; message: string; type?: string; idempotencyKey?: string; recipientType?: "tenant" | "owner"; recipientId?: string; notificationId?: string; immediate?: boolean; }
 
 function normalizeLegacyPhone(value: string) {
   const cleaned = value.replace(/[^\d+]/g, "");
@@ -40,7 +40,28 @@ async function sendLegacyApiWap(phone: string, message: string) {
   }
 }
 
-export async function sendWhatsAppMessage({ phone, message, type = "notification", idempotencyKey, recipientType, recipientId, notificationId }: SendWhatsAppOptions): Promise<{ success: boolean; status?: string; error?: { code: number; message: string } }> {
+async function dispatchQueuedOpenWaMessage(db: Awaited<ReturnType<typeof connectToDatabase>>["db"], result: Awaited<ReturnType<typeof enqueueOpenWaText>>) {
+  if (!result.success || !result.messageId || !["queued", "duplicate"].includes(result.status)) return result;
+  try {
+    await processOpenWaOutbox(db, 1, result.messageId);
+    const attempt = await db.collection("whatsappMessageAttempts").findOne(
+      { _id: new ObjectId(result.messageId) },
+      { projection: { status: 1 } },
+    );
+    if (attempt?.status === "failed" || attempt?.status === "cancelled") {
+      return { success: false as const, status: "failed" as const, error: { code: 1000, message: "WhatsApp message could not be submitted" } };
+    }
+    if (["sent", "delivered", "read"].includes(String(attempt?.status))) {
+      return { success: true as const, status: String(attempt?.status) };
+    }
+    return { success: true as const, status: "queued" as const };
+  } catch (error) {
+    logger.warn("Immediate WhatsApp dispatch deferred to the outbox worker", { error });
+    return { success: true as const, status: "queued" as const };
+  }
+}
+
+export async function sendWhatsAppMessage({ phone, message, type = "notification", idempotencyKey, recipientType, recipientId, notificationId, immediate = false }: SendWhatsAppOptions): Promise<{ success: boolean; status?: string; error?: { code: number; message: string } }> {
   if (!phone || !message || message.length > 4096) return { success: false, error: { code: 1001, message: "Invalid WhatsApp message" } };
   const { db } = await connectToDatabase();
   const settings = await readWhatsAppSettings(db);
@@ -70,7 +91,7 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
     let allSuccess = true;
     let finalStatus = "queued";
     for (const [index, recipient] of recipients.entries()) {
-      const result = await enqueueOpenWaText(db, recipient, message, {
+      const queued = await enqueueOpenWaText(db, recipient, message, {
         type,
         recipientType,
         recipientId,
@@ -78,6 +99,7 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
         notificationId,
         idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey,
       });
+      const result = immediate ? await dispatchQueuedOpenWaMessage(db, queued) : queued;
       if (!result.success) allSuccess = false;
       if (result.status === "duplicate") finalStatus = "duplicate";
     }
@@ -90,7 +112,8 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
     let allSuccess = true;
     let finalStatus = "queued";
     for (const [index, recipient] of recipients.entries()) {
-      const result = await enqueueOpenWaText(db, recipient, message, { type, recipientType, recipientId, notificationId, idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey });
+      const queued = await enqueueOpenWaText(db, recipient, message, { type, recipientType, recipientId, notificationId, idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey });
+      const result = immediate ? await dispatchQueuedOpenWaMessage(db, queued) : queued;
       if (!result.success) allSuccess = false;
       if (result.status === "skipped_consent") finalStatus = result.status;
       else if (result.status === "duplicate" && finalStatus !== "skipped_consent") finalStatus = "duplicate";

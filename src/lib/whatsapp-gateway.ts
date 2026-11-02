@@ -167,10 +167,17 @@ export async function enqueueOpenWaText(db: Db, phone: string, message: string, 
     );
     if (!inserted.upsertedCount) {
       if (options.notificationId) await attempts.updateOne({ idempotencyKey, notificationId: { $exists: false } }, { $set: { notificationId: options.notificationId, updatedAt: now } });
-      return { success: true as const, status: "duplicate" as const, messageId: null };
+      const existing = await attempts.findOne({ idempotencyKey }, { projection: { _id: 1, status: 1 } });
+      const messageId = existing && ["queued", "retry_wait"].includes(String(existing.status)) ? String(existing._id) : null;
+      return { success: true as const, status: "duplicate" as const, messageId };
     }
   } catch (error) {
-    if ((error as { code?: number })?.code === 11000) return { success: true as const, status: "duplicate" as const, messageId: null };
+    if ((error as { code?: number })?.code === 11000) {
+      if (options.notificationId) await attempts.updateOne({ idempotencyKey, notificationId: { $exists: false } }, { $set: { notificationId: options.notificationId, updatedAt: now } });
+      const existing = await attempts.findOne({ idempotencyKey }, { projection: { _id: 1, status: 1 } });
+      const messageId = existing && ["queued", "retry_wait"].includes(String(existing.status)) ? String(existing._id) : null;
+      return { success: true as const, status: "duplicate" as const, messageId };
+    }
     throw error;
   }
   return { success: true as const, status: "queued" as const, messageId: id.toHexString() };

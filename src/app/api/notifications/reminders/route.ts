@@ -18,6 +18,8 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState } from "../../../../lib/tenant-payment-allocation";
 import { calculateReminderDueAmounts } from "../../../../lib/reminder-calculations";
 
+export const maxDuration = 60;
+
 interface Notification {
   _id: string;
   message: string;
@@ -463,6 +465,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               recipientType: "tenant",
               recipientId: tenant._id.toString(),
               notificationId,
+              immediate: true,
               idempotencyKey: `tenant-reminder:${tenant._id.toString()}:${type}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(finalMessage).digest("hex")}`,
             });
             if (!waResult.success) {

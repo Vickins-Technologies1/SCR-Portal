@@ -17,6 +17,8 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { resolveAccountTier } from "@/lib/tier";
 
+export const maxDuration = 60;
+
 interface Notification {
   _id: ObjectId;
   message: string;
@@ -393,6 +395,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           recipientType: "tenant",
           recipientId: tenant._id.toString(),
           notificationId: notificationId.toHexString(),
+          immediate: true,
           idempotencyKey: `notification:${tenant._id.toString()}:${String(type)}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(finalMessage).digest("hex")}`,
         });
 
