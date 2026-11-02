@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "./mongodb";
 import { sendWelcomeSms } from "./sms";
 import { sendWhatsAppMessage } from "./whatsapp";
+import { syncOpenWaNotificationStatus } from "./whatsapp-gateway";
 import { sendReminderEmail } from "./email";
 import logger from "./logger";
 import { Property } from "../types/property";
@@ -486,7 +487,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     if (deliveryMethod === "whatsapp" || deliveryMethod === "both") {
       if (tenant.phone) {
         try {
-          const waResult = await sendWhatsAppMessage({ phone: tenant.phone, message: whatsappMessage, type: `rent_reminder_${reminderType}`, recipientType: "tenant", recipientId: tenantId, idempotencyKey: reminderKey });
+          const waResult = await sendWhatsAppMessage({ phone: tenant.phone, message: whatsappMessage, type: `rent_reminder_${reminderType}`, recipientType: "tenant", recipientId: tenantId, notificationId: String(claimedId), idempotencyKey: reminderKey });
           if (!waResult.success) {
             if (waResult.status === "skipped_owner_whatsapp_not_connected" && deliveryMethod !== "whatsapp") {
               logger.info("WhatsApp reminder skipped because the property owner has not connected an account", { tenantId });
@@ -510,6 +511,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
       { _id: claimedId },
       { $set: { deliveryStatus, errorDetails, updatedAt: new Date().toISOString(), dueAmounts: newNotification.dueAmounts, message: newNotification.message } },
     );
+    await syncOpenWaNotificationStatus(db, String(claimedId));
     createdNotifications.push(completedNotification);
     if (deliveryStatus === "success") sent += 1;
     else if (deliveryStatus === "pending") queued += 1;

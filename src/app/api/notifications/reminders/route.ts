@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { v4 as uuidv4 } from "uuid";
 import { sendWelcomeSms } from "../../../../lib/sms";
 import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
+import { syncOpenWaNotificationStatus } from "../../../../lib/whatsapp-gateway";
 import { generateStyledTemplate } from "../../../../lib/email-template";
 import nodemailer from "nodemailer";
 import { connectToDatabase } from "../../../../lib/mongodb";
@@ -354,6 +355,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (deliveryMethod !== "both" && tenant.deliveryMethod && tenant.deliveryMethod !== "both") {
         effectiveDeliveryMethod = tenant.deliveryMethod as Notification["deliveryMethod"];
       }
+      const notificationId = uuidv4();
 
       if (type === "payment") {
         const state = await calculateTenantFinancialState(db, tenant, { asOf: today, rentOverrideMap });
@@ -460,6 +462,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               type: "tenant_reminder",
               recipientType: "tenant",
               recipientId: tenant._id.toString(),
+              notificationId,
               idempotencyKey: `tenant-reminder:${tenant._id.toString()}:${type}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(finalMessage).digest("hex")}`,
             });
             if (!waResult.success) {
@@ -480,7 +483,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       const newNotification: Notification = {
-        _id: uuidv4(),
+        _id: notificationId,
         message: finalMessage,
         type,
         createdAt: new Date().toISOString(),
@@ -494,6 +497,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       };
 
       await db.collection<Notification>("notifications").insertOne(newNotification);
+      await syncOpenWaNotificationStatus(db, notificationId);
       logger.info("Notification created", { 
         notificationId: newNotification._id, 
         ownerId: effectiveOwnerId, 

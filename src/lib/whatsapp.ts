@@ -7,7 +7,7 @@ import { readOwnerWhatsApp } from "./owner-whatsapp";
 import { normalizeWhatsAppPhone } from "./listing-contact";
 import { hashWhatsAppConsentPhone } from "./whatsapp-crypto";
 
-interface SendWhatsAppOptions { phone: string | string[]; message: string; type?: string; idempotencyKey?: string; recipientType?: "tenant" | "owner"; recipientId?: string; }
+interface SendWhatsAppOptions { phone: string | string[]; message: string; type?: string; idempotencyKey?: string; recipientType?: "tenant" | "owner"; recipientId?: string; notificationId?: string; }
 
 function normalizeLegacyPhone(value: string) {
   const cleaned = value.replace(/[^\d+]/g, "");
@@ -40,7 +40,7 @@ async function sendLegacyApiWap(phone: string, message: string) {
   }
 }
 
-export async function sendWhatsAppMessage({ phone, message, type = "notification", idempotencyKey, recipientType, recipientId }: SendWhatsAppOptions): Promise<{ success: boolean; status?: string; error?: { code: number; message: string } }> {
+export async function sendWhatsAppMessage({ phone, message, type = "notification", idempotencyKey, recipientType, recipientId, notificationId }: SendWhatsAppOptions): Promise<{ success: boolean; status?: string; error?: { code: number; message: string } }> {
   if (!phone || !message || message.length > 4096) return { success: false, error: { code: 1001, message: "Invalid WhatsApp message" } };
   const { db } = await connectToDatabase();
   const settings = await readWhatsAppSettings(db);
@@ -75,6 +75,7 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
         recipientType,
         recipientId,
         senderOwnerId,
+        notificationId,
         idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey,
       });
       if (!result.success) allSuccess = false;
@@ -89,7 +90,7 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
     let allSuccess = true;
     let finalStatus = "queued";
     for (const [index, recipient] of recipients.entries()) {
-      const result = await enqueueOpenWaText(db, recipient, message, { type, recipientType, recipientId, idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey });
+      const result = await enqueueOpenWaText(db, recipient, message, { type, recipientType, recipientId, notificationId, idempotencyKey: recipients.length > 1 && idempotencyKey ? `${idempotencyKey}:${index}` : idempotencyKey });
       if (!result.success) allSuccess = false;
       if (result.status === "skipped_consent") finalStatus = result.status;
       else if (result.status === "duplicate" && finalStatus !== "skipped_consent") finalStatus = "duplicate";

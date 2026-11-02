@@ -125,7 +125,7 @@ export async function getOpenWaQr(db: Db) {
   return typeof body.qrCode === "string" && body.qrCode.startsWith("data:image/") ? body.qrCode : null;
 }
 
-export async function enqueueOpenWaText(db: Db, phone: string, message: string, options: { type: string; recipientType?: string; recipientId?: string; senderOwnerId?: string; idempotencyKey?: string; authorizedTest?: boolean } = { type: "notification" }) {
+export async function enqueueOpenWaText(db: Db, phone: string, message: string, options: { type: string; recipientType?: string; recipientId?: string; senderOwnerId?: string; notificationId?: string; idempotencyKey?: string; authorizedTest?: boolean } = { type: "notification" }) {
   const normalized = normalizeWhatsAppPhone(phone);
   if (!normalized || !/^\d{10,15}$/.test(normalized)) return { success: false as const, status: "rejected" as const, error: "Invalid phone number" };
   if (!message.trim() || message.length > 4096) return { success: false as const, status: "rejected" as const, error: "Message must contain 1–4096 characters" };
@@ -153,6 +153,7 @@ export async function enqueueOpenWaText(db: Db, phone: string, message: string, 
           senderOwnerId: options.senderOwnerId,
           senderEnvironment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
         } : {}),
+        ...(options.notificationId ? { notificationId: options.notificationId } : {}),
         authorizedTest: options.authorizedTest === true,
         recipientMasked: `${normalized.slice(0, 3)}••••${normalized.slice(-3)}`,
         status: "queued",
@@ -164,7 +165,10 @@ export async function enqueueOpenWaText(db: Db, phone: string, message: string, 
       } },
       { upsert: true },
     );
-    if (!inserted.upsertedCount) return { success: true as const, status: "duplicate" as const, messageId: null };
+    if (!inserted.upsertedCount) {
+      if (options.notificationId) await attempts.updateOne({ idempotencyKey, notificationId: { $exists: false } }, { $set: { notificationId: options.notificationId, updatedAt: now } });
+      return { success: true as const, status: "duplicate" as const, messageId: null };
+    }
   } catch (error) {
     if ((error as { code?: number })?.code === 11000) return { success: true as const, status: "duplicate" as const, messageId: null };
     throw error;
@@ -225,6 +229,7 @@ export async function processOpenWaOutbox(db: Db, limit = 20, onlyAttemptId?: st
           : null;
         if (!optedIn) {
           await attempts.updateOne({ _id: job._id, status: "processing" }, { $set: { status: "cancelled", errorCategory: "consent_revoked_or_phone_changed", updatedAt: new Date() }, $unset: { encryptedPayload: "", lockedAt: "", nextAttemptAt: "" } });
+          if (typeof job.notificationId === "string") await updateLinkedNotificationDeliveryStatus(db, job.notificationId, "failed", "WhatsApp consent was revoked or the phone number changed.");
           processed += 1;
           continue;
         }
@@ -248,6 +253,7 @@ export async function processOpenWaOutbox(db: Db, limit = 20, onlyAttemptId?: st
         await attempts.updateOne({ _id: job._id, status: "processing" }, { $set: { status: "retry_wait", attempts: attemptNumber, nextAttemptAt: new Date(now.getTime() + delayMs), lastAttemptAt: now, errorCategory: "rate_limited", updatedAt: new Date() }, $unset: { lockedAt: "" } });
       } else {
         await attempts.updateOne({ _id: job._id, status: "processing" }, { $set: { status: uncertain ? "unknown" : "failed", attempts: attemptNumber, lastAttemptAt: now, errorCategory: uncertain ? "submission_outcome_unknown" : httpStatus ? `gateway_http_${httpStatus}` : "invalid_queued_payload", updatedAt: new Date() }, $unset: { encryptedPayload: "", lockedAt: "", nextAttemptAt: "" } });
+        if (!uncertain && typeof job.notificationId === "string") await updateLinkedNotificationDeliveryStatus(db, job.notificationId, "failed", "WhatsApp message could not be submitted.");
       }
     }
     processed += 1;
@@ -345,7 +351,7 @@ export async function applyOpenWaDeliveryEvent(db: Db, event: unknown, deliveryH
 }
 
 async function applyStoredOpenWaDeliveryState(db: Db, gatewayMessageId: string) {
-  const current = await db.collection("whatsappMessageAttempts").findOne({ gatewayMessageId }, { projection: { _id: 1, status: 1 } });
+  const current = await db.collection("whatsappMessageAttempts").findOne({ gatewayMessageId }, { projection: { _id: 1, status: 1, notificationId: 1 } });
   if (!current) return { matched: false };
   const events = await db.collection("whatsappDeliveryEvents").find({ gatewayMessageId }, { projection: { status: 1 } }).sort({ receivedAt: 1 }).toArray();
   const order: Record<string, number> = { queued: 0, retry_wait: 0, processing: 0, submitted: 1, sent: 2, delivered: 3, read: 4, failed: 5 };
@@ -356,10 +362,36 @@ async function applyStoredOpenWaDeliveryState(db: Db, gatewayMessageId: string) 
     if (eventStatus === "failed" && (nextStatus === "delivered" || nextStatus === "read")) continue;
     if ((order[eventStatus] || 0) > (order[nextStatus] || 0)) nextStatus = eventStatus;
   }
-  if (nextStatus === current.status) return { matched: true, changed: false };
-  const now = new Date();
-  await db.collection("whatsappMessageAttempts").updateOne({ _id: current._id }, { $set: { status: nextStatus, deliveryStatusAt: now, updatedAt: now, ...(nextStatus === "failed" ? { errorCategory: "provider_delivery_failed" } : {}) } });
-  return { matched: true, changed: true };
+  const changed = nextStatus !== current.status;
+  if (changed) {
+    const now = new Date();
+    await db.collection("whatsappMessageAttempts").updateOne({ _id: current._id }, { $set: { status: nextStatus, deliveryStatusAt: now, updatedAt: now, ...(nextStatus === "failed" ? { errorCategory: "provider_delivery_failed" } : {}) } });
+  }
+  if (typeof current.notificationId === "string" && ["sent", "delivered", "read"].includes(nextStatus)) {
+    await updateLinkedNotificationDeliveryStatus(db, current.notificationId, "success");
+  } else if (typeof current.notificationId === "string" && nextStatus === "failed") {
+    await updateLinkedNotificationDeliveryStatus(db, current.notificationId, "failed", "WhatsApp delivery failed.");
+  }
+  return { matched: true, changed };
+}
+
+async function updateLinkedNotificationDeliveryStatus(db: Db, notificationId: string, deliveryStatus: "success" | "failed", errorDetails?: string) {
+  const id = ObjectId.isValid(notificationId) ? new ObjectId(notificationId) : notificationId;
+  await db.collection("notifications").updateOne(
+    { _id: id as any, deliveryStatus: "pending" },
+    { $set: { deliveryStatus, ...(deliveryStatus === "failed" ? { errorDetails } : { errorDetails: null }), updatedAt: new Date().toISOString() } },
+  );
+}
+
+export async function syncOpenWaNotificationStatus(db: Db, notificationId: string) {
+  const attempts = await db.collection("whatsappMessageAttempts").find({ notificationId }, { projection: { status: 1 } }).toArray();
+  if (!attempts.length) return;
+  const statuses = attempts.map((attempt) => String(attempt.status));
+  if (statuses.some((status) => ["failed", "cancelled"].includes(status))) {
+    await updateLinkedNotificationDeliveryStatus(db, notificationId, "failed", "WhatsApp delivery failed.");
+  } else if (statuses.every((status) => ["sent", "delivered", "read"].includes(status))) {
+    await updateLinkedNotificationDeliveryStatus(db, notificationId, "success");
+  }
 }
 
 export async function cancelWhatsAppRecipientOutbox(db: Db, entityType: "tenant" | "owner", entityId: ObjectId) {

@@ -7,6 +7,7 @@ import { connectToDatabase } from "../../../lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../lib/csrf";
 import { sendWelcomeSms } from "../../../lib/sms"; // Uses BlessedTexts
 import { sendWhatsAppMessage } from "../../../lib/whatsapp";
+import { syncOpenWaNotificationStatus } from "../../../lib/whatsapp-gateway";
 import { generateStyledTemplate } from "../../../lib/email-template";
 import nodemailer from "nodemailer";
 import logger from "../../../lib/logger";
@@ -303,6 +304,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       const effectiveMethod = deliveryMethod;
+      const notificationId = new ObjectId();
 
       if (type === "payment") {
         const latestState = await calculateTenantFinancialState(db, tenant, {
@@ -390,6 +392,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           type: "tenant_notification",
           recipientType: "tenant",
           recipientId: tenant._id.toString(),
+          notificationId: notificationId.toHexString(),
           idempotencyKey: `notification:${tenant._id.toString()}:${String(type)}:${new Date().toISOString().slice(0, 10)}:${createHash("sha256").update(finalMessage).digest("hex")}`,
         });
 
@@ -425,7 +428,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
       // === SAVE NOTIFICATION ===
       const notification: Notification = {
-        _id: new ObjectId(),
+        _id: notificationId,
         message: finalMessage,
         type,
         createdAt: new Date().toISOString(),
@@ -441,6 +444,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       };
 
       await db.collection("notifications").insertOne(notification);
+      await syncOpenWaNotificationStatus(db, notificationId.toHexString());
       notifications.push(notification);
     }
 
