@@ -1,4 +1,4 @@
-import { Db, ObjectId } from "mongodb";
+import { ClientSession, Db, ObjectId } from "mongodb";
 import { RentPriceOverride } from "@/types/rent-price-override";
 
 export const buildOverrideKey = (propertyId: string, unitType: string): string =>
@@ -35,7 +35,8 @@ export const filterOverridesForUnit = (
 
 export const fetchActiveRentOverridesByPropertyIds = async (
   db: Db,
-  propertyIds: string[]
+  propertyIds: string[],
+  session?: ClientSession,
 ): Promise<Map<string, RentPriceOverride[]>> => {
   const map = new Map<string, RentPriceOverride[]>();
   if (!propertyIds.length) return map;
@@ -50,7 +51,7 @@ export const fetchActiveRentOverridesByPropertyIds = async (
     // `propertyId` is stored as a string in new data, but may be an ObjectId in legacy records.
     propertyId: { $in: propertyIdCandidates as any[] },
     status: { $ne: "inactive" },
-  }).toArray();
+  }, session ? { session } : undefined).toArray();
 
   for (const override of overrides) {
     const propertyId = override.propertyId?.toString?.() ?? String(override.propertyId);

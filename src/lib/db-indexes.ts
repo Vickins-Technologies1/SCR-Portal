@@ -231,6 +231,15 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "paymentReconciliations",
+    indexes: [
+      { key: { idempotencyKey: 1 }, name: "paymentReconciliations_idempotency_unique", unique: true },
+      { key: { tenantId: 1, createdAt: -1 }, name: "paymentReconciliations_tenant_created" },
+      { key: { landlordId: 1, createdAt: -1 }, name: "paymentReconciliations_landlord_created" },
+      { key: { reconciliationId: 1 }, name: "paymentReconciliations_id_unique", unique: true },
+    ],
+  },
+  {
     collection: "propertyReviews",
     indexes: [
       { key: { listingId: 1, status: 1, createdAt: -1 }, name: "propertyReviews_listing_status_createdAt" },

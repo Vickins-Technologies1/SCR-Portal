@@ -1,4 +1,4 @@
-import { Db, ObjectId } from "mongodb";
+import { ClientSession, Db, ObjectId } from "mongodb";
 import { PropertyUtility } from "@/types/property";
 import { businessDateIsBefore, businessDueDate, businessMonthStart, businessDateParts } from "@/lib/business-time";
 
@@ -303,6 +303,7 @@ export const getPostedMeteredUtilityBreakdown = async (
   today = new Date(),
   paymentDay = 1,
   propertyId?: string | ObjectId,
+  session?: ClientSession,
 ): Promise<UtilityDueBreakdown> => {
   const tenantIdentities: Array<string | ObjectId> = [tenantId.toString()];
   if (ObjectId.isValid(tenantId.toString())) tenantIdentities.push(new ObjectId(tenantId.toString()));
@@ -316,7 +317,7 @@ export const getPostedMeteredUtilityBreakdown = async (
       ] }
     : {};
   const rows = await db.collection<UtilityCharge>("utilityCharges")
-    .find({ tenantId: { $in: tenantIdentities } as any, status: "posted", ...scope } as any)
+    .find({ tenantId: { $in: tenantIdentities } as any, status: "posted", ...scope } as any, session ? { session } : undefined)
     .toArray();
   const breakdown = emptyUtilityBreakdown();
   const currentPeriod = toBillingPeriod(today);
