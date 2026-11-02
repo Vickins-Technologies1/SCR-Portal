@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
 
   const deliveries: Array<{
     channel: "email" | "sms" | "whatsapp";
-    status: "sent" | "failed" | "skipped";
+    status: "sent" | "queued" | "failed" | "skipped" | "skipped_consent";
     recipient?: string;
     error?: string;
   }> = [];
