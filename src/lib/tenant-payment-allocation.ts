@@ -92,6 +92,18 @@ export function sumTenantDepositPaid(states: Iterable<Pick<TenantFinancialState,
   return money(total);
 }
 
+/**
+ * Aggregates unpaid deposit balances from the same tenant ledger projection
+ * used to derive rent and utility dues.
+ */
+export function sumTenantDepositOutstanding(
+  states: Iterable<Pick<TenantFinancialState, "depositOutstanding">>
+) {
+  let total = 0;
+  for (const state of states) total += amountOf(state.depositOutstanding);
+  return money(total);
+}
+
 export function sumTenantOverdueAmount(
   states: Iterable<Pick<TenantFinancialState, "overdueAmount">>
 ) {

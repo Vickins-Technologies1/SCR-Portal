@@ -4,7 +4,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialStates, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialStates, sumTenantDepositOutstanding, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
 import { ACTIVE_PROPERTY_STATUSES, buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
@@ -62,7 +62,7 @@ interface Stats {
   totalUtilityPaid: number;
 }
 
-const roundMoney = (value: number) => Math.round(value || 0);
+const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -288,7 +288,6 @@ export async function GET(request: NextRequest) {
     // === Overdue Logic ===
     let overduePayments = 0;
     let totalPenaltyAmount = 0;
-    let totalDepositDue = 0;
 
     // Financial obligations remain reportable after occupancy ends. The
     // financial query above is scoped to this owner's selected properties;
@@ -300,8 +299,6 @@ export async function GET(request: NextRequest) {
     const currentTenants = Math.max(0, activeTenantsForOccupancy.length - activeOverduePayments);
     const bulkOps = tenantStates.map(({ tenant, state }) => {
       totalPenaltyAmount += state.penalties;
-      totalDepositDue += state.depositOutstanding;
-
       return {
         updateOne: {
           filter: { _id: tenant._id },
@@ -325,6 +322,7 @@ export async function GET(request: NextRequest) {
     // Deposits remain held after tenancy ends, so the collected metric includes
     // every tenant ledger attached to an active owner property.
     const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantStates.map(({ state }) => state)));
+    const totalDepositDue = roundMoney(sumTenantDepositOutstanding(allTenantStates.map(({ state }) => state)));
     const totalOverdueFromComponents = sumTenantOverdueAmount(tenantStates.map(({ state }) => state));
 
     if (bulkOps.length > 0) {

@@ -16,6 +16,12 @@ const sumOverdue = (states: Iterable<{ overdueAmount: number }>) => {
   return totalMinor / 100;
 };
 
+const sumDepositOutstanding = (states: Iterable<{ depositOutstanding: number }>) => {
+  let totalMinor = 0;
+  for (const state of states) totalMinor += Math.round((Number(state.depositOutstanding) || 0) * 100);
+  return totalMinor / 100;
+};
+
 vi.mock("@/lib/csrf", () => ({ validateCsrfToken: () => true, buildInvalidCsrfResponse: () => new Response("csrf", { status: 403 }) }));
 vi.mock("@/lib/mongodb", () => ({
   connectToDatabase: async () => ({ db: {
@@ -45,6 +51,7 @@ vi.mock("@/lib/rent-overrides", () => ({ fetchActiveRentOverridesByPropertyIds: 
 vi.mock("@/lib/tenant-payment-allocation", () => ({
   calculateTenantFinancialState: async (_db: unknown, tenant: any) => fixtures.states.get(String(tenant._id)),
   calculateTenantFinancialStates: async (_db: unknown, tenants: any[]) => tenants.map((tenant) => fixtures.states.get(String(tenant._id))),
+  sumTenantDepositOutstanding: sumDepositOutstanding,
   sumTenantDepositPaid: () => 0,
   sumTenantOverdueAmount: sumOverdue,
   tenantOverdueStatus: (state: any) => state.overdueAmount > 0 ? "overdue" : "up-to-date",
@@ -93,9 +100,9 @@ describe("owner stats overdue aggregation", () => {
       { _id: new ObjectId("64a000000000000000000035"), propertyId: String(propertyA), leaseStartDate: "2026-01-01", leaseEndDate: "2026-09-01", status: "moved out" },
     ];
     fixtures.states = new Map([
-      [String(fixtures.tenants[0]._id), { overdueAmount: 125.25, penalties: 0, depositOutstanding: 0 }],
+      [String(fixtures.tenants[0]._id), { overdueAmount: 125.25, penalties: 0, depositOutstanding: 300.25 }],
       [String(fixtures.tenants[1]._id), { overdueAmount: 0, penalties: 20, depositOutstanding: 500 }],
-      [String(fixtures.tenants[2]._id), { overdueAmount: 74.5, penalties: 0, depositOutstanding: 0 }],
+      [String(fixtures.tenants[2]._id), { overdueAmount: 74.5, penalties: 0, depositOutstanding: 199.5 }],
       [String(fixtures.tenants[3]._id), { overdueAmount: 999, penalties: 0, depositOutstanding: 0 }],
       [String(fixtures.tenants[4]._id), { overdueAmount: 40, penalties: 0, depositOutstanding: 0 }],
     ]);
@@ -109,8 +116,10 @@ describe("owner stats overdue aggregation", () => {
     const property = await propertyResponse.json();
 
     expect(portfolio.stats.totalOverdueAmount).toBe(239.75);
+    expect(portfolio.stats.totalDepositDue).toBe(999.75);
     expect(portfolio.stats.overduePayments).toBe(3);
     expect(property.stats.totalOverdueAmount).toBe(165.25);
+    expect(property.stats.totalDepositDue).toBe(800.25);
     expect(property.stats.overduePayments).toBe(2);
     expect(property.stats.totalOverdueAmount + 74.5).toBe(portfolio.stats.totalOverdueAmount);
   });

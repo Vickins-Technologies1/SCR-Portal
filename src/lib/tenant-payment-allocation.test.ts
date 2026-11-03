@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "./tenant-payment-allocation";
+import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenantFinancialState, sumTenantDepositOutstanding, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "./tenant-payment-allocation";
 import { calculateTenantRentDueToDate } from "./utils";
 
 const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type });
@@ -344,6 +344,14 @@ describe("tenant payment allocation", () => {
 
     expect(sumTenantOverdueAmount([depositOnly])).toBe(0);
     expect(sumTenantOverdueAmount([rentAndUtilities])).toBe(15_000);
+  });
+
+  it("aggregates outstanding deposits across tenant ledger states", () => {
+    expect(sumTenantDepositOutstanding([
+      { depositOutstanding: 5_000.25 },
+      { depositOutstanding: 0 },
+      { depositOutstanding: 2_499.5 },
+    ])).toBe(7_499.75);
   });
 
   it("classifies only rent and utility arrears as overdue", () => {
