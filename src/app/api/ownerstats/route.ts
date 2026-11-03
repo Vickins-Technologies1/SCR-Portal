@@ -317,7 +317,13 @@ export async function GET(request: NextRequest) {
     // Deposits remain held after tenancy ends, so the collected metric includes
     // every tenant ledger attached to an active owner property.
     const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantStates.map(({ state }) => state)));
-    const totalOverdueFromComponents = sumTenantOverdueAmount(tenantStates.map(({ state }) => state));
+    // The overdue balance card represents the outstanding balance across every
+    // tenant ledger on the selected owner properties. Keep the overdue tenant
+    // count scoped to current occupants above, but include former tenants with
+    // unpaid arrears in the monetary balance as well. Each state is calculated
+    // from that tenant's own allocated payment ledger, so one tenant's credit
+    // cannot offset another tenant's arrears.
+    const totalOverdueFromComponents = sumTenantOverdueAmount(allTenantStates.map(({ state }) => state));
 
     if (bulkOps.length > 0) {
       await tenantCollection.bulkWrite(bulkOps);
