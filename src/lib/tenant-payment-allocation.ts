@@ -1,9 +1,9 @@
 import { ClientSession, Db, ObjectId } from "mongodb";
 import { randomUUID } from "node:crypto";
-import { calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown, UtilityDueBreakdown } from "@/lib/property-utilities";
+import { buildPostedMeteredUtilityBreakdown, calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown, UtilityCharge, UtilityDueBreakdown } from "@/lib/property-utilities";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
-import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { FinancialPaymentRow, getFinancialPaymentRows } from "@/lib/financial-reporting";
 import { identityValues, isSuccessfulPaymentStatus, paymentEventDate } from "@/lib/payment-query";
 import { businessDateParts } from "@/lib/business-time";
 
@@ -372,7 +372,7 @@ export function deriveTenantFinancialState(params: {
 export async function calculateTenantFinancialState(
   db: Db,
   tenant: any,
-  options: { asOf?: Date; property?: any; rentOverrideMap?: Map<string, any>; session?: ClientSession } = {}
+  options: { asOf?: Date; property?: any; rentOverrideMap?: Map<string, any>; session?: ClientSession; financialRows?: FinancialPaymentRow[]; meteredUtilities?: UtilityDueBreakdown } = {}
 ): Promise<TenantFinancialState> {
   const asOf = options.asOf ?? new Date();
   const propertyId = String(tenant.propertyId || "").trim();
@@ -394,14 +394,14 @@ export async function calculateTenantFinancialState(
     today: asOf,
     paymentDay: property?.rentPaymentDate,
   });
-  const meteredUtilities = await getPostedMeteredUtilityBreakdown(
-    db,
-    String(tenant._id),
-    asOf,
-    property?.rentPaymentDate,
-    tenant.propertyId,
-    options.session,
-  );
+  const meteredUtilities = options.meteredUtilities ?? await getPostedMeteredUtilityBreakdown(
+      db,
+      String(tenant._id),
+      asOf,
+      property?.rentPaymentDate,
+      tenant.propertyId,
+      options.session,
+    );
   const utilityBreakdown: UtilityDueBreakdown = {
     charged: money(fixedUtilities.charged + meteredUtilities.charged),
     currentCharged: money(fixedUtilities.currentCharged + meteredUtilities.currentCharged),
@@ -412,7 +412,7 @@ export async function calculateTenantFinancialState(
   // totals. Tenant dues must not use a second, subtly different payment query.
   // tenantId is the authoritative ownership link; this also retains legacy
   // payment rows whose propertyId was never populated.
-  const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id], session: options.session });
+  const financialRows = options.financialRows ?? await getFinancialPaymentRows({ db, tenantIds: [tenant._id], session: options.session });
   const payments = financialRows.map((row) => ({
     ...row.payment,
     amount: row.netAmount,
@@ -431,6 +431,65 @@ export async function calculateTenantFinancialState(
     payments,
     property,
   });
+}
+
+/** Calculate a set of tenant states with one bulk payment read and one bulk utility read. */
+export async function calculateTenantFinancialStates(
+  db: Db,
+  tenants: any[],
+  options: { asOf?: Date; propertyById?: Map<string, any>; rentOverrideMap?: Map<string, any> } = {},
+): Promise<TenantFinancialState[]> {
+  if (tenants.length === 0) return [];
+  const asOf = options.asOf ?? new Date();
+  const tenantIds = tenants.map((tenant) => tenant._id);
+  const propertyIds = [...new Set(tenants.map((tenant) => String(tenant.propertyId || "")).filter(Boolean))];
+  const propertyIdentities = identityValues(propertyIds);
+  const [financialRows, utilityRows] = await Promise.all([
+    getFinancialPaymentRows({ db, tenantIds }),
+    db.collection<UtilityCharge>("utilityCharges").find({
+      tenantId: { $in: identityValues(tenantIds) } as any,
+      status: "posted",
+      $or: [
+        { propertyId: { $in: propertyIdentities } as any },
+        { propertyId: { $exists: false } },
+        { propertyId: null },
+      ],
+    } as any).toArray(),
+  ]);
+  const paymentsByTenant = new Map<string, FinancialPaymentRow[]>();
+  for (const row of financialRows) {
+    const tenantKey = String(row.payment?.tenantId ?? "");
+    if (!tenantKey) continue;
+    const rows = paymentsByTenant.get(tenantKey) || [];
+    rows.push(row);
+    paymentsByTenant.set(tenantKey, rows);
+  }
+  const utilitiesByTenant = new Map<string, UtilityCharge[]>();
+  const propertyByTenantId = new Map(tenants.map((tenant) => [String(tenant._id), String(tenant.propertyId || "")]));
+  for (const row of utilityRows) {
+    const tenantKey = String(row.tenantId ?? "");
+    if (!tenantKey) continue;
+    const chargePropertyId = String(row.propertyId || "");
+    if (chargePropertyId && chargePropertyId !== propertyByTenantId.get(tenantKey)) continue;
+    const rows = utilitiesByTenant.get(tenantKey) || [];
+    rows.push(row);
+    utilitiesByTenant.set(tenantKey, rows);
+  }
+
+  return Promise.all(tenants.map((tenant) => {
+    const property = options.propertyById?.get(String(tenant.propertyId));
+    return calculateTenantFinancialState(db, tenant, {
+      asOf,
+      property,
+      rentOverrideMap: options.rentOverrideMap,
+      financialRows: paymentsByTenant.get(String(tenant._id)) || [],
+      meteredUtilities: buildPostedMeteredUtilityBreakdown(
+        utilitiesByTenant.get(String(tenant._id)) || [],
+        asOf,
+        property?.rentPaymentDate,
+      ),
+    });
+  }));
 }
 
 export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string, options: { session?: ClientSession; lockToken?: string } = {}) {

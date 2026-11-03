@@ -4,8 +4,8 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
-import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
+import { calculateTenantFinancialStates, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { ACTIVE_PROPERTY_STATUSES, buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
 
@@ -61,7 +61,6 @@ interface Stats {
 }
 
 const roundMoney = (value: number) => Math.round(value || 0);
-const ACTIVE_PROPERTY_STATUSES = ["Active", "active"] as const;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -265,10 +264,12 @@ export async function GET(request: NextRequest) {
 
     // Historical receipt categories use posted snapshots; current tenant
     // states are independently recalculated for outstanding balances.
-    const allTenantStates = await Promise.all(tenantsForFinancials.map(async (tenant: any) => ({
-      tenant,
-      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(String(tenant.propertyId)), asOf: today }),
-    })));
+    const calculatedTenantStates = await calculateTenantFinancialStates(db, tenantsForFinancials, {
+      propertyById: propertyMap,
+      rentOverrideMap,
+      asOf: today,
+    });
+    const allTenantStates = tenantsForFinancials.map((tenant: any, index) => ({ tenant, state: calculatedTenantStates[index] }));
     const monthlySummary = summarizeFinancialPaymentRows(monthlyRows);
     const lifetimeSummary = summarizeFinancialPaymentRows(lifetimeRows);
     const rentCollectedThisMonth = roundMoney(monthlySummary.rentReceived);
@@ -281,14 +282,14 @@ export async function GET(request: NextRequest) {
     const totalUtilityPaid = roundMoney(lifetimeSummary.utilityReceived);
 
     // === Overdue Logic ===
-    const activeTenantsForDues = activeTenantsForOccupancy;
-
     let overduePayments = 0;
     let totalPenaltyAmount = 0;
     let totalDepositDue = 0;
 
-    const activeTenantIds = new Set(activeTenantsForDues.map((tenant) => String(tenant._id)));
-    const tenantStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
+    // Financial obligations remain reportable after occupancy ends. The
+    // financial query above is scoped to this owner's selected properties;
+    // occupancy eligibility is used only for occupancy metrics.
+    const tenantStates = allTenantStates;
     overduePayments = tenantStates.filter(({ state }) => state.overdueAmount > 0).length;
     const bulkOps = tenantStates.map(({ tenant, state }) => {
       totalPenaltyAmount += state.penalties;

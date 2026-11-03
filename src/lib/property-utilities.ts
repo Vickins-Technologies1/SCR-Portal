@@ -319,6 +319,14 @@ export const getPostedMeteredUtilityBreakdown = async (
   const rows = await db.collection<UtilityCharge>("utilityCharges")
     .find({ tenantId: { $in: tenantIdentities } as any, status: "posted", ...scope } as any, session ? { session } : undefined)
     .toArray();
+  return buildPostedMeteredUtilityBreakdown(rows, today, paymentDay);
+};
+
+export const buildPostedMeteredUtilityBreakdown = (
+  rows: UtilityCharge[],
+  today = new Date(),
+  paymentDay = 1,
+): UtilityDueBreakdown => {
   const breakdown = emptyUtilityBreakdown();
   const currentPeriod = toBillingPeriod(today);
   for (const charge of rows) {

@@ -521,4 +521,69 @@ describe("tenant payment allocation", () => {
     const leap = calculateTenantRentDueToDate({ tenant: leapTenant, today: new Date("2024-03-01T21:00:00.000Z"), paymentDay: 31 });
     expect(leap.overdueRentDue).toBe(1000);
   });
+
+  it("reduces overdue rent by partial payments while keeping current rent separate", () => {
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-06T12:00:00.000Z"),
+      rentDue: 2_000,
+      overdueRentCharged: 1_000,
+      monthsStayed: 2,
+      utilityBreakdown: { charged: 0, currentCharged: 0, overdueCharged: 0 },
+      depositDue: 0,
+      payments: [payment(250)],
+    });
+
+    expect(state.rentOutstanding).toBe(1_750);
+    expect(state.overdueRent).toBe(750);
+    expect(state.overdueAmount).toBe(750);
+  });
+
+  it("keeps fully paid rent out of overdue balances, including payment on the due date", () => {
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-05T12:00:00.000Z"),
+      rentDue: 1_000,
+      overdueRentCharged: 1_000,
+      monthsStayed: 1,
+      utilityBreakdown: { charged: 0, currentCharged: 0, overdueCharged: 0 },
+      depositDue: 0,
+      payments: [{ ...payment(1_000), paymentDate: "2026-10-05T09:00:00.000Z" }],
+    });
+
+    expect(state.rentOutstanding).toBe(0);
+    expect(state.overdueRent).toBe(0);
+    expect(state.overdueAmount).toBe(0);
+  });
+
+  it("stops accruing rent after the lease-end billing month for former tenants", () => {
+    const tenant: any = {
+      leaseStartDate: "2026-08-01",
+      leaseEndDate: "2026-09-15",
+      leasedUnits: [{ unitIdentifier: "A1", unitType: "Studio", houseNumber: "A1", price: 1000, deposit: 0 }],
+    };
+    const former = calculateTenantRentDueToDate({ tenant, today: new Date("2026-11-03T12:00:00.000Z"), paymentDay: 5 });
+
+    expect(former.monthsStayed).toBe(2);
+    expect(former.rentDue).toBe(2_000);
+    expect(former.overdueRentDue).toBe(2_000);
+    expect(former.obligations.map(({ billingPeriod }) => billingPeriod)).toEqual(["2026-08", "2026-09"]);
+
+    const lateDue = calculateTenantRentDueToDate({
+      tenant: { ...tenant, leaseEndDate: "2026-09-10" },
+      today: new Date("2026-11-03T12:00:00.000Z"),
+      paymentDay: 20,
+    });
+    expect(lateDue.rentDue).toBe(2_000);
+    expect(lateDue.overdueRentDue).toBe(2_000);
+  });
+
+  it("does not accrue rent for malformed or not-yet-started leases", () => {
+    const unit = [{ unitIdentifier: "A1", unitType: "Studio", houseNumber: "A1", price: 1000, deposit: 0 }];
+    const malformed = calculateTenantRentDueToDate({ tenant: { leaseStartDate: "not-a-date", leasedUnits: unit } as any, today: new Date("2026-10-06T12:00:00.000Z") });
+    const future = calculateTenantRentDueToDate({ tenant: { leaseStartDate: "2026-11-01", leasedUnits: unit } as any, today: new Date("2026-10-06T12:00:00.000Z") });
+
+    expect(malformed.rentDue).toBe(0);
+    expect(future.rentDue).toBe(0);
+  });
 });

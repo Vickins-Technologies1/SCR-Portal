@@ -410,7 +410,8 @@ export const calculateTenantRentDueToDate = ({
   }
 
   const start = new Date(tenant.leaseStartDate);
-  if (Number.isNaN(start.getTime()) || today < start) {
+  const leaseEnd = tenant.leaseEndDate ? new Date(tenant.leaseEndDate) : null;
+  if (Number.isNaN(start.getTime()) || businessDateIsBefore(today, start) || (leaseEnd && !Number.isNaN(leaseEnd.getTime()) && businessDateIsBefore(leaseEnd, start))) {
     return {
       rentDue: 0,
       overdueRentDue: 0,
@@ -422,9 +423,13 @@ export const calculateTenantRentDueToDate = ({
     };
   }
 
+  // A former tenant remains liable for rent through the month in which their
+  // lease ended, but must not accrue new rent in later months.
+  const accrualAsOf = leaseEnd && !Number.isNaN(leaseEnd.getTime()) && businessDateIsBefore(leaseEnd, today) ? leaseEnd : today;
+  const accrualParts = businessDateParts(accrualAsOf);
   const startParts = businessDateParts(start);
   const monthDiff =
-    (todayParts.year - startParts.year) * 12 + (todayParts.month - startParts.month);
+    (accrualParts.year - startParts.year) * 12 + (accrualParts.month - startParts.month);
 
   const monthsStayed = Math.max(1, monthDiff + 1);
 
@@ -451,6 +456,8 @@ export const calculateTenantRentDueToDate = ({
     const periodDueDate = businessDueDate(period.getUTCFullYear(), period.getUTCMonth(), effectivePaymentDay);
     const firstDueDate = i === 0 ? getNextDueDate(start, effectivePaymentDay) : periodDueDate;
     rentDueTotal += monthRent;
+    // Accrual stops with the lease, but contractual due dates can pass after
+    // move-out; evaluate overdue status against the requested as-of date.
     const overdue = businessDateIsBefore(firstDueDate, today);
     if (overdue) overdueRentDue += monthRent;
     obligations.push({ billingPeriod: `${period.getUTCFullYear()}-${String(period.getUTCMonth() + 1).padStart(2, "0")}`, amount: roundCurrency(monthRent), dueDate: firstDueDate, overdue });

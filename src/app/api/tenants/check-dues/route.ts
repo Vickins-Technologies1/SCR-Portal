@@ -7,13 +7,17 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
+import { ACTIVE_PROPERTY_STATUSES, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsWithFinancialHistory } from "@/lib/tenant-occupancy";
 import {
   calculateTenantFinancialState,
+  calculateTenantFinancialStates,
   reconcileTenantPaymentAllocation,
+  sumTenantOverdueAmount,
+  tenantOverdueStatus,
   type TenantFinancialState,
 } from "@/lib/tenant-payment-allocation";
 import { getFinancialReportSummary } from "@/lib/financial-reporting";
+import { identityValues } from "@/lib/payment-query";
 
 interface Tenant {
   _id: ObjectId;
@@ -107,6 +111,7 @@ async function calculateTenantDues(db: Db, tenantId: string, today = new Date())
   const dues = {
     rentDues,
     rentOutstanding: baseRentDues,
+    overdueAmount: allocation.overdueAmount,
     penaltyDues,
     depositDues,
     utilityDues,
@@ -178,6 +183,7 @@ function buildTenantDuesResponse(
     dues: {
       rentDues: Math.max(0, state.rentOutstanding + state.penalties),
       rentOutstanding: state.rentOutstanding,
+      overdueAmount: state.overdueAmount,
       penaltyDues: state.penalties,
       depositDues: state.depositOutstanding,
       utilityDues: state.utilitiesOutstanding,
@@ -284,7 +290,10 @@ export async function GET(request: NextRequest) {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const properties = await db.collection("properties").find({ ownerId: userId }).toArray();
+    const properties = await db.collection("properties").find({
+      ownerId: { $in: identityValues(userId) },
+      $or: [{ status: { $in: ACTIVE_PROPERTY_STATUSES } }, { status: { $exists: false } }],
+    }).toArray();
     const propertyIds = properties.map((p: any) => p._id.toString());
     const propertyMap = new Map(properties.map((p: any) => [p._id.toString(), p]));
 
@@ -307,7 +316,7 @@ export async function GET(request: NextRequest) {
     // 1. Total Units
     const totalUnitsResult = await db.collection("properties")
       .aggregate([
-        { $match: { ownerId: userId } },
+        { $match: { _id: { $in: properties.map((property: any) => property._id) } } },
         { $unwind: "$unitTypes" },
         { $group: { _id: null, totalUnits: { $sum: "$unitTypes.quantity" } } },
       ])
@@ -328,31 +337,24 @@ export async function GET(request: NextRequest) {
     const totalPayments = lifetimeSummary.netReceived;
 
     // 5. Overdue Calculation
-    let overdueCount = 0;
-    let totalOverdueAmount = 0;
-
-    const states = await Promise.all(activeTenants.map(async (tenant) => ({
-      tenant,
-      state: await calculateTenantFinancialState(db, tenant, {
-        property: propertyMap.get(tenant.propertyId),
-        asOf: today,
-        rentOverrideMap,
-      }),
-    })));
+    const financialTenants = await fetchTenantsWithFinancialHistory(db, propertyIds);
+    const calculatedStates = await calculateTenantFinancialStates(db, financialTenants, {
+      propertyById: propertyMap,
+      asOf: today,
+      rentOverrideMap,
+    });
+    const states = financialTenants.map((tenant, index) => ({ tenant, state: calculatedStates[index] }));
 
     const bulkUpdates = states.map(({ tenant, state }) => {
-      const totalDue = state.overdueAmount;
-      if (totalDue > 0) {
-        overdueCount++;
-        totalOverdueAmount += totalDue;
-      }
       return {
         updateOne: {
           filter: { _id: tenant._id },
-          update: { $set: { paymentStatus: totalDue > 0 ? "overdue" : "up-to-date", updatedAt: todayISO } },
+          update: { $set: { paymentStatus: tenantOverdueStatus(state), updatedAt: todayISO } },
         },
       };
     });
+    const overdueCount = states.filter(({ state }) => state.overdueAmount > 0).length;
+    const totalOverdueAmount = sumTenantOverdueAmount(states.map(({ state }) => state));
 
     if (bulkUpdates.length > 0) {
       await db.collection("tenants").bulkWrite(bulkUpdates);

@@ -7,6 +7,8 @@ export const NON_OCCUPYING_TENANT_STATUSES: ReadonlyArray<string> = [
   "evicted",
 ];
 
+export const ACTIVE_PROPERTY_STATUSES: ReadonlyArray<string> = ["Active", "active"];
+
 export const countOccupiedUnitsForTenant = (tenant: { leasedUnits?: unknown } | null | undefined): number => {
   if (!tenant) return 0;
   const leasedUnits = (tenant as any).leasedUnits;
@@ -193,6 +195,21 @@ export async function fetchTenantsActiveOnDay<TTenant extends Document = Documen
   }
 
   return db.collection<TTenant>("tenants").aggregate<TTenant>(pipeline).toArray();
+}
+
+/**
+ * Returns every tenant record linked to the supplied properties, regardless
+ * of current occupancy or status. Financial history can remain outstanding
+ * after a lease ends or a tenant is marked inactive/terminated.
+ */
+export async function fetchTenantsWithFinancialHistory<TTenant extends Document = Document>(
+  db: Db,
+  propertyIds: string[],
+  projection?: Record<string, 1 | 0>
+): Promise<TTenant[]> {
+  if (propertyIds.length === 0) return [];
+  const query = { propertyId: { $in: buildPropertyIdCandidates(propertyIds) as any } };
+  return db.collection<TTenant>("tenants").find<TTenant>(query as any, projection ? { projection } : undefined).toArray();
 }
 
 export async function fetchTenantsOverlappingRange<TTenant extends Document = Document>(

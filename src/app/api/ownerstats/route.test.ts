@@ -35,6 +35,7 @@ vi.mock("@/lib/mongodb", () => ({
         find: (query: any) => ({ toArray: async () => fixtures.tenants.filter((tenant) => query.propertyId.$in.includes(tenant.propertyId)) }),
         bulkWrite: async () => ({ acknowledged: true }),
       };
+      if (name === "utilityCharges") return { find: () => ({ toArray: async () => [] }) };
       throw new Error(`Unexpected collection ${name}`);
     },
   } }),
@@ -43,14 +44,21 @@ vi.mock("@/lib/utils", () => ({ resolveTenantMonthlyRentForDate: () => 0 }));
 vi.mock("@/lib/rent-overrides", () => ({ fetchActiveRentOverridesByPropertyIds: async () => new Map() }));
 vi.mock("@/lib/tenant-payment-allocation", () => ({
   calculateTenantFinancialState: async (_db: unknown, tenant: any) => fixtures.states.get(String(tenant._id)),
+  calculateTenantFinancialStates: async (_db: unknown, tenants: any[]) => tenants.map((tenant) => fixtures.states.get(String(tenant._id))),
   sumTenantDepositPaid: () => 0,
   sumTenantOverdueAmount: sumOverdue,
   tenantOverdueStatus: (state: any) => state.overdueAmount > 0 ? "overdue" : "up-to-date",
 }));
 vi.mock("@/lib/tenant-occupancy", () => ({
+  ACTIVE_PROPERTY_STATUSES: ["Active", "active"],
   buildPropertyIdCandidates: (ids: string[]) => ids,
   countOccupiedUnitsForTenant: () => 1,
-  fetchTenantsActiveOnDay: async (_db: unknown, propertyIds: string[]) => fixtures.tenants.filter((tenant) => propertyIds.includes(tenant.propertyId)),
+  fetchTenantsActiveOnDay: async (_db: unknown, propertyIds: string[], day: Date) => fixtures.tenants.filter((tenant) =>
+    propertyIds.includes(tenant.propertyId) &&
+    !["terminated", "inactive", "moved out", "evicted"].includes(String(tenant.status || "").toLowerCase()) &&
+    Number.isFinite(new Date(tenant.leaseStartDate).getTime()) && new Date(tenant.leaseStartDate) <= day &&
+    Number.isFinite(new Date(tenant.leaseEndDate).getTime()) && new Date(tenant.leaseEndDate) >= day
+  ),
   fetchTenantsOverlappingRange: async () => [],
 }));
 vi.mock("@/lib/financial-reporting", () => ({
@@ -82,12 +90,14 @@ describe("owner stats overdue aggregation", () => {
       { _id: new ObjectId("64a000000000000000000032"), propertyId: String(propertyA), leaseStartDate: "2026-01-01", leaseEndDate: "2027-01-01", outstandingInvoiceBalance: 15_000 },
       { _id: new ObjectId("64a000000000000000000033"), propertyId: String(propertyB), leaseStartDate: "2026-01-01", leaseEndDate: "2027-01-01" },
       { _id: new ObjectId("64a000000000000000000034"), propertyId: String(propertyOtherOwner), leaseStartDate: "2026-01-01", leaseEndDate: "2027-01-01" },
+      { _id: new ObjectId("64a000000000000000000035"), propertyId: String(propertyA), leaseStartDate: "2026-01-01", leaseEndDate: "2026-09-01", status: "moved out" },
     ];
     fixtures.states = new Map([
       [String(fixtures.tenants[0]._id), { overdueAmount: 125.25, penalties: 0, depositOutstanding: 0 }],
       [String(fixtures.tenants[1]._id), { overdueAmount: 0, penalties: 20, depositOutstanding: 500 }],
       [String(fixtures.tenants[2]._id), { overdueAmount: 74.5, penalties: 0, depositOutstanding: 0 }],
       [String(fixtures.tenants[3]._id), { overdueAmount: 999, penalties: 0, depositOutstanding: 0 }],
+      [String(fixtures.tenants[4]._id), { overdueAmount: 40, penalties: 0, depositOutstanding: 0 }],
     ]);
   });
 
@@ -98,10 +108,10 @@ describe("owner stats overdue aggregation", () => {
     const propertyResponse = await GET(request(String(fixtures.properties[0]._id)));
     const property = await propertyResponse.json();
 
-    expect(portfolio.stats.totalOverdueAmount).toBe(199.75);
-    expect(portfolio.stats.overduePayments).toBe(2);
-    expect(property.stats.totalOverdueAmount).toBe(125.25);
-    expect(property.stats.overduePayments).toBe(1);
+    expect(portfolio.stats.totalOverdueAmount).toBe(239.75);
+    expect(portfolio.stats.overduePayments).toBe(3);
+    expect(property.stats.totalOverdueAmount).toBe(165.25);
+    expect(property.stats.overduePayments).toBe(2);
     expect(property.stats.totalOverdueAmount + 74.5).toBe(portfolio.stats.totalOverdueAmount);
   });
 });
