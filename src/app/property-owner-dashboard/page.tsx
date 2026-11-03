@@ -88,6 +88,7 @@ export default function PropertyOwnerDashboard() {
     totalRentPaid: 0,
     totalDepositDue: 0,
     overduePayments: 0,
+    currentTenants: 0,
     totalPayments: 0,
     totalOverdueAmount: 0,
     totalPenaltyAmount: 0,
@@ -267,8 +268,8 @@ export default function PropertyOwnerDashboard() {
     datasets: [
       {
         data: [
-          Math.max(0, stats.activeTenants - stats.overduePayments),
-          stats.overduePayments,
+          stats.currentTenants ?? Math.max(0, stats.activeTenants - stats.overduePayments),
+          stats.activeOverduePayments ?? stats.overduePayments,
           0,
         ],
         backgroundColor: ["#42c775", "#ef4444", "#f59e0b"],

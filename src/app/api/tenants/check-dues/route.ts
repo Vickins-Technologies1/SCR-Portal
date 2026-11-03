@@ -414,7 +414,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, results });
     }
 
-    const result = await calculateTenantDues(db, tenantId);
+    const results = await calculateBatchTenantDues(db, [tenantId]);
+    const result = results[0];
     if (!result) {
       return NextResponse.json(
         { success: false, message: "Tenant not found" },

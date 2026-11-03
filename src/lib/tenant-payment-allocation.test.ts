@@ -556,6 +556,37 @@ describe("tenant payment allocation", () => {
     expect(state.overdueAmount).toBe(0);
   });
 
+  it("ages penalties per overdue rent period and stops for settled periods", () => {
+    const asOf = new Date("2026-10-21T12:00:00.000Z");
+    const obligations = [
+      { billingPeriod: "2026-08", amount: 1_000, dueDate: new Date("2026-08-05T00:00:00.000Z"), overdue: true },
+      { billingPeriod: "2026-09", amount: 1_000, dueDate: new Date("2026-09-05T00:00:00.000Z"), overdue: true },
+      { billingPeriod: "2026-10", amount: 1_000, dueDate: new Date("2026-10-05T00:00:00.000Z"), overdue: true },
+    ];
+    const state = deriveTenantFinancialState({
+      tenant: { leaseStartDate: "2026-08-01" }, asOf, rentDue: 3_000, overdueRentCharged: 3_000,
+      monthsStayed: 3, rentObligations: obligations,
+      utilityBreakdown: { charged: 0, currentCharged: 0, overdueCharged: 0 }, depositDue: 0,
+      payments: [payment(1_500)],
+      property: { rentPaymentDate: 5, penaltyAmount: 10, penaltyFrequency: "daily" },
+    });
+    // Oldest-first payment clears August and half of September. Only the
+    // remaining half of September and all of October continue accruing.
+    expect(state.rentObligations.map((row) => row.outstanding)).toEqual([0, 500, 1_000]);
+    expect(state.penalties).toBeGreaterThan(0);
+  });
+
+  it("does not accrue weekly penalties before a full week has elapsed", () => {
+    const state = deriveTenantFinancialState({
+      tenant: { leaseStartDate: "2026-10-01" }, asOf: new Date("2026-10-11T12:00:00.000Z"),
+      rentDue: 1_000, overdueRentCharged: 1_000, monthsStayed: 1,
+      rentObligations: [{ billingPeriod: "2026-10", amount: 1_000, dueDate: new Date("2026-10-05T00:00:00.000Z"), overdue: true }],
+      utilityBreakdown: { charged: 0, currentCharged: 0, overdueCharged: 0 }, depositDue: 0,
+      payments: [], property: { rentPaymentDate: 5, penaltyAmount: 100, penaltyFrequency: "weekly" },
+    });
+    expect(state.penalties).toBe(0);
+  });
+
   it("stops accruing rent after the lease-end billing month for former tenants", () => {
     const tenant: any = {
       leaseStartDate: "2026-08-01",

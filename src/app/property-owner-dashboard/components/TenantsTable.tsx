@@ -224,7 +224,7 @@ export default function TenantsTable({
   }, [properties]);
 
   const getPaymentSnapshot = (tenant: ResponseTenant) => {
-    const overdueBalance = Math.max(tenant.dues?.totalRemainingDues ?? 0, 0);
+    const overdueBalance = Math.max(tenant.dues?.overdueAmount ?? 0, 0);
     const statusText = (tenant.paymentStatus || "").toLowerCase();
     const isOverdue = statusText === "overdue" || overdueBalance > 0;
     return {

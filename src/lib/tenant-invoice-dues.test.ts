@@ -38,7 +38,7 @@ describe("dues-based tenant invoice calculation", () => {
   });
 
   it("proposes only the remaining overdue amounts after ledger allocation", async () => {
-    mocks.state.mockResolvedValue({ rentPaid: 8_000, utilitiesPaid: 0, depositPaid: 0, otherPaid: 0, overdueRent: 7_000, overdueUtilities: 2_000, penalties: 0, walletBalance: 0, monthsStayed: 3, rentObligations: [{ billingPeriod: "2026-03", amount: 15_000, paid: 0, outstanding: 15_000, dueDate: new Date("2026-03-05"), overdue: true }] });
+    mocks.state.mockResolvedValue({ rentPaid: 8_000, utilitiesPaid: 0, depositPaid: 0, otherPaid: 0, overdueRent: 7_000, overdueUtilities: 2_000, penalties: 0, walletBalance: 0, monthsStayed: 3, rentObligations: [{ billingPeriod: "2026-03", amount: 15_000, paid: 8_000, outstanding: 7_000, dueDate: new Date("2026-03-05"), overdue: true }] });
     const result = await calculateTenantInvoiceDues(dbWith(), { _id: "tenant-1" }, { _id: "property-1" }, new Date("2026-06-01"));
     expect(result).toMatchObject({ rentMinor: 700_000, utilitiesMinor: 0, totalMinor: 700_000 });
     expect(result.lines.map((line) => line.category)).toEqual(["rent"]);

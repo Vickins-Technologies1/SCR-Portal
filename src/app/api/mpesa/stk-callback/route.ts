@@ -3,14 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import logger from "@/lib/logger";
-import { calculateTenantRentDueToDate, calculateWalletBalanceFromPayments, resolveTenantRequiredDeposit } from "@/lib/utils";
-import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { getTenantPaymentTotals } from "@/lib/payment-totals";
-import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 import { sendAirbnbPaymentReceivedEmail, sendConfirmationEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { syncAirbnbBookingPaymentStatus } from "@/lib/airbnb-payments";
-import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, reconcileTenantPaymentAllocation, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
 import { diffNights, parseDate } from "@/lib/airbnb-utils";
 import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } from "@/lib/daraja-callback";
 import { postVerifiedPayment } from "@/lib/verified-payment-posting";
@@ -267,49 +263,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" }, { status: 200 });
     }
 
-    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-    const { rentDue: totalRentDue } = calculateTenantRentDueToDate({
-      tenant: tenant as any,
-      today: new Date(),
-      rentOverrideMap,
-      paymentDay: (property as any).rentPaymentDate,
-    });
-
-    const paymentTotals = await getTenantPaymentTotals(db, payment.tenantId);
     const amount = metadata.amount || payment.amount || 0;
-    const depositTotal = resolveTenantRequiredDeposit({
-      tenant: tenant as any,
-      unitTypes: (property as any)?.unitTypes,
-    });
-    const rentDueAfter = Math.max(0, totalRentDue - paymentTotals.rentPaid);
-    const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
-    const utilityDueAfter =
-      calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenant as any, today: new Date() }) +
-      (await getPostedMeteredUtilityTotal(db, payment.tenantId));
-    const walletBalance = calculateWalletBalanceFromPayments({
-      rentPaid: paymentTotals.rentPaid,
-      depositPaid: paymentTotals.depositPaid,
-      utilityPaid: paymentTotals.utilityPaid,
-      rentDue: totalRentDue,
-      depositDue: depositTotal,
-      utilityDue: utilityDueAfter,
-    });
-    const totalRemainingDues = rentDueAfter + depositDueAfter + utilityDueAfter;
+    await reconcileTenantPaymentAllocation(db, payment.tenantId);
+    const state = await calculateTenantFinancialState(db, tenant, { property, asOf: new Date() });
 
     await db.collection("tenants").updateOne(
       { _id: new ObjectId(payment.tenantId) },
       {
         $set: {
-          totalRentPaid: paymentTotals.rentPaid,
-          totalUtilityPaid: paymentTotals.utilityPaid,
-          totalDepositPaid: paymentTotals.depositPaid,
-          walletBalance,
-          paymentStatus: totalRemainingDues > 0 ? "overdue" : "up-to-date",
+          totalRentPaid: state.rentPaid,
+          totalUtilityPaid: state.utilitiesPaid,
+          totalDepositPaid: state.depositPaid,
+          walletBalance: state.walletBalance,
+          paymentStatus: tenantOverdueStatus(state),
           updatedAt: new Date().toISOString(),
         },
       }
     );
-    await reconcileTenantPaymentAllocation(db, payment.tenantId);
 
     const ownerId = typeof property.ownerId === "string" ? property.ownerId : property.ownerId?.toString?.();
     const owner = ownerId

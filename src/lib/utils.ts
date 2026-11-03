@@ -486,6 +486,7 @@ export const calculateTenantRentDueToDate = ({
 
 export const calculateOverduePenalty = ({
   rentDues,
+  rentObligations,
   today,
   rentPaymentDate,
   leaseStartDate,
@@ -493,6 +494,7 @@ export const calculateOverduePenalty = ({
   penaltyFrequency,
 }: {
   rentDues: number;
+  rentObligations?: Array<{ amount: number; outstanding?: number; dueDate: Date; overdue: boolean }>;
   today: Date;
   rentPaymentDate?: number;
   leaseStartDate?: string;
@@ -503,31 +505,30 @@ export const calculateOverduePenalty = ({
   if (!penaltyFrequency) return 0;
   if (rentDues <= 0) return 0;
 
+  const todayParts = businessDateParts(today);
+  const daysLate = (dueDate: Date) => {
+    const dueParts = businessDateParts(dueDate);
+    return Math.floor((Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day) - Date.UTC(dueParts.year, dueParts.month - 1, dueParts.day)) / MS_PER_DAY);
+  };
+  if (rentObligations) return roundCurrency(rentObligations.reduce((sum, obligation) => {
+    const outstanding = Math.max(0, Number(obligation.outstanding ?? obligation.amount) || 0);
+    if (!obligation.overdue || outstanding <= 0) return sum;
+    const days = daysLate(obligation.dueDate);
+    const periods = penaltyFrequency === "weekly" ? Math.floor(days / 7) : days;
+    return sum + Math.max(0, periods) * penaltyAmount;
+  }, 0));
+
+  // Legacy callers without obligation data retain the previous single-period calculation.
   const todayStart = startOfDay(today);
   let dueDate = getMostRecentDueDate(todayStart, rentPaymentDate);
-
   const leaseStart = toValidDate(leaseStartDate);
   if (leaseStart) {
     const firstDueDate = getNextDueDate(startOfDay(leaseStart), rentPaymentDate);
-    if (todayStart < startOfDay(firstDueDate)) {
-      return 0;
-    }
-    if (dueDate < firstDueDate) {
-      dueDate = firstDueDate;
-    }
+    if (todayStart < startOfDay(firstDueDate)) return 0;
+    if (dueDate < firstDueDate) dueDate = firstDueDate;
   }
-
-  const todayParts = businessDateParts(todayStart);
-  const dueParts = businessDateParts(dueDate);
-  const daysOverdue = Math.floor((Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day) - Date.UTC(dueParts.year, dueParts.month - 1, dueParts.day)) / MS_PER_DAY);
-  if (daysOverdue <= 0) return 0;
-
-  const periodsOverdue =
-    penaltyFrequency === "weekly" ? Math.floor(daysOverdue / 7) : daysOverdue;
-
-  if (periodsOverdue <= 0) return 0;
-
-  return roundCurrency(periodsOverdue * penaltyAmount);
+  const days = daysLate(dueDate);
+  return roundCurrency(Math.max(0, penaltyFrequency === "weekly" ? Math.floor(days / 7) : days) * penaltyAmount);
 };
 
 const normalizeOverrides = (overrides?: RentPriceOverride[]): RentPriceOverride[] => {

@@ -10,6 +10,8 @@ export interface OwnerStats {
   totalRentPaid: number;
   totalDepositDue: number;
   overduePayments: number;
+  currentTenants?: number;
+  activeOverduePayments?: number;
   totalPayments: number;
   totalOverdueAmount: number;
   totalPenaltyAmount: number;

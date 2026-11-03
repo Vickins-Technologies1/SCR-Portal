@@ -1100,7 +1100,7 @@ export default function OwnerIntegrationsPage() {
                           : "border-border bg-white text-foreground hover:bg-muted"
                       } disabled:cursor-not-allowed disabled:opacity-70`}
                     >
-                      {gateway === "tuma" ? "Tuma" : "Daraja"}{active ? " · Active" : ""}
+                      Daraja{active ? " · Active" : ""}
                     </button>
                   );
                 })}

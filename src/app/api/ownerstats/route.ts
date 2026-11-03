@@ -53,6 +53,8 @@ interface Stats {
   totalRentPaid: number;
   totalDepositDue: number;
   overduePayments: number;
+  currentTenants: number;
+  activeOverduePayments: number;
   totalPayments: number;
   totalOverdueAmount: number;
   totalPenaltyAmount: number;
@@ -185,6 +187,8 @@ export async function GET(request: NextRequest) {
         totalRentPaid: 0,
         totalDepositDue: 0,
         overduePayments: 0,
+        currentTenants: 0,
+        activeOverduePayments: 0,
         totalPayments: 0,
         totalOverdueAmount: 0,
         totalPenaltyAmount: 0,
@@ -290,7 +294,10 @@ export async function GET(request: NextRequest) {
     // financial query above is scoped to this owner's selected properties;
     // occupancy eligibility is used only for occupancy metrics.
     const tenantStates = allTenantStates;
+    const overdueTenantIds = new Set(tenantStates.filter(({ state }) => state.overdueAmount > 0).map(({ tenant }) => String(tenant._id)));
     overduePayments = tenantStates.filter(({ state }) => state.overdueAmount > 0).length;
+    const activeOverduePayments = activeTenantsForOccupancy.filter((tenant: any) => overdueTenantIds.has(String(tenant._id))).length;
+    const currentTenants = Math.max(0, activeTenantsForOccupancy.length - activeOverduePayments);
     const bulkOps = tenantStates.map(({ tenant, state }) => {
       totalPenaltyAmount += state.penalties;
       totalDepositDue += state.depositOutstanding;
@@ -347,6 +354,8 @@ export async function GET(request: NextRequest) {
       totalRentPaid,
       totalDepositDue: roundMoney(totalDepositDue),
       overduePayments,
+      currentTenants,
+      activeOverduePayments,
       totalPayments,
       totalOverdueAmount: totalOverdueFromComponents,
       totalPenaltyAmount: roundMoney(totalPenaltyAmount),

@@ -1,7 +1,5 @@
 import { Db, ObjectId } from "mongodb";
 
-export type AirbnbPaymentGateway = "daraja";
-
 /** The gateway selected for Airbnb booking collections. */
 export type AirbnbPaymentGateway = "tuma" | "daraja";
 

@@ -44,12 +44,16 @@ const businessDay = (date: Date) => new Date(new Intl.DateTimeFormat("en-CA", { 
 export async function calculateTenantInvoiceDues(db: Db, tenant: any, property: any, asOf = new Date(), options: { excludeInvoiceIds?: string[]; financialState?: TenantFinancialState } = {}): Promise<TenantInvoiceDues> {
   const state = options.financialState ?? await calculateTenantFinancialState(db, tenant, { asOf, property });
   const obligations: TenantDueObligation[] = [];
-  let rentPaidLeft = moneyMinor(state.rentPaid);
+  let fallbackRentPaidLeft = moneyMinor(state.rentPaid);
   for (const rent of [...(state.rentObligations || [])].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())) {
     const originalAmountMinor = moneyMinor(rent.amount);
-    const amountPaidMinor = Math.min(originalAmountMinor, rentPaidLeft);
-    rentPaidLeft -= amountPaidMinor;
-    const outstandingMinor = originalAmountMinor - amountPaidMinor;
+    // The shared financial state has already applied net payments, explicit
+    // historical category allocations, and reversals. Reuse its obligation
+    // projection instead of re-spreading aggregate rent paid a second time.
+    const hasSharedAllocation = Number.isFinite(Number(rent.outstanding)) && Number.isFinite(Number(rent.paid));
+    const amountPaidMinor = hasSharedAllocation ? Math.min(originalAmountMinor, moneyMinor(rent.paid)) : Math.min(originalAmountMinor, fallbackRentPaidLeft);
+    fallbackRentPaidLeft = Math.max(0, fallbackRentPaidLeft - amountPaidMinor);
+    const outstandingMinor = hasSharedAllocation ? moneyMinor(rent.outstanding) : originalAmountMinor - amountPaidMinor;
     const overdueDays = Math.max(0, Math.floor((businessDay(asOf) - businessDay(rent.dueDate)) / 86_400_000));
     obligations.push({ reference: `rent:${rent.billingPeriod}`, chargeType: "rent", description: `Rent arrears — ${rent.billingPeriod}`, billingPeriod: rent.billingPeriod, originalAmountMinor, amountPaidMinor, amountAllocatedMinor: amountPaidMinor, outstandingMinor, dueDate: rent.dueDate, overdueDays, eligible: rent.overdue && outstandingMinor > 0 });
   }

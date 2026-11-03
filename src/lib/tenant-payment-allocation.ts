@@ -317,8 +317,16 @@ export function deriveTenantFinancialState(params: {
   const utilityOverdueCharged = money(params.utilityBreakdown.overdueCharged);
   const overdueRentCharged = money(params.overdueRentCharged ?? params.rentDue);
   const overdueRent = money(Math.max(0, overdueRentCharged - ledger.rentPaid));
+  let penaltyRentPaidLeft = ledger.rentPaid;
+  const penaltyObligations = (params.rentObligations || []).map((obligation) => {
+    const amount = money(obligation.amount);
+    const paid = Math.min(amount, penaltyRentPaidLeft);
+    penaltyRentPaidLeft = money(penaltyRentPaidLeft - paid);
+    return { ...obligation, outstanding: money(amount - paid) };
+  });
   const penalties = money(calculateOverduePenalty({
     rentDues: overdueRent,
+    rentObligations: penaltyObligations,
     today: params.asOf,
     rentPaymentDate: params.property?.rentPaymentDate,
     leaseStartDate: params.tenant.leaseStartDate,

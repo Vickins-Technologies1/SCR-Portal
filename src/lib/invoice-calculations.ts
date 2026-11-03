@@ -1,3 +1,5 @@
+import { businessDateIsBefore } from "@/lib/business-time";
+
 export type InvoicePaymentStatus = "PAID" | "PARTIALLY PAID" | "DUE" | "OVERDUE";
 
 export type InvoiceCalculation = {
@@ -48,8 +50,9 @@ export function calculateInvoiceTotals(input: InvoiceCalculationInput): InvoiceC
   let status: InvoicePaymentStatus;
   if (amountPaid >= total) status = "PAID";
   else if (amountPaid > 0) status = "PARTIALLY PAID";
-  else if (dueDate && now.getTime() > dueDate.getTime()) status = "OVERDUE";
+  else if (dueDate && businessDateIsBefore(dueDate, now)) status = "OVERDUE";
   else status = "DUE";
 
   return { subtotal, discount, tax, total, amountPaid, balanceDue, status };
 }
+

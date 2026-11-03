@@ -86,6 +86,7 @@ export interface ResponseTenant {
     utilityDues: number;
     depositDues: number;
     totalRemainingDues: number;
+    overdueAmount?: number;
     walletApplied?: number;
     walletRemaining?: number;
     walletCoverageMonths?: number;
