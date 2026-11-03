@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
-import { getAirbnbOwnerPaymentGateway, getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
+import { getAirbnbOwnerPaymentGateway } from "@/lib/airbnb-owner-integrations";
 import {
   initiateStkPush,
   isStkPushAccepted,
@@ -120,58 +119,6 @@ export async function POST(request: NextRequest) {
 
   const nowIso = new Date().toISOString();
   const gateway = await getAirbnbOwnerPaymentGateway(db, String(tenant.ownerId));
-
-  if (gateway === "tuma") {
-    const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
-    const tumaIntegration = await getAirbnbOwnerTumaIntegration(db, String(tenant.ownerId));
-    if (!isTumaConfigured(tumaIntegration) || !tumaCallbackBase) {
-      return NextResponse.json(
-        { success: false, message: "Tuma is selected but its API credentials or callback URL are missing." },
-        { status: 500 }
-      );
-    }
-    const incoming = await createTumaStkPush({
-      amount,
-      phone: normalizedPhone,
-      description: `Airbnb booking ${bookingId}`,
-      callbackUrl: `${tumaCallbackBase}/api/tuma/webhook`,
-      credentials: {
-        email: tumaIntegration!.email,
-        apiKey: tumaIntegration!.apiKey,
-      },
-    });
-
-    const checkoutRequestId = incoming.checkoutRequestId || incoming.merchantRequestId || "";
-    const merchantRequestId = incoming.merchantRequestId || "";
-
-    await db.collection("payments").insertOne({
-      tenantId: null,
-      airbnbTenantId: tenantContext.tenantId,
-      ownerId: tenant.ownerId,
-      amount,
-      propertyId: booking.listingId,
-      propertyName: booking.listingName,
-      paymentDate: nowIso,
-      transactionId: checkoutRequestId || merchantRequestId || reference,
-      status: "pending_stk",
-      createdAt: nowIso,
-      type: "AirbnbDirect",
-      phoneNumber: normalizedPhone,
-      reference,
-      mpesaCode: null,
-      checkoutRequestId,
-      merchantRequestId,
-      airbnbBookingId: bookingId,
-      provider: "tuma",
-      tumaPaymentId: incoming.raw?.data?.payment_id || incoming.raw?.payment_id || "",
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: incoming.customerMessage || "STK Push initiated. Check your phone.",
-      checkoutRequestId,
-    });
-  }
 
   let resolvedMpesa;
   try {

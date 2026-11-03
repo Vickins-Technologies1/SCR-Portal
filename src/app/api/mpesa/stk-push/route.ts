@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId, Db } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { createTumaStkPush, isTumaConfigured } from "@/lib/tuma";
-import { getOwnerInvoicePaymentProvider, getOwnerPaymentGateway, getOwnerTumaIntegration } from "@/lib/owner-integrations";
+import { getOwnerInvoicePaymentProvider, getOwnerPaymentGateway } from "@/lib/owner-integrations";
 import { createIncomingPayment, getKopokopoTillNumber, KopokopoApiError } from "@/lib/kopokopo";
 import {
   initiateStkPush,
@@ -521,68 +520,6 @@ export async function POST(request: NextRequest) {
     // The tenant reference identifies the payer/property in the callback.
     // The landlord's PayBill account number is not a fixed tenant identity.
     const stkAccountReference = invoiceReference;
-
-    if (paymentGateway === "tuma") {
-      const tumaCallbackBase = (process.env.TUMA_CALLBACK_BASE_URL || "").trim().replace(/\/$/, "");
-      const tumaIntegration = await getOwnerTumaIntegration(db, derivedLandlordId);
-      if (!isTumaConfigured(tumaIntegration) || !tumaCallbackBase) {
-        return NextResponse.json(
-          { success: false, message: "Tuma is selected but its API credentials or callback URL are missing." },
-          { status: 500 }
-        );
-      }
-      const description = `${parsed.data.type || "Rent"} payment ${invoiceReference}`;
-      const incoming = await createTumaStkPush({
-        amount: paymentAmount,
-        phone: payerPhone,
-        description,
-        callbackUrl: `${tumaCallbackBase}/api/tuma/webhook`,
-        credentials: {
-          email: tumaIntegration!.email,
-          apiKey: tumaIntegration!.apiKey,
-        },
-      });
-
-      const nowIso = new Date().toISOString();
-      const checkoutRequestId = incoming.checkoutRequestId || incoming.merchantRequestId || "";
-      const merchantRequestId = incoming.merchantRequestId || "";
-      await db.collection("payments").insertOne({
-        tenantId,
-        amount: paymentAmount,
-        requestedAmount: paymentAmount,
-        providerConfirmedAmount: null,
-        postedAmount: null,
-        financialPostingStatus: "pending",
-        propertyId,
-        paymentDate: nowIso,
-        transactionId: checkoutRequestId || merchantRequestId || invoiceReference,
-        status: "pending_stk",
-        createdAt: nowIso,
-        type: parsed.data.type || "Rent",
-        phoneNumber: payerPhone,
-        reference: invoiceReference,
-        mpesaCode: null,
-        checkoutRequestId,
-        merchantRequestId,
-        invoiceId: parsed.data.invoiceId,
-        landlordId: parsed.data.landlordId,
-        provider: "tuma",
-        tumaPaymentId: incoming.raw?.data?.payment_id || incoming.raw?.payment_id || "",
-      });
-
-      return NextResponse.json(
-        {
-          success: true,
-          message: incoming.customerMessage || "STK Push initiated — please check your phone and enter M-Pesa PIN.",
-          checkoutRequestId,
-          merchantRequestId,
-          customerMessage:
-            incoming.customerMessage || "STK Push initiated — please check your phone and enter M-Pesa PIN.",
-          provider: "tuma",
-        },
-        { status: 200 }
-      );
-    }
 
     // Resolve Sorana credentials once, then route the STK request to the
     // landlord shortcode authorized under Sorana's merchant-routing setup.

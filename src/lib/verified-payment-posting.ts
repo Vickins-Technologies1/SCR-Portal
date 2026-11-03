@@ -83,7 +83,7 @@ export async function postVerifiedPayment(params: {
   // financial confirmation. Manual/operator entries are already verified at
   // the application boundary and may use their stored amount.
   const providerAmount = numeric(
-    suppliedProviderAmount ?? (provider && !["daraja", "tuma", "kopokopo"].includes(provider) ? payment.amount : null),
+    suppliedProviderAmount ?? (provider && !["daraja", "kopokopo"].includes(provider) ? payment.amount : null),
   );
   if (providerAmount === null) return quarantine(params.db, payment, "Provider-confirmed amount is missing or invalid.");
 

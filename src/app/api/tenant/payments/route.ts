@@ -38,7 +38,7 @@ interface Payment {
   reference?: string;
   mpesaCode?: string | null;
   paymentId?: string;
-  provider?: "daraja" | "kopokopo" | "tuma";
+  provider?: "daraja" | "kopokopo";
   paymentMethod?: string;
   allocation?: { deposit: number; rent: number; utilities: number; other: number; walletCredit: number; walletApplied?: number };
 }

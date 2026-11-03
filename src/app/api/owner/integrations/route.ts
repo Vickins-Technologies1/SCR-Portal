@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { getOwnerPaymentGateway, maskSecret } from "@/lib/owner-integrations";
-import { decryptTumaApiKey, encryptTumaApiKey, isLikelyEncryptedTumaApiKey } from "@/lib/tuma-crypto";
+import { getOwnerPaymentGateway } from "@/lib/owner-integrations";
 
 type OwnerContext = {
   ownerId: string;
@@ -53,39 +52,8 @@ export async function GET(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
-    const record = await db.collection("ownerIntegrations").findOne(
-      { ownerId: new ObjectId(context.ownerId) },
-      { projection: { tuma: 1 } }
-    );
-
-    const tuma = record?.tuma || {};
     const paymentGateway = await getOwnerPaymentGateway(db, context.ownerId);
-    const email = String(tuma.email || "").trim();
-    const storedApiKey = String(tuma.apiKey || "").trim();
-    const businessId = String(tuma.businessId || "").trim();
-    const enabled = tuma.enabled !== false;
-    let apiKeyForMask = storedApiKey;
-    if (storedApiKey && isLikelyEncryptedTumaApiKey(storedApiKey)) {
-      try {
-        apiKeyForMask = decryptTumaApiKey(storedApiKey);
-      } catch {
-        apiKeyForMask = storedApiKey;
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      integrations: {
-        paymentGateway,
-        tuma: {
-          enabled,
-          email,
-          businessId,
-          hasApiKey: !!storedApiKey,
-          maskedApiKey: maskSecret(apiKeyForMask),
-        },
-      },
-    });
+    return NextResponse.json({ success: true, integrations: { paymentGateway } });
   } catch (error) {
     console.error("GET /api/owner/integrations error:", error);
     return NextResponse.json({ success: false, message: "Failed to load integrations" }, { status: 500 });
@@ -114,112 +82,30 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid JSON payload" }, { status: 400 });
     }
 
+    if (payload?.tuma) {
+      return NextResponse.json({ success: false, message: "Tuma Gateway has been removed." }, { status: 410 });
+    }
     const selectedGateway = payload?.paymentGateway;
-    if (selectedGateway !== undefined && selectedGateway !== "tuma" && selectedGateway !== "daraja") {
+    if (selectedGateway !== undefined && selectedGateway !== "daraja") {
       return NextResponse.json({ success: false, message: "Invalid payment gateway." }, { status: 400 });
     }
 
-    const hasTumaPayload = payload?.tuma && typeof payload.tuma === "object";
-    if (!hasTumaPayload && selectedGateway) {
-      const { db } = await connectToDatabase();
-      const now = new Date().toISOString();
-      await db.collection("ownerIntegrations").updateOne(
-        { ownerId: new ObjectId(context.ownerId) },
-        {
-          $set: {
-            ownerId: new ObjectId(context.ownerId),
-            ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
-            updatedAt: now,
-          },
-          $setOnInsert: { createdAt: now },
-        },
-        { upsert: true }
-      );
-      return NextResponse.json({
-        success: true,
-        integrations: {
-          ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
-        },
-      });
-    }
-
-    const tumaPayload = payload?.tuma || {};
-    const incomingEmail = String(tumaPayload.email || "").trim();
-    const incomingApiKey = String(tumaPayload.apiKey || "").trim();
-    const incomingBusinessId = String(tumaPayload.businessId || "").trim();
-    const incomingEnabled = tumaPayload.enabled !== false;
-
     const { db } = await connectToDatabase();
-    const existing = await db.collection("ownerIntegrations").findOne(
-      { ownerId: new ObjectId(context.ownerId) },
-      { projection: { tuma: 1 } }
-    );
-    const existingTuma = existing?.tuma || {};
-
-    const nextEmail = incomingEmail || String(existingTuma.email || "").trim();
-    const existingStoredApiKey = String(existingTuma.apiKey || "").trim();
-    const nextEnabled = incomingEnabled;
-    let nextStoredApiKey = existingStoredApiKey;
-    if (incomingApiKey) {
-      nextStoredApiKey = encryptTumaApiKey(incomingApiKey);
-    } else if (existingStoredApiKey && !isLikelyEncryptedTumaApiKey(existingStoredApiKey)) {
-      try {
-        nextStoredApiKey = encryptTumaApiKey(existingStoredApiKey);
-      } catch {
-        nextStoredApiKey = existingStoredApiKey;
-      }
-    }
-    const nextBusinessId = incomingBusinessId || String(existingTuma.businessId || "").trim();
-
-    if (nextEnabled && (!nextEmail || !nextStoredApiKey)) {
-      return NextResponse.json(
-        { success: false, message: "Tuma email and API key are required when integration is enabled." },
-        { status: 400 }
-      );
-    }
-
-    const updateDoc = {
-      ownerId: new ObjectId(context.ownerId),
-      ...(selectedGateway ? { paymentGateway: selectedGateway } : {}),
-      tuma: {
-        email: nextEmail,
-        apiKey: nextStoredApiKey,
-        businessId: nextBusinessId,
-        enabled: nextEnabled,
-        updatedAt: new Date().toISOString(),
-      },
-      updatedAt: new Date().toISOString(),
-    };
-
+    const now = new Date().toISOString();
     await db.collection("ownerIntegrations").updateOne(
       { ownerId: new ObjectId(context.ownerId) },
-      { $set: updateDoc },
+      {
+        $set: {
+          ownerId: new ObjectId(context.ownerId),
+          paymentGateway: "daraja",
+          updatedAt: now,
+        },
+        $setOnInsert: { createdAt: now },
+        $unset: { tuma: "" },
+      },
       { upsert: true }
     );
-
-    return NextResponse.json({
-      success: true,
-      integrations: {
-        paymentGateway: selectedGateway || (await getOwnerPaymentGateway(db, context.ownerId)),
-        tuma: {
-          enabled: nextEnabled,
-          email: nextEmail,
-          businessId: nextBusinessId,
-          hasApiKey: !!nextStoredApiKey,
-          maskedApiKey: maskSecret(
-            isLikelyEncryptedTumaApiKey(nextStoredApiKey)
-              ? (() => {
-                  try {
-                    return decryptTumaApiKey(nextStoredApiKey);
-                  } catch {
-                    return nextStoredApiKey;
-                  }
-                })()
-              : nextStoredApiKey
-          ),
-        },
-      },
-    });
+    return NextResponse.json({ success: true, integrations: { paymentGateway: "daraja" } });
   } catch (error) {
     console.error("PUT /api/owner/integrations error:", error);
     return NextResponse.json({ success: false, message: "Failed to update integrations" }, { status: 500 });
@@ -244,33 +130,9 @@ export async function DELETE(request: NextRequest) {
     const { db } = await connectToDatabase();
     await db.collection("ownerIntegrations").updateOne(
       { ownerId: new ObjectId(context.ownerId) },
-      {
-        $set: {
-          "tuma.enabled": false,
-          updatedAt: new Date().toISOString(),
-        },
-        $unset: {
-          "tuma.apiKey": "",
-          "tuma.email": "",
-          "tuma.businessId": "",
-        },
-      },
-      { upsert: true }
+      { $unset: { tuma: "" }, $set: { updatedAt: new Date().toISOString(), paymentGateway: "daraja" } }
     );
-
-    return NextResponse.json({
-      success: true,
-      message: "Tuma credentials deleted.",
-      integrations: {
-        tuma: {
-          enabled: false,
-          email: "",
-          businessId: "",
-          hasApiKey: false,
-          maskedApiKey: "",
-        },
-      },
-    });
+    return NextResponse.json({ success: true, message: "Removed integration data." });
   } catch (error) {
     console.error("DELETE /api/owner/integrations error:", error);
     return NextResponse.json({ success: false, message: "Failed to delete integrations" }, { status: 500 });

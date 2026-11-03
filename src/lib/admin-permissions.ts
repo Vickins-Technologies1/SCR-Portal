@@ -162,7 +162,7 @@ export const ADMIN_PERMISSION_GROUPS: AdminPermissionGroup[] = [
       {
         key: "admin:webhooks:view",
         label: "Webhooks",
-        description: "View webhook activity (Tuma, etc).",
+        description: "View provider webhook activity.",
       },
     ],
   },

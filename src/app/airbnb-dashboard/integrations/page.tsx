@@ -94,7 +94,7 @@ export default function AirbnbIntegrationsPage() {
     if (data.success) {
       setIntegrations(data.integrations || []);
     }
-    if (gatewayRes.ok && gatewayData.success && (gatewayData.gateway === "tuma" || gatewayData.gateway === "daraja")) {
+    if (gatewayRes.ok && gatewayData.success && gatewayData.gateway === "daraja") {
       setPaymentGateway(gatewayData.gateway);
     }
     setIsLoading(false);
@@ -722,7 +722,7 @@ function GatewaySelector({
     <div className="rounded-xl border border-border bg-white/70 p-3">
       <p className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Active booking gateway</p>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        {(["tuma", "daraja"] as const).map((gateway) => {
+        {(["daraja"] as const).map((gateway) => {
           const active = activeGateway === gateway;
           return (
             <button

@@ -432,18 +432,6 @@ export default function OwnerIntegrationsPage() {
         : "Setup required";
     return [
       {
-        id: "tuma",
-        name: "Tuma Gateway",
-        description: tumaCardDescription,
-        status: isConfigured ? "connected" : "available",
-        badgeLabel: tumaBadgeLabel,
-        cta: tumaCta,
-        icon: PlugZap,
-        logoSrc: "/brand/tuma.png",
-        logoAlt: "Tuma",
-        logoClassName: "h-7",
-      },
-      {
         id: "daraja-shared",
         name: "Mpesa",
         description: sharedCardDescription,
@@ -1098,7 +1086,7 @@ export default function OwnerIntegrationsPage() {
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:min-w-64">
-                {(["tuma", "daraja"] as const).map((gateway) => {
+                {(["daraja"] as const).map((gateway) => {
                   const active = paymentGateway === gateway;
                   return (
                     <button

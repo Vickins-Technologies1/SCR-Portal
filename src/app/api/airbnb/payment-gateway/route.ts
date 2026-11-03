@@ -7,7 +7,7 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { getAirbnbOwnerPaymentGateway } from "@/lib/airbnb-owner-integrations";
 
 const PaymentGatewaySchema = z.object({
-  gateway: z.enum(["tuma", "daraja"]),
+  gateway: z.literal("daraja"),
 });
 
 export async function GET(request: NextRequest) {

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/mongodb";
 import { resolveAirbnbOwner } from "@/lib/airbnb-auth";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
-import { getAirbnbOwnerPaymentGateway, getAirbnbOwnerTumaIntegration } from "@/lib/airbnb-owner-integrations";
+import { getAirbnbOwnerPaymentGateway } from "@/lib/airbnb-owner-integrations";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -16,8 +16,6 @@ export async function GET(request: NextRequest) {
 
   const { db } = await connectToDatabase();
 
-  const tumaIntegration = await getAirbnbOwnerTumaIntegration(db, ownerId);
-  const tumaStatus = tumaIntegration ? "connected" : "available";
   const paymentGateway = await getAirbnbOwnerPaymentGateway(db, ownerId);
 
   const integrations = await db
@@ -30,21 +28,12 @@ export async function GET(request: NextRequest) {
 
   const defaults = [
     {
-      id: "tuma",
-      name: "Tuma M-Pesa Gateway",
-      status: tumaStatus,
-      description: paymentGateway === "tuma"
-        ? "Active gateway for booking STK Push collections."
-        : "Configured independently; select it when you want Tuma to collect payments.",
-      provider: "tuma",
-    },
-    {
       id: "daraja",
       name: "Daraja M-Pesa Gateway",
       status: paymentGateway === "daraja" ? "connected" : "available",
       description: paymentGateway === "daraja"
         ? "Active gateway for booking STK Push collections."
-        : "Uses your Daraja shortcode and passkey; select it without changing Tuma credentials.",
+        : "Uses your Daraja shortcode and passkey; select it using your configured shortcode and passkey.",
       provider: "daraja",
     },
     {

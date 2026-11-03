@@ -67,7 +67,7 @@ export function resolveAirbnbBookingReference(booking: AirbnbBookingRecord): str
 export function resolveAirbnbPaymentMethod(payment?: AirbnbBookingPayment | null): string {
   if (!payment) return "M-Pesa";
   const provider = String(payment.paymentMethod || payment.provider || "").trim().toLowerCase();
-  if (!provider || provider === "mpesa" || provider === "tuma") return "M-Pesa";
+  if (!provider || provider === "mpesa") return "M-Pesa";
   if (provider === "cash") return "Cash";
   if (provider === "bank") return "Bank";
   return payment.paymentMethod || payment.provider || "M-Pesa";
