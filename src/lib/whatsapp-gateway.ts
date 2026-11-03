@@ -129,12 +129,16 @@ export async function enqueueOpenWaText(db: Db, phone: string, message: string, 
   const normalized = normalizeWhatsAppPhone(phone);
   if (!normalized || !/^\d{10,15}$/.test(normalized)) return { success: false as const, status: "rejected" as const, error: "Invalid phone number" };
   if (!message.trim() || message.length > 4096) return { success: false as const, status: "rejected" as const, error: "Message must contain 1–4096 characters" };
-  if (!options.authorizedTest) {
+  if (!options.authorizedTest && options.recipientType !== "tenant") {
     const entityType = options.recipientType === "owner" ? "owner" : options.recipientType === "tenant" ? "tenant" : null;
     if (!entityType || !options.recipientId || !ObjectId.isValid(options.recipientId)) return { success: false as const, status: "skipped_consent" as const, error: "Recipient identity is required to verify WhatsApp consent" };
     const consentPhoneHash = hashWhatsAppConsentPhone(normalized);
     const consent = await db.collection("whatsappPreferences").findOne({ entityType, entityId: new ObjectId(options.recipientId), enabled: true, consentPhoneHash }, { projection: { _id: 1 } });
     if (!consent) return { success: false as const, status: "skipped_consent" as const, error: "Recipient has not opted in to WhatsApp notifications" };
+  }
+  if (!options.authorizedTest && options.recipientType === "tenant" && options.recipientId && ObjectId.isValid(options.recipientId)) {
+    const optedOut = await db.collection("whatsappPreferences").findOne({ entityType: "tenant", entityId: new ObjectId(options.recipientId), revokedAt: { $exists: true } }, { projection: { _id: 1 } });
+    if (optedOut) return { success: false as const, status: "skipped_consent" as const, error: "Recipient opted out of WhatsApp messages" };
   }
   const id = new ObjectId();
   const now = new Date();
@@ -227,7 +231,7 @@ export async function processOpenWaOutbox(db: Db, limit = 20, onlyAttemptId?: st
     try {
       const payload = JSON.parse(decryptWhatsAppApiKey(String(job.encryptedPayload || ""))) as { phone?: string; message?: string };
       if (!payload.phone || !payload.message) throw new Error("Invalid queued message payload");
-      if (job.authorizedTest !== true) {
+      if (job.authorizedTest !== true && job.recipientType !== "tenant") {
         const entityType = job.recipientType === "owner" ? "owner" : job.recipientType === "tenant" ? "tenant" : null;
         const recipientId = typeof job.recipientId === "string" ? job.recipientId : "";
         const consentPhoneHash = hashWhatsAppConsentPhone(payload.phone);
@@ -237,6 +241,15 @@ export async function processOpenWaOutbox(db: Db, limit = 20, onlyAttemptId?: st
         if (!optedIn) {
           await attempts.updateOne({ _id: job._id, status: "processing" }, { $set: { status: "cancelled", errorCategory: "consent_revoked_or_phone_changed", updatedAt: new Date() }, $unset: { encryptedPayload: "", lockedAt: "", nextAttemptAt: "" } });
           if (typeof job.notificationId === "string") await updateLinkedNotificationDeliveryStatus(db, job.notificationId, "failed", "WhatsApp consent was revoked or the phone number changed.");
+          processed += 1;
+          continue;
+        }
+      }
+      if (job.authorizedTest !== true && job.recipientType === "tenant" && typeof job.recipientId === "string" && ObjectId.isValid(job.recipientId)) {
+        const optedOut = await db.collection("whatsappPreferences").findOne({ entityType: "tenant", entityId: new ObjectId(job.recipientId), revokedAt: { $exists: true } }, { projection: { _id: 1 } });
+        if (optedOut) {
+          await attempts.updateOne({ _id: job._id, status: "processing" }, { $set: { status: "cancelled", errorCategory: "recipient_opted_out", updatedAt: new Date() }, $unset: { encryptedPayload: "", lockedAt: "", nextAttemptAt: "" } });
+          if (typeof job.notificationId === "string") await updateLinkedNotificationDeliveryStatus(db, job.notificationId, "failed", "WhatsApp recipient opted out.");
           processed += 1;
           continue;
         }

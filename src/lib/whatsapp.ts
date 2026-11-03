@@ -67,17 +67,21 @@ export async function sendWhatsAppMessage({ phone, message, type = "notification
   const settings = await readWhatsAppSettings(db);
   const recipients = Array.isArray(phone) ? phone : [phone];
   if (!recipientType || !recipientId || !ObjectId.isValid(recipientId)) return { success: false, status: "skipped_consent", error: { code: 1005, message: "Recipient identity is required to verify WhatsApp consent" } };
-  const preference = await db.collection("whatsappPreferences").findOne({
+  if (recipientType === "tenant") {
+    const optedOut = await db.collection("whatsappPreferences").findOne({ entityType: "tenant", entityId: new ObjectId(recipientId), revokedAt: { $exists: true } }, { projection: { _id: 1 } });
+    if (optedOut) return { success: false, status: "skipped_consent", error: { code: 1005, message: "Recipient opted out of WhatsApp messages" } };
+  }
+  const preference = recipientType === "owner" ? await db.collection("whatsappPreferences").findOne({
     entityType: recipientType === "owner" ? "owner" : "tenant",
     entityId: new ObjectId(recipientId),
     enabled: true,
-  }, { projection: { consentPhoneHash: 1 } });
+  }, { projection: { consentPhoneHash: 1 } }) : null;
   const consentPhoneHash = typeof preference?.consentPhoneHash === "string" ? preference.consentPhoneHash : "";
   const consentedRecipients = recipients.filter((recipient) => {
     const normalized = normalizeWhatsAppPhone(recipient);
     return normalized && hashWhatsAppConsentPhone(normalized) === consentPhoneHash;
   });
-  if (!consentPhoneHash || !consentedRecipients.length || consentedRecipients.length !== recipients.length) return { success: false, status: "skipped_consent", error: { code: 1005, message: "Recipient has not opted in to WhatsApp notifications for this phone number" } };
+  if (recipientType === "owner" && (!consentPhoneHash || !consentedRecipients.length || consentedRecipients.length !== recipients.length)) return { success: false, status: "skipped_consent", error: { code: 1005, message: "Recipient has not opted in to WhatsApp notifications for this phone number" } };
 
   if (recipientType === "tenant") {
     if (process.env.VERCEL_ENV === "preview") return { success: false, status: "skipped_preview", error: { code: 1003, message: "Tenant WhatsApp delivery is disabled on Preview deployments" } };

@@ -107,7 +107,7 @@ export default function OwnerWhatsAppIntegration({ canManage }: { canManage: boo
         <button type="button" onClick={() => act("qr")} disabled={!!busy} className="mt-3 inline-flex items-center gap-2 text-xs font-medium underline"><RefreshCw size={13} /> Refresh QR</button>
         <p className="mt-2 text-xs text-muted-foreground">Keep the QR private and scan it promptly. WhatsApp can unlink unofficial integrations; connect only an account you control.</p>
       </div>}
-      <p className="text-xs text-muted-foreground">Tenants must opt in to WhatsApp notifications. WhatsApp is skipped until your account is connected and enabled; SMS and email continue as configured. OpenWA uses an unofficial WhatsApp Web connection, which WhatsApp may unlink or restrict.</p>
+      <p className="text-xs text-muted-foreground">WhatsApp messages are sent to tenant phone numbers on file when your account is connected and enabled; tenants do not need to opt in first, and explicit opt-outs are honored. SMS and email continue as configured. OpenWA uses an unofficial WhatsApp Web connection, which WhatsApp may unlink or restrict.</p>
     </section>
   );
 }
