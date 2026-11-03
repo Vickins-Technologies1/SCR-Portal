@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { calculateFixedUtilityBreakdown, getPostedMeteredUtilityBreakdown, UtilityDueBreakdown } from "@/lib/property-utilities";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
-import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+import { getFinancialPaymentRows, type FinancialPaymentRow } from "@/lib/financial-reporting";
 import { identityValues, isSuccessfulPaymentStatus, paymentEventDate } from "@/lib/payment-query";
 import { businessDateParts } from "@/lib/business-time";
 
@@ -130,6 +130,23 @@ const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdA
 type AllocationField = "deposit" | "rent" | "utilities" | "other";
 
 const defaultAllocationPriority: AllocationField[] = ["deposit", "rent", "utilities", "other"];
+
+/** Convert the shared financial projection to tenant-ledger inputs. */
+export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): LedgerPayment[] {
+  return rows.map((row) => ({
+    ...row.payment,
+    amount: row.netAmount,
+    postedAmount: row.netAmount,
+    // The financial projection already prorates a persisted allocation after
+    // reversals. Preserve the legacy policy fallback for old v1 rows that have
+    // no stored allocation, but do not reintroduce the unreversed snapshot.
+    allocation: row.payment.allocation
+      ? row.allocation
+      : row.payment.allocationPolicyVersion === "deposit-first-v1"
+        ? undefined
+        : row.allocation,
+  })) as LedgerPayment[];
+}
 
 /**
  * New receipts always clear obligations in deposit-first order. A declared
@@ -413,12 +430,7 @@ export async function calculateTenantFinancialState(
   // tenantId is the authoritative ownership link; this also retains legacy
   // payment rows whose propertyId was never populated.
   const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id], session: options.session });
-  const payments = financialRows.map((row) => ({
-    ...row.payment,
-    amount: row.netAmount,
-    postedAmount: row.netAmount,
-    allocation: row.payment.allocation || (row.payment.allocationPolicyVersion === "deposit-first-v1" ? undefined : row.allocation),
-  })) as LedgerPayment[];
+  const payments = mapFinancialRowsToLedgerPayments(financialRows);
   return deriveTenantFinancialState({
     tenant,
     asOf,

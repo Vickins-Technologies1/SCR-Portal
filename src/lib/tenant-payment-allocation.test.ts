@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "./tenant-payment-allocation";
+import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenantFinancialState, mapFinancialRowsToLedgerPayments, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "./tenant-payment-allocation";
+import { projectFinancialPaymentRows } from "./financial-reporting";
 import { calculateTenantRentDueToDate } from "./utils";
 
 const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type });
@@ -459,6 +460,30 @@ describe("tenant payment allocation", () => {
     });
     expect(state.rentPaid).toBe(0);
     expect(state.rentOutstanding).toBe(20_000);
+  });
+
+  it("uses prorated category allocations when a payment is partially reversed", () => {
+    const paymentId = new ObjectId();
+    const rows = projectFinancialPaymentRows([{
+      _id: paymentId,
+      amount: 5_000,
+      status: "completed",
+      allocation: { rent: 4_000, utilities: 1_000, deposit: 0, other: 0, walletCredit: 0 },
+    }], [{ _id: paymentId.toString(), total: 1_000 }]);
+    const state = deriveTenantFinancialState({
+      tenant: {},
+      asOf: new Date("2026-10-11T00:00:00.000Z"),
+      rentDue: 5_000,
+      monthsStayed: 1,
+      utilityBreakdown: { charged: 5_000, currentCharged: 4_000, overdueCharged: 1_000 },
+      depositDue: 0,
+      overdueRentCharged: 1_000,
+      payments: mapFinancialRowsToLedgerPayments(rows),
+    });
+
+    expect(state.rentPaid).toBe(3_200);
+    expect(state.utilitiesPaid).toBe(800);
+    expect(state.overdueAmount).toBe(200);
   });
 
   it("does not count pending or failed requests as rent payments", () => {
