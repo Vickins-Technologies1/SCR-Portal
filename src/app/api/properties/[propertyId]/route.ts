@@ -5,6 +5,13 @@ import { ObjectId } from 'mongodb';
 import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 import { sanitizePropertyUtilities } from '@/lib/property-utilities';
 import { enforceLifetimeLimit } from '@/lib/lifetime';
+import { calculateTenantFinancialViews, summarizeTenantFinancialStates } from '@/lib/tenant-financial-view';
+import { fetchTenantsActiveOnDay } from '@/lib/tenant-occupancy';
+import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from '@/lib/financial-reporting';
+import { identityValues } from '@/lib/payment-query';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // ===============================================
 // INTERFACES
@@ -133,8 +140,8 @@ export async function GET(
     if (role === 'tenant') {
       const tenant = await db.collection<Tenant>('tenants').findOne({
         _id: new ObjectId(userId),
-        propertyId,
-      });
+        propertyId: { $in: identityValues(propertyId) },
+      } as any);
       if (!tenant) {
         return NextResponse.json(
           { success: false, message: 'Unauthorized: Tenant not associated with this property' },
@@ -157,7 +164,7 @@ export async function GET(
       );
     }
 
-    if (role === 'propertyOwner' && property.ownerId !== userId) {
+    if (role === 'propertyOwner' && String(property.ownerId) !== userId) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized: Property not owned by user' },
         { status: 403 }
@@ -167,7 +174,7 @@ export async function GET(
     if (role === 'teamMember') {
       const teamMember = await db.collection('teamMembers').findOne({
         _id: new ObjectId(userId),
-        ownerId: new ObjectId(property.ownerId),
+        ownerId: { $in: identityValues(String(property.ownerId)) },
         active: true,
       });
 
@@ -179,7 +186,26 @@ export async function GET(
       }
     }
 
-    const tenants = await db.collection<Tenant>('tenants').find({ propertyId }).toArray();
+    const tenants = await db.collection<Tenant>('tenants').find({
+      propertyId: { $in: identityValues(propertyId) },
+    } as any).toArray();
+    const today = new Date();
+    const tenantViews = await calculateTenantFinancialViews(db, tenants, today);
+    const financialSummary = summarizeTenantFinancialStates(tenantViews.map((view) => view.state));
+    const activeTenants = await fetchTenantsActiveOnDay<Tenant>(db, [propertyId], today);
+    const activeTenantIds = new Set(activeTenants.map((tenant) => String(tenant._id)));
+    const expectedMonthlyRent = tenantViews
+      .filter((view) => activeTenantIds.has(String(view.tenant._id)))
+      .reduce((sum, view) => sum + view.expectedMonthlyRent, 0);
+    const financialPaymentRows = await getFinancialPaymentRows({
+      db,
+      propertyIds: [propertyId],
+      tenantIdsForUnresolvedProperty: tenants.map((tenant) => tenant._id),
+      end: today,
+    });
+    const paymentSummary = summarizeFinancialPaymentRows(financialPaymentRows);
+
+    const roundedExpectedMonthlyRent = Math.round(expectedMonthlyRent * 100) / 100;
 
     return NextResponse.json({
       success: true,
@@ -190,17 +216,34 @@ export async function GET(
         createdAt: toISO(property.createdAt),
         updatedAt: toISO(property.updatedAt),
       },
-      tenants: tenants.map(t => ({
+      tenants: tenantViews.map(({ tenant: t }) => ({
         ...t,
-        _id: t._id.toString(),
-        propertyId: t.propertyId.toString(),
+        _id: String(t._id),
+        propertyId: String(t.propertyId),
         ownerId: t.ownerId,
         createdAt: toISO(t.createdAt),
         updatedAt: toISO(t.updatedAt),
         walletBalance: t.walletBalance ?? 0,
         status: getTenantStatus(t.leaseStartDate, t.leaseEndDate),
       })),
-    });
+      financialSummary: {
+        expectedMonthlyRent: roundedExpectedMonthlyRent,
+        expectedRent: financialSummary.expectedRent,
+        rentCollected: financialSummary.rentCollected,
+        rentOutstanding: financialSummary.rentOutstanding,
+        overdueRent: financialSummary.overdueRent,
+        expectedUtilities: financialSummary.expectedUtilities,
+        utilitiesCollected: financialSummary.utilitiesCollected,
+        utilitiesOutstanding: financialSummary.utilitiesOutstanding,
+        overdueUtilities: financialSummary.overdueUtilities,
+        expectedDeposits: financialSummary.expectedDeposits,
+        depositsReceived: financialSummary.depositsReceived,
+        depositsDue: financialSummary.depositsDue,
+        totalPaymentsReceived: paymentSummary.netReceived,
+        totalOutstanding: financialSummary.totalOutstanding,
+        totalPenalties: financialSummary.penalties,
+      },
+    }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
   } catch (error) {
     console.error('GET error:', error);
     return NextResponse.json(

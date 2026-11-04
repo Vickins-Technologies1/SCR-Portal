@@ -172,8 +172,8 @@ export async function getFinancialPaymentRows(params: {
   db: Db;
   propertyIds?: Array<string | ObjectId>;
   tenantIds?: Array<string | ObjectId>;
-  /** Include legacy tenant-linked payments that have no propertyId set. */
-  tenantIdsForLegacyPropertyless?: Array<string | ObjectId>;
+  /** Include tenant-linked receipts whose property is missing or no longer resolves. */
+  tenantIdsForUnresolvedProperty?: Array<string | ObjectId>;
   invoiceIds?: Array<string | ObjectId>;
   start?: Date;
   end?: Date;
@@ -184,16 +184,11 @@ export async function getFinancialPaymentRows(params: {
   if (params.propertyIds) {
     if (!params.propertyIds.length) return [];
     const propertyMatch = identityFilter("propertyId", params.propertyIds);
-    if (params.tenantIdsForLegacyPropertyless?.length) {
+    if (params.tenantIdsForUnresolvedProperty?.length) {
       and.push({
         $or: [
           propertyMatch,
-          {
-            $and: [
-              identityFilter("tenantId", params.tenantIdsForLegacyPropertyless),
-              { $or: [{ propertyId: { $exists: false } }, { propertyId: null }] },
-            ],
-          },
+          identityFilter("tenantId", params.tenantIdsForUnresolvedProperty),
         ],
       });
     } else {
@@ -211,10 +206,36 @@ export async function getFinancialPaymentRows(params: {
   const dateRange = paymentDateRangeFilter(params.start, params.end);
   if (dateRange) and.push(dateRange);
 
-  const payments = await params.db.collection("payments")
+  const queriedPayments = await params.db.collection("payments")
     .find({ $and: and }, params.session ? { session: params.session } : undefined)
     .sort({ paymentDate: -1, createdAt: -1, _id: -1 })
     .toArray();
+
+  let payments = queriedPayments;
+  if (params.propertyIds?.length && params.tenantIdsForUnresolvedProperty?.length) {
+    const scopedPropertyIds = new Set(params.propertyIds.map(String));
+    const scopedTenantIds = new Set(params.tenantIdsForUnresolvedProperty.map(String));
+    const unresolvedPropertyIds = queriedPayments
+      .filter((payment) => payment.tenantId != null && scopedTenantIds.has(String(payment.tenantId)) &&
+        payment.propertyId != null && !scopedPropertyIds.has(String(payment.propertyId)))
+      .map((payment) => payment.propertyId);
+    const existingProperties = unresolvedPropertyIds.length
+      ? await params.db.collection("properties")
+          .find({ _id: { $in: identityValues(unresolvedPropertyIds) } } as any,
+            params.session ? { session: params.session } : undefined)
+          .project({ _id: 1 })
+          .toArray()
+      : [];
+    const existingPropertyIds = new Set(existingProperties.map((property: any) => String(property._id)));
+    payments = queriedPayments.filter((payment) => {
+      if (payment.propertyId != null && scopedPropertyIds.has(String(payment.propertyId))) return true;
+      if (payment.tenantId == null || !scopedTenantIds.has(String(payment.tenantId))) return false;
+      if (payment.propertyId == null) return true;
+      // A known property outside this scope remains excluded. A stale/deleted
+      // property reference falls back to the in-scope tenant relationship.
+      return !existingPropertyIds.has(String(payment.propertyId));
+    });
+  }
 
   if (!payments.length) return [];
 

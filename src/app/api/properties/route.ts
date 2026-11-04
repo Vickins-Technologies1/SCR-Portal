@@ -14,6 +14,9 @@ import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 import { sanitizePropertyUtilities } from '@/lib/property-utilities';
 import { identityValues } from '@/lib/payment-query';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const buildOccupiedByPropertyAndUnitIdentifier = async (
   db: Db,
   propertyIds: string[],
@@ -180,7 +183,7 @@ export async function GET(request: NextRequest) {
           })),
           pagination: { page, limit, total, hasMore: skip + properties.length < total },
         },
-        { status: 200 }
+        { status: 200, headers: { 'Cache-Control': 'no-store, max-age=0' } }
       );
     }
 
@@ -316,7 +319,7 @@ export async function GET(request: NextRequest) {
           properties: enrichedProperties,
           pagination: { page, limit, total, hasMore: skip + properties.length < total },
         },
-        { status: 200 }
+        { status: 200, headers: { 'Cache-Control': 'no-store, max-age=0' } }
       );
     }
 

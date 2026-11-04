@@ -168,11 +168,14 @@ export default function TenantDetailsPage() {
   ): PaymentReport => {
     const unitSummary = getTenantUnitSummary(currentTenant);
     const snapshot = getPaymentSnapshot(currentTenant);
-    const totalPaid =
+    const totalPaid = currentTenant.dues?.totalPaid ?? (
       (currentTenant.totalRentPaid || 0) +
       (currentTenant.totalUtilityPaid || 0) +
-      (currentTenant.totalDepositPaid || 0);
-    const totalOutstanding = snapshot.overdueBalance;
+      (currentTenant.totalDepositPaid || 0) +
+      (currentTenant.totalOtherPaid || 0) +
+      (currentTenant.walletBalance || 0)
+    );
+    const totalOutstanding = currentTenant.dues?.totalRemainingDues ?? 0;
     const collectionRate =
       totalPaid + totalOutstanding > 0
         ? Math.round((totalPaid / (totalPaid + totalOutstanding)) * 100)
@@ -482,13 +485,12 @@ export default function TenantDetailsPage() {
         const token = csrfToken || (await fetchCsrfToken());
         if (token) {
           await fetchTenantData(token);
-          await fetchDues(token);
           await fetchPaymentStatements();
         }
       };
       load();
     }
-  }, [userId, csrfToken, fetchCsrfToken, fetchTenantData, fetchDues, fetchPaymentStatements]);
+  }, [userId, csrfToken, fetchCsrfToken, fetchTenantData, fetchPaymentStatements]);
 
   // Auto-fill payment amount based on selected type
   useEffect(() => {

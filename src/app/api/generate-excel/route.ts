@@ -118,7 +118,7 @@ export async function POST(
     const rows = await getFinancialPaymentRows({
       db,
       propertyIds: selectedPropertyId === "all" ? propertyIds : [selectedPropertyId],
-      tenantIdsForLegacyPropertyless: tenants.map((tenant: any) => tenant._id),
+      tenantIdsForUnresolvedProperty: tenants.map((tenant: any) => tenant._id),
       start: parseBusinessDate(startDate),
       end: parseBusinessDate(endDate, true),
     });

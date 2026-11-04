@@ -124,4 +124,39 @@ describe("financial report payment projection", () => {
     expect(rows).toHaveLength(2);
     expect(rows.map((row) => row.originalAmount)).toEqual([10_000, 10_000]);
   });
+
+  it("includes in-scope tenant receipts with missing or stale property links but excludes another existing property", async () => {
+    const ownerPropertyId = new ObjectId("670000000000000000000001");
+    const otherPropertyId = new ObjectId("670000000000000000000002");
+    const stalePropertyId = new ObjectId("670000000000000000000003");
+    const tenantId = "tenant-in-scope";
+    const paymentRows = [
+      { _id: new ObjectId(), propertyId: ownerPropertyId, tenantId: "unrelated-tenant", amount: 100, status: "completed" },
+      { _id: new ObjectId(), tenantId, amount: 200, status: "completed" },
+      { _id: new ObjectId(), propertyId: stalePropertyId, tenantId, amount: 300, status: "completed" },
+      { _id: new ObjectId(), propertyId: otherPropertyId, tenantId, amount: 400, status: "completed" },
+      { _id: new ObjectId(), propertyId: new ObjectId("670000000000000000000004"), tenantId: "unrelated-tenant", amount: 500, status: "completed" },
+    ];
+    const cursor = (values: any[]) => ({
+      sort: () => cursor(values),
+      project: () => cursor(values),
+      toArray: async () => values,
+    });
+    const db = {
+      collection(name: string) {
+        if (name === "payments") return { find: () => cursor(paymentRows) };
+        if (name === "properties") return { find: () => cursor([{ _id: otherPropertyId }]) };
+        if (name === "financialLedger") return { aggregate: () => cursor([]) };
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    } as any;
+
+    const rows = await getFinancialPaymentRows({
+      db,
+      propertyIds: [ownerPropertyId],
+      tenantIdsForUnresolvedProperty: [tenantId],
+    });
+
+    expect(rows.map((row) => row.originalAmount)).toEqual([100, 200, 300]);
+  });
 });

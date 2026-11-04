@@ -17,6 +17,10 @@ import { categorizeFinancialPaymentRows, getFinancialPaymentRows } from "@/lib/f
 import { businessDateTime } from "@/lib/business-time";
 import { identityValues } from "@/lib/payment-query";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
+
 // Reuse the application's shared MongoDB pool instead of opening a new client
 // for every report request.
 const getDatabase = async (): Promise<Db> => (await connectToDatabase()).db;
@@ -272,7 +276,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           "Historical occupancy is calculated from lease start and end dates for properties that existed by the selected month-end. Unit totals use the current property configuration because historical unit snapshots are not stored.",
       };
 
-      return NextResponse.json({ success: true, report });
+      return NextResponse.json({ success: true, report }, { headers: NO_STORE_HEADERS });
     }
 
     // Validate query parameters
@@ -325,7 +329,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
     if (!propertyIds.length) {
       logger.debug("No properties found for propertyOwner", { effectiveOwnerId });
-      return NextResponse.json({ success: true, data: [] }, { status: 200 });
+      return NextResponse.json({ success: true, data: [] }, { status: 200, headers: NO_STORE_HEADERS });
     }
 
     if (propertyId && propertyId !== "all" && !propertyIds.includes(propertyId)) {
@@ -348,7 +352,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const rows = await getFinancialPaymentRows({
       db,
       propertyIds: selectedPropertyIds,
-      tenantIdsForLegacyPropertyless: tenantDocs.map((tenant: any) => tenant._id),
+      tenantIdsForUnresolvedProperty: tenantDocs.map((tenant: any) => tenant._id),
       start: reportStart,
       end: reportEnd,
     });
@@ -400,7 +404,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       duration: `${Date.now() - startTime}ms`,
     });
 
-    return NextResponse.json({ success: true, data: payments }, { status: 200 });
+    return NextResponse.json({ success: true, data: payments }, { status: 200, headers: NO_STORE_HEADERS });
   } catch (error: unknown) {
     logger.error("Error fetching reports", {
       message: error instanceof Error ? error.message : "Unknown error",

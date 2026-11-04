@@ -1,5 +1,6 @@
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import type { TenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { money } from "@/lib/payment-query";
 
 export function buildTenantDuesResponse(
   tenant: any,
@@ -27,7 +28,7 @@ export function buildTenantDuesResponse(
     overdueAmount: state.overdueAmount,
     otherDues: 0,
     totalRemainingDues: state.totalOutstanding,
-    totalPaid: state.rentPaid + state.utilitiesPaid + state.depositPaid + state.otherPaid + state.walletBalance,
+    totalPaid: money(state.rentPaid + state.utilitiesPaid + state.depositPaid + state.otherPaid + state.walletBalance),
     walletApplied: state.walletApplied,
     walletRemaining: state.walletBalance,
     walletCoverageMonths: effectiveMonthlyRent ? Math.floor(state.walletBalance / effectiveMonthlyRent) : 0,
@@ -44,7 +45,6 @@ export function buildTenantDuesResponse(
       totalOtherPaid: state.otherPaid,
       walletBalance: state.walletBalance,
       paymentStatus: state.overdueAmount > 0 ? "overdue" : "up-to-date",
-      updatedAt: today.toISOString(),
       dues,
     },
     dues,

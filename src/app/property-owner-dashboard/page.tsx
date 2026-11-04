@@ -93,6 +93,14 @@ export default function PropertyOwnerDashboard() {
     totalPenaltyAmount: 0,
     totalDepositPaid: 0,
     totalUtilityPaid: 0,
+    totalExpectedRent: 0,
+    totalRentOutstanding: 0,
+    totalOverdueRent: 0,
+    totalExpectedUtilities: 0,
+    totalUtilitiesOutstanding: 0,
+    totalOverdueUtilities: 0,
+    totalExpectedDeposits: 0,
+    totalOutstanding: 0,
   });
 
   const [chartData, setChartData] = useState<ChartData | null>(null);
@@ -215,14 +223,17 @@ export default function PropertyOwnerDashboard() {
         fetch(`/api/properties?userId=${effectiveOwnerId}`, {
           headers,
           credentials: "include",
+          cache: "no-store",
         }),
         fetch(`/api/ownerstats?userId=${effectiveOwnerId}${propertyParam}`, {
           headers,
           credentials: "include",
+          cache: "no-store",
         }),
         fetch(`/api/ownercharts?propertyOwnerId=${effectiveOwnerId}${propertyParam}`, {
           headers,
           credentials: "include",
+          cache: "no-store",
         }),
       ]);
 
@@ -645,8 +656,8 @@ export default function PropertyOwnerDashboard() {
                           value: formatCurrency(stats.totalOverdueAmount),
                           icon: AlertCircle,
                           color: "red",
-                          subtitle: `${stats.overduePayments} tenants overdue`,
-          explanation: "Past-due rent and utilities across active tenants. Security deposits and penalties are excluded.",
+                          subtitle: `${stats.overduePayments} current tenants overdue`,
+                          explanation: `Past-due rent and utilities across tenant ledgers, including former tenants. The overdue tenant count covers current occupants; this amount excludes deposits and penalties. Rent overdue: ${formatCurrency(stats.totalOverdueRent)}. Utilities overdue: ${formatCurrency(stats.totalOverdueUtilities)}.`,
                         },
                         {
                           title: "Late Payment Penalties",
@@ -761,6 +772,66 @@ export default function PropertyOwnerDashboard() {
                     )}
                   </section>
 
+                  {!isFree && (
+                    <section className="mt-6 surface-card rounded-3xl p-5 sm:p-6">
+                      <h2 className="text-sm sm:text-base font-semibold text-foreground mb-4">Financial reconciliation</h2>
+                      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                        {[
+                          {
+                            title: "Rent",
+                            rows: [
+                              ["Expected to date", stats.totalExpectedRent],
+                              ["Collected", stats.totalRentPaid],
+                              ["Outstanding", stats.totalRentOutstanding],
+                              ["Overdue", stats.totalOverdueRent],
+                            ],
+                          },
+                          {
+                            title: "Utilities",
+                            rows: [
+                              ["Expected to date", stats.totalExpectedUtilities],
+                              ["Collected", stats.totalUtilityPaid],
+                              ["Outstanding", stats.totalUtilitiesOutstanding],
+                              ["Overdue", stats.totalOverdueUtilities],
+                            ],
+                          },
+                          {
+                            title: "Security deposits",
+                            rows: [
+                              ["Expected", stats.totalExpectedDeposits],
+                              ["Received", stats.totalDepositPaid],
+                              ["Due", stats.totalDepositDue],
+                              ["Total outstanding", stats.totalOutstanding],
+                            ],
+                          },
+                          {
+                            title: "Portfolio",
+                            rows: [
+                              ["Eligible receipts received", stats.totalPayments],
+                              ["Total outstanding", stats.totalOutstanding],
+                              ["Penalties", stats.totalPenaltyAmount],
+                            ],
+                          },
+                        ].map((group) => (
+                          <div key={group.title} className="rounded-2xl border border-border p-4">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</h3>
+                            <dl className="mt-3 space-y-2">
+                              {group.rows.map(([label, value]) => (
+                                <div key={String(label)} className="flex items-center justify-between gap-3 text-sm">
+                                  <dt className="text-muted-foreground">{label}</dt>
+                                  <dd className="font-medium text-foreground">{formatCurrency(Number(value) || 0)}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Balances include former tenants. Deposit overpayments remain deposit receipts and do not reduce rent. Eligible property linked receipts without a tenant link are included in portfolio receipts.
+                      </p>
+                    </section>
+                  )}
+
                   {/* CHARTS */}
                   {isFree ? (
                     <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -791,6 +862,7 @@ export default function PropertyOwnerDashboard() {
                     <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <div className="surface-card rounded-3xl p-5 sm:p-6">
                         <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment Trends</h2>
+                        <p className="-mt-2 mb-3 text-xs text-muted-foreground">Posted receipts use stored historical allocation categories, so chart categories can differ from current tenant balance categories when legacy allocation snapshots differ.</p>
                         <div className="h-64 sm:h-72">
                           <Bar
                             data={barData}

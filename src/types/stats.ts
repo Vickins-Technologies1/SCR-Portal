@@ -15,4 +15,12 @@ export interface OwnerStats {
   totalPenaltyAmount: number;
   totalDepositPaid: number;
   totalUtilityPaid: number;
+  totalExpectedRent: number;
+  totalRentOutstanding: number;
+  totalOverdueRent: number;
+  totalExpectedUtilities: number;
+  totalUtilitiesOutstanding: number;
+  totalOverdueUtilities: number;
+  totalExpectedDeposits: number;
+  totalOutstanding: number;
 }

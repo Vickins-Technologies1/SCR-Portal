@@ -4,7 +4,8 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, sumTenantDepositOutstanding, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { summarizeTenantFinancialStates } from "@/lib/tenant-financial-view";
 import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
@@ -59,10 +60,22 @@ interface Stats {
   totalPenaltyAmount: number;
   totalDepositPaid: number;
   totalUtilityPaid: number;
+  totalExpectedRent: number;
+  totalRentOutstanding: number;
+  totalOverdueRent: number;
+  totalExpectedUtilities: number;
+  totalUtilitiesOutstanding: number;
+  totalOverdueUtilities: number;
+  totalExpectedDeposits: number;
+  totalOutstanding: number;
 }
 
 const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 const ACTIVE_PROPERTY_STATUSES = ["Active", "active"] as const;
+const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -155,10 +168,6 @@ export async function GET(request: NextRequest) {
 
     const propertyFilter: Record<string, unknown> = {
       ownerId: { $in: identityValues(effectiveOwnerId) },
-      $or: [
-        { status: { $in: ACTIVE_PROPERTY_STATUSES } },
-        { status: { $exists: false } },
-      ],
     };
 
     if (allowedPropertyIds) {
@@ -166,11 +175,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch active properties for the owner
+    const activePropertyFilter: Record<string, unknown> = {
+      ...propertyFilter,
+      $or: [
+        { status: { $in: ACTIVE_PROPERTY_STATUSES } },
+        { status: { $exists: false } },
+      ],
+    };
     const properties = await db
       .collection("properties")
       .find<WithId<Property>>(propertyFilter)
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
+    const activeProperties = properties.filter((property) =>
+      property.status == null || ACTIVE_PROPERTY_STATUSES.includes(property.status as any)
+    );
+    const activePropertyIds = activeProperties.map((property) => property._id.toString());
     const propertyIdCandidates = buildPropertyIdCandidates(propertyIds);
     const tenantPropertyFilter = { propertyId: { $in: propertyIdCandidates } } as any;
     const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
@@ -192,12 +212,19 @@ export async function GET(request: NextRequest) {
         totalPenaltyAmount: 0,
         totalDepositPaid: 0,
         totalUtilityPaid: 0,
+        totalExpectedRent: 0,
+        totalRentOutstanding: 0,
+        totalOverdueRent: 0,
+        totalExpectedUtilities: 0,
+        totalUtilitiesOutstanding: 0,
+        totalOverdueUtilities: 0,
+        totalExpectedDeposits: 0,
+        totalOutstanding: 0,
       };
-      return NextResponse.json({ success: true, stats });
+      return NextResponse.json({ success: true, stats }, { headers: NO_STORE_HEADERS });
     }
 
     const today = new Date();
-    const todayISO = today.toISOString();
     const nairobiParts = new Intl.DateTimeFormat("en-US", {
       timeZone: "Africa/Nairobi",
       year: "numeric",
@@ -223,7 +250,7 @@ export async function GET(request: NextRequest) {
       db
         .collection("properties")
         .aggregate<{ totalUnits: number }>([
-          { $match: propertyFilter },
+          { $match: activePropertyFilter },
           { $unwind: "$unitTypes" },
           {
             $group: {
@@ -236,8 +263,8 @@ export async function GET(request: NextRequest) {
       fetchActiveRentOverridesByPropertyIds(db, propertyIds),
       tenantCollection.countDocuments(tenantPropertyFilter),
       tenantCollection.find(tenantPropertyFilter).toArray(),
-      fetchTenantsActiveOnDay<TenantDoc>(db, propertyIds, today),
-      fetchTenantsOverlappingRange<TenantDoc>(db, propertyIds, startOfMonth, endOfMonth),
+      fetchTenantsActiveOnDay<TenantDoc>(db, activePropertyIds, today),
+      fetchTenantsOverlappingRange<TenantDoc>(db, activePropertyIds, startOfMonth, endOfMonth),
     ]);
 
     const totalUnits = totalUnitsResult[0]?.totalUnits || 0;
@@ -252,14 +279,14 @@ export async function GET(request: NextRequest) {
       getFinancialPaymentRows({
         db,
         propertyIds,
-        tenantIdsForLegacyPropertyless: tenantsForFinancials.map((tenant: any) => tenant._id),
+        tenantIdsForUnresolvedProperty: tenantsForFinancials.map((tenant: any) => tenant._id),
         start: startOfMonth,
         end: today,
       }),
       getFinancialPaymentRows({
         db,
         propertyIds,
-        tenantIdsForLegacyPropertyless: tenantsForFinancials.map((tenant: any) => tenant._id),
+        tenantIdsForUnresolvedProperty: tenantsForFinancials.map((tenant: any) => tenant._id),
         end: today,
       }),
     ]);
@@ -281,59 +308,29 @@ export async function GET(request: NextRequest) {
     const totalMonthlyRent = rentCollectedThisMonth;
 
     // Total rent paid (all time)
-    const totalRentPaid = roundMoney(lifetimeSummary.rentReceived);
     const totalPayments = roundMoney(lifetimeSummary.netReceived);
-    const totalUtilityPaid = roundMoney(lifetimeSummary.utilityReceived);
 
     // === Overdue Logic ===
     const activeTenantsForDues = activeTenantsForOccupancy;
 
     let overduePayments = 0;
-    let totalPenaltyAmount = 0;
-
     const activeTenantIds = new Set(activeTenantsForDues.map((tenant) => String(tenant._id)));
     const tenantStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
     overduePayments = tenantStates.filter(({ state }) => state.overdueAmount > 0).length;
-    const bulkOps = tenantStates.map(({ tenant, state }) => {
-      totalPenaltyAmount += state.penalties;
-      return {
-        updateOne: {
-          filter: { _id: tenant._id },
-          update: {
-            $set: {
-              // Keep the persisted tenant status aligned with the full
-              // financial state. The overdue metric intentionally excludes
-              // deposits/penalties, but a tenant with any outstanding
-              // obligation is not up to date.
-              paymentStatus: tenantOverdueStatus(state),
-              updatedAt: todayISO,
-            },
-          },
-        },
-      };
-    });
-
     // Deposits must come from the same tenant ledger used for dues. Summing
     // raw payments with type "Deposit" incorrectly counts overpayments and
     // ignores payments whose allocation was split across charges.
     // Deposits remain held after tenancy ends, so the collected metric includes
     // every tenant ledger attached to an active owner property.
-    const allTenantFinancialStates = allTenantStates.map(({ state }) => state);
-    const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantFinancialStates));
-    // Collected and due deposits use the same tenant population so former
-    // tenants and legacy leases cannot make the owner totals disagree.
-    const totalDepositDue = roundMoney(sumTenantDepositOutstanding(allTenantFinancialStates));
-    // The overdue balance card represents the outstanding balance across every
-    // tenant ledger on the selected owner properties. Keep the overdue tenant
-    // count scoped to current occupants above, but include former tenants with
-    // unpaid arrears in the monetary balance as well. Each state is calculated
-    // from that tenant's own allocated payment ledger, so one tenant's credit
-    // cannot offset another tenant's arrears.
-    const totalOverdueFromComponents = sumTenantOverdueAmount(allTenantStates.map(({ state }) => state));
-
-    if (bulkOps.length > 0) {
-      await tenantCollection.bulkWrite(bulkOps);
-    }
+    const ledgerSummary = summarizeTenantFinancialStates(allTenantStates.map(({ state }) => state));
+    // Cards that describe tenant balances use the same current tenant ledgers
+    // as tenant and property detail. Payment trend totals remain a separate
+    // posted receipt view, which can also include property-linked receipts
+    // without a tenant relationship.
+    const totalRentPaidFromTenants = ledgerSummary.rentCollected;
+    const totalUtilityPaid = ledgerSummary.utilitiesCollected;
+    const totalDepositPaid = ledgerSummary.depositsReceived;
+    const totalDepositDue = ledgerSummary.depositsDue;
 
     const expectedMonthlyRent = roundMoney(
       activeTenantsForMonth.reduce((sum, tenant: any) => {
@@ -348,24 +345,32 @@ export async function GET(request: NextRequest) {
 
     // Final stats
     const stats: Stats = {
-      activeProperties: properties.length,
+      activeProperties: activeProperties.length,
       totalTenants,
       activeTenants,
       totalUnits,
       occupiedUnits,
       expectedMonthlyRent,
       totalMonthlyRent,
-      totalRentPaid,
+      totalRentPaid: totalRentPaidFromTenants,
       totalDepositDue,
       overduePayments,
       totalPayments,
-      totalOverdueAmount: totalOverdueFromComponents,
-      totalPenaltyAmount: roundMoney(totalPenaltyAmount),
+      totalOverdueAmount: roundMoney(ledgerSummary.overdueRent + ledgerSummary.overdueUtilities),
+      totalPenaltyAmount: ledgerSummary.penalties,
       totalDepositPaid,
       totalUtilityPaid,
+      totalExpectedRent: ledgerSummary.expectedRent,
+      totalRentOutstanding: ledgerSummary.rentOutstanding,
+      totalOverdueRent: ledgerSummary.overdueRent,
+      totalExpectedUtilities: ledgerSummary.expectedUtilities,
+      totalUtilitiesOutstanding: ledgerSummary.utilitiesOutstanding,
+      totalOverdueUtilities: ledgerSummary.overdueUtilities,
+      totalExpectedDeposits: ledgerSummary.expectedDeposits,
+      totalOutstanding: ledgerSummary.totalOutstanding,
     };
 
-    return NextResponse.json({ success: true, stats });
+    return NextResponse.json({ success: true, stats }, { headers: NO_STORE_HEADERS });
   } catch (error) {
     console.error("Owner stats error:", error);
     return NextResponse.json(

@@ -7,6 +7,9 @@ import { businessMonthStart } from "@/lib/business-time";
 import { identityValues } from "@/lib/payment-query";
 import { buildPropertyIdCandidates } from "@/lib/tenant-occupancy";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface ChartData {
   months: string[];
   rentPayments: number[];
@@ -108,10 +111,6 @@ export async function GET(request: NextRequest) {
     // Fetch properties for the owner (optionally filtered by assignment / selection)
     const propertyQuery: Record<string, unknown> = {
       ownerId: { $in: identityValues(effectiveOwnerId) },
-      $or: [
-        { status: { $in: ["Active", "active"] } },
-        { status: { $exists: false } },
-      ],
     };
     if (allowedPropertyIds) {
       propertyQuery._id = { $in: allowedPropertyIds.flatMap((id) => identityValues(id)) };
@@ -134,7 +133,7 @@ export async function GET(request: NextRequest) {
           otherPayments: [],
           walletCreditPayments: [],
         },
-      });
+      }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
     // Match report dates and the per-property chart: payment months are
@@ -154,9 +153,8 @@ export async function GET(request: NextRequest) {
     const otherPayments: number[] = [];
     const walletCreditPayments: number[] = [];
 
-    // The saved payment allocation is a snapshot and can be stale when an
-    // earlier payment was reallocated after a lease or utility change. Use
-    // the same tenant ledger calculation as the owner dashboard cards.
+    // Charts show posted receipt events using their historical allocation
+    // snapshots; current balances are recalculated from tenant ledgers.
     const tenants = await db.collection("tenants")
       .find({ propertyId: { $in: buildPropertyIdCandidates(propertyIds) } })
       .toArray();
@@ -176,7 +174,7 @@ export async function GET(request: NextRequest) {
     const paymentRows = await getFinancialPaymentRows({
       db,
       propertyIds,
-      tenantIdsForLegacyPropertyless: tenants.map((tenant: any) => tenant._id),
+      tenantIdsForUnresolvedProperty: tenants.map((tenant: any) => tenant._id),
       start: monthBuckets[0].start,
       end: today,
     });
@@ -200,7 +198,7 @@ export async function GET(request: NextRequest) {
       walletCreditPayments,
     };
 
-    return NextResponse.json({ success: true, chartData });
+    return NextResponse.json({ success: true, chartData }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : "Internal server error" },

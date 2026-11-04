@@ -46,6 +46,7 @@ export interface Tenant {
   totalRentPaid: number;
   totalUtilityPaid: number;
   totalDepositPaid: number;
+  totalOtherPaid?: number;
   walletBalance: number;
   rentPaymentOverrides?: TenantRentPaymentOverride[];
   deliveryMethod: "sms" | "email" | "whatsapp" | "both" | "app";
@@ -77,6 +78,7 @@ export interface ResponseTenant {
   totalRentPaid: number;
   totalUtilityPaid: number;
   totalDepositPaid: number;
+  totalOtherPaid?: number;
   walletBalance: number;
   rentPaymentOverrides?: TenantRentPaymentOverride[];
   deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
@@ -89,6 +91,7 @@ export interface ResponseTenant {
     utilityDues: number;
     depositDues: number;
     totalRemainingDues: number;
+    totalPaid?: number;
     overdueAmount?: number;
     walletApplied?: number;
     walletRemaining?: number;

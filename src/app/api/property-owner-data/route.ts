@@ -4,6 +4,11 @@ import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { ResponseTenant } from "../../../types/tenant";
+import { identityValues } from "@/lib/payment-query";
+import { calculateTenantFinancialViews } from "@/lib/tenant-financial-view";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface UnitType {
   type: string;
@@ -104,18 +109,20 @@ export async function GET(request: NextRequest) {
     const [user, tenants, totalTenants, properties, pendingInvoices] = await Promise.all([
       db.collection("propertyOwners").findOne({ _id: new ObjectId(userId) }),
       db.collection<TenantFromDB>("tenants")
-        .find({ ownerId: userId })
+        .find({ ownerId: { $in: identityValues(userId) } } as any)
         .skip(skip)
         .limit(limit)
         .toArray(),
-      db.collection<TenantFromDB>("tenants").countDocuments({ ownerId: userId }),
-      db.collection<Property>("properties").find({ ownerId: userId }).toArray(),
+      db.collection<TenantFromDB>("tenants").countDocuments({ ownerId: { $in: identityValues(userId) } } as any),
+      db.collection<Property>("properties").find({ ownerId: { $in: identityValues(userId) } } as any).toArray(),
       db.collection("invoices").countDocuments({ userId, status: "pending" }),
     ]);
 
     if (!user) {
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
     }
+
+    const tenantViews = await calculateTenantFinancialViews(db, tenants);
 
     return NextResponse.json(
       {
@@ -124,14 +131,14 @@ export async function GET(request: NextRequest) {
           paymentStatus: user.paymentStatus || "inactive",
           walletBalance: user.walletBalance || 0,
         },
-        tenants: tenants.map((tenant): ResponseTenant => ({
+        tenants: tenantViews.map(({ tenant }): ResponseTenant => ({
           _id: tenant._id.toString(),
-          ownerId: tenant.ownerId,
+          ownerId: String(tenant.ownerId),
           name: tenant.name,
           email: tenant.email,
           phone: tenant.phone,
           role: "tenant" as const, // Fixed: explicit literal type
-          propertyId: tenant.propertyId,
+          propertyId: String(tenant.propertyId),
           unitType: tenant.unitType,
           unitIdentifier: tenant.unitIdentifier || "", // add if missing in old data
           leasedUnits: tenant.leasedUnits,
@@ -151,7 +158,9 @@ export async function GET(request: NextRequest) {
           totalRentPaid: tenant.totalRentPaid ?? 0,
           totalUtilityPaid: tenant.totalUtilityPaid ?? 0,
           totalDepositPaid: tenant.totalDepositPaid ?? 0,
+          totalOtherPaid: tenant.totalOtherPaid ?? 0,
           walletBalance: tenant.walletBalance ?? 0,
+          dues: tenant.dues,
           deliveryMethod: tenant.deliveryMethod || "both",
         })),
         totalTenants,
@@ -177,7 +186,7 @@ export async function GET(request: NextRequest) {
         page,
         limit,
       },
-      { status: 200 }
+      { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } }
     );
   } catch (error: unknown) {
     logger.error("Error in GET /api/property-owner-data", {

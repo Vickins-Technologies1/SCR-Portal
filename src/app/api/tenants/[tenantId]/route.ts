@@ -13,6 +13,10 @@ import { buildInvalidCsrfResponse } from "../../../../lib/csrf";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
 import { identityValues } from "@/lib/payment-query";
+import { calculateTenantFinancialViews } from "@/lib/tenant-financial-view";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const logger = {
   info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
@@ -131,11 +135,13 @@ export async function GET(
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });
     }
 
+    const [financialView] = await calculateTenantFinancialViews(db, [tenant]);
+
     return NextResponse.json({
       success: true,
       tenant: {
-        ...tenant,
-        _id: tenant._id.toString(),
+        ...financialView.tenant,
+        _id: String(tenant._id),
         createdAt: formatDate(tenant.createdAt),
         updatedAt: formatDate(tenant.updatedAt),
       },
@@ -144,7 +150,9 @@ export async function GET(
         name: property.name,
         utilities: property.utilities || [],
       },
-    });
+      dues: financialView.dues,
+      monthsStayed: financialView.monthsStayed,
+    }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: any) {
     logger.error("GET /api/tenants/[tenantId]", { error: error.message });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });

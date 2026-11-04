@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -86,8 +86,6 @@ export default function TenantsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const duesRequestId = useRef(0);
-  const duesAbortController = useRef<AbortController | null>(null);
 
   // Pagination & Filters
   const [page, setPage] = useState(1);
@@ -173,57 +171,6 @@ export default function TenantsPage() {
     }
   }, [userId, csrfToken, effectiveOwnerId]);
 
-  const enrichTenantsWithDues = useCallback(
-    async (tenantList: ResponseTenant[]) => {
-      if (!effectiveOwnerId || !csrfToken || tenantList.length === 0) return;
-      const requestId = ++duesRequestId.current;
-      duesAbortController.current?.abort();
-      const abortController = new AbortController();
-      duesAbortController.current = abortController;
-
-      let resultsByTenantId = new Map<string, any>();
-      try {
-        const res = await fetch("/api/tenants/check-dues", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken,
-          },
-          credentials: "include",
-          signal: abortController.signal,
-          body: JSON.stringify({
-            tenantIds: tenantList.map((tenant) => tenant._id),
-            userId: effectiveOwnerId,
-          }),
-        });
-        const data = await res.json();
-        if (data.success && Array.isArray(data.results)) {
-          resultsByTenantId = new Map(
-            data.results.map((result: any) => [String(result.tenantId), result])
-          );
-        }
-      } catch {}
-
-      const enriched = tenantList.map((tenant) => {
-        const result = resultsByTenantId.get(tenant._id);
-        if (!result?.dues) return tenant;
-        return {
-          ...tenant,
-          dues: result.dues,
-          totalRentPaid: result.tenant?.totalRentPaid ?? tenant.totalRentPaid,
-          totalDepositPaid: result.tenant?.totalDepositPaid ?? tenant.totalDepositPaid,
-          totalUtilityPaid: result.tenant?.totalUtilityPaid ?? tenant.totalUtilityPaid,
-          paymentStatus: result.tenant?.paymentStatus ?? tenant.paymentStatus,
-        };
-      });
-
-      if (requestId === duesRequestId.current) {
-        setTenants(enriched);
-      }
-    },
-    [csrfToken, effectiveOwnerId]
-  );
-
   // Fetch tenants (using effectiveOwnerId)
   const fetchTenants = useCallback(async () => {
     if (!effectiveOwnerId || !csrfToken) return;
@@ -254,7 +201,6 @@ export default function TenantsPage() {
         const baseTenants = data.tenants || [];
         setTenants(baseTenants);
         setTotalTenants(data.total || 0);
-        enrichTenantsWithDues(baseTenants);
       } else {
         setError(data.message || "Failed to load tenants");
       }
@@ -263,7 +209,7 @@ export default function TenantsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveOwnerId, csrfToken, page, limit, filters, enrichTenantsWithDues]);
+  }, [effectiveOwnerId, csrfToken, page, limit, filters]);
 
   // Fetch properties (using effectiveOwnerId)
   const fetchProperties = useCallback(async () => {

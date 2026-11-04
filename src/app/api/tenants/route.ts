@@ -17,6 +17,10 @@ import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
 import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
 import { identityValues } from "@/lib/payment-query";
 import { buildPropertyIdCandidates } from "@/lib/tenant-occupancy";
+import { calculateTenantFinancialViews, type TenantFinancialView } from "@/lib/tenant-financial-view";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -172,9 +176,6 @@ export async function GET(request: NextRequest) {
     }
 
     const paymentStatusFilter = searchParams.get("paymentStatus");
-    if (paymentStatusFilter) {
-      filters.paymentStatus = paymentStatusFilter;
-    }
 
     const minRentRaw = searchParams.get("minRent");
     const maxRentRaw = searchParams.get("maxRent");
@@ -216,20 +217,46 @@ export async function GET(request: NextRequest) {
       totalUtilityPaid: 1,
       walletBalance: 1,
       deliveryMethod: 1,
+      rentPaymentOverrides: 1,
     } as const;
 
-    const [total, tenants] = await Promise.all([
-      db.collection<Tenant>("tenants").countDocuments(filters),
-      db.collection<Tenant>("tenants")
+    let total: number;
+    let financialViews: TenantFinancialView[];
+    if (paymentStatusFilter) {
+      // The stored paymentStatus field is a derived cache. Calculate the
+      // financial status before filtering so stale cache values cannot hide
+      // current or overdue tenants from the owner list.
+      const allTenants = await db.collection<Tenant>("tenants")
         .find(filters, { projection: tenantProjection })
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
-    ]);
+        .toArray();
+      const allViews = await calculateTenantFinancialViews(db, allTenants);
+      const requestedStatus = paymentStatusFilter.trim().toLowerCase();
+      const matchingViews = allViews.filter(({ state }) => {
+        const currentStatus = state.overdueAmount > 0
+          ? "overdue"
+          : state.totalOutstanding <= 0
+            ? "paid"
+            : "current";
+        return currentStatus === requestedStatus;
+      });
+      total = matchingViews.length;
+      financialViews = matchingViews.slice(skip, skip + limit);
+    } else {
+      const [recordCount, tenants] = await Promise.all([
+        db.collection<Tenant>("tenants").countDocuments(filters),
+        db.collection<Tenant>("tenants")
+          .find(filters, { projection: tenantProjection })
+          .skip(skip)
+          .limit(limit)
+          .toArray(),
+      ]);
+      total = recordCount;
+      financialViews = await calculateTenantFinancialViews(db, tenants);
+    }
 
     return NextResponse.json({
       success: true,
-      tenants: tenants.map((t): ResponseTenant => ({
+      tenants: financialViews.map(({ tenant: t, dues }): ResponseTenant => ({
         _id: t._id.toString(),
         ownerId: t.ownerId,
         name: t.name,
@@ -252,13 +279,16 @@ export async function GET(request: NextRequest) {
         totalRentPaid: t.totalRentPaid,
         totalUtilityPaid: t.totalUtilityPaid,
         totalDepositPaid: t.totalDepositPaid,
+        totalOtherPaid: t.totalOtherPaid,
         walletBalance: t.walletBalance,
+        rentPaymentOverrides: t.rentPaymentOverrides,
         deliveryMethod: t.deliveryMethod,
+        dues,
       })),
       total,
       page,
       limit,
-    });
+    }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     logger.error("GET /api/tenants error", { error });
     return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });

@@ -6,14 +6,17 @@ import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
-import {
-  calculateTenantFinancialState,
-  reconcileTenantPaymentAllocation,
-} from "@/lib/tenant-payment-allocation";
+import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { getFinancialReportSummary } from "@/lib/financial-reporting";
 import { identityValues } from "@/lib/payment-query";
-import { buildTenantDuesResponse } from "@/lib/tenant-dues-response";
+import { calculateTenantFinancialViews } from "@/lib/tenant-financial-view";
+import { summarizeTenantFinancialStates } from "@/lib/tenant-financial-view";
+import { businessDateParts, businessMonthStart } from "@/lib/business-time";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 
 interface Tenant {
   _id: ObjectId;
@@ -111,84 +114,6 @@ async function tenantIdsBelongToOwner(db: Db, tenantIds: string[], scope: OwnerS
   });
 }
 
-async function calculateTenantDues(db: Db, tenantId: string, today = new Date()) {
-  const tenant = await db
-    .collection<Tenant>("tenants")
-    .findOne({ _id: new ObjectId(tenantId) });
-
-  if (!tenant) return null;
-
-  const allocation = await reconcileTenantPaymentAllocation(db, tenantId);
-  if (!allocation) return null;
-  const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-  return buildTenantDuesResponse(tenant, allocation.financialState, today, rentOverrideMap);
-}
-
-async function mapWithConcurrency<T, TResult>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T) => Promise<TResult>
-): Promise<TResult[]> {
-  const results = new Array<TResult>(items.length);
-  let nextIndex = 0;
-
-  const worker = async () => {
-    while (true) {
-      const index = nextIndex++;
-      if (index >= items.length) return;
-      results[index] = await mapper(items[index]);
-    }
-  };
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
-  );
-  return results;
-}
-
-async function calculateBatchTenantDues(db: Db, tenantIds: string[]) {
-  const today = new Date();
-  const tenantObjectIds = tenantIds.map((id) => new ObjectId(id));
-  const tenants = await db
-    .collection<Tenant>("tenants")
-    .find({ _id: { $in: tenantObjectIds } })
-    .toArray();
-  const tenantById = new Map(tenants.map((tenant) => [tenant._id.toString(), tenant]));
-
-  const allPropertyIds = Array.from(
-    new Set(
-      tenants
-        .map((tenant) => String(tenant.propertyId || ""))
-        .filter(Boolean)
-    )
-  );
-  const propertyIds = allPropertyIds.filter((propertyId) => ObjectId.isValid(propertyId));
-  const [properties, rentOverrideMap] = await Promise.all([
-    propertyIds.length > 0
-      ? db.collection("properties").find({ _id: { $in: identityValues(propertyIds) } } as any).toArray()
-      : Promise.resolve([]),
-    fetchActiveRentOverridesByPropertyIds(db, allPropertyIds),
-  ]);
-  const propertyById = new Map(properties.map((property) => [property._id.toString(), property]));
-
-  return mapWithConcurrency(tenantIds, 8, async (tenantId) => {
-    const tenant = tenantById.get(tenantId);
-    if (!tenant) return { tenantId };
-
-    try {
-      const state = await calculateTenantFinancialState(db, tenant, {
-        property: propertyById.get(String(tenant.propertyId)),
-        asOf: today,
-        rentOverrideMap,
-      });
-      return { tenantId, ...buildTenantDuesResponse(tenant, state, today, rentOverrideMap) };
-    } catch (error) {
-      logger.error("Error checking tenant dues", { error, tenantId });
-      return { tenantId };
-    }
-  });
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
@@ -213,9 +138,8 @@ export async function GET(request: NextRequest) {
     }
 
     const today = new Date();
-    const todayISO = today.toISOString();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    const todayParts = businessDateParts(today);
+    const startOfMonth = businessMonthStart(todayParts.year, todayParts.month - 1);
 
     const propertyFilter: Record<string, unknown> = {
       ownerId: { $in: identityValues(scope.ownerId) },
@@ -225,6 +149,10 @@ export async function GET(request: NextRequest) {
     }
     const properties = await db.collection("properties").find(propertyFilter).toArray();
     const propertyIds = properties.map((p: any) => p._id.toString());
+    const activeProperties = properties.filter((property: any) =>
+      property.status == null || ["Active", "active"].includes(String(property.status))
+    );
+    const activePropertyIds = activeProperties.map((property: any) => property._id.toString());
     const propertyMap = new Map(properties.map((p: any) => [p._id.toString(), p]));
 
     if (propertyIds.length === 0) {
@@ -238,7 +166,7 @@ export async function GET(request: NextRequest) {
         totalPayments: 0,
         totalOverdueAmount: 0,
       };
-      return NextResponse.json({ success: true, stats: emptyStats });
+      return NextResponse.json({ success: true, stats: emptyStats }, { headers: NO_STORE_HEADERS });
     }
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
@@ -246,7 +174,10 @@ export async function GET(request: NextRequest) {
     // 1. Total Units
     const totalUnitsResult = await db.collection("properties")
       .aggregate([
-        { $match: propertyFilter },
+        { $match: {
+          ...propertyFilter,
+          $or: [{ status: { $in: ["Active", "active"] } }, { status: { $exists: false } }],
+        } },
         { $unwind: "$unitTypes" },
         { $group: { _id: null, totalUnits: { $sum: "$unitTypes.quantity" } } },
       ])
@@ -254,23 +185,24 @@ export async function GET(request: NextRequest) {
     const totalUnits = totalUnitsResult[0]?.totalUnits || 0;
 
     // 2. Active Tenants + Occupied Units (DB-filtered, supports string/Date lease fields and multi-unit tenants)
-    const activeTenants = await fetchTenantsActiveOnDay<Tenant>(db, propertyIds, today);
-    const totalTenants = activeTenants.length;
+    const activeTenants = await fetchTenantsActiveOnDay<Tenant>(db, activePropertyIds, today);
+    const allTenants = await db.collection<Tenant>("tenants").find({
+      propertyId: { $in: buildPropertyIdCandidates(propertyIds) },
+    } as any).toArray();
+    const totalTenants = allTenants.length;
     const occupiedUnits = activeTenants.reduce((sum, tenant) => sum + countOccupiedUnitsForTenant(tenant), 0);
 
     // 3-4. Revenue uses the same net, reversal-aware financial projection as reports.
     const [monthlySummary, lifetimeSummary] = await Promise.all([
-      getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth }),
-      getFinancialReportSummary({ db, propertyIds }),
+      getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: today }),
+      getFinancialReportSummary({ db, propertyIds, end: today }),
     ]);
-    const totalMonthlyRent = monthlySummary.netReceived;
+    const totalMonthlyRent = monthlySummary.rentReceived;
     const totalPayments = lifetimeSummary.netReceived;
 
     // 5. Overdue Calculation
-    let overdueCount = 0;
-    let totalOverdueAmount = 0;
-
-    const states = await Promise.all(activeTenants.map(async (tenant) => ({
+    const activeTenantIds = new Set(activeTenants.map((tenant) => String(tenant._id)));
+    const states = await Promise.all(allTenants.map(async (tenant) => ({
       tenant,
       state: await calculateTenantFinancialState(db, tenant, {
         property: propertyMap.get(tenant.propertyId),
@@ -279,36 +211,23 @@ export async function GET(request: NextRequest) {
       }),
     })));
 
-    const bulkUpdates = states.map(({ tenant, state }) => {
-      const totalDue = state.overdueAmount;
-      if (totalDue > 0) {
-        overdueCount++;
-        totalOverdueAmount += totalDue;
-      }
-      return {
-        updateOne: {
-          filter: { _id: tenant._id },
-          update: { $set: { paymentStatus: totalDue > 0 ? "overdue" : "up-to-date", updatedAt: todayISO } },
-        },
-      };
-    });
-
-    if (bulkUpdates.length > 0) {
-      await db.collection("tenants").bulkWrite(bulkUpdates);
-    }
+    const overduePayments = states.filter(({ tenant, state }) =>
+      activeTenantIds.has(String(tenant._id)) && state.overdueAmount > 0
+    ).length;
+    const ledgerSummary = summarizeTenantFinancialStates(states.map(({ state }) => state));
 
     const stats: Stats = {
-      activeProperties: propertyIds.length,
+      activeProperties: activeProperties.length,
       totalTenants,
       totalUnits,
       occupiedUnits,
       totalMonthlyRent,
-      overduePayments: overdueCount,
+      overduePayments,
       totalPayments,
-      totalOverdueAmount,
+      totalOverdueAmount: ledgerSummary.overdueRent + ledgerSummary.overdueUtilities,
     };
 
-    return NextResponse.json({ success: true, stats });
+    return NextResponse.json({ success: true, stats }, { headers: NO_STORE_HEADERS });
   } catch (error) {
     logger.error("Error in owner stats", { error });
     return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
@@ -358,12 +277,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
+    const tenantDocs = await db.collection<Tenant>("tenants").find({
+      _id: { $in: requestedTenantIds.map((id: string) => new ObjectId(id)) },
+      ownerId: { $in: identityValues(scope.ownerId) },
+    } as any).toArray();
+    const views = await calculateTenantFinancialViews(db, tenantDocs);
+    const results = views.map((view) => ({
+      tenantId: String(view.tenant._id),
+      tenant: view.tenant,
+      dues: view.dues,
+      monthsStayed: view.monthsStayed,
+    }));
+
     if (tenantIds) {
-      const results = await calculateBatchTenantDues(db, tenantIds);
-      return NextResponse.json({ success: true, results });
+      return NextResponse.json({ success: true, results }, { headers: NO_STORE_HEADERS });
     }
 
-    const result = await calculateTenantDues(db, tenantId);
+    const result = results[0];
     if (!result) {
       return NextResponse.json(
         { success: false, message: "Tenant not found" },
@@ -371,7 +301,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true, ...result });
+    return NextResponse.json({ success: true, ...result }, { headers: NO_STORE_HEADERS });
   } catch (error) {
     logger.error("Error checking tenant dues", { error, tenantId });
     return NextResponse.json(

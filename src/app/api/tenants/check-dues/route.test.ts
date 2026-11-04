@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   connectToDatabase: vi.fn(),
   calculateTenantFinancialState: vi.fn(),
   reconcileTenantPaymentAllocation: vi.fn(),
+  calculateTenantFinancialViews: vi.fn(),
   fetchActiveRentOverridesByPropertyIds: vi.fn(),
   getFinancialReportSummary: vi.fn(),
   fetchTenantsActiveOnDay: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("@/lib/tenant-payment-allocation", () => ({
   calculateTenantFinancialState: mocks.calculateTenantFinancialState,
   reconcileTenantPaymentAllocation: mocks.reconcileTenantPaymentAllocation,
 }));
+vi.mock("@/lib/tenant-financial-view", () => ({ calculateTenantFinancialViews: mocks.calculateTenantFinancialViews }));
 vi.mock("@/lib/rent-overrides", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/rent-overrides")>()),
   fetchActiveRentOverridesByPropertyIds: mocks.fetchActiveRentOverridesByPropertyIds,
@@ -122,6 +124,22 @@ describe("tenant dues owner scoping", () => {
     mocks.connectToDatabase.mockResolvedValue({ db });
     mocks.calculateTenantFinancialState.mockResolvedValue(state);
     mocks.reconcileTenantPaymentAllocation.mockResolvedValue({ financialState: state });
+    mocks.calculateTenantFinancialViews.mockResolvedValue([{
+      tenant: { ...tenant, _id: tenantId, totalRentPaid: 6_000, dues: { overdueAmount: 2_000 } },
+      dues: {
+        rentDues: 6_000,
+        rentOutstanding: 6_000,
+        rentOverdueDues: 2_000,
+        rentCurrentDues: 4_000,
+        depositDues: 0,
+        utilityDues: 0,
+        totalRemainingDues: 6_000,
+        overdueAmount: 2_000,
+      },
+      monthsStayed: 3,
+      state,
+      expectedMonthlyRent: 2_000,
+    }]);
     mocks.fetchActiveRentOverridesByPropertyIds.mockResolvedValue(new Map());
     mocks.getFinancialReportSummary.mockResolvedValue({ netReceived: 0 });
   });
@@ -137,6 +155,8 @@ describe("tenant dues owner scoping", () => {
     expect(listData.results[0].dues).toEqual(detailsData.dues);
     expect(detailsData.dues).toMatchObject({ rentDues: 6_000, rentOverdueDues: 2_000, rentCurrentDues: 4_000 });
     expect(detailsData.tenant.dues.overdueAmount).toBe(2_000);
+    expect(mocks.reconcileTenantPaymentAllocation).not.toHaveBeenCalled();
+    expect(mocks.calculateTenantFinancialViews).toHaveBeenCalledTimes(2);
   });
 
   it("does not calculate dues for tenant IDs outside the authenticated owner's properties", async () => {

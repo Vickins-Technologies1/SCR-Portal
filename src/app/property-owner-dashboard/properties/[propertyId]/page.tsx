@@ -49,6 +49,23 @@ type Property = {
   penaltyFrequency?: "daily" | "weekly";
   unitTypes: PropertyUnit[];
   createdAt?: string;
+  financialSummary?: {
+    expectedMonthlyRent: number;
+    expectedRent: number;
+    rentCollected: number;
+    rentOutstanding: number;
+    overdueRent: number;
+    expectedUtilities: number;
+    utilitiesCollected: number;
+    utilitiesOutstanding: number;
+    overdueUtilities: number;
+    expectedDeposits: number;
+    depositsReceived: number;
+    depositsDue: number;
+    totalPaymentsReceived: number;
+    totalOutstanding: number;
+    totalPenalties: number;
+  };
 };
 
 type Tenant = {
@@ -114,41 +131,7 @@ export default function PropertyDetailsPage() {
   const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
   const vacancyRate = totalUnits > 0 ? Math.round((vacancyCount / totalUnits) * 100) : 0;
 
-  const expectedMonthlyRent = useMemo(() => {
-    if (!property) return 0;
-
-    const priceByUnit = new Map<string, number>();
-    property.unitTypes?.forEach((unit: any) => {
-      if (unit.uniqueType) {
-        priceByUnit.set(unit.uniqueType, Number(unit.price) || 0);
-      }
-      if (unit.type) {
-        priceByUnit.set(unit.type, Number(unit.price) || 0);
-      }
-    });
-
-    const tenantTotals = activeTenants.map((tenant) => {
-      if (tenant.leasedUnits && tenant.leasedUnits.length > 0) {
-        const sumUnits = tenant.leasedUnits.reduce((sum, unit) => {
-          if (unit.price) return sum + Number(unit.price);
-          const key = unit.unitIdentifier || unit.unitType || "";
-          if (key && priceByUnit.has(key)) {
-            return sum + (priceByUnit.get(key) || 0);
-          }
-          return sum;
-        }, 0);
-        if (sumUnits > 0) return sumUnits;
-      }
-
-      if (tenant.price) return Number(tenant.price);
-      if (tenant.unitType && priceByUnit.has(tenant.unitType)) {
-        return priceByUnit.get(tenant.unitType) || 0;
-      }
-      return 0;
-    });
-
-    return tenantTotals.reduce((sum, value) => sum + value, 0);
-  }, [property, activeTenants]);
+  const expectedMonthlyRent = property?.financialSummary?.expectedMonthlyRent ?? 0;
 
   const fetchCsrfToken = useCallback(async () => {
     const tokenFromCookie = Cookies.get("csrf-token");
@@ -182,10 +165,12 @@ export default function PropertyDetailsPage() {
         fetch(`/api/properties/${propertyId}`, {
           headers,
           credentials: "include",
+          cache: "no-store",
         }),
         fetch(`/api/property-charts?propertyId=${propertyId}`, {
           headers,
           credentials: "include",
+          cache: "no-store",
         }),
       ]);
 
@@ -384,6 +369,36 @@ export default function PropertyDetailsPage() {
                   </motion.div>
                 ))}
               </section>
+
+              {property.financialSummary && (
+                <section className="surface-card rounded-3xl p-5 sm:p-6">
+                  <h2 className="text-sm sm:text-base font-semibold text-foreground mb-4">Financial reconciliation</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {[
+                      ["Expected rent to date", property.financialSummary.expectedRent],
+                      ["Rent collected", property.financialSummary.rentCollected],
+                      ["Rent outstanding", property.financialSummary.rentOutstanding],
+                      ["Overdue rent", property.financialSummary.overdueRent],
+                      ["Expected utilities", property.financialSummary.expectedUtilities],
+                      ["Utilities collected", property.financialSummary.utilitiesCollected],
+                      ["Utilities outstanding", property.financialSummary.utilitiesOutstanding],
+                      ["Overdue utilities", property.financialSummary.overdueUtilities],
+                      ["Expected deposits", property.financialSummary.expectedDeposits],
+                      ["Deposits received", property.financialSummary.depositsReceived],
+                      ["Deposits due", property.financialSummary.depositsDue],
+                      ["Total outstanding", property.financialSummary.totalOutstanding],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded-2xl border border-border bg-white/70 p-4">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+                        <p className="mt-2 text-base font-semibold text-foreground">{formatCurrency(Number(value) || 0)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Tenant balances use current ledger calculations, including former tenants. Receipt totals can also include valid property linked payments with no tenant link.
+                  </p>
+                </section>
+              )}
 
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 surface-card rounded-3xl p-5 sm:p-6">

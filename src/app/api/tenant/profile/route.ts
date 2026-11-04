@@ -4,8 +4,11 @@ import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
 import { resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { getFinancialPaymentRows } from "@/lib/financial-reporting";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface Tenant {
   _id: ObjectId;
@@ -194,18 +197,12 @@ export async function GET(request: NextRequest) {
 
     if (shouldCalculateDues) {
       const today = new Date();
-      // Reconcile the persisted payment allocations before returning the
-      // profile. Payment history and the tenant snapshot must show the same
-      // allocation after a category cascade or wallet correction.
-      const state = await reconcileTenantPaymentAllocation(db, targetTenantId);
-      if (!state) {
-        return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
-      }
+      const state = await calculateTenantFinancialState(db, tenantDoc, { asOf: today, rentOverrideMap });
       const { monthsStayed } = state;
 
       const rentPaid = state.rentPaid;
       const depositPaid = state.depositPaid;
-      const utilityPaid = state.utilityPaid;
+      const utilityPaid = state.utilitiesPaid;
       const updatedTotalRentPaid = rentPaid;
       const updatedWalletBalance = state.walletBalance;
       const otherPaid = state.otherPaid;
@@ -214,24 +211,9 @@ export async function GET(request: NextRequest) {
       const depositDues = state.depositOutstanding;
       const utilityDues = state.utilitiesOutstanding;
       const totalRemainingDues = state.totalOutstanding;
-      const totalPaid = rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance;
+      const totalPaid = Math.round((rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance) * 100) / 100;
 
       const paymentStatus = state.overdueAmount > 0 ? "overdue" : "up-to-date";
-
-      await db.collection("tenants").updateOne(
-        { _id: new ObjectId(targetTenantId) },
-        {
-          $set: {
-            totalRentPaid: updatedTotalRentPaid,
-            totalUtilityPaid: utilityPaid,
-            totalDepositPaid: depositPaid,
-            totalOtherPaid: otherPaid,
-            walletBalance: updatedWalletBalance,
-            paymentStatus,
-            updatedAt: today.toISOString(),
-          },
-        }
-      );
 
       const monthlyPayments = await getMonthlyPayments(db, targetTenantId, monthsStayed);
       const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
@@ -258,7 +240,7 @@ export async function GET(request: NextRequest) {
           utilityOverdueDues: state.utilitiesOverdueOutstanding,
           utilityStatus: state.utilityStatus,
           depositDues,
-          otherDues: state.otherOutstanding,
+          otherDues: 0,
           totalRemainingDues,
           totalPaid,
           walletApplied: state.walletApplied,
@@ -284,7 +266,7 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({ success: true, tenant, analytics }, { status: 200 });
+    return NextResponse.json({ success: true, tenant, analytics }, { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error: unknown) {
     console.error("Error in /api/tenant/profile:", error);
     return NextResponse.json(

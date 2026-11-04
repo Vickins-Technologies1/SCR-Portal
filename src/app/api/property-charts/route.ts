@@ -5,6 +5,9 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { getFinancialPaymentRows, summarizeFinancialPaymentPeriods } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface ChartData {
   months: string[];
   rentPayments: number[];
@@ -86,7 +89,7 @@ export async function GET(request: NextRequest) {
     const rows = await getFinancialPaymentRows({
       db,
       propertyIds: [propertyId],
-      tenantIdsForLegacyPropertyless: tenants.map((tenant: any) => tenant._id),
+      tenantIdsForUnresolvedProperty: tenants.map((tenant: any) => tenant._id),
       start: periods[0].start,
       end: today,
     });
@@ -103,7 +106,7 @@ export async function GET(request: NextRequest) {
       depositPayments,
     };
 
-    return NextResponse.json({ success: true, chartData });
+    return NextResponse.json({ success: true, chartData }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : "Internal server error" },

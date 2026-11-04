@@ -1,7 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { createSessionToken, verifySessionToken } from "@/lib/session";
+
+const mocks = vi.hoisted(() => ({ connectToDatabase: vi.fn() }));
+vi.mock("@/lib/mongodb", () => ({ connectToDatabase: mocks.connectToDatabase }));
+
 import { POST } from "./route";
+
+beforeEach(() => {
+  mocks.connectToDatabase.mockResolvedValue({
+    db: { collection: () => ({ insertOne: vi.fn().mockResolvedValue({ acknowledged: true }) }) },
+  });
+});
 
 function buildRequest(cookie: string) {
   return new NextRequest(new URL("http://localhost/api/revert-impersonation"), {

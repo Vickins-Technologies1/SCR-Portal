@@ -53,10 +53,21 @@ describe("owner dashboard financial totals", () => {
   };
   const property = { _id: propertyId, ownerId, status: "Active", unitTypes: [] };
   const states = new Map([
-    [String(activeTenant._id), { depositRequired: 20_000, depositPaid: 10_000, depositOutstanding: 10_000, overdueAmount: 5_000, penalties: 0 }],
-    [String(formerTenant._id), { depositRequired: 20_000, depositPaid: 5_000, depositOutstanding: 15_000, overdueAmount: 8_000, penalties: 0 }],
+    [String(activeTenant._id), {
+      depositRequired: 20_000, depositPaid: 10_000, depositOutstanding: 10_000,
+      rentCharged: 30_000, rentPaid: 24_000, rentOutstanding: 6_000, overdueRent: 4_000,
+      utilitiesCharged: 2_000, utilitiesPaid: 1_000, utilitiesOutstanding: 1_000, overdueUtilities: 1_000,
+      totalOutstanding: 17_000, overdueAmount: 5_000, penalties: 0,
+    }],
+    [String(formerTenant._id), {
+      depositRequired: 20_000, depositPaid: 5_000, depositOutstanding: 15_000,
+      rentCharged: 20_000, rentPaid: 12_000, rentOutstanding: 8_000, overdueRent: 6_000,
+      utilitiesCharged: 3_000, utilitiesPaid: 1_000, utilitiesOutstanding: 2_000, overdueUtilities: 2_000,
+      totalOutstanding: 25_000, overdueAmount: 8_000, penalties: 0,
+    }],
   ]);
   let propertyFindFilter: any;
+  let tenantBulkWrite: ReturnType<typeof vi.fn>;
 
   function cursor(values: any[]) {
     return { toArray: async () => values };
@@ -65,6 +76,7 @@ describe("owner dashboard financial totals", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     propertyFindFilter = null;
+    tenantBulkWrite = vi.fn(async () => ({}));
     mocks.connectToDatabase.mockResolvedValue({
       db: {
         collection: (name: string) => {
@@ -78,7 +90,7 @@ describe("owner dashboard financial totals", () => {
           if (name === "tenants") return {
             countDocuments: vi.fn(async () => 2),
             find: vi.fn(() => cursor([activeTenant, formerTenant])),
-            bulkWrite: vi.fn(async () => ({})),
+            bulkWrite: tenantBulkWrite,
           };
           throw new Error(`Unexpected collection ${name}`);
         },
@@ -112,5 +124,18 @@ describe("owner dashboard financial totals", () => {
       overduePayments: 1,
     });
     expect(data.stats.totalDepositPaid + data.stats.totalDepositDue).toBe(40_000);
+    expect(data.stats).toMatchObject({
+      totalExpectedRent: 50_000,
+      totalRentPaid: 36_000,
+      totalRentOutstanding: 14_000,
+      totalOverdueRent: 10_000,
+      totalExpectedUtilities: 5_000,
+      totalUtilityPaid: 2_000,
+      totalUtilitiesOutstanding: 3_000,
+      totalOverdueUtilities: 3_000,
+      totalExpectedDeposits: 40_000,
+      totalOutstanding: 42_000,
+    });
+    expect(tenantBulkWrite).not.toHaveBeenCalled();
   });
 });

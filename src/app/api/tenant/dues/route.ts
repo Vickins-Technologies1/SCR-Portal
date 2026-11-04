@@ -5,11 +5,15 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, reconcileTenantPaymentAllocation, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, sumTenantOverdueAmount } from "@/lib/tenant-payment-allocation";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { identityValues } from "@/lib/payment-query";
 import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { businessDateParts, businessMonthStart } from "@/lib/business-time";
+import { calculateTenantFinancialViews } from "@/lib/tenant-financial-view";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface Property {
   _id: ObjectId;
@@ -87,18 +91,19 @@ export async function GET(request: NextRequest) {
 
     const propertyFilter: Record<string, unknown> = {
       ownerId: { $in: identityValues(userId) },
-      $or: [
-        { status: { $in: ["Active", "active"] } },
-        { status: { $exists: false } },
-      ],
     };
 
-    // Fetch active properties for the owner, with both historical owner ID types.
+    // Keep financial history for all owned properties; occupancy and unit
+    // capacity remain scoped to active properties.
     const properties = await db
       .collection("properties")
       .find<WithId<Property>>(propertyFilter)
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
+    const activeProperties = properties.filter((property) =>
+      property.status == null || ["Active", "active"].includes(String(property.status))
+    );
+    const activePropertyIds = activeProperties.map((property) => property._id.toString());
     const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
 
     if (properties.length === 0) {
@@ -113,13 +118,12 @@ export async function GET(request: NextRequest) {
         totalPayments: 0,
         totalOverdueAmount: 0,
       };
-      return NextResponse.json({ success: true, stats });
+      return NextResponse.json({ success: true, stats }, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
     const today = new Date();
-    const todayISO = today.toISOString();
     const { year, month } = businessDateParts(today);
     const startOfMonth = businessMonthStart(year, month - 1);
 
@@ -129,7 +133,10 @@ export async function GET(request: NextRequest) {
     const totalUnitsResult = await db
       .collection("properties")
       .aggregate<{ totalUnits: number }>([
-        { $match: propertyFilter },
+        { $match: {
+          ...propertyFilter,
+          $or: [{ status: { $in: ["Active", "active"] } }, { status: { $exists: false } }],
+        } },
         { $unwind: "$unitTypes" },
         { $group: { _id: null, totalUnits: { $sum: "$unitTypes.quantity" } } },
       ])
@@ -138,7 +145,7 @@ export async function GET(request: NextRequest) {
 
     const [allTenants, activeTenants] = await Promise.all([
       db.collection("tenants").find({ propertyId: { $in: buildPropertyIdCandidates(propertyIds) } }).toArray(),
-      fetchTenantsActiveOnDay<Tenant>(db, propertyIds, today),
+      fetchTenantsActiveOnDay<Tenant>(db, activePropertyIds, today),
     ]);
     const totalTenants = allTenants.length;
     const occupiedUnits = activeTenants.reduce((sum, tenant) => sum + countOccupiedUnitsForTenant(tenant), 0);
@@ -147,10 +154,10 @@ export async function GET(request: NextRequest) {
     logger.debug("Tenants fetched for ownerstats", { userId, tenantIds, totalTenants, occupiedUnits });
 
     const [monthlyRows, lifetimeRows] = await Promise.all([
-      getFinancialPaymentRows({ db, propertyIds, tenantIdsForLegacyPropertyless: tenantIds, start: startOfMonth, end: today }),
-      getFinancialPaymentRows({ db, propertyIds, tenantIdsForLegacyPropertyless: tenantIds, end: today }),
+      getFinancialPaymentRows({ db, propertyIds, tenantIdsForUnresolvedProperty: tenantIds, start: startOfMonth, end: today }),
+      getFinancialPaymentRows({ db, propertyIds, tenantIdsForUnresolvedProperty: tenantIds, end: today }),
     ]);
-    const totalMonthlyRent = summarizeFinancialPaymentRows(monthlyRows).netReceived;
+    const totalMonthlyRent = summarizeFinancialPaymentRows(monthlyRows).rentReceived;
     const totalPayments = summarizeFinancialPaymentRows(lifetimeRows).netReceived;
 
     let overduePayments = 0;
@@ -160,35 +167,13 @@ export async function GET(request: NextRequest) {
     })));
     const activeTenantIds = new Set(activeTenants.map((tenant) => String(tenant._id)));
     const activeStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
-    const bulkOps = activeStates.map(({ tenant, state }) => {
-      const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
-      const totalOverdue = state.overdueAmount;
-
-      if (totalOverdue > 0) {
-        overduePayments += 1;
-      }
-
-      return {
-        updateOne: {
-          filter: { _id: tenantObjectId },
-          update: {
-            $set: {
-              paymentStatus: tenantOverdueStatus(state),
-              updatedAt: todayISO,
-            },
-          },
-        },
-      };
+    activeStates.forEach(({ state }) => {
+      if (state.overdueAmount > 0) overduePayments += 1;
     });
     const totalOverdueAmount = sumTenantOverdueAmount(allTenantStates.map(({ state }) => state));
 
-    if (bulkOps.length > 0) {
-      await db.collection("tenants").bulkWrite(bulkOps);
-      logger.debug("Bulk tenant updates executed", { userId, updateCount: bulkOps.length });
-    }
-
     const stats: Stats = {
-      activeProperties: properties.length,
+      activeProperties: activeProperties.length,
       totalTenants,
       totalUnits,
       occupiedUnits,
@@ -199,7 +184,7 @@ export async function GET(request: NextRequest) {
     };
 
     logger.debug("Successfully fetched owner stats", { userId, stats });
-    return NextResponse.json({ success: true, stats });
+    return NextResponse.json({ success: true, stats }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     logger.error("Error fetching owner stats", {
       userId,
@@ -252,47 +237,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
-    const today = new Date(); // Use current date
-    // Keep the stored payment allocations in sync with the same cascade used
-    // to calculate dues. Otherwise the dues response can be correct while
-    // the tenant payment history still shows an old wallet/category split.
-    const state = await reconcileTenantPaymentAllocation(db, tenantId);
-    if (!state) {
+    const today = new Date();
+    const [view] = await calculateTenantFinancialViews(db, [tenant], today);
+    if (!view) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
-    const dues = {
-      rentDues: state.rentOutstanding + state.penalties,
-      rentOutstanding: state.rentOutstanding,
-      penaltyDues: state.penalties,
-      depositDues: state.depositOutstanding,
-      utilityDues: state.utilitiesOutstanding,
-      utilityCurrentDues: state.utilitiesCurrentOutstanding,
-      utilityOverdueDues: state.utilitiesOverdueOutstanding,
-      utilityStatus: state.utilityStatus,
-      overdueAmount: state.overdueAmount,
-      otherDues: state.otherOutstanding,
-      totalRemainingDues: state.totalOutstanding,
-      paymentStatus: tenantOverdueStatus(state),
-      monthsStayed: state.monthsStayed,
-      totalPaid: state.rentPaid + state.utilityPaid + state.depositPaid + state.otherPaid + state.walletBalance,
-      walletApplied: state.walletApplied,
-      walletRemaining: state.walletBalance,
-      walletCoverageMonths: 0,
-      walletCoverageRemainder: state.walletBalance,
-    };
-
-    await db.collection("tenants").updateOne(
-      { _id: new ObjectId(tenantId) },
-      {
-        $set: {
-          totalRentPaid: state.rentPaid,
-          totalDepositPaid: state.depositPaid,
-          totalUtilityPaid: state.utilityPaid,
-          paymentStatus: dues.paymentStatus,
-          updatedAt: today.toISOString(),
-        },
-      }
-    );
+    const dues = { ...view.dues, paymentStatus: view.tenant.paymentStatus, monthsStayed: view.monthsStayed };
 
     logger.debug("Successfully calculated tenant dues", {
       tenantId,
@@ -300,7 +250,7 @@ export async function POST(request: NextRequest) {
       dues,
       monthsStayed: dues.monthsStayed,
     });
-    return NextResponse.json({ success: true, dues, monthsStayed: dues.monthsStayed });
+    return NextResponse.json({ success: true, dues, monthsStayed: dues.monthsStayed }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     logger.error("Error processing tenant dues", {
       message: error instanceof Error ? error.message : "Unknown error",
