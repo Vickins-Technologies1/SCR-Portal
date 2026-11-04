@@ -94,15 +94,14 @@ async function tenantIdsBelongToOwner(db: Db, tenantIds: string[], scope: OwnerS
   }).toArray();
   if (tenants.length !== uniqueTenantIds.length) return false;
 
-  const propertyObjectIds = Array.from(new Set<string>(tenants
+  const propertyIds = Array.from(new Set<string>(tenants
     .map((tenant: any): string => String(tenant.propertyId || ""))
-    .filter((propertyId: string): propertyId is string => ObjectId.isValid(propertyId))))
-    .map((propertyId) => new ObjectId(propertyId));
-  if (!propertyObjectIds.length) return false;
+    .filter((propertyId: string): propertyId is string => ObjectId.isValid(propertyId))));
+  if (!propertyIds.length) return false;
   const properties = await db.collection("properties").find({
-    _id: { $in: propertyObjectIds },
+    _id: { $in: identityValues(propertyIds) },
     ownerId: { $in: identityValues(scope.ownerId) },
-  }).project({ _id: 1 }).toArray();
+  } as any).project({ _id: 1 }).toArray();
   const ownerPropertyIds = new Set(properties.map((property: any) => String(property._id)));
 
   return tenants.every((tenant: any) => {
@@ -164,10 +163,9 @@ async function calculateBatchTenantDues(db: Db, tenantIds: string[]) {
     )
   );
   const propertyIds = allPropertyIds.filter((propertyId) => ObjectId.isValid(propertyId));
-  const propertyObjectIds = propertyIds.map((propertyId) => new ObjectId(propertyId));
   const [properties, rentOverrideMap] = await Promise.all([
-    propertyObjectIds.length > 0
-      ? db.collection("properties").find({ _id: { $in: propertyObjectIds } }).toArray()
+    propertyIds.length > 0
+      ? db.collection("properties").find({ _id: { $in: identityValues(propertyIds) } } as any).toArray()
       : Promise.resolve([]),
     fetchActiveRentOverridesByPropertyIds(db, allPropertyIds),
   ]);

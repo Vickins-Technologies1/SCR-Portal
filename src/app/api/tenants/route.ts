@@ -15,6 +15,8 @@ import { buildInvalidCsrfResponse } from "../../../lib/csrf";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
 import { findAnyExistingEmail, isDuplicateKeyError, normalizeEmail } from "@/lib/email-identity";
+import { identityValues } from "@/lib/payment-query";
+import { buildPropertyIdCandidates } from "@/lib/tenant-occupancy";
 
 const logger = {
   debug: (msg: string, meta?: any) => process.env.NODE_ENV !== "production" && console.debug(`[DEBUG] ${msg}`, meta || ""),
@@ -122,7 +124,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Invalid owner ID" }, { status: 400 });
     }
 
-    const filters: any = { ownerId: effectiveOwnerId, accountType: { $ne: "airbnb_guest" } };
+    const filters: any = { ownerId: { $in: identityValues(effectiveOwnerId) }, accountType: { $ne: "airbnb_guest" } };
     const andFilters: any[] = [];
     if (searchParams.get("name")) filters.name = { $regex: searchParams.get("name")!, $options: "i" };
     if (searchParams.get("email")) filters.email = { $regex: searchParams.get("email")!, $options: "i" };
@@ -137,9 +139,9 @@ export async function GET(request: NextRequest) {
       ) {
         return NextResponse.json({ success: true, tenants: [], total: 0, page, limit, totalPages: 0 }, { status: 200 });
       }
-      filters.propertyId = requestedPropertyId;
+      filters.propertyId = { $in: buildPropertyIdCandidates([requestedPropertyId]) };
     } else if (role === "teamMember" && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0) {
-      filters.propertyId = { $in: teamMemberAssignedPropertyIds };
+      filters.propertyId = { $in: buildPropertyIdCandidates(teamMemberAssignedPropertyIds) };
     }
     const unitTypeFilter = searchParams.get("unitType");
     if (unitTypeFilter) {

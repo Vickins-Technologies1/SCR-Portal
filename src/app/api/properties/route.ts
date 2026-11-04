@@ -12,6 +12,7 @@ import { resolveAccountTier } from '@/lib/tier';
 import { enforceLifetimeLimit } from '@/lib/lifetime';
 import { appendOwnerActivityFromRequest } from '@/lib/owner-activity';
 import { sanitizePropertyUtilities } from '@/lib/property-utilities';
+import { identityValues } from '@/lib/payment-query';
 
 const buildOccupiedByPropertyAndUnitIdentifier = async (
   db: Db,
@@ -256,7 +257,7 @@ export async function GET(request: NextRequest) {
     //           PROPERTY OWNER / TEAM MEMBER – enriched with occupiedUnits
     // ────────────────────────────────────────────────────────────────
     if (role === 'propertyOwner' || role === 'teamMember') {
-      const propertyQuery: any = { ownerId: effectiveOwnerId };
+      const propertyQuery: any = { ownerId: { $in: identityValues(effectiveOwnerId) } };
       if (role === 'teamMember' && teamMemberAssignedPropertyIds && teamMemberAssignedPropertyIds.length > 0) {
         propertyQuery._id = { $in: teamMemberAssignedPropertyIds.map((id) => new ObjectId(id)) };
       }

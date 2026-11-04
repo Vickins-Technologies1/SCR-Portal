@@ -5,9 +5,11 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { WithId, ObjectId } from "mongodb";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, reconcileTenantPaymentAllocation, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
-import { getFinancialReportSummary } from "@/lib/financial-reporting";
+import { calculateTenantFinancialState, reconcileTenantPaymentAllocation, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { identityValues } from "@/lib/payment-query";
+import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
+import { businessDateParts, businessMonthStart } from "@/lib/business-time";
 
 interface Property {
   _id: ObjectId;
@@ -83,10 +85,18 @@ export async function GET(request: NextRequest) {
   try {
     const { db } = await connectToDatabase();
 
-    // Fetch properties for the owner
+    const propertyFilter: Record<string, unknown> = {
+      ownerId: { $in: identityValues(userId) },
+      $or: [
+        { status: { $in: ["Active", "active"] } },
+        { status: { $exists: false } },
+      ],
+    };
+
+    // Fetch active properties for the owner, with both historical owner ID types.
     const properties = await db
       .collection("properties")
-      .find<WithId<Property>>({ ownerId: { $in: identityValues(userId) } })
+      .find<WithId<Property>>(propertyFilter)
       .toArray();
     const propertyIds = properties.map((p) => p._id.toString());
     const propertyMap = new Map(properties.map((p) => [p._id.toString(), p]));
@@ -108,10 +118,10 @@ export async function GET(request: NextRequest) {
 
     logger.debug("Properties fetched for ownerstats", { userId, propertyIds });
 
-    // Define current month range
-    const today = new Date(); // Use current date
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    const today = new Date();
+    const todayISO = today.toISOString();
+    const { year, month } = businessDateParts(today);
+    const startOfMonth = businessMonthStart(year, month - 1);
 
     const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, propertyIds);
 
@@ -119,82 +129,43 @@ export async function GET(request: NextRequest) {
     const totalUnitsResult = await db
       .collection("properties")
       .aggregate<{ totalUnits: number }>([
-        { $match: { ownerId: { $in: identityValues(userId) } } },
+        { $match: propertyFilter },
         { $unwind: "$unitTypes" },
         { $group: { _id: null, totalUnits: { $sum: "$unitTypes.quantity" } } },
       ])
       .toArray();
     const totalUnits = totalUnitsResult[0]?.totalUnits || 0;
 
-    // Tenants and occupied units aggregation
-    const tenantsResult = await db
-      .collection("tenants")
-      .aggregate<{
-        totalTenants: number;
-        occupiedUnits: number;
-        tenantIds: string[];
-      }>([
-        { $match: { propertyId: { $in: identityValues(propertyIds) } } },
-        {
-          $group: {
-            _id: null,
-            totalTenants: { $sum: 1 },
-            occupiedUnits: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $lte: ["$leaseStartDate", today.toISOString()] },
-                      { $gte: ["$leaseEndDate", today.toISOString()] },
-                      { $ne: ["$leaseStartDate", null] },
-                      { $ne: ["$leaseEndDate", null] },
-                    ],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
-            tenantIds: { $push: "$_id" },
-          },
-        },
-      ])
-      .toArray();
-    const { totalTenants = 0, occupiedUnits = 0, tenantIds = [] } = tenantsResult[0] || {};
+    const [allTenants, activeTenants] = await Promise.all([
+      db.collection("tenants").find({ propertyId: { $in: buildPropertyIdCandidates(propertyIds) } }).toArray(),
+      fetchTenantsActiveOnDay<Tenant>(db, propertyIds, today),
+    ]);
+    const totalTenants = allTenants.length;
+    const occupiedUnits = activeTenants.reduce((sum, tenant) => sum + countOccupiedUnitsForTenant(tenant), 0);
+    const tenantIds = allTenants.map((tenant: any) => tenant._id);
 
     logger.debug("Tenants fetched for ownerstats", { userId, tenantIds, totalTenants, occupiedUnits });
 
-    // Dashboard totals use the same net, reversal-aware projection as reports.
-    const [monthlySummary, lifetimeSummary] = await Promise.all([
-      getFinancialReportSummary({ db, propertyIds, start: startOfMonth, end: endOfMonth }),
-      getFinancialReportSummary({ db, propertyIds }),
+    const [monthlyRows, lifetimeRows] = await Promise.all([
+      getFinancialPaymentRows({ db, propertyIds, tenantIdsForLegacyPropertyless: tenantIds, start: startOfMonth, end: today }),
+      getFinancialPaymentRows({ db, propertyIds, tenantIdsForLegacyPropertyless: tenantIds, end: today }),
     ]);
-    const totalMonthlyRent = monthlySummary.netReceived;
-    const totalPayments = lifetimeSummary.netReceived;
-
-    const activeTenants = await db
-      .collection("tenants")
-      .find({
-        propertyId: { $in: identityValues(propertyIds) },
-        leaseStartDate: { $ne: null, $lte: today.toISOString() },
-        leaseEndDate: { $ne: null, $gte: today.toISOString() },
-      })
-      .toArray();
+    const totalMonthlyRent = summarizeFinancialPaymentRows(monthlyRows).netReceived;
+    const totalPayments = summarizeFinancialPaymentRows(lifetimeRows).netReceived;
 
     let overduePayments = 0;
-    let totalOverdueAmount = 0;
-
-    const bulkStates = await Promise.all(activeTenants.map(async (tenant) => ({
+    const allTenantStates = await Promise.all(allTenants.map(async (tenant) => ({
       tenant,
-      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(tenant.propertyId), asOf: today, rentOverrideMap }),
+      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(String(tenant.propertyId)), asOf: today, rentOverrideMap }),
     })));
-    const bulkOps = bulkStates.map(({ tenant, state }) => {
+    const activeTenantIds = new Set(activeTenants.map((tenant) => String(tenant._id)));
+    const activeStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
+    const bulkOps = activeStates.map(({ tenant, state }) => {
       const tenantObjectId = typeof tenant._id === "string" ? new ObjectId(tenant._id) : tenant._id;
       const totalOverdue = state.overdueAmount;
 
       if (totalOverdue > 0) {
         overduePayments += 1;
-        totalOverdueAmount += totalOverdue;
       }
 
       return {
@@ -203,12 +174,13 @@ export async function GET(request: NextRequest) {
           update: {
             $set: {
               paymentStatus: tenantOverdueStatus(state),
-              updatedAt: today.toISOString(),
+              updatedAt: todayISO,
             },
           },
         },
       };
     });
+    const totalOverdueAmount = sumTenantOverdueAmount(allTenantStates.map(({ state }) => state));
 
     if (bulkOps.length > 0) {
       await db.collection("tenants").bulkWrite(bulkOps);

@@ -122,9 +122,13 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
       label: "Total Deposit Paid",
       value: formatCurrency(tenant.totalDepositPaid),
       className: "text-amber-600 font-semibold",
-      note: tenant.totalDepositPaid >= tenant.deposit
-        ? "Deposit Fully Paid"
-        : `${formatCurrency(tenant.deposit - tenant.totalDepositPaid)} remaining`,
+      note: tenant.dues?.depositDues != null
+        ? tenant.dues.depositDues <= 0
+          ? "Deposit Fully Paid"
+          : `${formatCurrency(tenant.dues.depositDues)} remaining`
+        : tenant.totalDepositPaid >= tenant.deposit
+          ? "Deposit Fully Paid"
+          : `${formatCurrency(tenant.deposit - tenant.totalDepositPaid)} remaining`,
     },
     {
       label: "Total Utility Paid",

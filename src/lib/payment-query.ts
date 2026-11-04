@@ -112,11 +112,16 @@ export function paymentDateRangeFilter(start?: Date, end?: Date) {
 
 export function prorateAllocation(allocation: Record<string, unknown> | null | undefined, original: number, net: number) {
   const ratio = original > 0 ? Math.max(0, Math.min(1, net / original)) : 0;
+  const walletCreditCategory = String(allocation?.walletCreditCategory || "");
+  const validWalletCreditCategory = ["deposit", "rent", "utilities", "other"].includes(walletCreditCategory)
+    ? walletCreditCategory as "deposit" | "rent" | "utilities" | "other"
+    : undefined;
   return {
     rent: money(money(allocation?.rent) * ratio),
     utilities: money(money(allocation?.utilities) * ratio),
     deposit: money(money(allocation?.deposit) * ratio),
     other: money(money(allocation?.other) * ratio),
     walletCredit: money(money(allocation?.walletCredit) * ratio),
+    ...(validWalletCreditCategory ? { walletCreditCategory: validWalletCreditCategory } : {}),
   };
 }

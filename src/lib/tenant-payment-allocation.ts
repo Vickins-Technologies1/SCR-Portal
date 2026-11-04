@@ -13,6 +13,7 @@ export type PaymentAllocation = {
   utilities: number;
   other: number;
   walletCredit: number;
+  walletCreditCategory?: AllocationField;
   walletApplied: number;
   walletAllocation?: Partial<Record<AllocationField, number>>;
   utilityAllocations?: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }>;
@@ -92,6 +93,12 @@ export function sumTenantDepositPaid(states: Iterable<Pick<TenantFinancialState,
   return money(total);
 }
 
+export function sumTenantDepositOutstanding(states: Iterable<Pick<TenantFinancialState, "depositOutstanding">>) {
+  let total = 0;
+  for (const state of states) total += amountOf(state.depositOutstanding);
+  return money(total);
+}
+
 export function sumTenantOverdueAmount(
   states: Iterable<Pick<TenantFinancialState, "overdueAmount">>
 ) {
@@ -142,7 +149,7 @@ export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): L
     // no stored allocation, but do not reintroduce the unreversed snapshot.
     allocation: row.payment.allocation
       ? row.allocation
-      : row.payment.allocationPolicyVersion === "deposit-first-v1"
+      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2"
         ? undefined
         : row.allocation,
   })) as LedgerPayment[];
@@ -171,13 +178,13 @@ export function allocatePaymentLedger(params: {
     utilities: amountOf(params.utilityDue),
     other: amountOf(params.otherDue),
   };
-  const walletLots: Array<{ paymentId: string; remaining: number }> = [];
+  const walletLots: Array<{ paymentId: string; remaining: number; allowedFields?: AllocationField[] }> = [];
   const allocations = new Map<string, PaymentAllocation>();
 
-  const applyReceiptFunds = (available: number) => {
+  const applyReceiptFunds = (available: number, fields = allocationPriority()) => {
     let remaining = amountOf(available);
     const appliedByField: Record<AllocationField, number> = { deposit: 0, rent: 0, utilities: 0, other: 0 };
-    for (const field of allocationPriority()) {
+    for (const field of fields) {
       if (remaining <= 0) break;
       const outstanding = money(Math.max(0, due[field] - paid[field]));
       const applied = money(Math.min(outstanding, remaining));
@@ -186,6 +193,33 @@ export function allocatePaymentLedger(params: {
       remaining = money(remaining - applied);
     }
     return { appliedByField, remaining };
+  };
+
+  const applyTypedReceiptFunds = (payment: LedgerPayment, amount: number) => {
+    const legacyDepositFirst = payment.allocationPolicyVersion === "deposit-first-v1";
+    if (legacyDepositFirst || payment.type === "General" || !payment.type) {
+      return applyReceiptFunds(amount);
+    }
+
+    const fieldByType: Partial<Record<PaymentCategory, AllocationField>> = {
+      Deposit: "deposit",
+      Rent: "rent",
+      Utility: "utilities",
+      Other: "other",
+    };
+    const field = fieldByType[payment.type];
+    if (!field) return applyReceiptFunds(amount, []);
+
+    // A security-deposit receipt remains a deposit collection even when it
+    // exceeds today's obligation. It must not be reclassified as rent or
+    // utilities, and the outstanding deposit balance is capped separately.
+    if (field === "deposit") {
+      const appliedByField: Record<AllocationField, number> = { deposit: amountOf(amount), rent: 0, utilities: 0, other: 0 };
+      paid.deposit = money(paid.deposit + appliedByField.deposit);
+      return { appliedByField, remaining: 0 };
+    }
+
+    return applyReceiptFunds(amount, [field]);
   };
 
   const applyWalletCredit = () => {
@@ -197,6 +231,7 @@ export function allocatePaymentLedger(params: {
       for (const lot of walletLots) {
         if (outstanding <= 0) break;
         if (lot.remaining <= 0) continue;
+        if (lot.allowedFields && !lot.allowedFields.includes(field)) continue;
         const amount = money(Math.min(outstanding, lot.remaining));
         if (amount <= 0) continue;
         const sourceAllocation = allocations.get(lot.paymentId);
@@ -216,9 +251,9 @@ export function allocatePaymentLedger(params: {
     return { applied, byField };
   };
 
-  const queueWalletCredit = (paymentId: string, amount: number) => {
+  const queueWalletCredit = (paymentId: string, amount: number, allowedFields?: AllocationField[]) => {
     const remaining = amountOf(amount);
-    if (remaining > 0) walletLots.push({ paymentId, remaining });
+    if (remaining > 0) walletLots.push({ paymentId, remaining, allowedFields });
   };
 
   for (const payment of params.payments.filter((entry) => isSuccessfulPaymentStatus(entry.status))) {
@@ -245,17 +280,19 @@ export function allocatePaymentLedger(params: {
       walletCredit = money(Math.min(fixedWalletCredit || remainingReceipt, remainingReceipt));
       remainingReceipt = money(remainingReceipt - walletCredit);
       walletCredit = money(walletCredit + remainingReceipt);
+      const walletCreditCategory = payment.allocation.walletCreditCategory;
       const sourceAllocation: PaymentAllocation = {
         deposit: money(receiptAllocation.deposit),
         rent: money(receiptAllocation.rent),
         utilities: money(receiptAllocation.utilities),
         other: money(receiptAllocation.other),
         walletCredit,
+        ...(walletCreditCategory ? { walletCreditCategory } : {}),
         walletApplied: 0,
         walletAllocation: { deposit: 0, rent: 0, utilities: 0, other: 0 },
       };
       allocations.set(paymentId, sourceAllocation);
-      queueWalletCredit(paymentId, walletCredit);
+      queueWalletCredit(paymentId, walletCredit, walletCreditCategory ? [walletCreditCategory] : undefined);
       // Persisted wallet credits are available for today's eligible dues even
       // when there is no newer payment row. The debit remains linked to the
       // original payment that created the wallet credit.
@@ -263,7 +300,7 @@ export function allocatePaymentLedger(params: {
       continue;
     }
 
-    const receiptResult = applyReceiptFunds(paymentAmount);
+    const receiptResult = applyTypedReceiptFunds(payment, paymentAmount);
     receiptAllocation = receiptResult.appliedByField;
     walletCredit = receiptResult.remaining;
     const sourceAllocation: PaymentAllocation = {
@@ -272,6 +309,9 @@ export function allocatePaymentLedger(params: {
       utilities: money(receiptAllocation.utilities),
       other: money(receiptAllocation.other),
       walletCredit,
+      ...(walletCredit > 0 && payment.type && payment.type !== "General" && payment.type !== "Deposit"
+        ? { walletCreditCategory: payment.type === "Utility" ? "utilities" : payment.type.toLowerCase() as AllocationField }
+        : {}),
       walletApplied: 0,
       walletAllocation: { deposit: 0, rent: 0, utilities: 0, other: 0 },
     };
@@ -281,7 +321,11 @@ export function allocatePaymentLedger(params: {
     if (walletLots.some((lot) => lot.remaining > 0) && allocationPriority().some((field) => due[field] - paid[field] > 0)) {
       applyWalletCredit();
     }
-    queueWalletCredit(paymentId, walletCredit);
+    queueWalletCredit(
+      paymentId,
+      walletCredit,
+      sourceAllocation.walletCreditCategory ? [sourceAllocation.walletCreditCategory] : undefined,
+    );
   }
 
   const wallet = money(walletLots.reduce((sum, lot) => sum + lot.remaining, 0));

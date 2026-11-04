@@ -4,6 +4,8 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { ObjectId } from "mongodb";
 import { getFinancialPaymentRows, summarizeFinancialPaymentPeriods } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
+import { identityValues } from "@/lib/payment-query";
+import { buildPropertyIdCandidates } from "@/lib/tenant-occupancy";
 
 interface ChartData {
   months: string[];
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
     const { db } = await connectToDatabase();
     const teamMember = await db.collection("teamMembers").findOne({
       _id: new ObjectId(loggedInUserId),
-      ownerId: new ObjectId(requestedOwnerId),
+      ownerId: { $in: identityValues(requestedOwnerId) },
       active: true,
     });
 
@@ -105,14 +107,14 @@ export async function GET(request: NextRequest) {
 
     // Fetch properties for the owner (optionally filtered by assignment / selection)
     const propertyQuery: Record<string, unknown> = {
-      ownerId: effectiveOwnerId,
+      ownerId: { $in: identityValues(effectiveOwnerId) },
       $or: [
         { status: { $in: ["Active", "active"] } },
         { status: { $exists: false } },
       ],
     };
     if (allowedPropertyIds) {
-      propertyQuery._id = { $in: allowedPropertyIds.map((id) => new ObjectId(id)) };
+      propertyQuery._id = { $in: allowedPropertyIds.flatMap((id) => identityValues(id)) };
     }
 
     const properties = await db
@@ -155,7 +157,9 @@ export async function GET(request: NextRequest) {
     // The saved payment allocation is a snapshot and can be stale when an
     // earlier payment was reallocated after a lease or utility change. Use
     // the same tenant ledger calculation as the owner dashboard cards.
-    const tenants = await db.collection("tenants").find({ propertyId: { $in: propertyIds } }).toArray();
+    const tenants = await db.collection("tenants")
+      .find({ propertyId: { $in: buildPropertyIdCandidates(propertyIds) } })
+      .toArray();
 
     const monthBuckets = Array.from({ length: 6 }, (_, i) => {
       const monthDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));

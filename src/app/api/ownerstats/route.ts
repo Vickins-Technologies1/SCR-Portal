@@ -4,10 +4,11 @@ import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { WithId, ObjectId } from "mongodb";
 import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialState, sumTenantDepositOutstanding, sumTenantDepositPaid, sumTenantOverdueAmount, tenantOverdueStatus } from "@/lib/tenant-payment-allocation";
 import { buildPropertyIdCandidates, countOccupiedUnitsForTenant, fetchTenantsActiveOnDay, fetchTenantsOverlappingRange } from "@/lib/tenant-occupancy";
 import { getFinancialPaymentRows, summarizeFinancialPaymentRows } from "@/lib/financial-reporting";
 import { businessMonthStart } from "@/lib/business-time";
+import { identityValues } from "@/lib/payment-query";
 
 interface Property {
   _id: string;
@@ -60,7 +61,7 @@ interface Stats {
   totalUtilityPaid: number;
 }
 
-const roundMoney = (value: number) => Math.round(value || 0);
+const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 const ACTIVE_PROPERTY_STATUSES = ["Active", "active"] as const;
 
 export async function GET(request: NextRequest) {
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
     const { db } = await connectToDatabase();
     const teamMember = await db.collection("teamMembers").findOne({
       _id: new ObjectId(loggedInUserId),
-      ownerId: new ObjectId(requestedOwnerId),
+      ownerId: { $in: identityValues(requestedOwnerId) },
       active: true,
     });
 
@@ -153,7 +154,7 @@ export async function GET(request: NextRequest) {
           : null;
 
     const propertyFilter: Record<string, unknown> = {
-      ownerId: effectiveOwnerId,
+      ownerId: { $in: identityValues(effectiveOwnerId) },
       $or: [
         { status: { $in: ACTIVE_PROPERTY_STATUSES } },
         { status: { $exists: false } },
@@ -161,7 +162,7 @@ export async function GET(request: NextRequest) {
     };
 
     if (allowedPropertyIds) {
-      propertyFilter._id = { $in: allowedPropertyIds.map((id) => new ObjectId(id)) };
+      propertyFilter._id = { $in: allowedPropertyIds.flatMap((id) => identityValues(id)) };
     }
 
     // Fetch active properties for the owner
@@ -267,7 +268,11 @@ export async function GET(request: NextRequest) {
     // states are independently recalculated for outstanding balances.
     const allTenantStates = await Promise.all(tenantsForFinancials.map(async (tenant: any) => ({
       tenant,
-      state: await calculateTenantFinancialState(db, tenant, { property: propertyMap.get(String(tenant.propertyId)), asOf: today }),
+      state: await calculateTenantFinancialState(db, tenant, {
+        property: propertyMap.get(String(tenant.propertyId)),
+        asOf: today,
+        rentOverrideMap,
+      }),
     })));
     const monthlySummary = summarizeFinancialPaymentRows(monthlyRows);
     const lifetimeSummary = summarizeFinancialPaymentRows(lifetimeRows);
@@ -285,15 +290,12 @@ export async function GET(request: NextRequest) {
 
     let overduePayments = 0;
     let totalPenaltyAmount = 0;
-    let totalDepositDue = 0;
 
     const activeTenantIds = new Set(activeTenantsForDues.map((tenant) => String(tenant._id)));
     const tenantStates = allTenantStates.filter(({ tenant }) => activeTenantIds.has(String(tenant._id)));
     overduePayments = tenantStates.filter(({ state }) => state.overdueAmount > 0).length;
     const bulkOps = tenantStates.map(({ tenant, state }) => {
       totalPenaltyAmount += state.penalties;
-      totalDepositDue += state.depositOutstanding;
-
       return {
         updateOne: {
           filter: { _id: tenant._id },
@@ -316,7 +318,11 @@ export async function GET(request: NextRequest) {
     // ignores payments whose allocation was split across charges.
     // Deposits remain held after tenancy ends, so the collected metric includes
     // every tenant ledger attached to an active owner property.
-    const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantStates.map(({ state }) => state)));
+    const allTenantFinancialStates = allTenantStates.map(({ state }) => state);
+    const totalDepositPaid = roundMoney(sumTenantDepositPaid(allTenantFinancialStates));
+    // Collected and due deposits use the same tenant population so former
+    // tenants and legacy leases cannot make the owner totals disagree.
+    const totalDepositDue = roundMoney(sumTenantDepositOutstanding(allTenantFinancialStates));
     // The overdue balance card represents the outstanding balance across every
     // tenant ledger on the selected owner properties. Keep the overdue tenant
     // count scoped to current occupants above, but include former tenants with
@@ -350,7 +356,7 @@ export async function GET(request: NextRequest) {
       expectedMonthlyRent,
       totalMonthlyRent,
       totalRentPaid,
-      totalDepositDue: roundMoney(totalDepositDue),
+      totalDepositDue,
       overduePayments,
       totalPayments,
       totalOverdueAmount: totalOverdueFromComponents,

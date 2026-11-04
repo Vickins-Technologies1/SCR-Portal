@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
-import { Tenant, ResponseTenant, TenantRequest } from "../../../../types/tenant";
+import { Tenant, TenantRequest } from "../../../../types/tenant";
 import { Property } from "../../../../types/property";
 import { sendTenantDeletionRequestEmail } from "../../../../lib/email";
 import { sendWelcomeSms } from "../../../../lib/sms";
@@ -12,6 +12,7 @@ import { sendWhatsAppMessage } from "../../../../lib/whatsapp";
 import { buildInvalidCsrfResponse } from "../../../../lib/csrf";
 import { fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import { appendOwnerActivityFromRequest } from "@/lib/owner-activity";
+import { identityValues } from "@/lib/payment-query";
 
 const logger = {
   info: (msg: string, meta?: any) => console.info(`[INFO] ${msg}`, meta || ""),
@@ -114,17 +115,17 @@ export async function GET(
 
     const tenant = await db.collection<Tenant>("tenants").findOne({
       _id: new ObjectId(tenantId),
-      ownerId: effectiveOwnerId,
-    });
+      ownerId: { $in: identityValues(effectiveOwnerId) },
+    } as any);
 
     if (!tenant) {
       return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
     }
 
     const property = await db.collection<Property>("properties").findOne({
-      _id: new ObjectId(tenant.propertyId),
-      ownerId: effectiveOwnerId,
-    });
+      _id: { $in: identityValues(tenant.propertyId) },
+      ownerId: { $in: identityValues(effectiveOwnerId) },
+    } as any);
 
     if (!property) {
       return NextResponse.json({ success: false, message: "Property not found" }, { status: 404 });

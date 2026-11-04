@@ -34,6 +34,7 @@ export type FinancialPaymentRow = {
     deposit: number;
     other: number;
     walletCredit: number;
+    walletCreditCategory?: "deposit" | "rent" | "utilities" | "other";
   };
 };
 

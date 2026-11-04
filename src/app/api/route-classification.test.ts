@@ -21,6 +21,7 @@ const API_ROOT_CLASS: Record<string, string> = {
   "system-errors": "ingest-or-admin", "team-members": "owner", tenant: "tenant",
   "tenant-invoices": "tenant-or-owner", tenants: "owner-or-tenant", "transaction-status": "session", tuma: "held-unverified-provider-callback",
   "update-wallet": "owner", upload: "session", user: "session", "utility-charges": "owner",
+  webhooks: "signed-provider-callback", "whatsapp-preferences": "session-csrf-and-consent",
 };
 
 function routeFiles(directory: string): string[] {

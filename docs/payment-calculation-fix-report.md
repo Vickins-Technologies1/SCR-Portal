@@ -4,6 +4,8 @@
 
 Phase 2 corrections for findings F-01 through F-07 are implemented in application code and covered by unit tests. Project validation passed with one existing test skipped. No production services were contacted, no reminders were sent, no database records or schema were changed, and no deployment was performed.
 
+> Historical note: the allocation behavior described in F-02 below was superseded on 2026-11-04 by the category-directed v2 policy. See [the system-wide financial calculation audit report](system-wide-financial-calculation-audit-report.md) for the current rules and validation results. Existing v1 allocations remain unchanged.
+
 ## Finding-by-finding results
 
 | Finding | Re-evaluation and change | Regression coverage and result | Remaining uncertainty |
