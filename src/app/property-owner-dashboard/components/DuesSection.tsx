@@ -26,7 +26,7 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
         <div className="relative group">
           <Info className="h-4 w-4 text-muted-foreground cursor-help" />
           <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block bg-gray-900 text-white text-[11px] rounded-lg py-2 px-3 whitespace-nowrap z-10 shadow-lg">
-            Includes current month for accuracy
+            The overdue and current portions are shown separately in the rent and utility cards.
           </span>
         </div>
       </div>
@@ -45,10 +45,20 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
           <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {/* Rent Dues */}
             <div className="surface-card rounded-2xl p-4 border-l-4 border-amber-400">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700">Rent</p>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700">Rent + penalties</p>
               <p className="text-base sm:text-lg font-semibold text-amber-700 mt-2">
                 Ksh {dues.rentDues.toFixed(0)}
               </p>
+              {dues.rentOverdueDues != null && dues.rentCurrentDues != null && (
+                <p className="mt-1 text-[10px] text-amber-800">
+                  Overdue rent Ksh {dues.rentOverdueDues.toLocaleString("en-KE")} · Current rent Ksh {dues.rentCurrentDues.toLocaleString("en-KE")}
+                </p>
+              )}
+              {(dues.penaltyDues ?? 0) > 0 && (
+                <p className="mt-1 text-[10px] text-amber-800">
+                  Penalties Ksh {Number(dues.penaltyDues).toLocaleString("en-KE")}
+                </p>
+              )}
             </div>
 
             {/* Utility Dues */}
@@ -57,6 +67,11 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
               <p className="text-base sm:text-lg font-semibold text-sky-700 mt-2">
                 Ksh {dues.utilityDues.toFixed(0)}
               </p>
+              {dues.utilityOverdueDues != null && dues.utilityCurrentDues != null && (
+                <p className="mt-1 text-[10px] text-sky-800">
+                  Overdue Ksh {dues.utilityOverdueDues.toLocaleString("en-KE")} · Current Ksh {dues.utilityCurrentDues.toLocaleString("en-KE")}
+                </p>
+              )}
             </div>
 
             {/* Deposit Dues */}

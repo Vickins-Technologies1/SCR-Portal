@@ -5,15 +5,15 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
-import { resolveTenantMonthlyRentForDate } from "@/lib/utils";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { countOccupiedUnitsForTenant, fetchTenantsActiveOnDay } from "@/lib/tenant-occupancy";
 import {
   calculateTenantFinancialState,
   reconcileTenantPaymentAllocation,
-  type TenantFinancialState,
 } from "@/lib/tenant-payment-allocation";
 import { getFinancialReportSummary } from "@/lib/financial-reporting";
+import { identityValues } from "@/lib/payment-query";
+import { buildTenantDuesResponse } from "@/lib/tenant-dues-response";
 
 interface Tenant {
   _id: ObjectId;
@@ -54,8 +54,65 @@ interface Stats {
   totalOverdueAmount: number;
 }
 
+interface OwnerScope {
+  ownerId: string;
+  assignedPropertyIds: string[] | null;
+}
+
+async function resolveOwnerScope(request: NextRequest, db: Db): Promise<OwnerScope | null> {
+  const sessionUserId = request.cookies.get("userId")?.value;
+  const role = request.cookies.get("role")?.value;
+  if (!sessionUserId || !ObjectId.isValid(sessionUserId)) return null;
+
+  if (role === "propertyOwner") return { ownerId: sessionUserId, assignedPropertyIds: null };
+  if (role !== "teamMember") return null;
+
+  const teamMember = await db.collection("teamMembers").findOne({
+    _id: new ObjectId(sessionUserId),
+    active: true,
+  });
+  if (!teamMember?.ownerId || !ObjectId.isValid(String(teamMember.ownerId))) return null;
+
+  const assignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
+    ? Array.from(new Set<string>((teamMember as any).assignedPropertyIds
+        .map((value: unknown): string => String(value || "").trim())
+        .filter((value: string): value is string => ObjectId.isValid(value))))
+    : null;
+
+  return {
+    ownerId: String(teamMember.ownerId),
+    assignedPropertyIds: assignedPropertyIds?.length ? assignedPropertyIds : null,
+  };
+}
+
+async function tenantIdsBelongToOwner(db: Db, tenantIds: string[], scope: OwnerScope): Promise<boolean> {
+  const uniqueTenantIds = Array.from(new Set(tenantIds));
+  const tenantObjectIds = uniqueTenantIds.map((id) => new ObjectId(id));
+  const tenants = await db.collection("tenants").find({
+    _id: { $in: tenantObjectIds },
+    ownerId: { $in: identityValues(scope.ownerId) },
+  }).toArray();
+  if (tenants.length !== uniqueTenantIds.length) return false;
+
+  const propertyObjectIds = Array.from(new Set<string>(tenants
+    .map((tenant: any): string => String(tenant.propertyId || ""))
+    .filter((propertyId: string): propertyId is string => ObjectId.isValid(propertyId))))
+    .map((propertyId) => new ObjectId(propertyId));
+  if (!propertyObjectIds.length) return false;
+  const properties = await db.collection("properties").find({
+    _id: { $in: propertyObjectIds },
+    ownerId: { $in: identityValues(scope.ownerId) },
+  }).project({ _id: 1 }).toArray();
+  const ownerPropertyIds = new Set(properties.map((property: any) => String(property._id)));
+
+  return tenants.every((tenant: any) => {
+    const propertyId = String(tenant.propertyId || "");
+    return ownerPropertyIds.has(propertyId) &&
+      (!scope.assignedPropertyIds || scope.assignedPropertyIds.includes(propertyId));
+  });
+}
+
 async function calculateTenantDues(db: Db, tenantId: string, today = new Date()) {
-  const todayISO = today.toISOString();
   const tenant = await db
     .collection<Tenant>("tenants")
     .findOne({ _id: new ObjectId(tenantId) });
@@ -64,140 +121,8 @@ async function calculateTenantDues(db: Db, tenantId: string, today = new Date())
 
   const allocation = await reconcileTenantPaymentAllocation(db, tenantId);
   if (!allocation) return null;
-
-  const rentPaid = allocation.rentPaid;
-  const depositPaid = allocation.depositPaid;
-  const utilityPaid = allocation.utilityPaid;
-  const otherPaid = allocation.otherPaid;
   const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenant.propertyId]);
-  const monthsStayed = allocation.monthsStayed;
-  const rentDue = allocation.rentDue;
-  const updatedTotalRentPaid = allocation.rentPaid;
-  const totalDeposit = allocation.depositDue;
-  const updatedWalletBalance = allocation.walletBalance;
-  const baseRentDues = allocation.rentOutstanding;
-  const penaltyDues = allocation.penalties;
-  const rentDues = Math.max(0, baseRentDues + penaltyDues);
-  const depositDues = allocation.depositOutstanding;
-  const utilityDues = allocation.utilitiesOutstanding;
-  const totalRemainingDues = allocation.totalOutstanding;
-  const paymentStatus = allocation.overdueAmount > 0 ? "overdue" : "up-to-date";
-
-  await db.collection<Tenant>("tenants").updateOne(
-    { _id: new ObjectId(tenantId) },
-    {
-      $set: {
-        totalRentPaid: updatedTotalRentPaid,
-        totalDepositPaid: depositPaid,
-        totalUtilityPaid: utilityPaid,
-        totalOtherPaid: otherPaid,
-        walletBalance: updatedWalletBalance,
-        paymentStatus,
-        updatedAt: todayISO,
-      },
-    }
-  );
-
-  const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
-    tenant: tenant as any,
-    date: today,
-    rentOverrideMap,
-  });
-
-  const dues = {
-    rentDues,
-    rentOutstanding: baseRentDues,
-    penaltyDues,
-    depositDues,
-    utilityDues,
-    utilityCurrentDues: allocation.utilitiesCurrentOutstanding,
-    utilityOverdueDues: allocation.utilitiesOverdueOutstanding,
-    utilityStatus: allocation.utilityStatus,
-    overdueAmount: allocation.overdueAmount,
-    otherDues: allocation.otherOutstanding,
-    totalRemainingDues,
-    totalPaid: rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance,
-    walletApplied: allocation.walletApplied,
-    walletRemaining: updatedWalletBalance,
-    walletCoverageMonths: effectiveMonthlyRent ? Math.floor(updatedWalletBalance / effectiveMonthlyRent) : 0,
-    walletCoverageRemainder: effectiveMonthlyRent ? updatedWalletBalance % effectiveMonthlyRent : updatedWalletBalance,
-  };
-
-  logger.info("Tenant dues recalculated and totals synced", {
-    tenantId,
-    monthsStayed,
-    rentDue,
-    depositDue: totalDeposit,
-    rentPaid,
-    depositPaid,
-    totalRemainingDues,
-  });
-
-  return {
-    tenant: {
-      ...tenant,
-      _id: tenant._id.toString(),
-      totalRentPaid: updatedTotalRentPaid,
-      totalDepositPaid: depositPaid,
-      totalUtilityPaid: utilityPaid,
-      totalOtherPaid: otherPaid,
-      walletBalance: updatedWalletBalance,
-      paymentStatus,
-      updatedAt: todayISO,
-    },
-    dues,
-    monthsStayed,
-  };
-}
-
-function buildTenantDuesResponse(
-  tenant: Tenant,
-  state: TenantFinancialState,
-  today: Date,
-  rentOverrideMap: Map<string, any>
-) {
-  const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
-    tenant: tenant as any,
-    date: today,
-    rentOverrideMap,
-  });
-  const totalRemainingDues = state.totalOutstanding;
-  const paymentStatus = state.overdueAmount > 0 ? "overdue" : "up-to-date";
-
-  return {
-    tenant: {
-      ...tenant,
-      _id: tenant._id.toString(),
-      totalRentPaid: state.rentPaid,
-      totalDepositPaid: state.depositPaid,
-      totalUtilityPaid: state.utilitiesPaid,
-      totalOtherPaid: state.otherPaid,
-      walletBalance: state.walletBalance,
-      paymentStatus,
-      updatedAt: today.toISOString(),
-    },
-    dues: {
-      rentDues: Math.max(0, state.rentOutstanding + state.penalties),
-      rentOutstanding: state.rentOutstanding,
-      penaltyDues: state.penalties,
-      depositDues: state.depositOutstanding,
-      utilityDues: state.utilitiesOutstanding,
-      utilityCurrentDues: state.utilitiesCurrentOutstanding,
-      utilityOverdueDues: state.utilitiesOverdueOutstanding,
-      utilityStatus: state.utilityStatus,
-      overdueAmount: state.overdueAmount,
-      otherDues: 0,
-      totalRemainingDues,
-      totalPaid: state.rentPaid + state.utilitiesPaid + state.depositPaid + state.otherPaid + state.walletBalance,
-      walletApplied: state.walletApplied,
-      walletRemaining: state.walletBalance,
-      walletCoverageMonths: effectiveMonthlyRent ? Math.floor(state.walletBalance / effectiveMonthlyRent) : 0,
-      walletCoverageRemainder: effectiveMonthlyRent
-        ? state.walletBalance % effectiveMonthlyRent
-        : state.walletBalance,
-    },
-    monthsStayed: state.monthsStayed,
-  };
+  return buildTenantDuesResponse(tenant, allocation.financialState, today, rentOverrideMap);
 }
 
 async function mapWithConcurrency<T, TResult>(
@@ -281,12 +206,26 @@ export async function GET(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const scope = await resolveOwnerScope(request, db);
+    if (!scope) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    if (userId !== scope.ownerId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
     const today = new Date();
     const todayISO = today.toISOString();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const properties = await db.collection("properties").find({ ownerId: userId }).toArray();
+    const propertyFilter: Record<string, unknown> = {
+      ownerId: { $in: identityValues(scope.ownerId) },
+    };
+    if (scope.assignedPropertyIds) {
+      propertyFilter._id = { $in: identityValues(scope.assignedPropertyIds) };
+    }
+    const properties = await db.collection("properties").find(propertyFilter).toArray();
     const propertyIds = properties.map((p: any) => p._id.toString());
     const propertyMap = new Map(properties.map((p: any) => [p._id.toString(), p]));
 
@@ -309,7 +248,7 @@ export async function GET(request: NextRequest) {
     // 1. Total Units
     const totalUnitsResult = await db.collection("properties")
       .aggregate([
-        { $match: { ownerId: userId } },
+        { $match: propertyFilter },
         { $unwind: "$unitTypes" },
         { $group: { _id: null, totalUnits: { $sum: "$unitTypes.quantity" } } },
       ])
@@ -408,6 +347,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
+    const scope = await resolveOwnerScope(request, db);
+    if (!scope) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+    if (body.userId !== scope.ownerId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    }
+
+    const requestedTenantIds = tenantIds || [tenantId];
+    if (!(await tenantIdsBelongToOwner(db, requestedTenantIds, scope))) {
+      return NextResponse.json({ success: false, message: "Tenant not found" }, { status: 404 });
+    }
 
     if (tenantIds) {
       const results = await calculateBatchTenantDues(db, tenantIds);

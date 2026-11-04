@@ -615,6 +615,7 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string,
   );
 
   return {
+    financialState: state,
     monthsStayed: state.monthsStayed,
     rentPaid: money(rentPaid),
     utilityPaid: money(utilitiesPaid),
