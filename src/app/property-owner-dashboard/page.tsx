@@ -772,66 +772,6 @@ export default function PropertyOwnerDashboard() {
                     )}
                   </section>
 
-                  {!isFree && (
-                    <section className="mt-6 surface-card rounded-3xl p-5 sm:p-6">
-                      <h2 className="text-sm sm:text-base font-semibold text-foreground mb-4">Financial reconciliation</h2>
-                      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-                        {[
-                          {
-                            title: "Rent",
-                            rows: [
-                              ["Expected to date", stats.totalExpectedRent],
-                              ["Collected", stats.totalRentPaid],
-                              ["Outstanding", stats.totalRentOutstanding],
-                              ["Overdue", stats.totalOverdueRent],
-                            ],
-                          },
-                          {
-                            title: "Utilities",
-                            rows: [
-                              ["Expected to date", stats.totalExpectedUtilities],
-                              ["Collected", stats.totalUtilityPaid],
-                              ["Outstanding", stats.totalUtilitiesOutstanding],
-                              ["Overdue", stats.totalOverdueUtilities],
-                            ],
-                          },
-                          {
-                            title: "Security deposits",
-                            rows: [
-                              ["Expected", stats.totalExpectedDeposits],
-                              ["Received", stats.totalDepositPaid],
-                              ["Due", stats.totalDepositDue],
-                              ["Total outstanding", stats.totalOutstanding],
-                            ],
-                          },
-                          {
-                            title: "Portfolio",
-                            rows: [
-                              ["Eligible receipts received", stats.totalPayments],
-                              ["Total outstanding", stats.totalOutstanding],
-                              ["Penalties", stats.totalPenaltyAmount],
-                            ],
-                          },
-                        ].map((group) => (
-                          <div key={group.title} className="rounded-2xl border border-border p-4">
-                            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</h3>
-                            <dl className="mt-3 space-y-2">
-                              {group.rows.map(([label, value]) => (
-                                <div key={String(label)} className="flex items-center justify-between gap-3 text-sm">
-                                  <dt className="text-muted-foreground">{label}</dt>
-                                  <dd className="font-medium text-foreground">{formatCurrency(Number(value) || 0)}</dd>
-                                </div>
-                              ))}
-                            </dl>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        Balances include former tenants. Deposit overpayments remain deposit receipts and do not reduce rent. Eligible property linked receipts without a tenant link are included in portfolio receipts.
-                      </p>
-                    </section>
-                  )}
-
                   {/* CHARTS */}
                   {isFree ? (
                     <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
