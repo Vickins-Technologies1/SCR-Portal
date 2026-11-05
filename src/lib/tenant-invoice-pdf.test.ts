@@ -28,7 +28,7 @@ describe("generateTenantInvoicePdf", () => {
       invoiceNumber: "RENT-202610-LONG-NAME", issueDate: "2026-10-01", dueDate: "2026-10-05", billingPeriod: "2026-10", status: "partially_paid",
       tenantName: "Alexandria Longlastname-ExtremelyLongUnitName", tenantEmail: "tenant@example.com", propertyName: "An Incredibly Long Property Name With Multiple Sections", propertyAddress: "123 Very Long Road, Building North, Suite 1402, Nairobi, Kenya",
       unitLabel: "North Tower Unit 1402", items, totalMinor: 105000, amountPaidMinor: 15000,
-      landlordName: "A Property Manager With a Very Long Name", landlordEmail: "manager@example.com", landlordPhone: "+254700000000",
+      landlordName: "A Property Manager With a Very Long Name", landlordEmail: "manager@example.com",
       paymentInstructions: instructions,
     });
     const pdf = await PDFDocument.load(result.pdfBytes);

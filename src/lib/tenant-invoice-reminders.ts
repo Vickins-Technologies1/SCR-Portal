@@ -121,7 +121,7 @@ export async function sendTenantInvoiceReminders(today = new Date()) {
           totalMinor: latestInvoice.totalMinor, originalInvoiceTotalMinor: latestInvoice.originalInvoiceTotalMinor,
           amountPaidMinor: latestInvoice.amountPaidMinor, balanceMinor, walletCreditAppliedMinor: latestInvoice.walletCreditAppliedMinor,
           reversedAmountMinor: latestInvoice.reversedAmountMinor, landlordName: owner?.name, landlordEmail: owner?.email,
-          landlordPhone: owner?.phone, brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor, paymentInstructions,
+          brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor, paymentInstructions,
         });
         const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || process.env.APP_URL || "").replace(/\/$/, "");
         const dueText = due?.toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" }) || "See invoice";

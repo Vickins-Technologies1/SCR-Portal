@@ -247,7 +247,6 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
           reversedAmountMinor: invoice.reversedAmountMinor,
           landlordName: owner?.name,
           landlordEmail: owner?.email,
-          landlordPhone: owner?.phone,
           brandName: setting.invoiceBrandName,
           brandColor: setting.invoiceBrandColor,
           paymentInstructions,

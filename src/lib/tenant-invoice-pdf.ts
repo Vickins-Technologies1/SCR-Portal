@@ -28,7 +28,7 @@ export type TenantInvoicePdfInput = {
   invoiceNumber: string; issueDate: Date | string; dueDate: Date | string; billingPeriod?: string; status?: string;
   tenantName: string; tenantEmail?: string; propertyName: string; propertyAddress?: string; unitLabel: string;
   items: Array<{ description: string; quantity: number; unitAmount: number; amount: number }>;
-  totalMinor: number; originalInvoiceTotalMinor?: number; amountPaidMinor?: number; balanceMinor?: number; walletCreditAppliedMinor?: number; reversedAmountMinor?: number; landlordName?: string; landlordEmail?: string; landlordPhone?: string;
+  totalMinor: number; originalInvoiceTotalMinor?: number; amountPaidMinor?: number; balanceMinor?: number; walletCreditAppliedMinor?: number; reversedAmountMinor?: number; landlordName?: string; landlordEmail?: string;
   paymentInstructions?: string; brandName?: string; brandColor?: string; previousOutstandingMinor?: number; creditsAndAdjustmentsMinor?: number;
 };
 
@@ -91,7 +91,7 @@ export async function generateTenantInvoicePdf(input: TenantInvoicePdfInput) {
       const propertyName = drawPdfWrappedText(page, input.propertyName, { x: col2, y: infoTop - 14, width: 240, font: fonts.bold, size: 9, lineHeight: 11, color: PDF_COLORS.ink });
       let tenantY = Math.min(tenantName.nextY, propertyName.nextY) - 2;
       const leftLines = [input.tenantEmail, `${input.unitLabel} · ${input.billingPeriod || "Billing period not specified"}`].filter(Boolean);
-      const rightLines = [input.propertyAddress, `${input.landlordName || input.brandName || "Property Manager"}${input.landlordEmail ? ` · ${input.landlordEmail}` : ""}`, input.landlordPhone].filter(Boolean);
+      const rightLines = [input.propertyAddress, `${input.landlordName || input.brandName || "Property Manager"}${input.landlordEmail ? ` · ${input.landlordEmail}` : ""}`].filter(Boolean);
       let rightY = tenantY;
       for (const value of leftLines) {
         const result = drawPdfWrappedText(page, value, { x: left, y: tenantY, width: 242, font: fonts.regular, size: 7.5, lineHeight: 9, color: PDF_COLORS.muted });

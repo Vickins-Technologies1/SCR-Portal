@@ -210,7 +210,7 @@ async function deliverInvoice({ db, invoice, channel, actorId }: { db: any; invo
     unitLabel: invoice.unitLabel, items: financial?.displayItems || invoiceItemsForDisplay(invoice), totalMinor: financial?.totalMinor ?? invoice.totalMinor, amountPaidMinor: financial?.amountPaidMinor || 0,
     balanceMinor: financial?.balanceMinor ?? invoice.totalMinor, walletCreditAppliedMinor: financial?.walletCreditAppliedMinor || 0, reversedAmountMinor: financial?.reversedAmountMinor || 0,
     landlordName: landlord?.name, landlordEmail: landlord?.email,
-    landlordPhone: landlord?.phone, brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor,
+    brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor,
     paymentInstructions: instructions,
   });
   const channels = channel === "both" ? ["email", "sms"] : [channel];

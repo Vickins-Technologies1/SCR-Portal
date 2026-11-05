@@ -47,7 +47,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     originalInvoiceTotalMinor: financial?.originalInvoiceTotalMinor,
     amountPaidMinor: financial?.amountPaidMinor || 0, balanceMinor: financial?.balanceMinor ?? invoice.totalMinor,
     walletCreditAppliedMinor: financial?.walletCreditAppliedMinor || 0, reversedAmountMinor: financial?.reversedAmountMinor || 0,
-    landlordName: landlord?.name, landlordEmail: landlord?.email, landlordPhone: landlord?.phone,
+    landlordName: landlord?.name, landlordEmail: landlord?.email,
     brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor, paymentInstructions,
   });
   return new NextResponse(Buffer.from(pdfBytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${invoice.invoiceNumber}.pdf"`, "Cache-Control": "private, no-store" } });
