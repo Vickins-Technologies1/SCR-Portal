@@ -488,7 +488,7 @@ export default function PropertyOwnerDashboard() {
                       </p>
                       <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
                         <span className="h-2 w-2 rounded-full bg-primary" />
-                        {stats.overduePayments} overdue tenants
+                        {stats.overduePayments} current tenants overdue
                       </div>
                     </div>
                   )}
@@ -610,7 +610,7 @@ export default function PropertyOwnerDashboard() {
                           "Expected Monthly Revenue",
                           "Monthly Rent",
                             "Deposit Due",
-                            "Overdue Amount",
+                            "Past-Due Amount",
                             "Late Payment Penalties",
                             "Total Tenants",
                             "Vacant Units",
@@ -652,11 +652,11 @@ export default function PropertyOwnerDashboard() {
                           explanation: "Total outstanding security deposit balance still due from tenants across all properties.",
                         },
                         {
-                          title: "Overdue Amount",
+                          title: "Past-Due Amount",
                           value: formatCurrency(stats.totalOverdueAmount),
                           icon: AlertCircle,
                           color: "red",
-                          subtitle: `${stats.overduePayments} current tenants overdue`,
+                          subtitle: "Rent + utilities past due across all tenant records",
                           explanation: `Past-due rent and utilities across tenant ledgers, including former tenants. The overdue tenant count covers current occupants; this amount excludes deposits and penalties. Rent overdue: ${formatCurrency(stats.totalOverdueRent)}. Utilities overdue: ${formatCurrency(stats.totalOverdueUtilities)}.`,
                         },
                         {
