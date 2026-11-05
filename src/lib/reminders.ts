@@ -12,6 +12,7 @@ import { calculateTenantFinancialState } from "./tenant-payment-allocation";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 import { addBusinessDays, businessDateKey, businessDateTime, businessDateIsBefore, businessDayEnd, businessDayStart, businessDueDate, businessDateParts } from "./business-time";
 import { calculateReminderDueAmounts } from "./reminder-calculations";
+import { getTenantInvoiceEnabledOwnerIds } from "./tenant-invoice-mode";
 
 type ReminderType = "fiveDaysBefore" | "paymentDate";
 
@@ -189,9 +190,15 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     return { sent: 0, queued: 0, skipped: 0, notifications: [] };
   }
 
+  const invoiceEnabledOwnerIds = await getTenantInvoiceEnabledOwnerIds(db, properties.map((property) => property.ownerId));
+  const reminderProperties = properties.filter((property) => !invoiceEnabledOwnerIds.has(String(property.ownerId)));
+  if (reminderProperties.length === 0) {
+    return { sent: 0, queued: 0, skipped: 0, notifications: [] };
+  }
+
   const propertyMap = new Map<string, Property>();
   const ownerIds = new Set<string>();
-  for (const property of properties) {
+  for (const property of reminderProperties) {
     propertyMap.set(property._id.toString(), property);
     ownerIds.add(String(property.ownerId));
   }
@@ -545,9 +552,15 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     return [];
   }
 
+  const invoiceEnabledOwnerIds = await getTenantInvoiceEnabledOwnerIds(db, properties.map((property) => property.ownerId));
+  const reminderProperties = properties.filter((property) => !invoiceEnabledOwnerIds.has(String(property.ownerId)));
+  if (reminderProperties.length === 0) {
+    return [];
+  }
+
   const propertyMap = new Map<string, Property>();
   const ownerIds = new Set<string>();
-  for (const property of properties) {
+  for (const property of reminderProperties) {
     propertyMap.set(property._id.toString(), property);
     ownerIds.add(String(property.ownerId));
   }

@@ -34,6 +34,17 @@ export async function sendTenantInvoiceReminders(today = new Date()) {
     else if (config.reminderOnDueDate !== false && diffDays === 0) kind = "due_date";
     else if (diffDays < 0 && Math.abs(diffDays) % Math.max(1, Number(config.overdueReminderEveryDays) || 7) === 0) kind = "overdue";
     if (!kind) { skipped++; continue; }
+    // The automatic rent-due invoice email is itself the due-date notice.
+    // Avoid sending a second invoice reminder a few hours later on the same day.
+    if (kind === "due_date") {
+      const invoiceSentToday = await db.collection("tenantInvoiceDeliveries").findOne({
+        invoiceId: String(invoice._id),
+        channel: "email",
+        status: "sent",
+        sentAt: { $gte: todayStart, $lte: new Date(todayStart.getTime() + 86_400_000 - 1) },
+      });
+      if (invoiceSentToday) { skipped++; continue; }
+    }
     const reminderKey = `${invoice._id}:${kind}:${currentKey}`;
     const now = new Date();
     const log = await db.collection("tenantInvoiceReminderLogs").updateOne({ reminderKey }, { $setOnInsert: { reminderKey, invoiceId: invoice._id, landlordId: invoice.landlordId, tenantId: invoice.tenantId, type: kind, status: "processing", amountMinor: Math.round(invoice.balanceDue * 100), createdAt: now, updatedAt: now } }, { upsert: true });

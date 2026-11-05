@@ -62,8 +62,14 @@ export async function PUT(request: NextRequest) {
   if (selectedTenantIds.some((id: string) => !validTenantIds.has(id))) return NextResponse.json({ success: false, message: "One or more selected tenants are outside your assigned properties" }, { status: 403 });
   const update = {
     ...defaults(context.ownerId),
-    invoicingEnabled: body.invoicingEnabled, automaticGeneration: body.automaticGeneration, automaticIssuing: body.automaticIssuing,
-    automaticSending: body.automaticSending, manualApproval: body.manualApproval, generationDay: body.generationDay, defaultDueDay: body.defaultDueDay,
+    invoicingEnabled: body.invoicingEnabled,
+    // Tenant invoice opt-in activates the due-date invoice workflow. Keep the
+    // legacy automation fields aligned for older settings consumers.
+    automaticGeneration: body.invoicingEnabled ? true : body.automaticGeneration,
+    automaticIssuing: body.invoicingEnabled ? true : body.automaticIssuing,
+    automaticSending: body.invoicingEnabled ? true : body.automaticSending,
+    manualApproval: body.invoicingEnabled ? false : body.manualApproval,
+    generationDay: body.generationDay, defaultDueDay: body.defaultDueDay,
     eligiblePropertyIds: [...new Set(body.eligiblePropertyIds)], eligibleTenantIds: [...new Set(body.eligibleTenantIds)], excludedTenantIds: [...new Set(body.excludedTenantIds)],
     invoicePrefix, invoiceBrandName, invoiceBrandColor, remindersEnabled: body.remindersEnabled,
     reminderBeforeDays: body.reminderBeforeDays, reminderOnDueDate: body.reminderOnDueDate, overdueReminderEveryDays: body.overdueReminderEveryDays,

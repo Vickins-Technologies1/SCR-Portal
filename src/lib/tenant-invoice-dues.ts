@@ -3,6 +3,7 @@ import { Db } from "mongodb";
 import { calculateTenantFinancialState, type TenantFinancialState } from "@/lib/tenant-payment-allocation";
 import { addInvoicePaymentStates, invoiceCategoryTotals } from "@/lib/tenant-invoices";
 import { identityValues } from "@/lib/payment-query";
+import { businessDateKey } from "@/lib/business-time";
 import { getTenantUtilityUnitCount, getUtilityDueDate, toBillingPeriod } from "@/lib/property-utilities";
 
 export type TenantDueObligation = {
@@ -157,6 +158,6 @@ export async function calculateTenantInvoiceDues(db: Db, tenant: any, property: 
   const otherMinor = proposed.filter((item) => item.chargeType === "other").reduce((sum, item) => sum + item.outstandingMinor, 0);
   const overdueRentMinor = proposed.filter((item) => item.chargeType === "rent").reduce((sum, item) => sum + item.outstandingMinor, 0) + overdueInvoiceRentMinor;
   const overdueUtilitiesMinor = proposed.filter((item) => item.chargeType === "utilities").reduce((sum, item) => sum + item.outstandingMinor, 0) + overdueInvoiceUtilitiesMinor;
-  const lines = proposed.map((item) => ({ description: `${item.description} · ${item.billingPeriod} · original KES ${(item.originalAmountMinor / 100).toFixed(2)} · paid KES ${(item.amountPaidMinor / 100).toFixed(2)} · due ${item.dueDate.toISOString().slice(0, 10)}`, quantity: 1, unitAmount: item.outstandingMinor, amount: item.outstandingMinor, category: item.chargeType, dueDate: item.dueDate, obligationRef: item.reference, billingPeriod: item.billingPeriod, originalAmountMinor: item.originalAmountMinor, amountPaidMinor: item.amountPaidMinor, amountAllocatedMinor: item.amountAllocatedMinor, overdueDays: item.overdueDays }));
+  const lines = proposed.map((item) => ({ description: `${item.description} · ${item.billingPeriod} · original KES ${(item.originalAmountMinor / 100).toFixed(2)} · paid KES ${(item.amountPaidMinor / 100).toFixed(2)} · due ${businessDateKey(item.dueDate)}`, quantity: 1, unitAmount: item.outstandingMinor, amount: item.outstandingMinor, category: item.chargeType, dueDate: item.dueDate, obligationRef: item.reference, billingPeriod: item.billingPeriod, originalAmountMinor: item.originalAmountMinor, amountPaidMinor: item.amountPaidMinor, amountAllocatedMinor: item.amountAllocatedMinor, overdueDays: item.overdueDays }));
   return { tenantId: String(tenant._id), propertyId: String(property._id), rentMinor, utilitiesMinor, otherMinor, totalMinor: rentMinor + utilitiesMinor + otherMinor, overdueRentMinor, overdueUtilitiesMinor, overdueAmountMinor: overdueRentMinor + overdueUtilitiesMinor, walletBalanceMinor: moneyMinor(state.walletBalance), lines, obligations: [...obligations.filter((item) => !item.eligible), ...evaluated], paymentsAllocatedMinor: moneyMinor(state.rentPaid + state.utilitiesPaid + state.depositPaid + state.otherPaid), existingInvoiceIds, existingInvoiceBalanceMinor };
 }
