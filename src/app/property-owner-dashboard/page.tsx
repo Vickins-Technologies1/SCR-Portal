@@ -802,7 +802,6 @@ export default function PropertyOwnerDashboard() {
                     <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <div className="surface-card rounded-3xl p-5 sm:p-6">
                         <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Payment Trends</h2>
-                        <p className="-mt-2 mb-3 text-xs text-muted-foreground">Posted receipts use stored historical allocation categories, so chart categories can differ from current tenant balance categories when legacy allocation snapshots differ.</p>
                         <div className="h-64 sm:h-72">
                           <Bar
                             data={barData}
