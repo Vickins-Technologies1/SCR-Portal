@@ -122,7 +122,8 @@ export async function GET(request: NextRequest) {
       active: true,
     });
 
-    if (teamMember) {
+    const permissions = Array.isArray((teamMember as any)?.permissions) ? (teamMember as any).permissions : [];
+    if (teamMember && permissions.includes("dashboard:view")) {
       authorized = true;
       teamMemberAssignedPropertyIds = Array.isArray((teamMember as any).assignedPropertyIds)
         ? Array.from(

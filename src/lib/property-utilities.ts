@@ -1,6 +1,6 @@
 import { ClientSession, Db, ObjectId } from "mongodb";
 import { PropertyUtility } from "@/types/property";
-import { businessDateIsBefore, businessDueDate, businessMonthStart, businessDateParts } from "@/lib/business-time";
+import { businessDateIsBefore, businessDateKey, businessDueDate, businessMonthStart, businessDateParts } from "@/lib/business-time";
 
 export interface UtilityCharge {
   _id?: ObjectId;
@@ -61,21 +61,26 @@ export const defaultUtilityStartDate = (date: Date = new Date()): string =>
 
 export const countUtilityBillableMonths = ({
   leaseStartDate,
+  leaseEndDate,
   utilityStartsAt,
   today = new Date(),
 }: {
   leaseStartDate?: string | Date | null;
+  leaseEndDate?: string | Date | null;
   utilityStartsAt?: string | Date | null;
   today?: Date;
 }): number => {
   const leaseStart = parseDate(leaseStartDate);
   if (!leaseStart) return 0;
 
+  const leaseEnd = parseDate(leaseEndDate);
+  const accrualEnd = leaseEnd && businessDateKey(leaseEnd) < businessDateKey(today) ? leaseEnd : today;
+
   const configuredStart = parseDate(utilityStartsAt);
   const start = monthStart(
     configuredStart && configuredStart > leaseStart ? configuredStart : leaseStart
   );
-  const end = monthStart(today);
+  const end = monthStart(accrualEnd);
   if (end < start) return 0;
 
   const startParts = businessDateParts(start);
@@ -183,6 +188,7 @@ export const calculateFixedUtilityDue = ({
   utilities?: PropertyUtility[] | null;
   tenant: {
     leaseStartDate?: string | Date | null;
+    leaseEndDate?: string | Date | null;
     leasedUnits?: unknown[];
     unitIdentifier?: string;
     unitType?: string;
@@ -200,6 +206,7 @@ export const calculateFixedUtilityDue = ({
       if (!utility || utility.active === false || utility.billingMode !== "fixed") return sum;
       const months = countUtilityBillableMonths({
         leaseStartDate: tenant.leaseStartDate,
+        leaseEndDate: tenant.leaseEndDate,
         utilityStartsAt: utility.startsAt,
         today,
       });
@@ -212,15 +219,18 @@ export type UtilityDueBreakdown = {
   charged: number;
   currentCharged: number;
   overdueCharged: number;
+  obligations?: Array<{ billingPeriod: string; amount: number; dueDate: Date | null; overdue: boolean }>;
 };
 
-const emptyUtilityBreakdown = (): UtilityDueBreakdown => ({ charged: 0, currentCharged: 0, overdueCharged: 0 });
+const emptyUtilityBreakdown = (): UtilityDueBreakdown => ({ charged: 0, currentCharged: 0, overdueCharged: 0, obligations: [] });
 
-const addUtilityAmount = (breakdown: UtilityDueBreakdown, amount: number, dueDate: Date | null, today: Date) => {
+const addUtilityAmount = (breakdown: UtilityDueBreakdown, amount: number, dueDate: Date | null, today: Date, billingPeriod: string) => {
   const safeAmount = Math.max(0, Math.round(amount || 0));
   if (!safeAmount) return;
   breakdown.charged += safeAmount;
-  if (dueDate && businessDateIsBefore(dueDate, today)) {
+  const overdue = Boolean(dueDate && businessDateIsBefore(dueDate, today));
+  breakdown.obligations!.push({ billingPeriod, amount: safeAmount, dueDate, overdue });
+  if (overdue) {
     breakdown.overdueCharged += safeAmount;
   } else {
     breakdown.currentCharged += safeAmount;
@@ -236,6 +246,7 @@ export const calculateFixedUtilityBreakdown = ({
   utilities?: PropertyUtility[] | null;
   tenant: {
     leaseStartDate?: string | Date | null;
+    leaseEndDate?: string | Date | null;
     leasedUnits?: unknown[];
     unitIdentifier?: string;
     unitType?: string;
@@ -249,19 +260,23 @@ export const calculateFixedUtilityBreakdown = ({
   const unitCount = getTenantUtilityUnitCount(tenant);
   if (unitCount <= 0) return breakdown;
 
+  const leaseEnd = parseDate(tenant.leaseEndDate);
+  const accrualEnd = leaseEnd && businessDateKey(leaseEnd) < businessDateKey(today) ? leaseEnd : today;
+
   for (const utility of utilities) {
     if (!utility || utility.active === false || utility.billingMode !== "fixed") continue;
     const leaseStart = parseDate(tenant.leaseStartDate);
     if (!leaseStart) continue;
     const configuredStart = parseDate(utility.startsAt);
     const start = monthStart(configuredStart && configuredStart > leaseStart ? configuredStart : leaseStart);
-    const end = monthStart(today);
+    const end = monthStart(accrualEnd);
     for (let cursor = new Date(start); cursor <= end; ) {
       addUtilityAmount(
         breakdown,
         Math.max(0, Number(utility.amount) || 0) * unitCount,
         getUtilityDueDate(toBillingPeriod(cursor), paymentDay),
-        today
+        today,
+        toBillingPeriod(cursor),
       );
       const period = businessDateParts(cursor);
       cursor = businessMonthStart(period.year, period.month);
@@ -274,6 +289,7 @@ export const getPostedMeteredUtilityTotal = async (
   db: Db,
   tenantId: string | ObjectId,
   propertyId?: string | ObjectId,
+  leaseEndDate?: string | Date | null,
 ): Promise<number> => {
   const tenantIdentities: Array<string | ObjectId> = [tenantId.toString()];
   if (ObjectId.isValid(tenantId.toString())) tenantIdentities.push(new ObjectId(tenantId.toString()));
@@ -286,10 +302,13 @@ export const getPostedMeteredUtilityTotal = async (
         { propertyId: null },
       ] }
     : {};
+  const leaseEnd = parseDate(leaseEndDate);
+  const accrualEnd = leaseEnd && businessDateKey(leaseEnd) < businessDateKey(new Date()) ? leaseEnd : new Date();
+  const maxBillingPeriod = toBillingPeriod(accrualEnd);
   const rows = await db
     .collection("utilityCharges")
     .aggregate<{ total: number }>([
-      { $match: { tenantId: { $in: tenantIdentities } as any, status: "posted", ...scope } },
+      { $match: { tenantId: { $in: tenantIdentities } as any, status: "posted", billingPeriod: { $lte: maxBillingPeriod }, ...scope } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ])
     .toArray();
@@ -304,6 +323,7 @@ export const getPostedMeteredUtilityBreakdown = async (
   paymentDay = 1,
   propertyId?: string | ObjectId,
   session?: ClientSession,
+  leaseEndDate?: string | Date | null,
 ): Promise<UtilityDueBreakdown> => {
   const tenantIdentities: Array<string | ObjectId> = [tenantId.toString()];
   if (ObjectId.isValid(tenantId.toString())) tenantIdentities.push(new ObjectId(tenantId.toString()));
@@ -320,14 +340,18 @@ export const getPostedMeteredUtilityBreakdown = async (
     .find({ tenantId: { $in: tenantIdentities } as any, status: "posted", ...scope } as any, session ? { session } : undefined)
     .toArray();
   const breakdown = emptyUtilityBreakdown();
+  const leaseEnd = parseDate(leaseEndDate);
+  const accrualEnd = leaseEnd && businessDateKey(leaseEnd) < businessDateKey(today) ? leaseEnd : today;
   const currentPeriod = toBillingPeriod(today);
+  const maxBillingPeriod = toBillingPeriod(accrualEnd);
   for (const charge of rows) {
-    if (!charge.billingPeriod || charge.billingPeriod > currentPeriod) continue;
+    if (!charge.billingPeriod || charge.billingPeriod > currentPeriod || charge.billingPeriod > maxBillingPeriod) continue;
     addUtilityAmount(
       breakdown,
       Number(charge.amount) || 0,
       charge.dueDate ? parseDate(charge.dueDate) : getUtilityDueDate(charge.billingPeriod, paymentDay),
-      today
+      today,
+      charge.billingPeriod,
     );
   }
   return breakdown;

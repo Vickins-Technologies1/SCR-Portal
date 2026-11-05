@@ -410,7 +410,24 @@ export const calculateTenantRentDueToDate = ({
   }
 
   const start = new Date(tenant.leaseStartDate);
-  if (Number.isNaN(start.getTime()) || today < start) {
+  if (Number.isNaN(start.getTime())) {
+    return {
+      rentDue: 0,
+      overdueRentDue: 0,
+      monthsStayed: 0,
+      daysInMonth: daysInCurrentMonth,
+      daysElapsedInMonth: 0,
+      dailyRent: 0,
+      obligations: [],
+    };
+  }
+
+  const parsedLeaseEnd = tenant.leaseEndDate ? new Date(tenant.leaseEndDate) : null;
+  const validLeaseEnd = parsedLeaseEnd && !Number.isNaN(parsedLeaseEnd.getTime()) ? parsedLeaseEnd : null;
+  const accrualEnd = validLeaseEnd && businessDateKey(validLeaseEnd) < businessDateKey(today)
+    ? validLeaseEnd
+    : today;
+  if (businessDateKey(accrualEnd) < businessDateKey(start)) {
     return {
       rentDue: 0,
       overdueRentDue: 0,
@@ -423,8 +440,9 @@ export const calculateTenantRentDueToDate = ({
   }
 
   const startParts = businessDateParts(start);
+  const accrualEndParts = businessDateParts(accrualEnd);
   const monthDiff =
-    (todayParts.year - startParts.year) * 12 + (todayParts.month - startParts.month);
+    (accrualEndParts.year - startParts.year) * 12 + (accrualEndParts.month - startParts.month);
 
   const monthsStayed = Math.max(1, monthDiff + 1);
 
@@ -456,13 +474,13 @@ export const calculateTenantRentDueToDate = ({
     obligations.push({ billingPeriod: `${period.getUTCFullYear()}-${String(period.getUTCMonth() + 1).padStart(2, "0")}`, amount: roundCurrency(monthRent), dueDate: firstDueDate, overdue });
   }
 
-  const currentTenantOverride = resolveTenantOverrideForDate({ overrides: tenant.rentPaymentOverrides, date: today });
+  const currentTenantOverride = resolveTenantOverrideForDate({ overrides: tenant.rentPaymentOverrides, date: accrualEnd });
 
   const currentMonthlyRent = currentTenantOverride
     ? Math.max(0, Number(currentTenantOverride.price) || 0)
     : leaseUnits.reduce(
         (sum, unit) =>
-          sum + resolveMonthlyRentForLeaseUnit({ unit, date: today, rentOverrideMap, propertyId: tenant.propertyId }),
+          sum + resolveMonthlyRentForLeaseUnit({ unit, date: accrualEnd, rentOverrideMap, propertyId: tenant.propertyId }),
         0
       );
 
@@ -923,7 +941,7 @@ export const calculateTenantDues = async (
     typeof penaltyConfig?.meteredUtilityDue === "number"
       ? Math.max(0, penaltyConfig.meteredUtilityDue)
       : typeof (db as any)?.collection === "function"
-        ? await getPostedMeteredUtilityTotal(db, tenant._id)
+        ? await getPostedMeteredUtilityTotal(db, tenant._id, tenant.propertyId, tenant.leaseEndDate)
         : 0;
   const totalUtilityDue = roundCurrency(fixedUtilityDue + meteredUtilityDue);
 

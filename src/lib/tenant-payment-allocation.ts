@@ -360,7 +360,7 @@ export function deriveTenantFinancialState(params: {
     .filter((payment) => {
       if (!isSuccessfulPaymentStatus(payment.status)) return false;
       const date = paymentDateValue(payment);
-      return date === null || date <= cutoff;
+      return date !== null && date <= cutoff;
     })
     .sort((a, b) => (paymentDateValue(a) ?? 0) - (paymentDateValue(b) ?? 0) || String(a._id).localeCompare(String(b._id)))
     .map((payment) => ({
@@ -376,8 +376,16 @@ export function deriveTenantFinancialState(params: {
     payments: eligiblePayments,
   });
   const utilityOverdueCharged = money(params.utilityBreakdown.overdueCharged);
-  const overdueRentCharged = money(params.overdueRentCharged ?? params.rentDue);
-  const overdueRent = money(Math.max(0, overdueRentCharged - ledger.rentPaid));
+  let unappliedRentPaid = ledger.rentPaid;
+  const rentObligations = (params.rentObligations || []).map((obligation) => {
+    const amount = money(obligation.amount);
+    const paid = money(Math.min(amount, unappliedRentPaid));
+    unappliedRentPaid = money(unappliedRentPaid - paid);
+    return { ...obligation, amount, paid, outstanding: money(amount - paid) };
+  });
+  const overdueRent = rentObligations.length
+    ? money(rentObligations.reduce((sum, obligation) => sum + (obligation.overdue ? obligation.outstanding : 0), 0))
+    : money(Math.max(0, money(params.overdueRentCharged ?? params.rentDue) - ledger.rentPaid));
   const penalties = money(calculateOverduePenalty({
     rentDues: overdueRent,
     today: params.asOf,
@@ -389,16 +397,20 @@ export function deriveTenantFinancialState(params: {
   const depositOutstanding = money(Math.max(0, params.depositDue - ledger.depositPaid));
   const rentOutstanding = money(Math.max(0, params.rentDue - ledger.rentPaid));
   const utilitiesOutstanding = money(Math.max(0, params.utilityBreakdown.charged - ledger.utilitiesPaid));
-  const utilitiesOverdueOutstanding = money(Math.min(utilitiesOutstanding, Math.max(0, utilityOverdueCharged - ledger.utilitiesPaid)));
+  const utilityObligations = [...(params.utilityBreakdown.obligations || [])]
+    .sort((a, b) => a.billingPeriod.localeCompare(b.billingPeriod) || (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0));
+  let unappliedUtilitiesPaid = ledger.utilitiesPaid;
+  const utilityOutstandingByPeriod = utilityObligations.map((obligation) => {
+    const paid = money(Math.min(obligation.amount, unappliedUtilitiesPaid));
+    unappliedUtilitiesPaid = money(unappliedUtilitiesPaid - paid);
+    return { ...obligation, outstanding: money(obligation.amount - paid) };
+  });
+  const overdueUtilitiesCalculated = utilityObligations.length
+    ? money(utilityOutstandingByPeriod.reduce((sum, obligation) => sum + (obligation.overdue ? obligation.outstanding : 0), 0))
+    : Math.max(0, utilityOverdueCharged - ledger.utilitiesPaid);
+  const utilitiesOverdueOutstanding = money(Math.min(utilitiesOutstanding, overdueUtilitiesCalculated));
   const utilitiesCurrentOutstanding = money(Math.max(0, utilitiesOutstanding - utilitiesOverdueOutstanding));
   const overdueUtilities = utilitiesOverdueOutstanding;
-  let unappliedRentPaid = ledger.rentPaid;
-  const rentObligations = (params.rentObligations || []).map((obligation) => {
-    const amount = money(obligation.amount);
-    const paid = money(Math.min(amount, unappliedRentPaid));
-    unappliedRentPaid = money(unappliedRentPaid - paid);
-    return { ...obligation, paid, outstanding: money(amount - paid) };
-  });
   return {
     monthsStayed: params.monthsStayed,
     depositRequired: money(params.depositDue),
@@ -462,18 +474,28 @@ export async function calculateTenantFinancialState(
     property?.rentPaymentDate,
     tenant.propertyId,
     options.session,
+    tenant.leaseEndDate,
   );
   const utilityBreakdown: UtilityDueBreakdown = {
     charged: money(fixedUtilities.charged + meteredUtilities.charged),
     currentCharged: money(fixedUtilities.currentCharged + meteredUtilities.currentCharged),
     overdueCharged: money(fixedUtilities.overdueCharged + meteredUtilities.overdueCharged),
+    obligations: [...(fixedUtilities.obligations || []), ...(meteredUtilities.obligations || [])],
   };
   const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
-  // Use the same reversal-aware financial projection as reports and payment
-  // totals. Tenant dues must not use a second, subtly different payment query.
-  // tenantId is the authoritative ownership link; this also retains legacy
-  // payment rows whose propertyId was never populated.
-  const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id], session: options.session });
+  // Use reversal-aware rows linked to this tenant and lease property. Keep
+  // legacy rows with no property (or a deleted property), but do not let a
+  // payment explicitly linked to another existing property reduce these dues.
+  const paymentPropertyId = property?._id ?? tenant.propertyId;
+  const financialRows = await getFinancialPaymentRows({
+    db,
+    tenantIds: [tenant._id],
+    ...(paymentPropertyId ? {
+      propertyIds: [paymentPropertyId],
+      tenantIdsForUnresolvedProperty: [tenant._id],
+    } : {}),
+    session: options.session,
+  });
   const payments = mapFinancialRowsToLedgerPayments(financialRows);
   return deriveTenantFinancialState({
     tenant,
@@ -614,7 +636,15 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string,
     .sort({ billingPeriod: 1, createdAt: 1, _id: 1 })
     .toArray();
   const chargeRemaining = new Map(utilityCharges.map((charge: any) => [String(charge._id), Math.max(0, Number(charge.amount) || 0)]));
-  const financialRows = await getFinancialPaymentRows({ db, tenantIds: [tenant._id], session: options.session });
+  const financialRows = await getFinancialPaymentRows({
+    db,
+    tenantIds: [tenant._id],
+    ...(tenant.propertyId ? {
+      propertyIds: [tenant.propertyId],
+      tenantIdsForUnresolvedProperty: [tenant._id],
+    } : {}),
+    session: options.session,
+  });
   for (const { payment } of [...financialRows].sort((a, b) =>
     (paymentDateValue(a.payment) ?? 0) - (paymentDateValue(b.payment) ?? 0) ||
     String(a.payment._id).localeCompare(String(b.payment._id))

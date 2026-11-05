@@ -88,6 +88,12 @@ export function paymentEventDate(payment: Record<string, unknown>): Date | null 
     const date = value instanceof Date ? value : new Date(String(value));
     if (!Number.isNaN(date.getTime())) return date;
   }
+  // Legacy rows can lack every explicit date field. An ObjectId still gives
+  // us a deterministic creation-time fallback, so as-of calculations never
+  // treat an undated payment as timeless credit.
+  const id = payment._id;
+  if (id instanceof ObjectId) return id.getTimestamp();
+  if (typeof id === "string" && ObjectId.isValid(id)) return new ObjectId(id).getTimestamp();
   return null;
 }
 
@@ -97,9 +103,18 @@ function convertedDateExpression(field: string) {
 
 /** Mongo expression for the same event-date precedence used by reports. */
 export function paymentEventDateExpression() {
-  return ["paymentDate", "providerTransactionDate", "completedAt", "paidAt", "createdAt"]
+  const explicitDate = ["paymentDate", "providerTransactionDate", "completedAt", "paidAt", "createdAt"]
     .map(convertedDateExpression)
     .reduceRight((fallback, current) => ({ $ifNull: [current, fallback] }), null as any);
+  const objectIdValue = {
+    $cond: [
+      { $eq: [{ $type: "$_id" }, "objectId"] },
+      "$_id",
+      { $convert: { input: "$_id", to: "objectId", onError: null, onNull: null } },
+    ],
+  };
+  const objectIdDate = { $convert: { input: objectIdValue, to: "date", onError: null, onNull: null } };
+  return { $ifNull: [explicitDate, objectIdDate] };
 }
 
 export function paymentDateRangeFilter(start?: Date, end?: Date) {

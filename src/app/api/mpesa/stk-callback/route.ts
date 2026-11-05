@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
     const depositDueAfter = Math.max(0, depositTotal - paymentTotals.depositPaid);
     const utilityDueAfter =
       calculateFixedUtilityDue({ utilities: (property as any)?.utilities, tenant: tenant as any, today: new Date() }) +
-      (await getPostedMeteredUtilityTotal(db, payment.tenantId));
+      (await getPostedMeteredUtilityTotal(db, payment.tenantId, tenant.propertyId, tenant.leaseEndDate));
     const walletBalance = calculateWalletBalanceFromPayments({
       rentPaid: paymentTotals.rentPaid,
       depositPaid: paymentTotals.depositPaid,
