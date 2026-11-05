@@ -6,12 +6,12 @@ import { identityValues } from "@/lib/payment-query";
 import { addInvoicePaymentStates, invoiceTotals, serializeTenantInvoice, validObjectId } from "@/lib/tenant-invoices";
 import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
-type InvoiceLine = { description: string; quantity: number; unitAmount: number; amount: number; category?: "rent" | "utilities" | "other" };
+type InvoiceLine = { description: string; quantity: number; unitAmount: number; amount: number; category?: "rent" | "utilities" | "deposit" | "penalty" | "other" };
 type TenantInvoice = {
   landlordId: string; tenantId: string; tenancyId: string; propertyId: string;
   unitLabel: string; tenantName: string; propertyName: string; billingPeriod: string;
   invoiceNumber: string; issueDate: Date | null; dueDate: Date; items: InvoiceLine[];
-  totalMinor: number; status: "draft" | "issued" | "cancelled"; createdAt: Date; updatedAt: Date;
+  totalMinor: number; status: string; createdAt: Date; updatedAt: Date;
   billingPeriodLabel?: string | null;
   invoiceBasis?: string;
   obligationRefs?: string[];
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   if (!userId || !ObjectId.isValid(userId)) return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 });
   const { db } = await connectToDatabase();
   if (role === "tenant") {
-    const rows = await db.collection<TenantInvoice>("tenantInvoices").find({ tenantId: userId, status: "issued" }).sort({ issueDate: -1 }).limit(100).toArray();
+    const rows = await db.collection<TenantInvoice>("tenantInvoices").find({ tenantId: userId, status: { $nin: ["draft", "cancelled", "voided", "superseded"] } }).sort({ issueDate: -1 }).limit(100).toArray();
     return NextResponse.json({ success: true, invoices: await addInvoicePaymentStates(db, rows) });
   }
   if (!["propertyOwner", "teamMember"].includes(role || "")) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
     const inputItems = body.items.map((item: any) => ({
       description: typeof item?.description === "string" ? item.description.trim().slice(0, 120) : "",
       quantity: Number(item?.quantity), unitAmount: amountMinor(item?.unitPrice),
-      category: item?.category === "utilities" || item?.category === "other" ? item.category : "rent",
+      category: ["rent", "utilities", "deposit", "penalty", "other"].includes(item?.category) ? item.category : "other",
     }));
     if (inputItems.some((item: any) => !item.description || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > 10000 || !item.unitAmount)) {
       return NextResponse.json({ success: false, message: "Each item needs a description, positive quantity, and unit price" }, { status: 400 });
@@ -214,6 +214,8 @@ export async function POST(request: NextRequest) {
   const eligibleTenantIds = new Set((Array.isArray(billingSettings?.eligibleTenantIds) ? billingSettings.eligibleTenantIds : []).map(String));
   const [year, month] = body.billingPeriod.split("-").map(Number);
   const now = new Date();
+  const currentPeriod = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit" }).format(now);
+  const billingPeriodLabel = `Current due balance · ${currentPeriod}`;
   const eligible = tenants.filter((tenant) => {
     if (excludedTenantIds.has(tenant._id.toString())) return false;
     if (eligibleTenantIds.size && !eligibleTenantIds.has(tenant._id.toString())) return false;
@@ -232,12 +234,12 @@ export async function POST(request: NextRequest) {
     const dues = await calculateTenantInvoiceDues(db, tenant, property, new Date());
     if (dues.totalMinor <= 0) { skipped++; continue; }
     const dueDate = dues.lines.reduce((earliest, line) => line.dueDate < earliest ? line.dueDate : earliest, dues.lines[0].dueDate);
-    const invoiceNumber = `R-${landlordId.slice(-5).toUpperCase()}-${body.billingPeriod.replace("-", "")}-${tenant._id.toString().toUpperCase()}`;
+    const invoiceNumber = `R-${landlordId.slice(-5).toUpperCase()}-${currentPeriod.replace("-", "")}-${tenant._id.toString().toUpperCase()}`;
     const items: InvoiceLine[] = dues.lines.map((line) => ({ ...line }));
     const doc: TenantInvoice = {
       landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
       unitLabel: String(tenant.houseNumber || tenant.unitIdentifier || tenant.unitType || "—"),
-      tenantName: String(tenant.name || "Tenant"), propertyName: String(property.name || "Property"), billingPeriod: body.billingPeriod,
+      tenantName: String(tenant.name || "Tenant"), propertyName: String(property.name || "Property"), billingPeriod: currentPeriod, billingPeriodLabel,
       invoiceNumber, issueDate: null, dueDate, items,
       totalMinor: dues.totalMinor, status: "draft", invoiceBasis: "overdue_tenant_dues_v1", obligationRefs: dues.lines.map((line) => line.obligationRef), obligationInvoiceIds: dues.existingInvoiceIds, createdAt: now, updatedAt: now,
     };
@@ -252,5 +254,5 @@ export async function POST(request: NextRequest) {
       if (error?.code === 11000) duplicate++; else throw error;
     }
   }
-  return NextResponse.json({ success: true, billingPeriod: body.billingPeriod, created, duplicate, skipped });
+  return NextResponse.json({ success: true, billingPeriod: currentPeriod, requestedPeriod: body.billingPeriod, billingPeriodLabel, created, duplicate, skipped });
 }

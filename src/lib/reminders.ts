@@ -12,9 +12,30 @@ import { calculateTenantFinancialState } from "./tenant-payment-allocation";
 import { fetchActiveRentOverridesByPropertyIds } from "./rent-overrides";
 import { addBusinessDays, businessDateKey, businessDateTime, businessDateIsBefore, businessDayEnd, businessDayStart, businessDueDate, businessDateParts } from "./business-time";
 import { calculateReminderDueAmounts } from "./reminder-calculations";
-import { getTenantInvoiceEnabledOwnerIds } from "./tenant-invoice-mode";
+import { addInvoicePaymentStates } from "./tenant-invoices";
+import { identityValues } from "./payment-query";
 
 type ReminderType = "fiveDaysBefore" | "paymentDate";
+
+async function hasTenantInvoiceReminderPath(db: any, tenant: any, property: Property, dueDate: Date) {
+  if (tenant.invoiceEnabled === false) return false;
+  const ownerValues = identityValues(property.ownerId);
+  const settings = await db.collection("landlordBillingSettings").findOne({ landlordId: { $in: ownerValues } });
+  if (!settings?.invoicingEnabled || !settings?.remindersEnabled) return false;
+  const eligibleTenants = Array.isArray(settings.eligibleTenantIds) ? settings.eligibleTenantIds.map(String) : [];
+  const excludedTenants = Array.isArray(settings.excludedTenantIds) ? settings.excludedTenantIds.map(String) : [];
+  const eligibleProperties = Array.isArray(settings.eligiblePropertyIds) ? settings.eligiblePropertyIds.map(String) : [];
+  if (excludedTenants.includes(String(tenant._id)) || eligibleTenants.length > 0 && !eligibleTenants.includes(String(tenant._id))) return false;
+  if (eligibleProperties.length > 0 && !eligibleProperties.includes(String(property._id))) return false;
+  const from = startOfDay(dueDate), through = endOfDay(dueDate);
+  const invoices = await db.collection("tenantInvoices").find({
+    tenantId: { $in: identityValues(tenant._id) }, propertyId: { $in: identityValues(property._id) },
+    status: { $nin: ["draft", "cancelled", "voided", "superseded"] }, dueDate: { $gte: from, $lte: through },
+  }).toArray();
+  if (!invoices.length) return false;
+  const calculated = await addInvoicePaymentStates(db, invoices);
+  return calculated.some((invoice: any) => Number(invoice.balanceMinor) > 0);
+}
 
 interface ReminderNotification {
   _id: ObjectId;
@@ -190,15 +211,9 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     return { sent: 0, queued: 0, skipped: 0, notifications: [] };
   }
 
-  const invoiceEnabledOwnerIds = await getTenantInvoiceEnabledOwnerIds(db, properties.map((property) => property.ownerId));
-  const reminderProperties = properties.filter((property) => !invoiceEnabledOwnerIds.has(String(property.ownerId)));
-  if (reminderProperties.length === 0) {
-    return { sent: 0, queued: 0, skipped: 0, notifications: [] };
-  }
-
   const propertyMap = new Map<string, Property>();
   const ownerIds = new Set<string>();
-  for (const property of reminderProperties) {
+  for (const property of properties) {
     propertyMap.set(property._id.toString(), property);
     ownerIds.add(String(property.ownerId));
   }
@@ -238,6 +253,7 @@ export async function sendPaymentReminders(params: { ownerId?: string; today?: D
     }
 
     if (!isLeaseCoveringDate(tenant, dueDate)) continue;
+    if (await hasTenantInvoiceReminderPath(db, tenant, property, dueDate)) continue;
 
     const reminderDate = addDays(dueDate, -5);
 
@@ -552,15 +568,9 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     return [];
   }
 
-  const invoiceEnabledOwnerIds = await getTenantInvoiceEnabledOwnerIds(db, properties.map((property) => property.ownerId));
-  const reminderProperties = properties.filter((property) => !invoiceEnabledOwnerIds.has(String(property.ownerId)));
-  if (reminderProperties.length === 0) {
-    return [];
-  }
-
   const propertyMap = new Map<string, Property>();
   const ownerIds = new Set<string>();
-  for (const property of reminderProperties) {
+  for (const property of properties) {
     propertyMap.set(property._id.toString(), property);
     ownerIds.add(String(property.ownerId));
   }
@@ -597,6 +607,7 @@ export async function getUpcomingPaymentReminders(params: { ownerId?: string; to
     }
 
     if (!isLeaseCoveringDate(tenant, dueDate)) continue;
+    if (await hasTenantInvoiceReminderPath(db, tenant, property, dueDate)) continue;
 
     const reminderDate = addDays(dueDate, -5);
 

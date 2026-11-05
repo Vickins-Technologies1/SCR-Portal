@@ -4,7 +4,7 @@ import { allocatePaymentLedger, allocateUtilityPaymentAcrossCharges, deriveTenan
 import { projectFinancialPaymentRows } from "./financial-reporting";
 import { calculateTenantRentDueToDate } from "./utils";
 
-const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type });
+const payment = (amount: number, id = new ObjectId(), type?: "Rent" | "Utility" | "Deposit" | "Other" | "General") => ({ _id: id, amount, status: "completed" as const, type, paymentDate: "2026-10-10T00:00:00.000Z" });
 describe("tenant payment allocation", () => {
   it("allocates partial, exact, and excess rent in rent-first order", () => {
     const partial = allocatePaymentLedger({ rentDue: 20_000, utilityDue: 3_000, payments: [payment(10_000)] });
@@ -118,6 +118,7 @@ describe("tenant payment allocation", () => {
       amount: 5_000,
       type: "Rent",
       status: "completed",
+      paymentDate: "2026-10-10T00:00:00.000Z",
       allocationPolicyVersion: "category-directed-v2",
     }], []);
     const state = deriveTenantFinancialState({
@@ -507,6 +508,7 @@ describe("tenant payment allocation", () => {
       _id: paymentId,
       amount: 5_000,
       status: "completed",
+      paymentDate: "2026-10-10T00:00:00.000Z",
       allocation: { rent: 4_000, utilities: 1_000, deposit: 0, other: 0, walletCredit: 0 },
     }], [{ _id: paymentId.toString(), total: 1_000 }]);
     const state = deriveTenantFinancialState({

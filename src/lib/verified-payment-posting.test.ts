@@ -43,6 +43,7 @@ describe("verified payment posting recovery", () => {
         }
         if (name === "tenants") return { findOne: async () => ({ _id: tenantId, propertyId }) };
         if (name === "properties") return { findOne: async () => ({ _id: propertyId, ownerId: "owner-1" }) };
+        if (name === "tenantInvoices") return { find: () => ({ limit() { return this; }, toArray: async () => [] }) };
         if (name === "financialLedger") {
           return {
             updateOne: async (query: any, update: any) => {

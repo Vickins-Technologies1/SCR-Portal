@@ -41,7 +41,7 @@ interface InvoiceEmailOptions {
   propertyName: string;
   amount: number;
   dueDate: string;
-  reminderType: "fiveDaysBefore" | "dueDate" | "overdue" | "manual";
+  reminderType: "fiveDaysBefore" | "dueDate" | "overdue" | "partial" | "paymentReceived" | "manual";
   dashboardUrl: string;
   invoiceNumber: string;
   pdfBytes?: Uint8Array | Buffer;
@@ -494,12 +494,20 @@ export async function sendInvoiceEmail({
     const title =
       reminderType === "manual"
         ? "Invoice Copy"
+        : reminderType === "paymentReceived"
+          ? "Payment Received"
+          : reminderType === "partial"
+            ? "Remaining Invoice Balance Reminder"
         : reminderType === "fiveDaysBefore"
           ? "Invoice Reminder"
           : reminderType === "overdue" ? "Overdue Invoice Reminder" : "Invoice Due Today";
     const intro =
       reminderType === "manual"
         ? `Attached is a copy of your invoice for ${propertyName}.`
+        : reminderType === "paymentReceived"
+          ? `A payment has been credited to invoice ${invoiceNumber}. The current balance for ${propertyName} is shown below.`
+          : reminderType === "partial"
+            ? `Your invoice for ${propertyName} has been partially paid. The remaining balance is shown below.`
         : reminderType === "fiveDaysBefore"
           ? `This is a reminder that your invoice for ${propertyName} is due on ${dueDate}.`
           : reminderType === "overdue" ? `Your invoice for ${propertyName} is overdue. The due date was ${dueDate}.` : `Your invoice for ${propertyName} is due today (${dueDate}).`;
@@ -512,7 +520,7 @@ export async function sendInvoiceEmail({
         <ul>
           <li><strong>Property:</strong> ${propertyName}</li>
           <li><strong>Invoice No.:</strong> ${invoiceNumber}</li>
-          <li><strong>Amount:</strong> Ksh. ${amount.toFixed(2)}</li>
+          <li><strong>${reminderType === "paymentReceived" || reminderType === "partial" ? "Balance due" : "Amount due"}:</strong> Ksh. ${amount.toFixed(2)}</li>
           <li><strong>Due Date:</strong> ${dueDate}</li>
         </ul>
         <p style="text-align: center; margin-top: 28px;">

@@ -2,6 +2,8 @@ import { Db, ObjectId } from "mongodb";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
 import { identityValues, isSuccessfulPaymentStatus } from "@/lib/payment-query";
+import { recordTenantInvoicePaymentReversal, recordTenantInvoiceWalletAllocations } from "@/lib/tenant-invoices";
+import { calculateWalletConsumedAllocation } from "@/lib/tenant-invoice-ledger";
 
 export type FinancialLedgerKind = "PAYMENT_POSTED" | "PAYMENT_REVERSED";
 export type WalletLedgerKind = "PAYMENT_CREDIT" | "CREDIT_CONSUMED" | "CREDIT_RESTORED" | "CREDIT_REVERSED" | "MANUAL_ADJUSTMENT";
@@ -13,12 +15,21 @@ const asAmount = (value: unknown) => {
 
 export function calculateReversalAllocation(allocation: Record<string, unknown> | null | undefined, originalAmount: number, reversalAmount: number) {
   const ratio = originalAmount > 0 ? Math.min(1, reversalAmount / originalAmount) : 0;
+  const originalWalletAllocation = (allocation?.walletAllocation && typeof allocation.walletAllocation === "object" ? allocation.walletAllocation : {}) as Record<string, unknown>;
+  const walletAllocation = {
+    rent: asAmount(asAmount(originalWalletAllocation.rent) * ratio),
+    utilities: asAmount(asAmount(originalWalletAllocation.utilities) * ratio),
+    deposit: asAmount(asAmount(originalWalletAllocation.deposit) * ratio),
+    other: asAmount(asAmount(originalWalletAllocation.other) * ratio),
+  };
   return {
     rent: asAmount(asAmount(allocation?.rent) * ratio),
     utilities: asAmount(asAmount(allocation?.utilities) * ratio),
     deposit: asAmount(asAmount(allocation?.deposit) * ratio),
     other: asAmount(asAmount(allocation?.other) * ratio),
     credit: asAmount(asAmount(allocation?.walletCredit) * ratio),
+    walletApplied: asAmount(asAmount(allocation?.walletApplied) * ratio),
+    walletAllocation,
   };
 }
 
@@ -142,7 +153,14 @@ export async function createPaymentReversal(params: {
     if (!existingReservation) throw new Error("Reversal reservation disappeared");
     if (existingReservation.status === "posted" || existingReservation.status === "rejected") {
       const existingPayment = await db.collection("payments").findOne({ _id: paymentId });
-      if (existingPayment?.tenantId) await reconcileTenantPaymentAllocation(db, String(existingPayment.tenantId));
+      if (existingPayment?.tenantId) {
+        const tenantState = await reconcileTenantPaymentAllocation(db, String(existingPayment.tenantId));
+        await recordTenantInvoiceWalletAllocations(db, String(existingPayment.tenantId));
+        if (existingReservation.status === "posted") {
+          await recordTenantInvoicePaymentReversal(db, existingPayment, existingReservation);
+          await recordTenantInvoiceWalletAllocations(db, String(existingPayment.tenantId), tenantState?.financialState?.paymentAllocations, String(existingReservation.eventKey));
+        }
+      }
       if (existingPayment?.invoiceId) await reconcileInvoiceFinancialState(db, String(existingPayment.invoiceId));
       return existingReservation;
     }
@@ -191,7 +209,17 @@ export async function createPaymentReversal(params: {
     );
   }
 
-  const reversedAllocation = calculateReversalAllocation(payment.allocation, originalAmount, amount);
+  const consumedWalletRows = payment.tenantId ? await db.collection("walletTransactions").find({
+    tenantId: { $in: identityValues(payment.tenantId) }, sourcePaymentId: { $in: identityValues(paymentId) }, kind: "CREDIT_CONSUMED",
+  }).sort({ createdAt: 1, _id: 1 }).toArray() : [];
+  const consumedWalletAllocation = calculateWalletConsumedAllocation(consumedWalletRows, payment.allocation?.walletCreditCategory);
+  const hasConsumedWalletAllocation = Object.values(consumedWalletAllocation).some((value) => value > 0);
+  const allocationForReversal = hasConsumedWalletAllocation ? {
+    ...(payment.allocation || {}),
+    walletApplied: Object.values(consumedWalletAllocation).reduce((sum, value) => sum + value, 0),
+    walletAllocation: consumedWalletAllocation,
+  } : payment.allocation;
+  const reversedAllocation = calculateReversalAllocation(allocationForReversal, originalAmount, amount);
   const updated = await db.collection("financialLedger").updateOne(
     { eventKey: reversalKey, status: "processing" },
     { $set: { status: "posted", allocation: reversedAllocation, postedAt: new Date().toISOString() } },
@@ -199,7 +227,12 @@ export async function createPaymentReversal(params: {
   if (!updated.modifiedCount) {
     const existing = await db.collection("financialLedger").findOne({ eventKey: reversalKey });
     if (existing?.status === "posted") {
-      if (payment.tenantId) await reconcileTenantPaymentAllocation(db, String(payment.tenantId));
+      if (payment.tenantId) {
+        const tenantState = await reconcileTenantPaymentAllocation(db, String(payment.tenantId));
+        await recordTenantInvoiceWalletAllocations(db, String(payment.tenantId));
+        await recordTenantInvoicePaymentReversal(db, payment, existing);
+        await recordTenantInvoiceWalletAllocations(db, String(payment.tenantId), tenantState?.financialState?.paymentAllocations, String(existing.eventKey));
+      }
       if (payment.invoiceId) await reconcileInvoiceFinancialState(db, String(payment.invoiceId));
     }
     return existing;
@@ -234,7 +267,13 @@ export async function createPaymentReversal(params: {
       { upsert: true },
     );
   }
-  if (payment.tenantId) await reconcileTenantPaymentAllocation(db, String(payment.tenantId));
+  const reversal = await db.collection("financialLedger").findOne({ eventKey: reversalKey });
+  if (payment.tenantId) {
+    const tenantState = await reconcileTenantPaymentAllocation(db, String(payment.tenantId));
+    await recordTenantInvoiceWalletAllocations(db, String(payment.tenantId));
+    await recordTenantInvoicePaymentReversal(db, payment, reversal);
+    await recordTenantInvoiceWalletAllocations(db, String(payment.tenantId), tenantState?.financialState?.paymentAllocations, String(reversal?.eventKey || reversalKey));
+  }
   if (payment.invoiceId) await reconcileInvoiceFinancialState(db, String(payment.invoiceId));
   return db.collection("financialLedger").findOne({ eventKey: `reversal:${params.idempotencyKey}` });
 }

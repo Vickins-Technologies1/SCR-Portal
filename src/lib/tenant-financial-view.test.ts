@@ -14,6 +14,7 @@ function state(overrides: Partial<TenantFinancialState> = {}): TenantFinancialSt
     utilitiesCharged: 0,
     utilitiesPaid: 0,
     otherPaid: 0,
+    otherOutstanding: 0,
     utilitiesOutstanding: 0,
     utilitiesCurrentOutstanding: 0,
     utilitiesOverdueOutstanding: 0,

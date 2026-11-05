@@ -47,6 +47,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       if (path.startsWith("/admin/users")) return "admin:owners:view";
       if (path.startsWith("/admin/team-members")) return "admin:team-members:view";
       if (path.startsWith("/admin/payments")) return "admin:payments:view";
+      if (path.startsWith("/admin/tenant-invoices")) return "admin:payments:view";
       if (path.startsWith("/admin/lifetime")) return "admin:payments:view";
       if (path.startsWith("/admin/invoices")) return "admin:invoices:view";
       if (path.startsWith("/admin/airbnb")) return "admin:airbnb:view";

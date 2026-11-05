@@ -3,10 +3,11 @@ import { Db, ObjectId } from "mongodb";
 import { identityValues } from "@/lib/payment-query";
 import { businessDateKey, businessDateParts, businessDateTime, businessDayEnd, businessDueDate } from "@/lib/business-time";
 import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
-import { addInvoicePaymentStates } from "@/lib/tenant-invoices";
+import { addInvoicePaymentStates, recordTenantInvoiceCharges } from "@/lib/tenant-invoices";
 import { generateTenantInvoicePdf } from "@/lib/tenant-invoice-pdf";
 import { sendInvoiceEmail } from "@/lib/email";
 import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
+import logger from "@/lib/logger";
 
 type BillingSetting = {
   landlordId: string;
@@ -73,6 +74,7 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
   let issued = 0;
   let sent = 0;
   let sendFailed = 0;
+  let generationFailed = 0;
   let skipped = 0;
 
   for (const setting of settings) {
@@ -98,6 +100,8 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
 
     for (const tenant of tenants) {
       const tenantId = String(tenant._id);
+      const failureKey = `${landlordId}:${tenantId}:${period}`;
+      try {
       if (excludedTenantIds.has(tenantId) || (eligibleTenantIds.size && !eligibleTenantIds.has(tenantId))) continue;
       const property = properties.find((item: any) => String(item._id) === String(tenant.propertyId));
       if (!property) { skipped++; continue; }
@@ -110,7 +114,7 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
       const invoiceFilter = { tenancyId: tenantId, billingPeriod };
       let invoice: any = await db.collection("tenantInvoices").findOne(invoiceFilter);
       const daysAfterRentDue = daysBetweenBusinessDates(dueDate, now);
-      if (daysAfterRentDue < 0 || (!invoice && daysAfterRentDue > 1)) continue;
+      if (daysAfterRentDue < 0) continue;
 
       if (invoice && invoice.invoiceBasis !== "overdue_tenant_dues_v1") {
         skipped++;
@@ -164,6 +168,7 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
             if (result.upsertedCount) {
               invoice = draft;
               created++;
+              logger.info("Tenant invoice generated", { landlordId, tenantId, invoiceId: invoiceId.toString(), period, totalMinor: draft.totalMinor });
               await db.collection("tenantInvoiceActivity").insertOne({ invoiceId: invoiceId.toString(), landlordId, tenantId, event: "automatic_draft_created", actorRole: "system", createdAt: now });
             } else {
               invoice = await db.collection("tenantInvoices").findOne(invoiceFilter);
@@ -190,6 +195,10 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
         invoice = await db.collection("tenantInvoices").findOne({ _id: invoice._id });
       }
       if (!invoice || invoice.status !== "issued") { skipped++; continue; }
+      await recordTenantInvoiceCharges(db, invoice);
+      await db.collection("tenantInvoiceAutomationFailures").updateOne(
+        { failureKey, status: "failed" }, { $set: { status: "recovered", resolvedAt: new Date(), updatedAt: new Date() } },
+      );
 
       const invoiceId = invoice._id.toString();
       const alreadySent = await db.collection("tenantInvoiceDeliveries").findOne({ invoiceId, channel: "email", status: "sent" });
@@ -229,9 +238,13 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
           propertyName: property.name || invoice.propertyName,
           propertyAddress: property.address,
           unitLabel: invoice.unitLabel,
-          items: invoice.items,
+          items: invoice.displayItems || invoice.items,
           totalMinor: invoice.totalMinor,
           amountPaidMinor: invoice.amountPaidMinor,
+          originalInvoiceTotalMinor: invoice.originalInvoiceTotalMinor,
+          balanceMinor: invoice.balanceMinor,
+          walletCreditAppliedMinor: invoice.walletCreditAppliedMinor,
+          reversedAmountMinor: invoice.reversedAmountMinor,
           landlordName: owner?.name,
           landlordEmail: owner?.email,
           landlordPhone: owner?.phone,
@@ -254,13 +267,28 @@ export async function sendOverdueTenantInvoicesOnRentDueDate(db: Db, now = new D
         await db.collection("tenantInvoiceDeliveries").updateOne({ _id: delivery.insertedId }, { $set: { status: "sent", sentAt: new Date(), updatedAt: new Date() } });
         await db.collection("tenantInvoiceActivity").insertOne({ invoiceId, landlordId, tenantId, event: "automatic_delivery_sent_on_rent_due_date", channel: "email", actorRole: "system", createdAt: new Date() });
         sent++;
+        logger.info("Tenant invoice sent", { landlordId, tenantId, invoiceId, channel: "email", balanceMinor: invoice.balanceMinor });
       } catch (error) {
         await db.collection("tenantInvoiceDeliveries").updateOne({ _id: delivery.insertedId }, { $set: { status: "failed", error: error instanceof Error ? error.message : "Invoice email failed", updatedAt: new Date() } });
         await db.collection("tenantInvoiceActivity").insertOne({ invoiceId, landlordId, tenantId, event: "automatic_delivery_failed", channel: "email", actorRole: "system", createdAt: new Date() });
         sendFailed++;
       }
+      } catch (error) {
+        generationFailed++;
+        const message = error instanceof Error ? error.message : "Automatic invoice generation failed";
+        try {
+          await db.collection("tenantInvoiceAutomationFailures").updateOne(
+            { failureKey },
+            { $set: { failureKey, landlordId, tenantId, propertyId: String(tenant.propertyId || ""), period, status: "failed", error: message.slice(0, 500), updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+            { upsert: true },
+          );
+        } catch (writeError) {
+          logger.error("Could not persist tenant invoice generation failure", { landlordId, tenantId, period, error: writeError instanceof Error ? writeError.message : "Database write failed" });
+        }
+        logger.error("Tenant invoice generation failed", { landlordId, tenantId, period, error: message });
+      }
     }
   }
 
-  return { period, landlords: settings.length, created, issued, sent, sendFailed, skipped };
+  return { period, landlords: settings.length, created, issued, sent, sendFailed, generationFailed, skipped };
 }

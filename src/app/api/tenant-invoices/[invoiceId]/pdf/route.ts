@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
-import { addInvoicePaymentStates, getPriorInvoiceOutstandingMinor, invoiceItemsForDisplay, validObjectId } from "@/lib/tenant-invoices";
+import { addInvoicePaymentStates, invoiceItemsForDisplay, validObjectId } from "@/lib/tenant-invoices";
 import { generateTenantInvoicePdf } from "@/lib/tenant-invoice-pdf";
 import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!ObjectId.isValid(userId) || !validObjectId(invoiceId)) return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
   const { db } = await connectToDatabase();
   const invoice = await db.collection("tenantInvoices").findOne({ _id: new ObjectId(invoiceId) });
-  if (!invoice || invoice.status !== "issued") return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+  if (!invoice || !["issued", "partially_paid", "paid", "overdue"].includes(String(invoice.status))) return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
   if (role === "tenant") {
     if (invoice.tenantId !== userId) return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
   } else if (role === "propertyOwner" || role === "teamMember") {
@@ -33,7 +33,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const landlord = await db.collection("propertyOwners").findOne({ _id: new ObjectId(invoice.landlordId) });
   const billingSettings = await db.collection("landlordBillingSettings").findOne({ landlordId: invoice.landlordId });
   const [financial] = await addInvoicePaymentStates(db, [invoice]);
-  const previousOutstandingMinor = await getPriorInvoiceOutstandingMinor(db, invoice);
   let paymentInstructions = "Use the payment method agreed with your property manager.";
   try {
     const route = await resolveOwnerTenantMpesaRouting(db, { landlordId: invoice.landlordId, propertyId: invoice.propertyId });
@@ -44,8 +43,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { pdfBytes } = await generateTenantInvoicePdf({
     invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, dueDate: invoice.dueDate, billingPeriod: invoice.billingPeriodLabel || invoice.billingPeriod, status: financial?.status || invoice.status,
     tenantName: tenant?.name || invoice.tenantName, tenantEmail: tenant?.email, propertyName: property?.name || invoice.propertyName,
-    propertyAddress: property?.address, unitLabel: invoice.unitLabel, items: invoiceItemsForDisplay(invoice), totalMinor: financial?.totalMinor ?? invoice.totalMinor,
-    amountPaidMinor: financial?.amountPaidMinor || 0, previousOutstandingMinor, creditsAndAdjustmentsMinor: (invoice.adjustments || []).reduce((sum: number, row: any) => sum + Number(row.amountMinor || 0), 0),
+    propertyAddress: property?.address, unitLabel: invoice.unitLabel, items: financial?.displayItems || invoiceItemsForDisplay(invoice), totalMinor: financial?.totalMinor ?? invoice.totalMinor,
+    originalInvoiceTotalMinor: financial?.originalInvoiceTotalMinor,
+    amountPaidMinor: financial?.amountPaidMinor || 0, balanceMinor: financial?.balanceMinor ?? invoice.totalMinor,
+    walletCreditAppliedMinor: financial?.walletCreditAppliedMinor || 0, reversedAmountMinor: financial?.reversedAmountMinor || 0,
     landlordName: landlord?.name, landlordEmail: landlord?.email, landlordPhone: landlord?.phone,
     brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor, paymentInstructions,
   });

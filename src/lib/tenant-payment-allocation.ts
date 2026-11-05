@@ -5,7 +5,8 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { calculateOverduePenalty, calculateTenantRentDueToDate, resolveTenantRequiredDeposit } from "@/lib/utils";
 import { getFinancialPaymentRows, type FinancialPaymentRow } from "@/lib/financial-reporting";
 import { identityValues, isSuccessfulPaymentStatus, paymentEventDate } from "@/lib/payment-query";
-import { businessDateParts } from "@/lib/business-time";
+import { businessDateKey, businessDateParts } from "@/lib/business-time";
+import { getManualTenantInvoiceChargeObligations } from "@/lib/tenant-invoices";
 
 export type PaymentAllocation = {
   deposit: number;
@@ -31,6 +32,8 @@ export type LedgerPayment = {
   createdAt?: string;
   allocation?: Partial<PaymentAllocation>;
   allocationPolicyVersion?: string;
+  tenantInvoiceId?: string;
+  invoicePriority?: AllocationField[];
 };
 
 export type TenantFinancialState = {
@@ -44,6 +47,7 @@ export type TenantFinancialState = {
   utilitiesCharged: number;
   utilitiesPaid: number;
   otherPaid: number;
+  otherOutstanding: number;
   utilitiesOutstanding: number;
   utilitiesCurrentOutstanding: number;
   utilitiesOverdueOutstanding: number;
@@ -300,7 +304,9 @@ export function allocatePaymentLedger(params: {
       continue;
     }
 
-    const receiptResult = applyTypedReceiptFunds(payment, paymentAmount);
+    const receiptResult = payment.tenantInvoiceId && payment.invoicePriority?.length
+      ? applyReceiptFunds(paymentAmount, [...payment.invoicePriority, ...allocationPriority().filter((field) => !payment.invoicePriority!.includes(field))])
+      : applyTypedReceiptFunds(payment, paymentAmount);
     receiptAllocation = receiptResult.appliedByField;
     walletCredit = receiptResult.remaining;
     const sourceAllocation: PaymentAllocation = {
@@ -348,6 +354,7 @@ export function deriveTenantFinancialState(params: {
   monthsStayed: number;
   utilityBreakdown: UtilityDueBreakdown;
   depositDue: number;
+  otherDue?: number;
   overdueRentCharged?: number;
   rentObligations?: Array<{ billingPeriod: string; amount: number; dueDate: Date; overdue: boolean }>;
   payments: LedgerPayment[];
@@ -371,7 +378,7 @@ export function deriveTenantFinancialState(params: {
     depositDue: params.depositDue,
     rentDue: params.rentDue,
     utilityDue: params.utilityBreakdown.charged,
-    otherDue: 0,
+    otherDue: params.otherDue || 0,
     walletBalance: 0,
     payments: eligiblePayments,
   });
@@ -395,6 +402,7 @@ export function deriveTenantFinancialState(params: {
     penaltyFrequency: params.property?.penaltyFrequency,
   }));
   const depositOutstanding = money(Math.max(0, params.depositDue - ledger.depositPaid));
+  const otherOutstanding = money(Math.max(0, money(params.otherDue) - ledger.otherPaid));
   const rentOutstanding = money(Math.max(0, params.rentDue - ledger.rentPaid));
   const utilitiesOutstanding = money(Math.max(0, params.utilityBreakdown.charged - ledger.utilitiesPaid));
   const utilityObligations = [...(params.utilityBreakdown.obligations || [])]
@@ -419,6 +427,7 @@ export function deriveTenantFinancialState(params: {
     rentCharged: money(params.rentDue),
     rentPaid: ledger.rentPaid,
     otherPaid: ledger.otherPaid,
+    otherOutstanding,
     rentOutstanding,
     utilitiesCharged: money(params.utilityBreakdown.charged),
     utilitiesPaid: ledger.utilitiesPaid,
@@ -430,7 +439,7 @@ export function deriveTenantFinancialState(params: {
     overdueUtilities,
     penalties,
     overdueAmount: money(overdueRent + overdueUtilities),
-    totalOutstanding: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + penalties),
+    totalOutstanding: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + otherOutstanding + penalties),
     walletBalance: ledger.walletBalance,
     walletApplied: ledger.walletApplied,
     paymentAllocations: ledger.allocations,
@@ -460,7 +469,22 @@ export async function calculateTenantFinancialState(
   const overrides = options.rentOverrideMap ?? await fetchActiveRentOverridesByPropertyIds(db, [String(tenant.propertyId)], options.session);
   const leaseStart = tenant.leaseStartDate ? new Date(tenant.leaseStartDate) : null;
   const paymentDay = property?.rentPaymentDate ?? (leaseStart && !Number.isNaN(leaseStart.getTime()) ? businessDateParts(leaseStart).day : 1);
-  const { rentDue, overdueRentDue, monthsStayed, obligations: rentObligations } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides, paymentDay });
+  const { rentDue: baseRentDue, overdueRentDue, monthsStayed, obligations: baseRentObligations } = calculateTenantRentDueToDate({ tenant, today: asOf, rentOverrideMap: overrides, paymentDay });
+  const manualInvoiceObligations = await getManualTenantInvoiceChargeObligations(db, String(tenant._id), String(tenant.propertyId), asOf);
+  const manualRent = manualInvoiceObligations.reduce((sum, invoice) => sum + invoice.categories.rent, 0) / 100;
+  const manualUtilities = manualInvoiceObligations.reduce((sum, invoice) => sum + invoice.categories.utilities, 0) / 100;
+  const manualDeposit = manualInvoiceObligations.reduce((sum, invoice) => sum + invoice.categories.deposit, 0) / 100;
+  const manualOther = manualInvoiceObligations.reduce((sum, invoice) => sum + invoice.categories.penalty + invoice.categories.other, 0) / 100;
+  const rentDue = money(baseRentDue + manualRent);
+  const rentObligations = [
+    ...baseRentObligations,
+    ...manualInvoiceObligations.filter((invoice) => invoice.categories.rent > 0).map((invoice) => ({
+      billingPeriod: `MANUAL-${invoice.invoiceId}`,
+      amount: invoice.categories.rent / 100,
+      dueDate: invoice.dueDate,
+      overdue: businessDateKey(invoice.dueDate) < businessDateKey(asOf),
+    })),
+  ];
   const fixedUtilities = calculateFixedUtilityBreakdown({
     utilities: property?.utilities,
     tenant,
@@ -477,12 +501,15 @@ export async function calculateTenantFinancialState(
     tenant.leaseEndDate,
   );
   const utilityBreakdown: UtilityDueBreakdown = {
-    charged: money(fixedUtilities.charged + meteredUtilities.charged),
-    currentCharged: money(fixedUtilities.currentCharged + meteredUtilities.currentCharged),
-    overdueCharged: money(fixedUtilities.overdueCharged + meteredUtilities.overdueCharged),
-    obligations: [...(fixedUtilities.obligations || []), ...(meteredUtilities.obligations || [])],
+    charged: money(fixedUtilities.charged + meteredUtilities.charged + manualUtilities),
+    currentCharged: money(fixedUtilities.currentCharged + meteredUtilities.currentCharged + manualInvoiceObligations.filter((invoice) => businessDateKey(invoice.dueDate) >= businessDateKey(asOf)).reduce((sum, invoice) => sum + invoice.categories.utilities / 100, 0)),
+    overdueCharged: money(fixedUtilities.overdueCharged + meteredUtilities.overdueCharged + manualInvoiceObligations.filter((invoice) => businessDateKey(invoice.dueDate) < businessDateKey(asOf)).reduce((sum, invoice) => sum + invoice.categories.utilities / 100, 0)),
+    obligations: [
+      ...(fixedUtilities.obligations || []), ...(meteredUtilities.obligations || []),
+      ...manualInvoiceObligations.filter((invoice) => invoice.categories.utilities > 0).map((invoice) => ({ billingPeriod: `MANUAL-${invoice.invoiceId}`, amount: invoice.categories.utilities / 100, dueDate: invoice.dueDate, overdue: businessDateKey(invoice.dueDate) < businessDateKey(asOf) })),
+    ],
   };
-  const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }));
+  const depositDue = money(resolveTenantRequiredDeposit({ tenant, unitTypes: property?.unitTypes }) + manualDeposit);
   // Use reversal-aware rows linked to this tenant and lease property. Keep
   // legacy rows with no property (or a deleted property), but do not let a
   // payment explicitly linked to another existing property reduce these dues.
@@ -497,6 +524,21 @@ export async function calculateTenantFinancialState(
     session: options.session,
   });
   const payments = mapFinancialRowsToLedgerPayments(financialRows);
+  const targetedInvoiceIds = [...new Set(payments.map((payment) => String(payment.tenantInvoiceId || "")).filter((id) => ObjectId.isValid(id)))];
+  const targetedInvoices = targetedInvoiceIds.length ? await db.collection("tenantInvoices").find({ _id: { $in: targetedInvoiceIds.map((id) => new ObjectId(id)) } }).toArray() : [];
+  const priorityByInvoice = new Map(targetedInvoices.map((invoice: any) => {
+    const categories: AllocationField[] = [];
+    for (const item of invoice.items || []) {
+      const field = item.category === "utilities" ? "utilities" : item.category === "deposit" ? "deposit" : item.category === "penalty" || item.category === "other" ? "other" : "rent";
+      if (!categories.includes(field)) categories.push(field);
+    }
+    for (const adjustment of invoice.adjustments || []) {
+      const field = adjustment.category === "utilities" ? "utilities" : adjustment.category === "deposit" ? "deposit" : adjustment.category === "penalty" || adjustment.category === "other" ? "other" : "rent";
+      if (!categories.includes(field)) categories.push(field);
+    }
+    return [String(invoice._id), categories];
+  }));
+  for (const payment of payments) if (payment.tenantInvoiceId) payment.invoicePriority = priorityByInvoice.get(String(payment.tenantInvoiceId));
   return deriveTenantFinancialState({
     tenant,
     asOf,
@@ -504,6 +546,7 @@ export async function calculateTenantFinancialState(
     monthsStayed,
     utilityBreakdown,
     depositDue,
+    otherDue: manualOther,
     overdueRentCharged: overdueRentDue,
     rentObligations,
     payments,
@@ -581,11 +624,20 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string,
 
   for (const [paymentId, allocation] of allocations) {
     if (ObjectId.isValid(paymentId)) {
-      await db.collection("payments").updateOne(
+      // Posted payment allocations are historical financial records. Only the
+      // payment currently being finalized (with an active posting claim) may
+      // receive its first allocation snapshot here.
+      const currentPayment = await db.collection("payments").findOne(
         { _id: new ObjectId(paymentId) },
-        { $set: { allocation } },
-        options.session ? { session: options.session } : undefined,
+        { projection: { financialPostingClaim: 1, financialPostingStatus: 1, utilityAllocations: 1 }, ...(options.session ? { session: options.session } : {}) },
       );
+      if (currentPayment?.financialPostingClaim && currentPayment.financialPostingStatus === "processing") {
+        await db.collection("payments").updateOne(
+          { _id: new ObjectId(paymentId), financialPostingStatus: "processing", allocation: { $exists: false } },
+          { $set: { allocation } },
+          options.session ? { session: options.session } : undefined,
+        );
+      }
       const expectedConsumed = money(allocation.walletApplied || 0);
       const alreadyConsumed = consumedBySourcePayment.get(paymentId) || 0;
       const incrementalDebit = money(Math.max(0, expectedConsumed - alreadyConsumed));
@@ -662,17 +714,23 @@ export async function reconcileTenantPaymentAllocation(db: Db, tenantId: string,
       chargeRemaining.set(allocation.utilityChargeId, money(available - allocation.amount));
       remaining = money(remaining - allocation.amount);
     }
-    await db.collection("payments").updateOne(
+    const currentPayment = await db.collection("payments").findOne(
       { _id: payment._id },
-      { $set: { utilityAllocations } },
-      options.session ? { session: options.session } : undefined,
+      { projection: { financialPostingClaim: 1, financialPostingStatus: 1, utilityAllocations: 1 }, ...(options.session ? { session: options.session } : {}) },
     );
+    if (currentPayment?.financialPostingClaim && currentPayment.financialPostingStatus === "processing" && !Array.isArray(currentPayment.utilityAllocations)) {
+      await db.collection("payments").updateOne(
+        { _id: payment._id, financialPostingStatus: "processing", utilityAllocations: { $exists: false } },
+        { $set: { utilityAllocations } },
+        options.session ? { session: options.session } : undefined,
+      );
+    }
   }
 
   const rentOutstanding = state.rentOutstanding;
   const utilitiesOutstanding = state.utilitiesOutstanding;
   const depositOutstanding = state.depositOutstanding;
-  const otherOutstanding = 0;
+  const otherOutstanding = state.otherOutstanding;
   const totalOutstanding = state.totalOutstanding;
   await db.collection("tenants").updateOne(
     { _id: new ObjectId(tenantId) },

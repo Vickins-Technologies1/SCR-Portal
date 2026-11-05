@@ -181,6 +181,22 @@ const coreIndexes: Array<{ collection: string; indexes: IndexDescription[] }> = 
     ],
   },
   {
+    collection: "tenantInvoiceLedger",
+    indexes: [
+      { key: { eventKey: 1 }, name: "tenantInvoiceLedger_eventKey_unique", unique: true },
+      { key: { invoiceId: 1, occurredAt: 1, _id: 1 }, name: "tenantInvoiceLedger_invoice_occurred" },
+      { key: { sourcePaymentId: 1, invoiceId: 1 }, name: "tenantInvoiceLedger_payment_invoice" },
+      { key: { tenantId: 1, propertyId: 1, occurredAt: 1 }, name: "tenantInvoiceLedger_tenant_property_occurred" },
+    ],
+  },
+  {
+    collection: "tenantInvoiceAutomationFailures",
+    indexes: [
+      { key: { failureKey: 1 }, name: "tenantInvoiceAutomationFailures_key_unique", unique: true },
+      { key: { landlordId: 1, status: 1, updatedAt: -1 }, name: "tenantInvoiceAutomationFailures_landlord_status_updated" },
+    ],
+  },
+  {
     collection: "tenantInvoiceDeliveries",
     indexes: [
       { key: { invoiceId: 1, createdAt: -1 }, name: "tenantInvoiceDeliveries_invoice_created" },

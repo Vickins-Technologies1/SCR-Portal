@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { identityValues } from "@/lib/payment-query";
 import { addInvoicePaymentStates } from "@/lib/tenant-invoices";
 import { summarizeTenantInvoices } from "@/lib/tenant-invoice-summary";
+import { businessDayEnd, businessDayStart } from "@/lib/business-time";
 
 function dateBoundary(value: string | null, endOfDay = false) {
   if (!value) return null;
@@ -42,7 +43,28 @@ export async function GET(request: NextRequest) {
   if (startDate || endDate) filter.issueDate = { ...(startDate ? { $gte: startDate } : {}), ...(endDate ? { $lte: endDate } : {}) };
   const rows = selectedPropertyIds.length ? await db.collection("tenantInvoices").find(filter).sort({ issueDate: -1, _id: -1 }).toArray() : [];
   const calculated = await addInvoicePaymentStates(db, rows);
-  return NextResponse.json({ success: true, summary: summarizeTenantInvoices(calculated) });
+  const summary = summarizeTenantInvoices(calculated);
+  const today = new Date();
+  const todayStart = businessDayStart(today);
+  const todayEnd = businessDayEnd(today);
+  const propertyScope = { propertyId: { $in: selectedPropertyIds } };
+  const [generatedToday, failedDeliveries, failedGenerations] = selectedPropertyIds.length ? await Promise.all([
+    db.collection("tenantInvoices").countDocuments({ landlordId, ...propertyScope, issueDate: { $gte: todayStart, $lte: todayEnd } }),
+    db.collection("tenantInvoiceDeliveries").countDocuments({ landlordId, status: "failed", createdAt: { $gte: todayStart, $lte: todayEnd } }),
+    db.collection("tenantInvoiceAutomationFailures").countDocuments({ landlordId, status: "failed", ...propertyScope }),
+  ]) : [0, 0, 0];
+  const recentFailures = selectedPropertyIds.length ? await db.collection("tenantInvoiceAutomationFailures").find({ landlordId, status: "failed", ...propertyScope }).sort({ updatedAt: -1 }).limit(20).project({ tenantId: 1, propertyId: 1, period: 1, error: 1, updatedAt: 1 }).toArray() : [];
+  return NextResponse.json({ success: true, summary, health: {
+    generatedToday,
+    pendingDrafts: summary.draftInvoices,
+    issued: summary.totalInvoices,
+    partiallyPaid: summary.partiallyPaidInvoices,
+    overdue: summary.overdueInvoices,
+    paid: summary.paidInvoices,
+    failedDeliveries,
+    failedAutomaticGenerations: failedGenerations,
+    recentFailures,
+  } });
 }
 
 export const dynamic = "force-dynamic";

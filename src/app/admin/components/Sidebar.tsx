@@ -11,6 +11,7 @@ import {
   Users,
   Building2,
   CreditCard,
+  FileText,
   Headphones,
   AlertCircle,
   Home,
@@ -161,6 +162,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       href: "/admin/payments",
       label: "Payments & Invoices",
       icon: <CreditCard size={20} />,
+      requiredPermission: "admin:payments:view",
+    },
+    {
+      key: "tenant-invoices",
+      href: "/admin/tenant-invoices",
+      label: "Tenant Invoice Health",
+      icon: <FileText size={20} />,
       requiredPermission: "admin:payments:view",
     },
     {

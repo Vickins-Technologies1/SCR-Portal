@@ -3,6 +3,7 @@ import { Db, ObjectId } from "mongodb";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { recordPostedPaymentLedger } from "@/lib/financial-ledger";
 import { calculateInvoiceFinancialState, reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
+import { recordTenantInvoicePaymentAllocations, recordTenantInvoiceWalletAllocations } from "@/lib/tenant-invoices";
 
 export type VerifiedPaymentPostingResult =
   | { outcome: "posted"; payment: any; tenantState?: any; invoice?: any }
@@ -191,6 +192,18 @@ export async function postVerifiedPayment(params: {
   }
   const refreshedPayment = await params.db.collection("payments").findOne({ _id: paymentObjectId }) || claimedPayment;
   const invoice = claimedPayment.invoiceId ? await reconcileInvoice(params.db, String(claimedPayment.invoiceId)) : null;
+
+  if (claimedPayment.tenantId) {
+    await recordTenantInvoicePaymentAllocations(params.db, refreshedPayment);
+  }
+  if (claimedPayment.tenantId) {
+    await recordTenantInvoiceWalletAllocations(
+      params.db,
+      String(claimedPayment.tenantId),
+      tenantState?.financialState?.paymentAllocations,
+      `payment:${String(claimedPayment._id)}:posted`,
+    );
+  }
 
   const finalPaymentBeforeLedger = await params.db.collection("payments").findOne({ _id: paymentObjectId }) || claimedPayment;
   await recordPostedPaymentLedger(params.db, finalPaymentBeforeLedger);

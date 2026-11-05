@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { connectToDatabase } from "@/lib/mongodb";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
-import { addInvoicePaymentStates, getPriorInvoiceOutstandingMinor, invoiceCategoryTotals, invoiceItemsForDisplay, validObjectId } from "@/lib/tenant-invoices";
+import { addInvoicePaymentStates, invoiceCategoryTotals, invoiceItemsForDisplay, recordTenantInvoiceCharges, validObjectId } from "@/lib/tenant-invoices";
 import { generateTenantInvoicePdf } from "@/lib/tenant-invoice-pdf";
 import { sendInvoiceEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
@@ -19,7 +20,7 @@ async function scopedInvoice(request: NextRequest, id: string, db: any, manage =
   const invoice = await db.collection("tenantInvoices").findOne({ _id: new ObjectId(id) });
   if (!invoice) return { error: "Invoice not found", status: 404 } as const;
   if (role === "tenant") {
-    if (invoice.tenantId !== userId || invoice.status !== "issued") return { error: "Invoice not found", status: 404 } as const;
+    if (invoice.tenantId !== userId || !["issued", "partially_paid", "paid", "overdue"].includes(String(invoice.status))) return { error: "Invoice not found", status: 404 } as const;
     return { invoice, actorId: userId, actorRole: role, tenantView: true as const };
   }
   if (!(["propertyOwner", "teamMember"].includes(role))) return { error: "Unauthorized", status: 403 } as const;
@@ -43,7 +44,6 @@ export async function GET(request: NextRequest, context: Ctx) {
   const scoped = await scopedInvoice(request, invoiceId, db);
   if ("error" in scoped) return NextResponse.json({ success: false, message: scoped.error }, { status: scoped.status });
   const [invoice] = await addInvoicePaymentStates(db, [scoped.invoice]);
-  invoice.previousOutstandingMinor = await getPriorInvoiceOutstandingMinor(db, scoped.invoice);
   let paymentInstructions = "Use the payment method agreed with your property manager.";
   try {
     const routing = await resolveOwnerTenantMpesaRouting(db, { landlordId: scoped.invoice.landlordId, propertyId: scoped.invoice.propertyId });
@@ -72,21 +72,27 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 300) : "";
     const value = Number(body.amount);
     const amountMinor = Number.isFinite(value) && value > 0 && value <= 1_000_000_000 ? Math.round(value * 100) : 0;
-    const category = ["rent", "utilities", "other"].includes(body.category) ? body.category : "other";
+    const category = ["rent", "utilities", "deposit", "penalty", "other"].includes(body.category) ? body.category : "other";
     if (!description || !reason || !amountMinor || !["credit", "charge"].includes(body.direction)) return NextResponse.json({ success: false, message: "Provide a description, reason, positive amount, category, and credit or charge direction" }, { status: 400 });
     const signedAmount = body.direction === "credit" ? -amountMinor : amountMinor;
     const categoryTotals = invoiceCategoryTotals(invoice);
-    if (signedAmount < 0 && amountMinor > categoryTotals[category as keyof typeof categoryTotals]) return NextResponse.json({ success: false, message: "Credit cannot exceed the remaining charge in its category" }, { status: 400 });
+    const [financial] = await addInvoicePaymentStates(db, [invoice]);
+    if (signedAmount < 0) {
+      const categoryPaid = Number(financial?.categoryPaidMinor?.[category] || 0);
+      const categoryOutstanding = Math.max(0, Number(financial?.categoryTotalsMinor?.[category] ?? categoryTotals[category as keyof typeof categoryTotals]) - categoryPaid);
+      if (amountMinor > categoryOutstanding) return NextResponse.json({ success: false, message: "Credit cannot exceed the unpaid charge in its category" }, { status: 400 });
+    }
     const adjustedTotal = Object.values(categoryTotals).reduce((sum, total) => sum + total, 0) + signedAmount;
     if (!Number.isSafeInteger(adjustedTotal) || adjustedTotal <= 0) return NextResponse.json({ success: false, message: "Adjustment must leave a positive invoice total" }, { status: 400 });
     const now = new Date();
     const update = await db.collection("tenantInvoices").updateOne(
       { _id: invoice._id, status: "issued", ...(invoice.updatedAt ? { updatedAt: invoice.updatedAt } : {}) },
-      { $push: { adjustments: { description, reason, category, amountMinor: signedAmount, direction: body.direction, actorId: scoped.actorId, createdAt: now } } as any, $set: { updatedAt: now } },
+      { $push: { adjustments: { eventId: randomUUID(), description, reason, category, amountMinor: signedAmount, direction: body.direction, actorId: scoped.actorId, createdAt: now } } as any, $set: { updatedAt: now } },
     );
     if (!update.modifiedCount) return NextResponse.json({ success: false, message: "Invoice changed concurrently; refresh and retry the adjustment" }, { status: 409 });
     await audit(db, scoped, "adjusted", { description, reason, category, amountMinor: signedAmount });
     const updatedInvoice = await db.collection("tenantInvoices").findOne({ _id: invoice._id });
+    await recordTenantInvoiceCharges(db, updatedInvoice);
     const [result] = await addInvoicePaymentStates(db, [updatedInvoice]);
     return NextResponse.json({ success: true, invoice: result });
   }
@@ -101,7 +107,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     if (body.notes !== undefined) set.notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) : "";
     if (body.items !== undefined) {
       if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 50) return NextResponse.json({ success: false, message: "Provide 1–50 invoice items" }, { status: 400 });
-      const items = body.items.map((item: any) => ({ description: String(item?.description || "").trim().slice(0, 120), quantity: Number(item?.quantity), unitAmount: Math.round(Number(item?.unitPrice) * 100), category: ["rent", "utilities", "other"].includes(item?.category) ? item.category : "other" }));
+      const items = body.items.map((item: any) => ({ description: String(item?.description || "").trim().slice(0, 120), quantity: Number(item?.quantity), unitAmount: Math.round(Number(item?.unitPrice) * 100), category: ["rent", "utilities", "deposit", "penalty", "other"].includes(item?.category) ? item.category : "other" }));
       if (items.some((item: any) => !item.description || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > 10000 || !Number.isSafeInteger(item.unitAmount) || item.unitAmount <= 0)) return NextResponse.json({ success: false, message: "Each item requires a description, quantity and positive unit price" }, { status: 400 });
       const normalized = items.map((item: any) => ({ ...item, amount: Math.round(item.quantity * item.unitAmount) }));
       const totalMinor = normalized.reduce((sum: number, item: any) => sum + item.amount, 0);
@@ -155,6 +161,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
   );
   const issuedInvoice = (issued as any)?.value ?? issued;
   if (!issuedInvoice || issuedInvoice.status !== "issued") return NextResponse.json({ success: false, message: "Invoice changed concurrently; refresh and try again" }, { status: 409 });
+  await recordTenantInvoiceCharges(db, issuedInvoice);
   await audit(db, { ...scoped, invoice: issuedInvoice }, body.approve === true ? "approved_and_issued" : "issued", { invoiceNumber: issueNo });
   let delivery: any = null;
   if (body.send === true) delivery = await deliverInvoice({ db, invoice: issuedInvoice, channel: body.channel || "email", actorId: scoped.actorId });
@@ -189,7 +196,6 @@ async function deliverInvoice({ db, invoice, channel, actorId }: { db: any; invo
   const landlord = await db.collection("propertyOwners").findOne({ _id: new ObjectId(invoice.landlordId) });
   const billingSettings = await db.collection("landlordBillingSettings").findOne({ landlordId: invoice.landlordId });
   const [financial] = await addInvoicePaymentStates(db, [invoice]);
-  const previousOutstandingMinor = await getPriorInvoiceOutstandingMinor(db, invoice);
   if (!tenant || !property) return { status: "failed", error: "Tenant or property record is unavailable" };
   let instructions = "Use the payment method agreed with your property manager.";
   try {
@@ -201,9 +207,11 @@ async function deliverInvoice({ db, invoice, channel, actorId }: { db: any; invo
   const pdf = await generateTenantInvoicePdf({
     invoiceNumber: invoice.invoiceNumber, issueDate: invoice.issueDate, dueDate: invoice.dueDate, billingPeriod: invoice.billingPeriodLabel || invoice.billingPeriod, status: financial?.status || invoice.status,
     tenantName: tenant.name || invoice.tenantName, tenantEmail: tenant.email, propertyName: property.name || invoice.propertyName, propertyAddress: property.address,
-    unitLabel: invoice.unitLabel, items: invoiceItemsForDisplay(invoice), totalMinor: financial?.totalMinor ?? invoice.totalMinor, amountPaidMinor: financial?.amountPaidMinor || 0, landlordName: landlord?.name, landlordEmail: landlord?.email,
+    unitLabel: invoice.unitLabel, items: financial?.displayItems || invoiceItemsForDisplay(invoice), totalMinor: financial?.totalMinor ?? invoice.totalMinor, amountPaidMinor: financial?.amountPaidMinor || 0,
+    balanceMinor: financial?.balanceMinor ?? invoice.totalMinor, walletCreditAppliedMinor: financial?.walletCreditAppliedMinor || 0, reversedAmountMinor: financial?.reversedAmountMinor || 0,
+    landlordName: landlord?.name, landlordEmail: landlord?.email,
     landlordPhone: landlord?.phone, brandName: billingSettings?.invoiceBrandName, brandColor: billingSettings?.invoiceBrandColor,
-    previousOutstandingMinor, creditsAndAdjustmentsMinor: (invoice.adjustments || []).reduce((sum: number, row: any) => sum + Number(row.amountMinor || 0), 0), paymentInstructions: instructions,
+    paymentInstructions: instructions,
   });
   const channels = channel === "both" ? ["email", "sms"] : [channel];
   const outcomes: Record<string, string> = {};
@@ -214,12 +222,12 @@ async function deliverInvoice({ db, invoice, channel, actorId }: { db: any; invo
       if (method === "email") {
         if (!tenant.email) throw new Error("Tenant email address is missing");
         const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || process.env.APP_URL || "").replace(/\/$/, "");
-        await sendInvoiceEmail({ to: tenant.email, ownerName: tenant.name || "Tenant", propertyName: property.name || "Property", amount: financial?.balanceDue ?? invoice.totalMinor / 100, dueDate: new Date(invoice.dueDate).toLocaleDateString("en-KE"), reminderType: "manual", dashboardUrl: `${baseUrl}/tenant-dashboard/invoices`, invoiceNumber: invoice.invoiceNumber, pdfBytes: pdf.pdfBytes });
+        await sendInvoiceEmail({ to: tenant.email, ownerName: tenant.name || "Tenant", propertyName: property.name || "Property", amount: financial?.balanceDue ?? invoice.totalMinor / 100, dueDate: new Date(invoice.dueDate).toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" }), reminderType: "manual", dashboardUrl: `${baseUrl}/tenant-dashboard/invoices`, invoiceNumber: invoice.invoiceNumber, pdfBytes: pdf.pdfBytes });
       } else if (method === "sms") {
         if (!tenant.phone) throw new Error("Tenant phone number is missing");
-        await sendWelcomeSms({ phone: tenant.phone, message: `My Accurate Rent: Invoice ${invoice.invoiceNumber} for ${property.name || "your property"}, KES ${(invoice.totalMinor / 100).toFixed(2)}, due ${new Date(invoice.dueDate).toLocaleDateString("en-KE")}. View in your tenant portal.` });
+        await sendWelcomeSms({ phone: tenant.phone, message: `My Accurate Rent: Invoice ${invoice.invoiceNumber}, balance KES ${(financial?.balanceDue ?? invoice.totalMinor / 100).toFixed(2)}, due ${new Date(invoice.dueDate).toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" })}. View in your tenant portal.` });
       } else {
-        await db.collection("notifications").insertOne({ tenantId: invoice.tenantId, ownerId: invoice.landlordId, tenantName: tenant.name, audience: "tenant", type: "other", message: `Invoice ${invoice.invoiceNumber} issued for KES ${(invoice.totalMinor / 100).toFixed(2)}. Due ${new Date(invoice.dueDate).toLocaleDateString("en-KE")}.`, source: "tenant_invoice", sourceId: invoice._id.toString(), status: "unread", deliveryMethod: "app", deliveryStatus: "success", createdAt: new Date().toISOString() });
+        await db.collection("notifications").insertOne({ tenantId: invoice.tenantId, ownerId: invoice.landlordId, tenantName: tenant.name, audience: "tenant", type: "other", message: `Invoice ${invoice.invoiceNumber}, balance KES ${(financial?.balanceDue ?? invoice.totalMinor / 100).toFixed(2)}. Due ${new Date(invoice.dueDate).toLocaleDateString("en-KE", { timeZone: "Africa/Nairobi" })}.`, source: "tenant_invoice", sourceId: invoice._id.toString(), status: "unread", deliveryMethod: "app", deliveryStatus: "success", createdAt: new Date().toISOString() });
       }
       outcomes[method] = "sent";
       await db.collection("tenantInvoiceDeliveries").updateOne({ _id: log.insertedId }, { $set: { status: "sent", sentAt: new Date(), updatedAt: new Date() } });

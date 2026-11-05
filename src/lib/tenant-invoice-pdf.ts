@@ -28,7 +28,7 @@ export type TenantInvoicePdfInput = {
   invoiceNumber: string; issueDate: Date | string; dueDate: Date | string; billingPeriod?: string; status?: string;
   tenantName: string; tenantEmail?: string; propertyName: string; propertyAddress?: string; unitLabel: string;
   items: Array<{ description: string; quantity: number; unitAmount: number; amount: number }>;
-  totalMinor: number; amountPaidMinor?: number; landlordName?: string; landlordEmail?: string; landlordPhone?: string;
+  totalMinor: number; originalInvoiceTotalMinor?: number; amountPaidMinor?: number; balanceMinor?: number; walletCreditAppliedMinor?: number; reversedAmountMinor?: number; landlordName?: string; landlordEmail?: string; landlordPhone?: string;
   paymentInstructions?: string; brandName?: string; brandColor?: string; previousOutstandingMinor?: number; creditsAndAdjustmentsMinor?: number;
 };
 
@@ -67,9 +67,10 @@ export async function generateTenantInvoicePdf(input: TenantInvoicePdfInput) {
   const width = right - left;
   const accent = invoiceAccent(input.brandColor);
   const amountPaid = input.amountPaidMinor || 0;
-  const adjustments = input.creditsAndAdjustmentsMinor || 0;
   const previous = input.previousOutstandingMinor || 0;
-  const currentBalanceMinor = Math.max(0, input.totalMinor - amountPaid + adjustments);
+  const currentBalanceMinor = Math.max(0, input.balanceMinor ?? input.totalMinor - amountPaid);
+  const walletCreditApplied = Math.min(amountPaid, Math.max(0, input.walletCreditAppliedMinor || 0));
+  const paymentAmount = Math.max(0, amountPaid - walletCreditApplied);
   const invoiceStatus = sanitizePdfText(input.status || (currentBalanceMinor <= 0 ? "PAID" : amountPaid > 0 ? "PARTIALLY PAID" : "ISSUED")).toUpperCase();
 
   const drawHeader = async (page: PDFPage, top: number, continued: boolean) => {
@@ -133,10 +134,12 @@ export async function generateTenantInvoicePdf(input: TenantInvoicePdfInput) {
   const summaryWidth = 256;
   const summaryX = right - summaryWidth;
   const summaryRows: Array<[string, number, boolean]> = [
+    ...(input.originalInvoiceTotalMinor !== undefined && input.originalInvoiceTotalMinor !== input.totalMinor ? [["Original invoice amount", input.originalInvoiceTotalMinor, false] as [string, number, boolean]] : []),
     ["Invoice total", input.totalMinor, true],
     ...(previous > 0 ? [["Previous outstanding", previous, false] as [string, number, boolean]] : []),
-    ...(adjustments !== 0 ? [["Credits / adjustments", adjustments, false] as [string, number, boolean]] : []),
-    ["Amount paid", amountPaid, false],
+    ["Payments received", paymentAmount, false],
+    ...(walletCreditApplied > 0 ? [["Wallet credit applied", walletCreditApplied, false] as [string, number, boolean]] : []),
+    ...((input.reversedAmountMinor || 0) > 0 ? [["Payment reversals", input.reversedAmountMinor || 0, false] as [string, number, boolean]] : []),
     ["Current balance due", currentBalanceMinor, true],
     ...(previous > 0 ? [["Total due including prior balance", currentBalanceMinor + previous, true] as [string, number, boolean]] : []),
   ];

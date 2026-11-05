@@ -22,6 +22,7 @@ import logger from "@/lib/logger";
 import { resolveAccountTier } from "@/lib/tier";
 import { expireStaleDarajaPendingPayments, resolveUnmatchedDarajaFailure } from "@/lib/daraja-callback";
 import { randomUUID } from "node:crypto";
+import { addInvoicePaymentStates } from "@/lib/tenant-invoices";
 
 const StkPushSchema = z.object({
   amount: z.preprocess((v) => Number(v), z.number().int().positive()),
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
 
     let propertyId: string | null = null;
     let tenantId: string | null = null;
+    let tenantInvoiceId: string | null = null;
     let derivedLandlordId: string | null = null;
     let isPlatformInvoicePayment = false;
     let invoicePaymentProvider: "daraja" | "kopokopo" | null = null;
@@ -140,6 +142,19 @@ export async function POST(request: NextRequest) {
           ? tenant.ownerId
           : tenant.ownerId?.toString?.() || null;
       invoiceReference = `TENANT-${tenantId}-${randomUUID().slice(0, 8)}`;
+      if (parsed.data.invoiceId) {
+        if (!ObjectId.isValid(parsed.data.invoiceId)) return NextResponse.json({ success: false, message: "Invalid tenant invoice ID" }, { status: 400 });
+        const selectedInvoice = await db.collection("tenantInvoices").findOne({ _id: new ObjectId(parsed.data.invoiceId) });
+        if (!selectedInvoice || String(selectedInvoice.tenantId) !== tenantId || String(selectedInvoice.propertyId) !== String(propertyId) || String(selectedInvoice.landlordId) !== String(derivedLandlordId)) {
+          return NextResponse.json({ success: false, message: "Tenant invoice not found" }, { status: 404 });
+        }
+        if (["draft", "cancelled", "voided", "superseded"].includes(String(selectedInvoice.status))) return NextResponse.json({ success: false, message: "This invoice is no longer payable" }, { status: 409 });
+        const [calculatedInvoice] = await addInvoicePaymentStates(db, [selectedInvoice]);
+        if (!calculatedInvoice || Number(calculatedInvoice.balanceMinor) <= 0) return NextResponse.json({ success: false, message: "This invoice is already paid" }, { status: 409 });
+        if (!["issued", "partially_paid", "overdue"].includes(String(calculatedInvoice.status))) return NextResponse.json({ success: false, message: "This invoice is no longer payable" }, { status: 409 });
+        tenantInvoiceId = String(selectedInvoice._id);
+        invoiceReference = String(selectedInvoice.invoiceNumber || `TENANT-${tenantId}-${tenantInvoiceId.slice(-8)}`);
+      }
     }
 
     // Owner-initiated STK (e.g., platform invoices)
@@ -548,6 +563,7 @@ export async function POST(request: NextRequest) {
       const merchantRequestId = incoming.merchantRequestId || "";
       await db.collection("payments").insertOne({
         tenantId,
+        ...(tenantInvoiceId ? { tenantInvoiceId } : {}),
         amount: paymentAmount,
         requestedAmount: paymentAmount,
         providerConfirmedAmount: null,
@@ -680,6 +696,7 @@ export async function POST(request: NextRequest) {
       {
         $set: {
           tenantId,
+          ...(tenantInvoiceId ? { tenantInvoiceId } : {}),
           paymentId: randomUUID(),
           amount: paymentAmount,
           requestedAmount: paymentAmount,

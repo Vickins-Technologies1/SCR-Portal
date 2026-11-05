@@ -48,9 +48,10 @@ export default function PaymentsPage() {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [displayedPayments, setDisplayedPayments] = useState<Payment[]>([]);
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [ownerTier, setOwnerTier] = useState<"free" | "premium" | null>(null);
   const [tenantFeatures, setTenantFeatures] = useState<{ canPay: boolean; canNotifications: boolean } | null>(null);
   const [landlordId, setLandlordId] = useState<string>("");
+  const [tenantInvoiceId, setTenantInvoiceId] = useState<string | null>(null);
+  const [invoiceBalance, setInvoiceBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -67,6 +68,23 @@ export default function PaymentsPage() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+    const invoiceId = new URLSearchParams(window.location.search).get("invoiceId");
+    if (!invoiceId) return;
+    setTenantInvoiceId(invoiceId);
+    void fetch(`/api/tenant-invoices/${encodeURIComponent(invoiceId)}`, { credentials: "include", cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data?.success || Number(data.invoice?.balanceDue) <= 0) throw new Error(data?.message || "This invoice is no longer payable");
+        const due = Number(data.invoice.balanceDue);
+        setInvoiceBalance(due);
+        setAmount(Math.max(1, Math.ceil(due)));
+        setIsModalOpen(true);
+      })
+      .catch((error) => setMessages([{ type: "error", text: error instanceof Error ? error.message : "Unable to load invoice", timestamp: new Date().toISOString() }]));
+  }, [isClient]);
 
   const fetchCsrfToken = useCallback(async () => {
     try {
@@ -145,7 +163,6 @@ export default function PaymentsPage() {
         if (normalizedOwnerId) setLandlordId(normalizedOwnerId);
       }
 
-      let canPay = true;
       try {
         const featuresRes = await fetch("/api/tenant/features", {
           credentials: "include",
@@ -153,19 +170,12 @@ export default function PaymentsPage() {
         });
         const featuresData = await featuresRes.json();
         if (featuresRes.ok && featuresData?.success) {
-          const resolvedTier = featuresData.ownerTier === "free" ? "free" : "premium";
-          setOwnerTier(resolvedTier);
           const resolvedFeatures = featuresData.features || null;
           setTenantFeatures(resolvedFeatures);
-          if (resolvedTier === "free") {
-            canPay = Boolean(resolvedFeatures?.canPay);
-          }
         } else {
-          setOwnerTier(null);
           setTenantFeatures(null);
         }
       } catch {
-        setOwnerTier(null);
         setTenantFeatures(null);
       }
 
@@ -242,8 +252,8 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     if (!isModalOpen || paymentType === "Other") return;
-    setAmount(getSuggestedAmount(paymentType, tenant?.dues));
-  }, [isModalOpen, paymentType, tenant?.dues, getSuggestedAmount]);
+    setAmount(tenantInvoiceId && invoiceBalance > 0 ? Math.max(1, Math.ceil(invoiceBalance)) : getSuggestedAmount(paymentType, tenant?.dues));
+  }, [isModalOpen, paymentType, tenant?.dues, getSuggestedAmount, tenantInvoiceId, invoiceBalance]);
 
   const handleOpenModal = () => {
     if (tenantFeatures?.canPay === false) {
@@ -594,6 +604,7 @@ export default function PaymentsPage() {
                       />
                     </label>
 
+                    {tenantInvoiceId && <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs"><p className="font-semibold">Paying an invoice</p><p className="mt-1">Current invoice balance: KES {invoiceBalance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. The submitted payment will be allocated to that invoice first.</p></div>}
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-900">
                       <p className="font-semibold">M-Pesa STK Push</p>
                       <p className="mt-1 text-emerald-800/90">
@@ -610,6 +621,7 @@ export default function PaymentsPage() {
                       landlordId={landlordId}
                       tenantId={tenantId || ""}
                       propertyId={tenant?.propertyId || ""}
+                      invoiceId={tenantInvoiceId || undefined}
                       csrfToken={csrfToken || ""}
                       type={paymentType}
                       disabled={isProcessing || amount < 1 || !validatePhoneNumber(phoneNumber) || !landlordId}
@@ -640,6 +652,7 @@ export default function PaymentsPage() {
                         setIsModalOpen(false);
                         setAmount(0);
                         setPaymentType("Rent");
+                        setTenantInvoiceId(null);
                         setIsProcessing(false);
                       }}
                       onPending={(message) => {
