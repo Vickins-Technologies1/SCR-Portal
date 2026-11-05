@@ -402,68 +402,6 @@ export default function BillingPage() {
     }
   };
 
-  // ── Update status ────────────────────────────────────────────────────────
-  const handleStatusChange = useCallback(
-    async (invoiceId: string, newStatus: "pending" | "completed" | "failed") => {
-      if (!csrfToken) {
-        setError("Security token missing. Please refresh.");
-        return;
-      }
-
-      const invoice = payments.find((inv) => inv._id === invoiceId);
-      if (!invoice) {
-        setError("Invoice not found.");
-        return;
-      }
-
-      try {
-        const res = await fetch("/api/invoices/update-status", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            invoiceId,
-            amount: invoice.amount,
-            status: newStatus,
-            description: invoice.description,
-          }),
-        });
-
-        if (res.status === 401 || res.status === 403) {
-          setError("Session expired. Redirecting...");
-          router.replace("/admin/login?session=expired");
-          return;
-        }
-
-        const data = await res.json();
-
-        if (data.success) {
-          setPayments((prev) =>
-            prev.map((inv) =>
-              inv._id === invoiceId
-                ? {
-                    ...inv,
-                    status: data.invoice.status,
-                    amount: data.invoice.amount,
-                    description: data.invoice.description,
-                    updatedAt: data.invoice.updatedAt,
-                  }
-                : inv
-            )
-          );
-        } else {
-          setError(data.message || "Failed to update status.");
-        }
-      } catch {
-        setError("Failed to connect to server.");
-      }
-    },
-    [csrfToken, payments, router]
-  );
-
   const totalPages = Math.ceil(filteredPayments.length / itemsPerPage);
   const paginated = filteredPayments.slice(
     (currentPage - 1) * itemsPerPage,
@@ -509,7 +447,7 @@ export default function BillingPage() {
                   <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin Console</p>
                   <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Payments & Invoices</h1>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    Track invoice transactions, update status, and generate PDFs.
+                    Track invoice transactions and generate PDFs.
                   </p>
                 </div>
               </div>
@@ -724,9 +662,6 @@ export default function BillingPage() {
                         Date
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Actions
                       </th>
                     </tr>
@@ -766,26 +701,6 @@ export default function BillingPage() {
                           </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">
                             {new Date(p.createdAt).toLocaleDateString("en-KE")}
-                          </td>
-                          <td className="px-4 py-3">
-                            <select
-                              value={p.status}
-                              onChange={(e) =>
-                                handleStatusChange(p._id, e.target.value as "pending" | "completed" | "failed")
-                              }
-                              className={cn(
-                                "text-xs px-3 py-1.5 rounded-md border font-medium focus:outline-none focus:ring-2 focus:ring-primary/30 transition",
-                                p.status === "completed"
-                                  ? "bg-primary/10 text-primary border-primary/30"
-                                  : p.status === "failed"
-                                  ? "bg-red-50 text-red-800 border-red-200"
-                                  : "bg-amber-50 text-amber-800 border-amber-200"
-                              )}
-                            >
-                              <option value="pending">Pending</option>
-                              <option value="completed">Completed</option>
-                              <option value="failed">Failed</option>
-                            </select>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-2">
