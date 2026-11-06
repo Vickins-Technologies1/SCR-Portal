@@ -9,6 +9,7 @@ import { sendInvoiceEmail } from "@/lib/email";
 import { sendWelcomeSms } from "@/lib/sms";
 import { resolveOwnerTenantMpesaRouting } from "@/lib/mpesa-routing";
 import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
+import { businessDateKey } from "@/lib/business-time";
 
 type Ctx = { params: Promise<{ invoiceId: string }> };
 
@@ -139,8 +140,12 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     if (!tenant || !property) return NextResponse.json({ success: false, message: "Tenant or property details are unavailable" }, { status: 409 });
     const dues = await calculateTenantInvoiceDues(db, tenant, property);
     const sameRefs = JSON.stringify([...(invoice.obligationRefs || [])].sort()) === JSON.stringify(dues.lines.map((line) => line.obligationRef).sort());
-    const existingLines = (invoice.items || []).map((line: any) => ({ ref: String(line.obligationRef || ""), amount: Number(line.amount) || 0, dueDate: line.dueDate ? new Date(line.dueDate).toISOString() : "" })).sort((a: any, b: any) => a.ref.localeCompare(b.ref));
-    const currentLines = dues.lines.map((line) => ({ ref: line.obligationRef, amount: line.amount, dueDate: line.dueDate.toISOString() })).sort((a, b) => a.ref.localeCompare(b.ref));
+    const dueDateKey = (value: unknown) => {
+      const date = value instanceof Date ? value : new Date(String(value || ""));
+      return Number.isNaN(date.getTime()) ? "" : businessDateKey(date);
+    };
+    const existingLines = (invoice.items || []).map((line: any) => ({ ref: String(line.obligationRef || ""), amount: Number(line.amount) || 0, dueDate: dueDateKey(line.dueDate) })).sort((a: any, b: any) => a.ref.localeCompare(b.ref));
+    const currentLines = dues.lines.map((line) => ({ ref: line.obligationRef, amount: line.amount, dueDate: dueDateKey(line.dueDate) })).sort((a, b) => a.ref.localeCompare(b.ref));
     const sameLines = JSON.stringify(existingLines) === JSON.stringify(currentLines);
     if (dues.totalMinor <= 0) return NextResponse.json({ success: false, message: "The tenant's overdue balance has been settled; this draft cannot be issued" }, { status: 409 });
     if (Number(invoice.totalMinor) !== dues.totalMinor || !sameRefs || !sameLines) {
