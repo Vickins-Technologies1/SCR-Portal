@@ -135,7 +135,16 @@ export default function LandlordInvoicesPage() {
     setPendingAction(operationId);
     try {
       const res = await fetch(`/api/tenant-invoices/${invoice._id}`, { method: action === "resend" || action === "retry" ? "POST" : "PATCH", credentials: "include", headers: { "Content-Type": "application/json", "X-CSRF-Token": Cookies.get("csrf-token") || "" }, body: JSON.stringify({ action, ...body }) });
-      const data = await readApiResponse(res, "Invoice action failed");
+      const data = await res.json().catch(() => null);
+      if (action === "issue" && data?.refreshed) {
+        await refresh();
+        const previewResponse = await fetch(`/api/tenant-invoices/${invoice._id}`, { credentials: "include", cache: "no-store" });
+        const previewData = await readApiResponse(previewResponse, "Unable to load the refreshed draft");
+        setPreview(previewData.invoice);
+        toast("The tenant balance changed. Review the refreshed draft before issuing.");
+        return;
+      }
+      if (!res.ok || !data?.success) throw new Error(data?.message || "Invoice action failed");
       if (data.delivery?.outcomes && Object.values(data.delivery.outcomes).some((state) => state === "failed")) toast.error(`Invoice ${action === "issue" ? "issued" : "updated"}, but some delivery attempts failed.`);
       else toast.success(action === "issue" ? "Invoice issued and sent." : action === "cancel" ? "Invoice cancelled." : action === "retry" ? "Failed delivery retried." : "Invoice resent.");
       await refresh();
