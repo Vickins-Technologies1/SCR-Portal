@@ -8,6 +8,7 @@ import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 
 type InvoiceLine = { description: string; quantity: number; unitAmount: number; amount: number; category?: "rent" | "utilities" | "deposit" | "penalty" | "other" };
 type TenantInvoice = {
+  _id: ObjectId;
   landlordId: string; tenantId: string; tenancyId: string; propertyId: string;
   unitLabel: string; tenantName: string; propertyName: string; billingPeriod: string;
   invoiceNumber: string; issueDate: Date | null; dueDate: Date; items: InvoiceLine[];
@@ -227,7 +228,7 @@ export async function POST(request: NextRequest) {
     const periodEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
     return (!leaseStart || Number.isNaN(leaseStart.getTime()) || leaseStart <= periodEnd) && (!leaseEnd || Number.isNaN(leaseEnd.getTime()) || leaseEnd >= periodStart);
   });
-  let created = 0; let duplicate = 0; let skipped = 0;
+  let created = 0; let updated = 0; let duplicate = 0; let skipped = 0;
   for (const tenant of eligible) {
     const property = properties.find((p) => String(p._id) === String(tenant.propertyId));
     if (!property) { skipped++; continue; }
@@ -237,22 +238,61 @@ export async function POST(request: NextRequest) {
     const invoiceNumber = `R-${landlordId.slice(-5).toUpperCase()}-${currentPeriod.replace("-", "")}-${tenant._id.toString().toUpperCase()}`;
     const items: InvoiceLine[] = dues.lines.map((line) => ({ ...line }));
     const doc: TenantInvoice = {
-      landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
+      _id: new ObjectId(), landlordId, tenantId: tenant._id.toString(), tenancyId: tenant._id.toString(), propertyId: property._id.toString(),
       unitLabel: String(tenant.houseNumber || tenant.unitIdentifier || tenant.unitType || "—"),
       tenantName: String(tenant.name || "Tenant"), propertyName: String(property.name || "Property"), billingPeriod: currentPeriod, billingPeriodLabel,
       invoiceNumber, issueDate: null, dueDate, items,
       totalMinor: dues.totalMinor, status: "draft", invoiceBasis: "overdue_tenant_dues_v1", obligationRefs: dues.lines.map((line) => line.obligationRef), obligationInvoiceIds: dues.existingInvoiceIds, createdAt: now, updatedAt: now,
     };
-    try {
+    const refreshFields = {
+      landlordId: doc.landlordId, tenantId: doc.tenantId, tenancyId: doc.tenancyId, propertyId: doc.propertyId,
+      unitLabel: doc.unitLabel, tenantName: doc.tenantName, propertyName: doc.propertyName,
+      billingPeriodLabel: doc.billingPeriodLabel, dueDate: doc.dueDate, items: doc.items,
+      totalMinor: doc.totalMinor, invoiceBasis: doc.invoiceBasis, obligationRefs: doc.obligationRefs,
+      obligationInvoiceIds: doc.obligationInvoiceIds, updatedAt: now,
+    };
+    const refreshExistingDraft = async (existing: any) => {
+      if (existing.status !== "draft" || existing.invoiceBasis !== "overdue_tenant_dues_v1"
+        || String(existing.landlordId) !== landlordId || String(existing.propertyId) !== doc.propertyId) return false;
       const result = await db.collection<TenantInvoice>("tenantInvoices").updateOne(
-        { tenancyId: doc.tenancyId, billingPeriod: doc.billingPeriod },
-        { $setOnInsert: doc },
-        { upsert: true },
+        { _id: existing._id, landlordId, propertyId: doc.propertyId, status: "draft", invoiceBasis: "overdue_tenant_dues_v1" },
+        { $set: refreshFields },
       );
-      if (result.upsertedCount) created++; else duplicate++;
+      if (!result.matchedCount) return false;
+      updated++;
+      await db.collection("tenantInvoiceActivity").insertOne({
+        invoiceId: existing._id.toString(), landlordId, tenantId: tenant._id.toString(),
+        event: "draft_refreshed", actorId: userId, actorRole: role,
+        detail: { source: "current_due_generation", totalMinor: dues.totalMinor, obligationRefs: doc.obligationRefs }, createdAt: now,
+      });
+      return true;
+    };
+    try {
+      const invoiceFilter = { tenancyId: doc.tenancyId, billingPeriod: doc.billingPeriod };
+      const existing = await db.collection<TenantInvoice>("tenantInvoices").findOne(invoiceFilter);
+      if (existing) {
+        if (!await refreshExistingDraft(existing)) duplicate++;
+        continue;
+      }
+
+      const result = await db.collection<TenantInvoice>("tenantInvoices").updateOne(invoiceFilter, { $setOnInsert: doc }, { upsert: true });
+      if (result.upsertedCount) {
+        created++;
+        await db.collection("tenantInvoiceActivity").insertOne({
+          invoiceId: (result.upsertedId || doc._id).toString(), landlordId, tenantId: tenant._id.toString(),
+          event: "draft_created", actorId: userId, actorRole: role,
+          detail: { source: "current_due_generation", totalMinor: dues.totalMinor, obligationRefs: doc.obligationRefs }, createdAt: now,
+        });
+      } else {
+        const raced = await db.collection<TenantInvoice>("tenantInvoices").findOne(invoiceFilter);
+        if (!raced || !await refreshExistingDraft(raced)) duplicate++;
+      }
     } catch (error: any) {
-      if (error?.code === 11000) duplicate++; else throw error;
+      if (error?.code === 11000) {
+        const raced = await db.collection<TenantInvoice>("tenantInvoices").findOne({ tenancyId: doc.tenancyId, billingPeriod: doc.billingPeriod });
+        if (!raced || !await refreshExistingDraft(raced)) duplicate++;
+      } else throw error;
     }
   }
-  return NextResponse.json({ success: true, billingPeriod: currentPeriod, requestedPeriod: body.billingPeriod, billingPeriodLabel, created, duplicate, skipped });
+  return NextResponse.json({ success: true, billingPeriod: currentPeriod, requestedPeriod: body.billingPeriod, billingPeriodLabel, created, updated, duplicate, skipped });
 }
