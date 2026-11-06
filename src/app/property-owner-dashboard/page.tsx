@@ -656,7 +656,6 @@ export default function PropertyOwnerDashboard() {
                           value: formatCurrency(stats.totalOverdueAmount),
                           icon: AlertCircle,
                           color: "red",
-                          subtitle: "Rent + utilities past due across all tenant records",
                           explanation: `Past-due rent and utilities across tenant ledgers, including former tenants. The overdue tenant count covers current occupants; this amount excludes deposits and penalties. Rent overdue: ${formatCurrency(stats.totalOverdueRent)}. Utilities overdue: ${formatCurrency(stats.totalOverdueUtilities)}.`,
                         },
                         {
