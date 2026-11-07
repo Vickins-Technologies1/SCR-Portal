@@ -109,9 +109,12 @@ function signedCategoryMap() {
 export function calculateWalletConsumedAllocation(rows: any[], fallbackCategory: unknown = "other") {
   const totals = signedCategoryMap();
   const cumulative = signedCategoryMap();
-  const fallbackCandidates = Array.isArray(fallbackCategory) ? fallbackCategory : [fallbackCategory];
-  const fallbackValue = fallbackCandidates.find((candidate) => candidate === "rent" || candidate === "utilities" || candidate === "deposit");
-  const fallback = fallbackValue === "rent" || fallbackValue === "utilities" || fallbackValue === "deposit" ? fallbackValue : "other";
+  const fallbackCandidates: unknown[] = Array.isArray(fallbackCategory) ? fallbackCategory : [fallbackCategory];
+  const fallbackValue = fallbackCandidates.find(
+    (candidate): candidate is InvoiceLedgerCategory =>
+      typeof candidate === "string" && ledgerCategories.includes(candidate as InvoiceLedgerCategory),
+  );
+  const fallback: InvoiceLedgerCategory = fallbackValue || "other";
   const ordered = [...rows].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime() || String(a.eventKey || a._id).localeCompare(String(b.eventKey || b._id)));
   for (const row of ordered) {
     const snapshot = row.walletAllocation && typeof row.walletAllocation === "object" ? row.walletAllocation : null;
