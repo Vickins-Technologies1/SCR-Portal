@@ -1,29 +1,32 @@
-// src/app/admin/components/Sidebar.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import {
-  LayoutDashboard,
-  Users,
+  AlertTriangle,
+  Award,
+  Banknote,
   Building2,
-  CreditCard,
-  FileText,
-  Headphones,
-  AlertCircle,
-  Home,
   CalendarCheck,
-  MessageCircle,
-  Wallet,
+  ChevronDown,
+  FileCheck,
+  GitCompareArrows,
+  Headset,
+  House,
+  LayoutDashboard,
+  MessagesSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plug,
-  Shield,
+  Send,
   Star,
   Store,
-  Gift,
-  Bell,
+  Users,
+  UsersRound,
+  Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAdminPermissions } from "@/hooks/useAdminPermissions";
@@ -34,8 +37,14 @@ type NavLink = {
   key: string;
   href: string;
   label: string;
-  icon: React.ReactNode;
+  icon: LucideIcon;
   requiredPermission?: AdminPermission;
+};
+
+type NavSection = {
+  key: string;
+  title: string;
+  links: NavLink[];
 };
 
 type AdminSidebarProps = {
@@ -43,21 +52,123 @@ type AdminSidebarProps = {
   onClose: () => void;
 };
 
+const NAV_SECTIONS: NavSection[] = [
+  {
+    key: "dashboard",
+    title: "Dashboard",
+    links: [
+      { key: "overview", href: "/admin/dashboard", label: "Overview", icon: LayoutDashboard, requiredPermission: "admin:dashboard:view" },
+    ],
+  },
+  {
+    key: "property-operations",
+    title: "Property Operations",
+    links: [
+      { key: "properties", href: "/admin/properties", label: "Properties", icon: Building2, requiredPermission: "admin:properties:view" },
+      { key: "users", href: "/admin/users", label: "Property Owners", icon: Users, requiredPermission: "admin:owners:view" },
+      { key: "team-members", href: "/admin/team-members", label: "Team Members", icon: UsersRound, requiredPermission: "admin:team-members:view" },
+    ],
+  },
+  {
+    key: "financial-management",
+    title: "Financial Management",
+    links: [
+      { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: Wallet, requiredPermission: "admin:payments:view" },
+      { key: "tenant-invoices", href: "/admin/tenant-invoices", label: "Tenant Invoice Health", icon: FileCheck, requiredPermission: "admin:payments:view" },
+      { key: "payment-reconciliation", href: "/admin/payments/reconciliation", label: "Payment Reconciliation", icon: GitCompareArrows, requiredPermission: "admin:payments:view" },
+      { key: "lifetime", href: "/admin/lifetime", label: "Lifetime Packages", icon: Award, requiredPermission: "admin:payments:view" },
+      { key: "referrals", href: "/admin/referrals", label: "Referrals & Payouts", icon: Users, requiredPermission: "admin:referrals:view" },
+    ],
+  },
+  {
+    key: "airbnb-management",
+    title: "Airbnb Management",
+    links: [
+      { key: "airbnb-listings", href: "/admin/airbnb/listings", label: "Airbnb Listings", icon: House, requiredPermission: "admin:airbnb:view" },
+      { key: "airbnb-bookings", href: "/admin/airbnb/bookings", label: "Airbnb Bookings", icon: CalendarCheck, requiredPermission: "admin:airbnb:view" },
+      { key: "airbnb-messages", href: "/admin/airbnb/messages", label: "Airbnb Messages", icon: MessagesSquare, requiredPermission: "admin:airbnb:view" },
+      { key: "airbnb-payouts", href: "/admin/airbnb/payouts", label: "Airbnb Payouts", icon: Banknote, requiredPermission: "admin:airbnb:view" },
+    ],
+  },
+  {
+    key: "platform-management",
+    title: "Platform Management",
+    links: [
+      { key: "market-place", href: "/admin/market-place", label: "Marketplace", icon: Store, requiredPermission: "admin:marketplace:view" },
+      { key: "integrations", href: "/admin/integrations", label: "Integrations", icon: Plug, requiredPermission: "admin:settings:manage" },
+      { key: "reviews", href: "/admin/reviews", label: "Reviews", icon: Star, requiredPermission: "admin:reviews:view" },
+    ],
+  },
+  {
+    key: "communication-support",
+    title: "Communication & Support",
+    links: [
+      { key: "support", href: "/admin/support", label: "Support", icon: Headset, requiredPermission: "admin:support:view" },
+      { key: "communications", href: "/admin/communications", label: "Owner Communications", icon: Send, requiredPermission: "admin:notifications:send" },
+    ],
+  },
+  {
+    key: "system-security",
+    title: "System & Security",
+    links: [
+      { key: "system-errors", href: "/admin/system-errors", label: "System Errors", icon: AlertTriangle, requiredPermission: "admin:dashboard:view" },
+    ],
+  },
+];
+
+const COLLAPSED_WIDTH = "72px";
+const EXPANDED_WIDTH = "256px";
+
+function matchesPath(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isLinkActive(pathname: string, href: string) {
+  if (pathname === href) return true;
+  if (!pathname.startsWith(`${href}/`)) return false;
+
+  // When a more specific navigation destination matches, highlight only that
+  // destination (for example, reconciliation rather than its payments parent).
+  return !NAV_SECTIONS.flatMap((section) => section.links).some(
+    (link) => link.href !== href && link.href.startsWith(`${href}/`) && matchesPath(pathname, link.href),
+  );
+}
+
 export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-
-  const [isCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [name, setName] = useState("Admin");
   const [mounted, setMounted] = useState(false);
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(NAV_SECTIONS.map((section) => [section.key, true])),
+  );
   const { role, isAdminOwner, hasPermission } = useAdminPermissions();
 
   useEffect(() => {
     setMounted(true);
-    const adminName = Cookies.get("adminName") || "Admin";
-    setName(adminName);
+    setName(Cookies.get("adminName") || "Admin");
+    setIsCollapsed(window.localStorage.getItem("adminSidebarCollapsed") === "true");
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    window.localStorage.setItem("adminSidebarCollapsed", String(isCollapsed));
+    document.querySelector<HTMLElement>(".admin-layout")?.style.setProperty(
+      "--admin-sidebar-width",
+      isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
+    );
+  }, [isCollapsed, mounted]);
+
+  useEffect(() => {
+    const activeSection = NAV_SECTIONS.find((section) =>
+      section.links.some((link) => isLinkActive(pathname, link.href)),
+    );
+    if (activeSection) {
+      setExpandedSections((current) => ({ ...current, [activeSection.key]: true }));
+    }
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,193 +181,59 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           setUnreadSupportCount(Number(data.unreadCount || 0));
         }
       } catch {
-        // ignore
+        // The navigation remains usable when the unread count is unavailable.
       }
     };
 
-    fetchUnreadSupport();
-    const interval = setInterval(fetchUnreadSupport, 30000);
+    void fetchUnreadSupport();
+    const interval = window.setInterval(fetchUnreadSupport, 30000);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      window.clearInterval(interval);
     };
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const media = window.matchMedia("(max-width: 767px)");
+
+    const syncScrollLock = () => {
+      root.style.overflow = media.matches ? "hidden" : previousRootOverflow;
+      body.style.overflow = media.matches ? "hidden" : previousBodyOverflow;
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    syncScrollLock();
+    media.addEventListener("change", syncScrollLock);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      media.removeEventListener("change", syncScrollLock);
+      window.removeEventListener("keydown", handleKeyDown);
+      root.style.overflow = previousRootOverflow;
+      body.style.overflow = previousBodyOverflow;
+    };
+  }, [isOpen, onClose]);
+
   const initials = name
     .split(" ")
-    .map((n) => n[0]?.toUpperCase() ?? "")
+    .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
     .slice(0, 2);
-
   const firstName = name.split(" ")[0] || "Admin";
-
-  const overviewLinks: NavLink[] = [
-    {
-      key: "overview",
-      href: "/admin/dashboard",
-      label: "Overview",
-      icon: <LayoutDashboard size={20} />,
-      requiredPermission: "admin:dashboard:view",
-    },
-  ];
-
-  const coreLinks: NavLink[] = [
-    {
-      key: "properties",
-      href: "/admin/properties",
-      label: "Properties",
-      icon: <Building2 size={20} />,
-      requiredPermission: "admin:properties:view",
-    },
-  ];
-
-  const airbnbLinks: NavLink[] = [
-    {
-      key: "airbnb-listings",
-      href: "/admin/airbnb/listings",
-      label: "Airbnb Listings",
-      icon: <Building2 size={20} />,
-      requiredPermission: "admin:airbnb:view",
-    },
-    {
-      key: "airbnb-bookings",
-      href: "/admin/airbnb/bookings",
-      label: "Airbnb Bookings",
-      icon: <CalendarCheck size={20} />,
-      requiredPermission: "admin:airbnb:view",
-    },
-    {
-      key: "airbnb-messages",
-      href: "/admin/airbnb/messages",
-      label: "Airbnb Messages",
-      icon: <MessageCircle size={20} />,
-      requiredPermission: "admin:airbnb:view",
-    },
-    {
-      key: "airbnb-payouts",
-      href: "/admin/airbnb/payouts",
-      label: "Airbnb Payouts",
-      icon: <Wallet size={20} />,
-      requiredPermission: "admin:airbnb:view",
-    },
-  ];
-
-  const generalLinks: NavLink[] = [
-    { key: "system-errors", href: "/admin/system-errors", label: "System Errors", icon: <AlertCircle size={20} />, requiredPermission: "admin:dashboard:view" },
-    {
-      key: "users",
-      href: "/admin/users",
-      label: "Property Owners",
-      icon: <Users size={20} />,
-      requiredPermission: "admin:owners:view",
-    },
-    {
-      key: "team-members",
-      href: "/admin/team-members",
-      label: "Team Members",
-      icon: <Shield size={20} />,
-      requiredPermission: "admin:team-members:view",
-    },
-    {
-      key: "payments",
-      href: "/admin/payments",
-      label: "Payments & Invoices",
-      icon: <CreditCard size={20} />,
-      requiredPermission: "admin:payments:view",
-    },
-    {
-      key: "tenant-invoices",
-      href: "/admin/tenant-invoices",
-      label: "Tenant Invoice Health",
-      icon: <FileText size={20} />,
-      requiredPermission: "admin:payments:view",
-    },
-    {
-      key: "payment-reconciliation",
-      href: "/admin/payments/reconciliation",
-      label: "Payment Reconciliation",
-      icon: <CreditCard size={20} />,
-      requiredPermission: "admin:payments:view",
-    },
-    {
-      key: "lifetime",
-      href: "/admin/lifetime",
-      label: "Lifetime Package",
-      icon: <CreditCard size={20} />,
-      requiredPermission: "admin:payments:view",
-    },
-    {
-      key: "referrals",
-      href: "/admin/referrals",
-      label: "Referrals & Payouts",
-      icon: <Gift size={20} />,
-      requiredPermission: "admin:referrals:view",
-    },
-    {
-      key: "reviews",
-      href: "/admin/reviews",
-      label: "Reviews",
-      icon: <Star size={20} />,
-      requiredPermission: "admin:reviews:view",
-    },
-    {
-      key: "market-place",
-      href: "/admin/market-place",
-      label: "Market Place",
-      icon: <Store size={20} />,
-      requiredPermission: "admin:marketplace:view",
-    },
-    {
-      key: "integrations",
-      href: "/admin/integrations",
-      label: "Integrations",
-      icon: <Plug size={20} />,
-      requiredPermission: "admin:settings:manage",
-    },
-    {
-      key: "support",
-      href: "/admin/support",
-      label: "Support",
-      icon: <Headphones size={20} />,
-      requiredPermission: "admin:support:view",
-    },
-    { key: "communications", href: "/admin/communications", label: "Owner Communications", icon: <Bell size={20} />, requiredPermission: "admin:notifications:send" },
-  ];
-
-  const navSections = [
-    {
-      title: "Overview",
-      links: overviewLinks,
-    },
-    {
-      title: "General",
-      links: generalLinks,
-    },
-    {
-      title: "Rentals Management",
-      links: coreLinks,
-      badge: {
-        label: "Rentals",
-        icon: <Building2 size={10} />,
-        className: "bg-slate-100 text-slate-700",
-      },
-    },
-    {
-      title: "Airbnb Management",
-      links: airbnbLinks,
-      badge: {
-        label: "Airbnb",
-        icon: <Home size={10} />,
-        className: "bg-primary/10 text-primary",
-      },
-    },
-  ];
-
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
-
-  const filterLinks = (links: NavLink[]) =>
-    links.filter((link) => !link.requiredPermission || hasPermission(link.requiredPermission));
+  const profileName = isAdminOwner ? firstName : name;
+  const profileRole = isAdminOwner
+    ? "Admin Owner · Administrator"
+    : role === "adminTeamMember"
+      ? "Team Member · Administrator"
+      : "Administrator";
 
   const handleSignOut = async () => {
     try {
@@ -285,140 +262,169 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     }
   };
 
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    links: section.links.filter((link) => !link.requiredPermission || hasPermission(link.requiredPermission)),
+  })).filter((section) => section.links.length > 0);
+
   return (
     <>
-      {/* Sidebar */}
       <aside
+        aria-label="Admin navigation"
         className={cn(
-          "sorana-sidebar fixed left-0 top-16 bottom-0 z-40 flex flex-col bg-card backdrop-blur-xl border-r border-border transition-all duration-300 ease-out md:inset-y-0",
-          "w-[82vw] max-w-[18rem] md:w-[15.5rem]",
+          "sorana-sidebar sorana-admin-sidebar fixed left-0 top-16 bottom-0 z-40 flex flex-col border-r border-border bg-card backdrop-blur-xl md:inset-y-0",
+          "w-[82vw] max-w-[18rem] md:w-64",
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-          isCollapsed ? "md:w-16" : "md:w-72"
+          "transition-[transform,width,max-width] duration-200 ease-out",
         )}
+        data-collapsed={isCollapsed}
       >
-        <div className="flex h-full flex-col">
-          {/* Profile Header */}
-          <div className="sorana-sidebar-header relative border-b border-border bg-gradient-to-b from-primary/10 via-white/70 to-transparent px-5 sm:px-6 py-5 sm:py-6">
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary-hover text-2xl font-bold text-white shadow-xl ring-4 ring-white/80">
-                {initials}
-              </div>
-
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="sorana-admin-sidebar-brand flex h-[68px] shrink-0 items-center justify-between border-b border-border px-3">
+            <div className={cn("flex min-w-0 items-center gap-2.5", isCollapsed && "gap-1")}>
+              <span className={cn("flex shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary", isCollapsed ? "h-7 w-7" : "h-9 w-9")}>
+                <Building2 size={19} strokeWidth={1.8} />
+              </span>
               {!isCollapsed && (
-                <>
-                  <p className="text-xs tracking-[0.35em] uppercase text-muted-foreground">
-                    Welcome back
-                  </p>
-                  <h2 className="mt-1 text-lg sm:text-xl font-semibold text-gradient-primary">
-                    {firstName}
-                  </h2>
-
-                  <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
-                    <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                    {isAdminOwner ? "Admin Owner" : role === "adminTeamMember" ? "Staff" : "Admin"}
-                  </div>
-                </>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold leading-5 text-foreground">Accurate Rent</span>
+                  <span className="block text-[10px] font-medium uppercase tracking-[0.15em] text-muted-foreground">Admin console</span>
+                </span>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setIsCollapsed((value) => !value)}
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={cn(
+                "hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 md:inline-flex",
+                isCollapsed && "h-7 w-7",
+              )}
+            >
+              {isCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="sorana-sidebar-nav flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5">
-            <div className="space-y-5">
-              {navSections.map((section) => (
-                <div key={section.title} className="space-y-2">
-                  {!isCollapsed && (
-                    <div className="px-3 sm:px-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                          {section.title}
-                        </p>
-                        {section.badge && (
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
-                              section.badge.className
-                            )}
-                          >
-                            {section.badge.icon}
-                            {section.badge.label}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-2 h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
-                    </div>
-                  )}
-                  <ul className="space-y-1.5">
-                    {filterLinks(section.links).map(({ key, href, label, icon }) => {
-                      const showUnreadBadge = key === "support" && unreadSupportCount > 0;
-                      return (
-                        <li key={key}>
-                          <Link
-                            href={href}
-                            onClick={onClose}
-                            className={cn(
-                              "group flex items-center rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200",
-                              isCollapsed ? "justify-center" : "gap-3 sm:gap-4",
-                              isActive(href)
-                                ? "bg-primary/10 text-primary shadow-sm ring-1 ring-primary/30"
-                                : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "relative flex h-5 w-5 items-center justify-center transition-colors",
-                                isActive(href) ? "text-primary" : "text-muted-foreground group-hover:text-primary"
-                              )}
-                            >
-                              {icon}
-                              {showUnreadBadge && (
-                                <span
-                                  className="absolute -top-2 -right-2 min-w-[18px] rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow"
-                                  aria-label={`${unreadSupportCount} unread support messages`}
-                                >
-                                  {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
-                                </span>
-                              )}
-                            </span>
+          <nav className="sorana-sidebar-nav min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-3" aria-label="Admin sections">
+            <div className="space-y-3">
+              {visibleSections.map((section) => {
+                const isExpanded = expandedSections[section.key] ?? true;
+                const panelId = `admin-nav-${section.key}`;
+                const hasActiveLink = section.links.some((link) => isLinkActive(pathname, link.href));
 
-                            {!isCollapsed && (
-                              <span className="truncate">
-                                {label}
-                                {showUnreadBadge && (
-                                  <span className="ml-2 inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
-                                    {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
+                return (
+                  <section key={section.key} aria-label={section.title}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSections((current) => ({ ...current, [section.key]: !isExpanded }))}
+                      aria-expanded={isExpanded}
+                      aria-controls={panelId}
+                      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${section.title}`}
+                      title={isCollapsed ? section.title : undefined}
+                      className={cn(
+                        "group flex min-h-7 w-full items-center justify-between rounded-md px-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        isCollapsed && "justify-center px-0",
+                        hasActiveLink && "text-foreground/80",
+                      )}
+                    >
+                      {!isCollapsed && <span>{section.title}</span>}
+                      <ChevronDown
+                        size={14}
+                        aria-hidden="true"
+                        className={cn("shrink-0 transition-transform duration-200", isExpanded ? "rotate-0" : "-rotate-90")}
+                      />
+                    </button>
+
+                    <div
+                      id={panelId}
+                      className={cn(
+                        "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
+                        isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+                      )}
+                      aria-hidden={!isExpanded}
+                      inert={!isExpanded}
+                    >
+                      <ul className="min-h-0 space-y-0.5 overflow-hidden pt-1">
+                        {section.links.map(({ key, href, label, icon: Icon }) => {
+                          const active = isLinkActive(pathname, href);
+                          const showUnreadBadge = key === "support" && unreadSupportCount > 0;
+
+                          return (
+                            <li key={key}>
+                              <Link
+                                href={href}
+                                onClick={onClose}
+                                aria-label={label}
+                                aria-current={active ? "page" : undefined}
+                                title={isCollapsed ? label : undefined}
+                                className={cn(
+                                  "group relative flex min-h-10 items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                                  isCollapsed && "justify-center px-0",
+                                  active
+                                    ? "bg-primary/10 text-primary shadow-sm ring-1 ring-inset ring-primary/20"
+                                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                                )}
+                              >
+                                <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                                  <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                                  {showUnreadBadge && (
+                                    <span
+                                      className="absolute -right-2 -top-1 min-w-[16px] rounded-full bg-destructive px-1 text-center text-[9px] font-semibold leading-4 text-white"
+                                      aria-label={`${unreadSupportCount} unread support messages`}
+                                    >
+                                      {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
+                                    </span>
+                                  )}
+                                </span>
+                                {!isCollapsed && (
+                                  <span className="min-w-0 truncate">
+                                    {label}
+                                    {showUnreadBadge && (
+                                      <span className="ml-2 inline-flex min-w-[18px] items-center justify-center rounded-full bg-destructive/10 px-1 text-[10px] font-semibold leading-4 text-destructive">
+                                        {unreadSupportCount > 99 ? "99+" : unreadSupportCount}
+                                      </span>
+                                    )}
                                   </span>
                                 )}
-                              </span>
-                            )}
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </section>
+                );
+              })}
 
-              {navSections.every((section) => section.links.length === 0) && mounted && (
-                <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                  <AlertCircle className="mb-5 h-14 w-14 text-amber-500/80" />
-                  <h3 className="text-lg font-semibold text-foreground">No Modules Available</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Something went wrong — please refresh or contact support.
-                  </p>
-                </div>
+              {visibleSections.length === 0 && mounted && (
+                <p className="px-3 py-8 text-center text-sm text-muted-foreground">No modules are available for this account.</p>
               )}
             </div>
           </nav>
 
-          {/* Footer */}
-          <div className="sorana-sidebar-footer mt-auto border-t border-border footer-fade px-6 py-4 text-center text-[10px] text-muted-foreground">
-            <div className="mb-3 flex justify-center md:hidden">
+          <div
+            className="sorana-admin-profile mx-2.5 flex shrink-0 items-center gap-3 border-t border-border px-1 py-3"
+            title={isCollapsed ? `${profileName} · ${profileRole}` : undefined}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
+              {initials || "A"}
+            </div>
+            {!isCollapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-foreground">{profileName}</p>
+                <p className="truncate text-[11px] text-muted-foreground">{profileRole}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="sorana-sidebar-footer shrink-0 border-t border-border px-3 py-2 text-center text-[10px] text-muted-foreground">
+            <div className="mb-2 flex justify-center md:hidden">
               <ShellFooterActions onSignOut={handleSignOut} />
             </div>
             <p>© {new Date().getFullYear()} My Accurate Rent</p>
             {!isCollapsed && (
-              <p className="mt-2">
+              <p className="mt-1.5">
                 Developed by{" "}
                 <a
                   href="https://www.vickinstechnologies.com/"
@@ -434,7 +440,6 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         </div>
       </aside>
 
-      {/* Mobile overlay */}
       {isOpen && (
         <div
           className="sorana-sidebar-overlay fixed inset-x-0 bottom-0 top-16 z-30 bg-black/40 backdrop-blur-sm md:hidden"

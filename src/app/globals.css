@@ -975,3 +975,98 @@ body {
     transition: none !important;
   }
 }
+
+/* Admin uses one persisted width for the rail, page offsets, and top bar. */
+.admin-layout {
+  --admin-sidebar-width: 256px;
+}
+
+.admin-layout .sorana-admin-sidebar {
+  --sorana-sidebar-width: var(--admin-sidebar-width, 256px);
+  width: min(88vw, 256px) !important;
+  max-width: 256px !important;
+  transition: transform 220ms ease, width 220ms ease, max-width 220ms ease, box-shadow 220ms ease !important;
+}
+
+.admin-layout .sorana-admin-sidebar nav {
+  padding: 12px 10px !important;
+}
+
+.sorana-sidebar.sorana-admin-sidebar nav ul a {
+  min-height: 40px;
+  padding: 8px 10px !important;
+  gap: 12px !important;
+  border-radius: 9px !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.25 !important;
+}
+
+.sorana-sidebar.sorana-admin-sidebar nav ul a svg {
+  width: 18px !important;
+  height: 18px !important;
+  flex: 0 0 18px;
+}
+
+.sorana-admin-sidebar[data-collapsed="true"] .sorana-admin-sidebar-brand {
+  justify-content: center;
+  gap: 2px;
+  padding-right: 4px !important;
+  padding-left: 4px !important;
+}
+
+.sorana-sidebar.sorana-admin-sidebar[data-collapsed="true"] nav ul a {
+  justify-content: center;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+}
+
+.sorana-sidebar.sorana-admin-sidebar[data-collapsed="true"] nav ul a > span {
+  margin: 0;
+}
+
+.sorana-admin-profile {
+  min-height: 62px;
+}
+
+@media (min-width: 768px) {
+  .admin-layout .sorana-admin-sidebar {
+    width: var(--admin-sidebar-width, 256px) !important;
+    max-width: var(--admin-sidebar-width, 256px) !important;
+  }
+
+  .admin-layout .md\:ml-72 {
+    margin-left: var(--admin-sidebar-width, 256px) !important;
+    transition: margin-left 220ms ease;
+  }
+
+  .admin-layout .md\:pl-72 {
+    padding-left: var(--admin-sidebar-width, 256px) !important;
+    transition: padding-left 220ms ease;
+  }
+
+  .admin-layout .md\:w-72 {
+    width: var(--admin-sidebar-width, 256px) !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-layout .lg\:ml-72 {
+    margin-left: var(--admin-sidebar-width, 256px) !important;
+  }
+
+  .admin-layout .lg\:pl-\[18rem\] {
+    padding-left: var(--admin-sidebar-width, 256px) !important;
+  }
+
+  .admin-layout .lg\:w-72 {
+    width: var(--admin-sidebar-width, 256px) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-layout .sorana-admin-sidebar,
+  .admin-layout .md\:ml-72,
+  .admin-layout .md\:pl-72 {
+    transition: none !important;
+  }
+}
