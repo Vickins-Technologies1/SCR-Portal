@@ -33,6 +33,21 @@ export type TenantInvoicePdfInput = {
 };
 
 const cash = (minor: number) => formatPdfMoney((Number(minor) || 0) / 100);
+function compactPdfInvoiceNumber(value: string) {
+  const invoiceNumber = String(value || "").trim();
+  const parts = invoiceNumber.split("-");
+  const suffix = parts[parts.length - 1] || "";
+  if (/^[a-f0-9]{24}$/i.test(suffix)) {
+    const maybePeriod = parts[parts.length - 2] || "";
+    const withPeriod = /^\d{6,8}$/.test(maybePeriod);
+    const prefix = parts.slice(0, withPeriod ? -2 : -1).join("-").slice(0, 8);
+    const period = withPeriod ? `${maybePeriod.slice(0, 6)}-` : "";
+    return `${prefix}${prefix ? "-" : ""}${period}${suffix.slice(-10).toUpperCase()}`;
+  }
+  if (invoiceNumber.length > 30) return `${invoiceNumber.slice(0, 10)}...${invoiceNumber.slice(-10)}`;
+  return invoiceNumber;
+}
+
 const invoiceAccent = (color?: string) => {
   const match = /^#([0-9a-f]{6})$/i.exec(color || "");
   if (!match) return PDF_COLORS.navy;
@@ -72,11 +87,12 @@ export async function generateTenantInvoicePdf(input: TenantInvoicePdfInput) {
   const walletCreditApplied = Math.min(amountPaid, Math.max(0, input.walletCreditAppliedMinor || 0));
   const paymentAmount = Math.max(0, amountPaid - walletCreditApplied);
   const invoiceStatus = sanitizePdfText(input.status || (currentBalanceMinor <= 0 ? "PAID" : amountPaid > 0 ? "PARTIALLY PAID" : "ISSUED")).toUpperCase();
+  const pdfInvoiceNumber = compactPdfInvoiceNumber(input.invoiceNumber);
 
   const drawHeader = async (page: PDFPage, top: number, continued: boolean) => {
     const title = continued ? "RENT INVOICE - CONTINUED" : "RENT INVOICE";
     page.drawText(title, { x: left, y: top - 8, size: continued ? 14 : 17, font: fonts.bold, color: accent });
-    drawMeta(page, fonts, "INVOICE NO.", input.invoiceNumber, right - 190, top - 8, right);
+    drawMeta(page, fonts, "INVOICE NO.", pdfInvoiceNumber, right - 190, top - 8, right);
     drawMeta(page, fonts, "STATUS", invoiceStatus, right - 190, top - 23, right, invoiceStatus === "PAID" ? PDF_COLORS.green : PDF_COLORS.navy);
     drawMeta(page, fonts, "ISSUED", formatPdfDate(input.issueDate), right - 190, top - 38, right);
     drawMeta(page, fonts, "DUE DATE", formatPdfDate(input.dueDate), right - 190, top - 53, right);
@@ -174,6 +190,6 @@ export async function generateTenantInvoicePdf(input: TenantInvoicePdfInput) {
     }
   }
 
-  await finalizePdfDocument(pdf, fonts, { title: `Rent Invoice ${input.invoiceNumber}`, reference: input.invoiceNumber, contact: input.landlordEmail || undefined });
+  await finalizePdfDocument(pdf, fonts, { title: `Rent Invoice ${pdfInvoiceNumber}`, reference: pdfInvoiceNumber, contact: input.landlordEmail || undefined });
   return { pdfBytes: await pdf.save(), invoiceNumber: input.invoiceNumber };
 }
