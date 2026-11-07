@@ -67,6 +67,7 @@ export default function Sidebar() {
   const [mounted, setMounted] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [financeOpen, setFinanceOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(true);
   const [financeTab, setFinanceTab] = useState<string | null>(null);
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean; pendingInvoices: number; dueProperties: { propertyId: string; propertyName: string; dueDate: string }[] } | null>(null);
 
@@ -114,17 +115,30 @@ export default function Sidebar() {
   const propertiesPath = "/property-owner-dashboard/properties";
   const propertiesReportPath = "/property-owner-dashboard/properties-report";
   const listPropertiesPath = "/property-owner-dashboard/list-properties";
+  const tenantsPath = "/property-owner-dashboard/tenants";
+  const usersPath = "/property-owner-dashboard/users";
   const reportsPath = "/property-owner-dashboard/reports";
   const paymentsPath = "/property-owner-dashboard/payments";
   const expensesPath = "/property-owner-dashboard/expenses";
   const integrationsPath = "/property-owner-dashboard/integrations";
   const tenantInvoicesPath = "/property-owner-dashboard/invoices";
   const reconciliationPath = "/property-owner-dashboard/payment-reconciliation";
+  const referralsPath = "/property-owner-dashboard/referrals";
+  const settingsPath = "/property-owner-dashboard/settings";
+  const billingInvoicingPath = "/property-owner-dashboard/settings/billing";
+  const billingAccessPath = "/account/billing";
 
   const propertiesActive = pathname === propertiesPath || pathname.startsWith(`${propertiesPath}/`);
   const propertyReportActive = pathname === propertiesReportPath || pathname.startsWith(`${propertiesReportPath}/`);
   const listPropertyActive = pathname === listPropertiesPath || pathname.startsWith(`${listPropertiesPath}/`);
-  const propertiesSectionActive = propertiesActive || propertyReportActive || listPropertyActive;
+  const propertyManagementActive =
+    propertiesActive ||
+    propertyReportActive ||
+    listPropertyActive ||
+    pathname === tenantsPath ||
+    pathname.startsWith(`${tenantsPath}/`) ||
+    pathname === usersPath ||
+    pathname.startsWith(`${usersPath}/`);
   const financeSectionActive =
     pathname === reportsPath ||
     pathname.startsWith(`${reportsPath}/`) ||
@@ -136,29 +150,31 @@ export default function Sidebar() {
     pathname.startsWith(`${expensesPath}/`) ||
     pathname === tenantInvoicesPath ||
     pathname.startsWith(`${tenantInvoicesPath}/`);
-  const invoicesActive = pathname === tenantInvoicesPath || (pathname === reportsPath && (financeTab === "invoices" || isDue));
+  const invoicesActive = pathname === reportsPath && (financeTab === "invoices" || isDue);
   const reportsActive = pathname === reportsPath && !invoicesActive;
   const paymentsActive = pathname === paymentsPath || pathname.startsWith(`${paymentsPath}/`);
   const expensesActive = pathname === expensesPath || pathname.startsWith(`${expensesPath}/`);
+  const accountSectionActive = [integrationsPath, referralsPath, settingsPath, billingInvoicingPath, billingAccessPath].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
 
   const allLinks: NavItem[] = [
     { key: "dashboard", href: "/property-owner-dashboard", label: "Overview", icon: <LayoutDashboard size={20} />, requiredPermission: "dashboard:view" },
-        {
+    {
       key: "properties",
-      label: "Properties",
+      label: "Property Management",
       icon: <Building2 size={20} />,
       children: [
         { key: "properties", href: propertiesPath, label: "Properties", icon: <Building2 size={18} />, requiredPermission: "properties:view" },
+        { key: "list-properties", href: listPropertiesPath, label: "List Properties", icon: <PlusCircle size={18} />, requiredPermission: "properties:view" },
         { key: "properties-report", href: propertiesReportPath, label: "Properties Report", icon: <BarChart size={18} />, requiredPermission: "properties:view" },
-        { key: "list-properties", href: "/property-owner-dashboard/list-properties", label: "List Properties", icon: <PlusCircle size={18} />, requiredPermission: "properties:view" },
+        { key: "tenants", href: tenantsPath, label: "Tenants", icon: <Users size={20} />, requiredPermission: "tenants:view" },
+        { key: "users", href: usersPath, label: "Users", icon: <UserCog size={20} />, requiredPermission: "users:view" },
       ],
     },
-    { key: "tenants", href: "/property-owner-dashboard/tenants", label: "Tenants", icon: <Users size={20} />, requiredPermission: "tenants:view" },
-    { key: "users", href: "/property-owner-dashboard/users", label: "Users", icon: <UserCog size={20} />, requiredPermission: "users:view" },
-    { key: "integrations", href: integrationsPath, label: "Integrations", icon: <PlugZap size={20} />, requiredPermission: "integrations:view" },
     {
       key: "finance",
-      label: "Finance",
+      label: "Financial Management",
       icon: <Landmark size={20} />,
       children: [
         { key: "reports", href: "/property-owner-dashboard/reports", label: "Reports", icon: <BarChart size={18} />, requiredPermission: "reports:view" },
@@ -169,10 +185,18 @@ export default function Sidebar() {
         { key: "expenses", href: expensesPath, label: "Expenses", icon: <Receipt size={18} />, requiredPermission: "expenses:view" },
       ],
     },
-    { key: "referrals", href: "/property-owner-dashboard/referrals", label: "Referrals", icon: <Gift size={20} />, requiredPermission: "dashboard:view" },
-    { key: "settings", href: "/property-owner-dashboard/settings", label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
-    { key: "billing-settings", href: "/property-owner-dashboard/settings/billing", label: "Billing & Invoicing", icon: <Receipt size={20} />, requiredPermission: "settings:edit" },
-    { key: "billing", href: "/account/billing", label: "Billing & Access", icon: <CreditCard size={20} />, requiredPermission: "settings:view" },
+    {
+      key: "account",
+      label: "Account & Services",
+      icon: <Settings size={20} />,
+      children: [
+        { key: "integrations", href: integrationsPath, label: "Integrations", icon: <PlugZap size={20} />, requiredPermission: "integrations:view" },
+        { key: "referrals", href: referralsPath, label: "Referrals", icon: <Gift size={20} />, requiredPermission: "dashboard:view" },
+        { key: "billing-settings", href: billingInvoicingPath, label: "Billing & Invoicing", icon: <Receipt size={20} />, requiredPermission: "settings:edit" },
+        { key: "billing", href: billingAccessPath, label: "Billing & Access", icon: <CreditCard size={20} />, requiredPermission: "settings:view" },
+        { key: "settings", href: settingsPath, label: "Settings", icon: <Settings size={20} />, requiredPermission: "settings:view" },
+      ],
+    },
   ];
 
   const canAccessLink = (link: NavLink) => perm.hasPermission(link.requiredPermission ?? "");
@@ -201,6 +225,31 @@ export default function Sidebar() {
     : [];
 
   const navLinks = isDue ? visibleLinks.filter((link) => restrictedKeys.has(link.key)) : visibleLinks;
+  const isChildLinkActive = (child: NavLink) => {
+    switch (child.key) {
+      case "reports":
+        return reportsActive;
+      case "invoices":
+        return invoicesActive;
+      case "payments":
+        return paymentsActive;
+      case "expenses":
+        return expensesActive;
+      case "properties":
+        return propertiesActive;
+      case "properties-report":
+        return propertyReportActive;
+      case "list-properties":
+        return listPropertyActive;
+      case "tenant-invoices":
+        return pathname === tenantInvoicesPath || pathname.startsWith(`${tenantInvoicesPath}/`);
+      case "settings":
+        return pathname === settingsPath || (pathname.startsWith(`${settingsPath}/`) && !pathname.startsWith(`${billingInvoicingPath}/`));
+      default:
+        return pathname === child.href || pathname.startsWith(`${child.href}/`);
+    }
+  };
+
   useEffect(() => {
     if (!isDue) return;
     const allowed = ["/property-owner-dashboard", "/property-owner-dashboard/reports", "/property-owner-dashboard/properties-report"];
@@ -303,92 +352,78 @@ export default function Sidebar() {
           <nav className="sorana-sidebar-nav flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-5 space-y-1.5">
             {navLinks.map((item) => {
               if ("children" in item) {
-                const isFinanceExpanded = financeOpen || financeSectionActive;
-                const isFinanceActive = financeSectionActive;
+                const isFinanceGroup = item.key === "finance";
                 const isPropertiesGroup = item.key === "properties";
+                const groupActive = isFinanceGroup
+                  ? financeSectionActive
+                  : isPropertiesGroup
+                    ? propertyManagementActive
+                    : accountSectionActive;
+                const groupExpanded = isFinanceGroup
+                  ? financeOpen || financeSectionActive
+                  : isPropertiesGroup
+                    ? propertiesOpen || propertyManagementActive
+                    : accountOpen || accountSectionActive;
+                const submenuId = isFinanceGroup
+                  ? "owner-finance-submenu"
+                  : isPropertiesGroup
+                    ? "owner-properties-submenu"
+                    : "owner-account-submenu";
                 const visibleChildren = item.children;
 
                 return (
                   <div
                     key={item.key}
                     className={`rounded-xl ${
-                      item.key === "finance" && isFinanceActive
-                        ? "bg-primary/10 ring-1 ring-primary/20"
-                        : isPropertiesGroup && propertiesSectionActive
-                          ? "bg-primary/10 ring-1 ring-primary/20"
-                          : ""
+                      groupActive ? "bg-primary/10 ring-1 ring-primary/20" : ""
                     }`}
                   >
                     <button
                       type="button"
                       onClick={() => {
-                        if (item.key === "finance") {
+                        if (isFinanceGroup) {
                           setFinanceOpen((prev) => !prev);
-                        } else {
+                        } else if (isPropertiesGroup) {
                           setPropertiesOpen((prev) => !prev);
+                        } else {
+                          setAccountOpen((prev) => !prev);
                         }
                       }}
                       data-tour={`owner-nav-${item.key}`}
                       className={`group flex w-full items-center gap-3 sm:gap-4 rounded-xl px-3 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-all duration-200 ${
-                        item.key === "finance"
-                          ? isFinanceActive
-                            ? "text-primary"
-                            : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
-                          : propertiesSectionActive
-                            ? "text-primary"
-                            : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
+                        groupActive
+                          ? "text-primary"
+                          : "text-muted-foreground hover:bg-primary/5 hover:text-primary"
                       }`}
-                      aria-expanded={item.key === "finance" ? isFinanceExpanded : propertiesOpen || propertiesSectionActive}
-                      aria-controls={item.key === "finance" ? "owner-finance-submenu" : "owner-properties-submenu"}
+                      aria-expanded={groupExpanded}
+                      aria-controls={submenuId}
                     >
-                      <span className={`relative ${
-                        item.key === "finance"
-                          ? isFinanceActive
-                            ? "text-primary"
-                            : "text-muted-foreground group-hover:text-primary"
-                          : propertiesSectionActive
-                            ? "text-primary"
-                            : "text-muted-foreground group-hover:text-primary"
-                      }`}>
+                      <span className={`relative ${groupActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}`}>
                         {item.icon}
                       </span>
                       <span className="truncate flex-1 text-left">{item.label}</span>
-                      {item.key === "finance"
-                        ? (isFinanceExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)
-                        : ((propertiesOpen || propertiesSectionActive) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
+                      {groupExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     <div
-                      id={item.key === "finance" ? "owner-finance-submenu" : "owner-properties-submenu"}
-                      className={`grid overflow-hidden transition-all duration-200 ${
-                        item.key === "finance"
-                          ? (isFinanceExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")
-                          : ((propertiesOpen || propertiesSectionActive) ? "grid-rows-[1fr]" : "grid-rows-[0fr]")
-                      }`}
+                      id={submenuId}
+                      className={`grid overflow-hidden transition-all duration-200 ${groupExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
                     >
                       <div className="min-h-0 overflow-hidden pl-4 pr-2 pb-2">
                         {visibleChildren.map((child) => {
-                          const isChildActive =
-                            child.key === "reports"
-                              ? reportsActive
-                              : child.key === "invoices"
-                                ? invoicesActive
-                                : child.key === "payments"
-                                  ? paymentsActive
-                                  : child.key === "expenses"
-                                    ? expensesActive
-                                    : child.key === "properties"
-                                        ? propertiesActive
-                                      : child.key === "properties-report"
-                                          ? propertyReportActive
-                                          : child.key === "list-properties"
-                                            ? listPropertyActive
-                                            : pathname === child.href || pathname.startsWith(child.href + "/");
+                          const isChildActive = isChildLinkActive(child);
 
                           return (
                             <Link
                               key={child.key}
                               href={child.href}
                               onClick={close}
+                              data-tour={
+                                child.key === "properties"
+                                  ? undefined
+                                  : child.key === "list-properties"
+                                    ? "owner-nav-list-property"
+                                    : `owner-nav-${child.key}`
+                              }
                               className={`mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition ${
                                 isChildActive
                                   ? "bg-primary/10 text-primary"
