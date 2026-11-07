@@ -138,6 +138,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const [name, setName] = useState("Admin");
   const [mounted, setMounted] = useState(false);
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
@@ -150,6 +151,14 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     setMounted(true);
     setName(Cookies.get("adminName") || "Admin");
     setIsCollapsed(window.localStorage.getItem("adminSidebarCollapsed") === "true");
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+    const syncViewport = () => setIsDesktop(media.matches);
+    syncViewport();
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
   }, []);
 
   useEffect(() => {
@@ -234,6 +243,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     : role === "adminTeamMember"
       ? "Team Member · Administrator"
       : "Administrator";
+  const isVisuallyCollapsed = isCollapsed && isDesktop;
 
   const handleSignOut = async () => {
     try {
@@ -277,15 +287,15 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           "transition-[transform,width,max-width] duration-200 ease-out",
         )}
-        data-collapsed={isCollapsed}
+        data-collapsed={isVisuallyCollapsed}
       >
         <div className="flex h-full min-h-0 flex-col">
           <div className="sorana-admin-sidebar-brand flex h-[68px] shrink-0 items-center justify-between border-b border-border px-3">
-            <div className={cn("flex min-w-0 items-center gap-2.5", isCollapsed && "gap-1")}>
-              <span className={cn("flex shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary", isCollapsed ? "h-7 w-7" : "h-9 w-9")}>
+            <div className={cn("flex min-w-0 items-center gap-2.5", isVisuallyCollapsed && "gap-1")}>
+              <span className={cn("flex shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary", isVisuallyCollapsed ? "h-7 w-7" : "h-9 w-9")}>
                 <Building2 size={19} strokeWidth={1.8} />
               </span>
-              {!isCollapsed && (
+              {!isVisuallyCollapsed && (
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold leading-5 text-foreground">Accurate Rent</span>
                   <span className="block text-[10px] font-medium uppercase tracking-[0.15em] text-muted-foreground">Admin console</span>
@@ -299,11 +309,26 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               className={cn(
                 "hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 md:inline-flex",
-                isCollapsed && "h-7 w-7",
+                isVisuallyCollapsed && "h-7 w-7",
               )}
             >
               {isCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
+          </div>
+
+          <div
+            className="sorana-admin-profile mx-2.5 mt-1 flex shrink-0 items-center gap-3 border-b border-border px-1 py-3"
+            title={isVisuallyCollapsed ? `${profileName} · ${profileRole}` : undefined}
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
+              {initials || "A"}
+            </div>
+            {!isVisuallyCollapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-foreground">{profileName}</p>
+                <p className="truncate text-[11px] text-muted-foreground">{profileRole}</p>
+              </div>
+            )}
           </div>
 
           <nav className="sorana-sidebar-nav min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-3" aria-label="Admin sections">
@@ -321,14 +346,14 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                       aria-expanded={isExpanded}
                       aria-controls={panelId}
                       aria-label={`${isExpanded ? "Collapse" : "Expand"} ${section.title}`}
-                      title={isCollapsed ? section.title : undefined}
+                      title={isVisuallyCollapsed ? section.title : undefined}
                       className={cn(
                         "group flex min-h-7 w-full items-center justify-between rounded-md px-2 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                        isCollapsed && "justify-center px-0",
+                        isVisuallyCollapsed && "justify-center px-0",
                         hasActiveLink && "text-foreground/80",
                       )}
                     >
-                      {!isCollapsed && <span>{section.title}</span>}
+                      {!isVisuallyCollapsed && <span>{section.title}</span>}
                       <ChevronDown
                         size={14}
                         aria-hidden="true"
@@ -357,10 +382,10 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                                 onClick={onClose}
                                 aria-label={label}
                                 aria-current={active ? "page" : undefined}
-                                title={isCollapsed ? label : undefined}
+                                title={isVisuallyCollapsed ? label : undefined}
                                 className={cn(
                                   "group relative flex min-h-10 items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                                  isCollapsed && "justify-center px-0",
+                                  isVisuallyCollapsed && "justify-center px-0",
                                   active
                                     ? "bg-primary/10 text-primary shadow-sm ring-1 ring-inset ring-primary/20"
                                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
@@ -377,7 +402,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                                     </span>
                                   )}
                                 </span>
-                                {!isCollapsed && (
+                                {!isVisuallyCollapsed && (
                                   <span className="min-w-0 truncate">
                                     {label}
                                     {showUnreadBadge && (
@@ -403,27 +428,12 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             </div>
           </nav>
 
-          <div
-            className="sorana-admin-profile mx-2.5 flex shrink-0 items-center gap-3 border-t border-border px-1 py-3"
-            title={isCollapsed ? `${profileName} · ${profileRole}` : undefined}
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
-              {initials || "A"}
-            </div>
-            {!isCollapsed && (
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-foreground">{profileName}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{profileRole}</p>
-              </div>
-            )}
-          </div>
-
           <div className="sorana-sidebar-footer shrink-0 border-t border-border px-3 py-2 text-center text-[10px] text-muted-foreground">
             <div className="mb-2 flex justify-center md:hidden">
               <ShellFooterActions onSignOut={handleSignOut} />
             </div>
             <p>© {new Date().getFullYear()} My Accurate Rent</p>
-            {!isCollapsed && (
+            {!isVisuallyCollapsed && (
               <p className="mt-1.5">
                 Developed by{" "}
                 <a
