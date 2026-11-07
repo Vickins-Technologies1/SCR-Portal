@@ -255,9 +255,10 @@ export async function applyTumaPaymentUpdate(params: {
         year: "numeric",
       });
 
+  const paymentTypeLabel = updatedPayment.type === "RentAndUtility" ? "Rent + Utilities" : updatedPayment.type || "Other";
   const emailCommon = {
     amount,
-    paymentType: updatedPayment.type || "Other",
+    paymentType: paymentTypeLabel,
     transactionId: updatedPayment.transactionId || update.id,
     paymentDate: paymentDateFormatted,
     mpesaCode: reference || undefined,
@@ -279,7 +280,7 @@ export async function applyTumaPaymentUpdate(params: {
 
   if (tenant.phone) {
     try {
-      const smsText = `Payment of Ksh. ${amount} for ${property.name} (${updatedPayment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${reference || updatedPayment.transactionId || update.id}`;
+      const smsText = `Payment of Ksh. ${amount} for ${property.name} (${paymentTypeLabel}) confirmed on ${paymentDateFormatted}. Ref: ${reference || updatedPayment.transactionId || update.id}`;
       await sendWelcomeSms({ phone: tenant.phone, message: smsText });
     } catch (smsError) {
       logger.error("Failed to send payment confirmation SMS to tenant", {
@@ -307,7 +308,7 @@ export async function applyTumaPaymentUpdate(params: {
 
     if (owner.phone) {
       try {
-        const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${updatedPayment.type || "Other"}) confirmed on ${paymentDateFormatted}. Ref: ${reference || updatedPayment.transactionId || update.id}`;
+        const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${paymentTypeLabel}) confirmed on ${paymentDateFormatted}. Ref: ${reference || updatedPayment.transactionId || update.id}`;
         await sendWelcomeSms({ phone: owner.phone, message: smsText });
       } catch (smsError) {
         logger.error("Failed to send payment confirmation SMS to owner", {

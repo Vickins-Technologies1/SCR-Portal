@@ -22,7 +22,7 @@ type PaymentDoc = {
   status: "completed" | "pending" | "pending_stk" | "failed";
   financialPostingStatus?: string;
   financialEffectsApplied?: boolean;
-  type?: "Rent" | "Utility" | "Deposit" | "Other";
+  type?: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
 };
 
 type TenantDoc = {

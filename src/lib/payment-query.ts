@@ -131,6 +131,9 @@ export function prorateAllocation(allocation: Record<string, unknown> | null | u
   const validWalletCreditCategory = ["deposit", "rent", "utilities", "other"].includes(walletCreditCategory)
     ? walletCreditCategory as "deposit" | "rent" | "utilities" | "other"
     : undefined;
+  const walletCreditCategories = Array.isArray(allocation?.walletCreditCategories)
+    ? allocation.walletCreditCategories.filter((field): field is "deposit" | "rent" | "utilities" | "other" => ["deposit", "rent", "utilities", "other"].includes(String(field)))
+    : undefined;
   return {
     rent: money(money(allocation?.rent) * ratio),
     utilities: money(money(allocation?.utilities) * ratio),
@@ -138,5 +141,6 @@ export function prorateAllocation(allocation: Record<string, unknown> | null | u
     other: money(money(allocation?.other) * ratio),
     walletCredit: money(money(allocation?.walletCredit) * ratio),
     ...(validWalletCreditCategory ? { walletCreditCategory: validWalletCreditCategory } : {}),
+    ...(walletCreditCategories?.length ? { walletCreditCategories } : {}),
   };
 }

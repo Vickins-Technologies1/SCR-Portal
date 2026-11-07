@@ -210,7 +210,7 @@ export default function TenantDetailsPage() {
       ? statements.map((statement) => {
           const date = new Date(statement.paymentDate).toLocaleDateString();
           const ref = getStatementReference(statement);
-          const type = statement.type || "Other";
+          const type = statement.type === "RentAndUtility" ? "Rent + Utilities" : statement.type || "Other";
           return `${date} | ${type} | Ksh ${statement.amount.toLocaleString()} | ${statement.status} | ${ref}`;
         })
       : ["No payments recorded."];
@@ -1013,7 +1013,7 @@ export default function TenantDetailsPage() {
                             <td className="py-2 px-2 whitespace-nowrap">
                               {new Date(statement.paymentDate).toLocaleDateString()}
                             </td>
-                            <td className="py-2 px-2">{statement.type || "Other"}</td>
+                            <td className="py-2 px-2">{statement.type === "RentAndUtility" ? "Rent + Utilities" : statement.type || "Other"}</td>
                             <td className="py-2 px-2 font-semibold">
                               {formatCurrency(statement.amount)}
                             </td>

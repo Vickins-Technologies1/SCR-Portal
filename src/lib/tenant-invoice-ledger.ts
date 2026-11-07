@@ -109,7 +109,9 @@ function signedCategoryMap() {
 export function calculateWalletConsumedAllocation(rows: any[], fallbackCategory: unknown = "other") {
   const totals = signedCategoryMap();
   const cumulative = signedCategoryMap();
-  const fallback = fallbackCategory === "rent" || fallbackCategory === "utilities" || fallbackCategory === "deposit" ? fallbackCategory : "other";
+  const fallbackCandidates = Array.isArray(fallbackCategory) ? fallbackCategory : [fallbackCategory];
+  const fallbackValue = fallbackCandidates.find((candidate) => candidate === "rent" || candidate === "utilities" || candidate === "deposit");
+  const fallback = fallbackValue === "rent" || fallbackValue === "utilities" || fallbackValue === "deposit" ? fallbackValue : "other";
   const ordered = [...rows].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime() || String(a.eventKey || a._id).localeCompare(String(b.eventKey || b._id)));
   for (const row of ordered) {
     const snapshot = row.walletAllocation && typeof row.walletAllocation === "object" ? row.walletAllocation : null;
@@ -321,7 +323,10 @@ export async function addInvoicePaymentStates(db: Db, invoices: any[]) {
         if (!totalDelta && Number(walletRow.amount) > 0 && !Object.values(snapshot).some((value: any) => Number(value) > 0)) {
           const sourcePayment: any = paymentById.get(sourcePaymentId);
           const walletCategory: string = String(sourcePayment?.allocation?.walletCreditCategory || "");
-          const fallback: InvoiceLedgerCategory = walletCategory === "rent" || walletCategory === "utilities" || walletCategory === "deposit" ? walletCategory : "other";
+          const walletCategories: string[] = Array.isArray(sourcePayment?.allocation?.walletCreditCategories) ? sourcePayment.allocation.walletCreditCategories : [];
+          const fallback: InvoiceLedgerCategory = walletCategory === "rent" || walletCategory === "utilities" || walletCategory === "deposit"
+            ? walletCategory
+            : walletCategories.includes("rent") ? "rent" : walletCategories.includes("utilities") ? "utilities" : "other";
           delta[fallback] = amountInDollars(walletRow.amount);
           totalDelta = delta[fallback];
         }

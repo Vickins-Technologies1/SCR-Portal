@@ -212,7 +212,7 @@ export async function createPaymentReversal(params: {
   const consumedWalletRows = payment.tenantId ? await db.collection("walletTransactions").find({
     tenantId: { $in: identityValues(payment.tenantId) }, sourcePaymentId: { $in: identityValues(paymentId) }, kind: "CREDIT_CONSUMED",
   }).sort({ createdAt: 1, _id: 1 }).toArray() : [];
-  const consumedWalletAllocation = calculateWalletConsumedAllocation(consumedWalletRows, payment.allocation?.walletCreditCategory);
+  const consumedWalletAllocation = calculateWalletConsumedAllocation(consumedWalletRows, payment.allocation?.walletCreditCategory || payment.allocation?.walletCreditCategories);
   const hasConsumedWalletAllocation = Object.values(consumedWalletAllocation).some((value) => value > 0);
   const allocationForReversal = hasConsumedWalletAllocation ? {
     ...(payment.allocation || {}),

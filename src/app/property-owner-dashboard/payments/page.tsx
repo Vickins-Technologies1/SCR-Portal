@@ -20,7 +20,7 @@ interface Payment {
   transactionId: string;
   status: string;
   tenantName: string;
-  type: "Rent" | "Utility" | "Deposit" | "Other";
+  type: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
   phoneNumber: string;
   reference: string;
   unitType: string;
@@ -676,7 +676,7 @@ export default function PaymentsPage() {
                           {properties.find((p) => p._id === payment.propertyId)?.name || "N/A"}
                         </td>
                         <td className="px-4 py-3">{`${baseUnitType} (${payment.unitType})`}</td>
-                        <td className="px-4 py-3">{payment.type}</td>
+                        <td className="px-4 py-3">{payment.type === "RentAndUtility" ? "Rent + Utilities" : payment.type}</td>
                         <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
                         <td className="px-4 py-3">
                           {formatPaymentDate(payment)}

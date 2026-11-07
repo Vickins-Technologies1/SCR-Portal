@@ -33,7 +33,7 @@ interface Payment {
   invoiceId?: string;
   status: "completed" | "pending" | "pending_stk" | "failed" | "cancelled";
   createdAt: string;
-  type?: "Rent" | "Utility" | "Deposit" | "Other";
+  type?: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference?: string;
   mpesaCode?: string | null;
@@ -102,7 +102,7 @@ const PaymentRequestSchema = z.object({
   amount: z.preprocess((v) => Number(v), z.number().int().positive()),
   propertyId: z.string().trim().min(1),
   userId: z.string().trim().min(1),
-  type: z.enum(["Rent", "Utility", "Deposit", "Other"]),
+  type: z.enum(["Rent", "Utility", "RentAndUtility", "Deposit", "Other"]),
   phoneNumber: z.string().trim().min(1),
   reference: z.string().trim().min(1),
 });
@@ -293,6 +293,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { tenantId, amount, propertyId, userId: submittedUserId, type, phoneNumber, reference } = parsed.data;
+  const paymentTypeLabel = type === "RentAndUtility" ? "Rent + Utilities" : type;
 
   if (submittedUserId !== userId) {
     return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 400 });
@@ -403,7 +404,7 @@ export async function POST(request: NextRequest) {
       amount,
       phone: normalizedPhone,
       accountReference,
-      transactionDesc: `${type} Payment`,
+      transactionDesc: `${paymentTypeLabel} Payment`,
       callbackUrl,
     });
 

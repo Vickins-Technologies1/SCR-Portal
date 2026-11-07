@@ -11,7 +11,7 @@ interface Payment {
   _id: string;
   tenantId: string;
   propertyId: string;
-  type?: "Rent" | "Utility" | "Deposit" | "Other";
+  type?: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
   amount: number;
   phoneNumber: string;
   paymentDate: string;
@@ -56,7 +56,7 @@ export default function PaymentsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [paymentType, setPaymentType] = useState<"Rent" | "Utility" | "Deposit" | "Other">("Rent");
+  const [paymentType, setPaymentType] = useState<"Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other">("Rent");
   const [amount, setAmount] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
@@ -238,10 +238,11 @@ export default function PaymentsPage() {
   };
 
   const getSuggestedAmount = useCallback(
-    (type: "Rent" | "Utility" | "Deposit" | "Other", dues?: Tenant["dues"]): number => {
+    (type: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other", dues?: Tenant["dues"]): number => {
       if (!dues) return 0;
       if (type === "Rent") return Number(dues.rentDues || 0);
       if (type === "Utility") return Number(dues.utilityDues || 0);
+      if (type === "RentAndUtility") return Math.ceil(Number(dues.rentDues || 0) + Number(dues.utilityDues || 0));
       if (type === "Deposit") return Number(dues.depositDues || 0);
       return Number(dues.totalRemainingDues || 0);
     },
@@ -419,7 +420,7 @@ export default function PaymentsPage() {
                       animate={{ opacity: 1 }}
                       className="hover:bg-primary/5 transition-colors text-xs sm:text-sm"
                     >
-                      <td className="px-4 py-4 font-semibold text-foreground capitalize">{p.type || "Other"}</td>
+                      <td className="px-4 py-4 font-semibold text-foreground">{p.type === "RentAndUtility" ? "Rent + Utilities" : p.type || "Other"}</td>
                       <td className="px-4 py-4">KES {p.amount.toLocaleString()}</td>
                       <td className="px-4 py-4 text-[11px] leading-5 text-gray-600">
                         {p.allocation ? (
@@ -571,6 +572,7 @@ export default function PaymentsPage() {
                       >
                         <option value="Rent">Rent</option>
                         <option value="Utility">Utility</option>
+                        <option value="RentAndUtility">Rent + Utilities</option>
                         <option value="Deposit">Deposit</option>
                         <option value="Other">Other</option>
                       </select>

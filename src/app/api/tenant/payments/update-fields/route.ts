@@ -60,7 +60,7 @@ interface Payment {
   transactionId: string;
   status: "completed" | "pending" | "pending_stk" | "failed" | "cancelled";
   createdAt: string;
-  type: "Rent" | "Utility" | "Deposit" | "Other";
+  type: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
   phoneNumber?: string;
   reference: string;
 }

@@ -15,12 +15,13 @@ export type PaymentAllocation = {
   other: number;
   walletCredit: number;
   walletCreditCategory?: AllocationField;
+  walletCreditCategories?: AllocationField[];
   walletApplied: number;
   walletAllocation?: Partial<Record<AllocationField, number>>;
   utilityAllocations?: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }>;
 };
 
-export type PaymentCategory = "Rent" | "Utility" | "Deposit" | "Other" | "General";
+export type PaymentCategory = "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other" | "General";
 
 export type LedgerPayment = {
   _id: ObjectId;
@@ -153,7 +154,7 @@ export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): L
     // no stored allocation, but do not reintroduce the unreversed snapshot.
     allocation: row.payment.allocation
       ? row.allocation
-      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2"
+      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.type === "RentAndUtility"
         ? undefined
         : row.allocation,
   })) as LedgerPayment[];
@@ -203,6 +204,9 @@ export function allocatePaymentLedger(params: {
     const legacyDepositFirst = payment.allocationPolicyVersion === "deposit-first-v1";
     if (legacyDepositFirst || payment.type === "General" || !payment.type) {
       return applyReceiptFunds(amount);
+    }
+    if (payment.type === "RentAndUtility") {
+      return applyReceiptFunds(amount, ["rent", "utilities"]);
     }
 
     const fieldByType: Partial<Record<PaymentCategory, AllocationField>> = {
@@ -285,6 +289,10 @@ export function allocatePaymentLedger(params: {
       remainingReceipt = money(remainingReceipt - walletCredit);
       walletCredit = money(walletCredit + remainingReceipt);
       const walletCreditCategory = payment.allocation.walletCreditCategory;
+      const walletCreditCategories = Array.isArray(payment.allocation.walletCreditCategories)
+        ? payment.allocation.walletCreditCategories.filter((field): field is AllocationField => ["deposit", "rent", "utilities", "other"].includes(field))
+        : undefined;
+      const walletAllowedFields = walletCreditCategories?.length ? walletCreditCategories : walletCreditCategory ? [walletCreditCategory] : undefined;
       const sourceAllocation: PaymentAllocation = {
         deposit: money(receiptAllocation.deposit),
         rent: money(receiptAllocation.rent),
@@ -292,11 +300,12 @@ export function allocatePaymentLedger(params: {
         other: money(receiptAllocation.other),
         walletCredit,
         ...(walletCreditCategory ? { walletCreditCategory } : {}),
+        ...(walletAllowedFields && walletCreditCategories?.length ? { walletCreditCategories: walletAllowedFields } : {}),
         walletApplied: 0,
         walletAllocation: { deposit: 0, rent: 0, utilities: 0, other: 0 },
       };
       allocations.set(paymentId, sourceAllocation);
-      queueWalletCredit(paymentId, walletCredit, walletCreditCategory ? [walletCreditCategory] : undefined);
+      queueWalletCredit(paymentId, walletCredit, walletAllowedFields);
       // Persisted wallet credits are available for today's eligible dues even
       // when there is no newer payment row. The debit remains linked to the
       // original payment that created the wallet credit.
@@ -309,13 +318,17 @@ export function allocatePaymentLedger(params: {
       : applyTypedReceiptFunds(payment, paymentAmount);
     receiptAllocation = receiptResult.appliedByField;
     walletCredit = receiptResult.remaining;
+    const walletCreditCategories: AllocationField[] | undefined = walletCredit > 0 && payment.type === "RentAndUtility"
+      ? ["rent", "utilities"]
+      : undefined;
     const sourceAllocation: PaymentAllocation = {
       deposit: money(receiptAllocation.deposit),
       rent: money(receiptAllocation.rent),
       utilities: money(receiptAllocation.utilities),
       other: money(receiptAllocation.other),
       walletCredit,
-      ...(walletCredit > 0 && payment.type && payment.type !== "General" && payment.type !== "Deposit"
+      ...(walletCreditCategories ? { walletCreditCategories } : {}),
+      ...(walletCredit > 0 && !walletCreditCategories && payment.type && payment.type !== "General" && payment.type !== "Deposit"
         ? { walletCreditCategory: payment.type === "Utility" ? "utilities" : payment.type.toLowerCase() as AllocationField }
         : {}),
       walletApplied: 0,
@@ -330,7 +343,7 @@ export function allocatePaymentLedger(params: {
     queueWalletCredit(
       paymentId,
       walletCredit,
-      sourceAllocation.walletCreditCategory ? [sourceAllocation.walletCreditCategory] : undefined,
+      sourceAllocation.walletCreditCategories || (sourceAllocation.walletCreditCategory ? [sourceAllocation.walletCreditCategory] : undefined),
     );
   }
 

@@ -5,7 +5,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { readJsonResponse } from "@/lib/api-client";
 
-type PaymentType = "Rent" | "Utility" | "Deposit" | "Other";
+type PaymentType = "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
 type PaymentProgressPhase =
   | "initiating"
   | "waiting_for_pin"

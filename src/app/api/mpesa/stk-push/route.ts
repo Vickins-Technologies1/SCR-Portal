@@ -29,7 +29,7 @@ const StkPushSchema = z.object({
   phone: z.string().trim(),
   invoiceId: z.string().trim().optional().default(""),
   landlordId: z.string().trim().optional().default(""),
-  type: z.enum(["Rent", "Utility", "Deposit", "Other"]).optional(),
+  type: z.enum(["Rent", "Utility", "RentAndUtility", "Deposit", "Other"]).optional(),
 });
 
 type RateLimitState = { count: number; resetAt: number };
@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() }, { status: 400 });
   }
+  const paymentTypeLabel = parsed.data.type === "RentAndUtility" ? "Rent + Utilities" : parsed.data.type;
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
@@ -431,7 +432,7 @@ export async function POST(request: NextRequest) {
           lastName,
           email: ownerEmail || ownerPhone || "",
           reference: invoiceReference,
-          notes: `${parsed.data.type || "Invoice"} payment ${invoiceReference}`,
+          notes: `${paymentTypeLabel || "Invoice"} payment ${invoiceReference}`,
           callbackUrl: `${appBaseUrl}/api/kopokopo/webhook`,
           customerId: parsed.data.invoiceId,
         });
@@ -546,7 +547,7 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-      const description = `${parsed.data.type || "Rent"} payment ${invoiceReference}`;
+      const description = `${paymentTypeLabel || "Rent"} payment ${invoiceReference}`;
       const incoming = await createTumaStkPush({
         amount: paymentAmount,
         phone: payerPhone,
@@ -670,7 +671,7 @@ export async function POST(request: NextRequest) {
       amount: paymentAmount,
       phone: payerPhone,
       accountReference: stkFields.accountReference,
-      transactionDesc: `${parsed.data.type || "Rent"} Payment`,
+      transactionDesc: `${paymentTypeLabel || "Rent"} Payment`,
       callbackUrl,
       transactionType: stkFields.transactionType,
       partyB: stkFields.partyB,
@@ -721,7 +722,7 @@ export async function POST(request: NextRequest) {
             paymentType === "till" ? "TILL" : paymentType === "bank" ? "BANK" : "PAYBILL",
           mpesaShortcode: stkFields.partyB,
           mpesaAccountReference: stkFields.accountReference,
-          transactionDesc: `${parsed.data.type || "Rent"} Payment`,
+          transactionDesc: `${paymentTypeLabel || "Rent"} Payment`,
           shortcode,
           resultCode: null,
           resultDesc: null,
