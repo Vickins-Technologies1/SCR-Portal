@@ -160,7 +160,7 @@ export default function PaymentReconciliationDashboard({ detailHrefBase }: { det
       if (value && !(key === "status" && value === "all")) query.set(key, value);
     }
     try {
-      const response = await fetch(`/api/payment-reconciliation?${query.toString()}`, { credentials: "include" });
+      const response = await fetch(`/api/admin/payment-reconciliation?${query.toString()}`, { credentials: "include" });
       const data = await response.json() as ApiResponse;
       if (!response.ok || !data.success) throw new Error(data.message || "Unable to load reconciliation data.");
       setCanExecute(!!data.canExecute);
@@ -213,7 +213,7 @@ export default function PaymentReconciliationDashboard({ detailHrefBase }: { det
     setNotice({ kind: "info", text: `Reconciling ${selectedItems.length} tenant${selectedItems.length === 1 ? "" : "s"}…` });
     const operationKey = globalThis.crypto?.randomUUID?.().replaceAll("-", "") || `reconcile${Date.now()}${Math.random().toString(16).slice(2)}`;
     try {
-      const response = await fetch("/api/payment-reconciliation", {
+      const response = await fetch("/api/admin/payment-reconciliation", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": token },

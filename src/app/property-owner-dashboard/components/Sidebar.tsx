@@ -122,7 +122,6 @@ export default function Sidebar() {
   const expensesPath = "/property-owner-dashboard/expenses";
   const integrationsPath = "/property-owner-dashboard/integrations";
   const tenantInvoicesPath = "/property-owner-dashboard/invoices";
-  const reconciliationPath = "/property-owner-dashboard/payment-reconciliation";
   const referralsPath = "/property-owner-dashboard/referrals";
   const settingsPath = "/property-owner-dashboard/settings";
   const billingInvoicingPath = "/property-owner-dashboard/settings/billing";
@@ -144,8 +143,6 @@ export default function Sidebar() {
     pathname.startsWith(`${reportsPath}/`) ||
     pathname === paymentsPath ||
     pathname.startsWith(`${paymentsPath}/`) ||
-    pathname === reconciliationPath ||
-    pathname.startsWith(`${reconciliationPath}/`) ||
     pathname === expensesPath ||
     pathname.startsWith(`${expensesPath}/`) ||
     pathname === tenantInvoicesPath ||
@@ -181,7 +178,6 @@ export default function Sidebar() {
         { key: "invoices", href: "/property-owner-dashboard/reports?tab=invoices", label: "Invoices", icon: <Receipt size={18} />, requiredPermission: "reports:view" },
         { key: "tenant-invoices", href: tenantInvoicesPath, label: "Tenant Invoices", icon: <Receipt size={18} />, requiredPermission: "reports:view" },
         { key: "payments", href: paymentsPath, label: "Payments", icon: <CreditCard size={18} />, requiredPermission: "payments:view" },
-        { key: "payment-reconciliation", href: reconciliationPath, label: "Payment Reconciliation", icon: <CreditCard size={18} />, requiredPermission: "payments:view" },
         { key: "expenses", href: expensesPath, label: "Expenses", icon: <Receipt size={18} />, requiredPermission: "expenses:view" },
       ],
     },

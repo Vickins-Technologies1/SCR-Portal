@@ -44,7 +44,7 @@ export default function PaymentReconciliationDetails({ reconciliationId, backHre
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/payment-reconciliation?reconciliationId=${encodeURIComponent(reconciliationId)}`, { credentials: "include" })
+    fetch(`/api/admin/payment-reconciliation?reconciliationId=${encodeURIComponent(reconciliationId)}`, { credentials: "include" })
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.message || "Reconciliation record not found.");

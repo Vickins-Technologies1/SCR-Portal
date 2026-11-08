@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/admin-auth";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { identityValues } from "@/lib/payment-query";
 import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
@@ -17,10 +16,7 @@ type AccessScope = {
   client: Awaited<ReturnType<typeof connectToDatabase>>["client"];
   userId: string;
   role: string;
-  landlordId: string | null;
-  assignedPropertyIds: string[] | null;
   canExecute: boolean;
-  admin: boolean;
 };
 
 const jsonError = (message: string, status: number) => NextResponse.json({ success: false, message }, { status });
@@ -28,60 +24,18 @@ const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$
 const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime()) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 
 async function resolveAccess(request: NextRequest, mode: "view" | "execute"): Promise<AccessScope | NextResponse> {
-  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const session = token ? await verifySessionToken(token) : null;
-  if (!session?.sub || !ObjectId.isValid(session.sub)) return jsonError("Authentication required", 401);
-  const role = String(session.role || "");
+  const auth = await requireAdmin(request, mode === "execute" ? "admin:payments:manage" : "admin:payments:view");
+  if (auth instanceof NextResponse) return auth;
   const { db, client } = await connectToDatabase();
-
-  if (role === "admin" || role === "adminTeamMember") {
-    const auth = await requireAdmin(request, mode === "execute" ? "admin:payments:manage" : "admin:payments:view");
-    if (auth instanceof NextResponse) return auth;
-    return {
-      db, client, userId: auth.userId, role: auth.role, landlordId: null,
-      assignedPropertyIds: null, canExecute: auth.role === "admin" || auth.permissions.includes("admin:payments:manage"), admin: true,
-    };
-  }
-
-  if (role === "propertyOwner") {
-    const owner = await db.collection("propertyOwners").findOne({
-      _id: new ObjectId(session.sub), role: "propertyOwner", accountStatus: { $ne: "suspended" },
-    }, { projection: { _id: 1 } });
-    if (!owner) return jsonError("Unauthorized", 403);
-    return {
-      db, client, userId: session.sub, role, landlordId: session.sub,
-      assignedPropertyIds: null, canExecute: true, admin: false,
-    };
-  }
-
-  if (role === "teamMember") {
-    const ownerId = String(session.ownerId || "");
-    if (!ObjectId.isValid(ownerId)) return jsonError("Unauthorized", 403);
-    const member = await db.collection("teamMembers").findOne({
-      _id: new ObjectId(session.sub), ownerId: new ObjectId(ownerId), active: true,
-    }, { projection: { permissions: 1, assignedPropertyIds: 1 } });
-    if (!member) return jsonError("Unauthorized", 403);
-    const permissions = Array.isArray(member.permissions) ? member.permissions : [];
-    if (mode === "view" && !permissions.includes("payments:view")) return jsonError("Forbidden", 403);
-    if (mode === "execute" && !permissions.includes("payments:record")) return jsonError("Forbidden", 403);
-    return {
-      db, client, userId: session.sub, role, landlordId: ownerId,
-      assignedPropertyIds: Array.isArray(member.assignedPropertyIds) ? member.assignedPropertyIds.map(String) : [],
-      canExecute: permissions.includes("payments:record"), admin: false,
-    };
-  }
-  return jsonError("Unauthorized", 403);
+  return {
+    db, client, userId: auth.userId, role: auth.role,
+    canExecute: auth.role === "admin" || auth.permissions.includes("admin:payments:manage"),
+  };
 }
 
-async function resolvePropertyScope(access: AccessScope, requestedLandlordId?: string | null) {
-  const ownerFilter = access.admin
-    ? requestedLandlordId && ObjectId.isValid(requestedLandlordId) ? { ownerId: { $in: identityValues(requestedLandlordId) } } : {}
-    : { ownerId: { $in: identityValues(access.landlordId) } };
-  const propertyRows = await access.db.collection("properties").find(ownerFilter).project({ _id: 1, name: 1, propertyName: 1, ownerId: 1, updatedAt: 1 }).sort({ name: 1, _id: 1 }).limit(2000).toArray();
-  const filtered = propertyRows.filter((property: any) =>
-    access.assignedPropertyIds === null || access.assignedPropertyIds.includes(String(property._id))
-  );
-  return filtered;
+async function resolvePropertyScope(db: AccessScope["db"], requestedLandlordId?: string | null) {
+  const ownerFilter = requestedLandlordId ? { ownerId: { $in: identityValues(requestedLandlordId) } } : {};
+  return db.collection("properties").find(ownerFilter).project({ _id: 1, name: 1, propertyName: 1, ownerId: 1, updatedAt: 1 }).sort({ name: 1, _id: 1 }).limit(2000).toArray();
 }
 
 async function mapWithConcurrency<T, U>(items: T[], concurrency: number, handler: (item: T) => Promise<U>) {
@@ -98,12 +52,11 @@ async function mapWithConcurrency<T, U>(items: T[], concurrency: number, handler
   return results;
 }
 
-async function getVisibleHistory(access: AccessScope, propertyIds: string[], landlordId?: string | null, limit = 100) {
+async function getVisibleHistory(db: AccessScope["db"], propertyIds: string[], landlordId?: string | null, limit = 100) {
   if (!propertyIds.length) return [];
   const filter: Record<string, unknown> = { propertyId: { $in: propertyIds } };
-  if (!access.admin && access.landlordId) filter.landlordId = access.landlordId;
-  else if (access.admin && landlordId) filter.landlordId = landlordId;
-  return access.db.collection("paymentReconciliations")
+  if (landlordId) filter.landlordId = landlordId;
+  return db.collection("paymentReconciliations")
     .find(filter)
     .sort({ createdAt: -1, reconciliationId: -1 })
     .limit(limit)
@@ -115,7 +68,7 @@ export async function GET(request: NextRequest) {
   if (access instanceof NextResponse) return access;
   const params = new URL(request.url).searchParams;
   const requestedLandlordId = params.get("landlordId");
-  if (access.admin && requestedLandlordId && !ObjectId.isValid(requestedLandlordId)) return jsonError("Invalid landlordId", 400);
+  if (requestedLandlordId && !ObjectId.isValid(requestedLandlordId)) return jsonError("Invalid landlordId", 400);
   const propertyId = params.get("propertyId");
   const tenantId = params.get("tenantId");
   if (propertyId && !ObjectId.isValid(propertyId)) return jsonError("Invalid propertyId", 400);
@@ -132,7 +85,7 @@ export async function GET(request: NextRequest) {
   const requestedLimit = Number(params.get("limit") || 100);
   const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(250, requestedLimit)) : 100;
 
-  const properties = await resolvePropertyScope(access, access.admin ? requestedLandlordId : null);
+  const properties = await resolvePropertyScope(access.db, requestedLandlordId);
   const propertyById = new Map(properties.map((property: any) => [String(property._id), property]));
   let visiblePropertyIds = properties.map((property: any) => String(property._id));
   if (propertyId) {
@@ -141,7 +94,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (params.get("view") === "history") {
-    const history = await getVisibleHistory(access, visiblePropertyIds, requestedLandlordId, 250);
+    const history = await getVisibleHistory(access.db, visiblePropertyIds, requestedLandlordId, 250);
     const filteredHistory = history.filter((item: any) => !tenantId || String(item.tenantId) === tenantId);
     return NextResponse.json({ success: true, history: filteredHistory, canExecute: access.canExecute });
   }
@@ -178,7 +131,7 @@ export async function GET(request: NextRequest) {
       db: access.db,
       tenant,
       property,
-      landlordId: access.admin ? (property?.ownerId ? String(property.ownerId) : null) : access.landlordId,
+      landlordId: property?.ownerId ? String(property.ownerId) : null,
       rentOverrideMap,
       paymentFilters: { startDate, endDate, paymentMethod },
     });
@@ -189,7 +142,7 @@ export async function GET(request: NextRequest) {
     return true;
   });
   const latestByTenant = new Map<string, any>();
-  const history = await getVisibleHistory(access, visiblePropertyIds, requestedLandlordId, 1000);
+  const history = await getVisibleHistory(access.db, visiblePropertyIds, requestedLandlordId, 1000);
   for (const entry of history) {
     const tenantKey = String(entry.tenantId);
     if (!latestByTenant.has(tenantKey)) latestByTenant.set(tenantKey, entry);
@@ -212,9 +165,7 @@ export async function GET(request: NextRequest) {
     reconciled: total.reconciled + (item.status === "reconciled" ? 1 : 0),
     failed: total.failed + (history.some((entry: any) => String(entry.tenantId) === item.tenantId && entry.status === "failed") ? 1 : 0),
   }), { tenants: 0, walletBalances: 0, eligibleOutstanding: 0, potentiallyMisallocated: 0, unallocatedVerifiedPayments: 0, reconciled: 0, failed: 0 });
-  const landlords = access.admin
-    ? await access.db.collection("propertyOwners").find({ role: "propertyOwner" }).project({ _id: 1, name: 1, email: 1 }).sort({ name: 1 }).limit(500).toArray()
-    : [];
+  const landlords = await access.db.collection("propertyOwners").find({ role: "propertyOwner" }).project({ _id: 1, name: 1, email: 1 }).sort({ name: 1 }).limit(500).toArray();
   return NextResponse.json({
     success: true,
     items: filtered,
@@ -243,9 +194,9 @@ export async function POST(request: NextRequest) {
     seen.add(item.tenantId);
   }
 
-  const requestedLandlordId = access.admin && typeof body.landlordId === "string" ? body.landlordId : null;
+  const requestedLandlordId = typeof body.landlordId === "string" ? body.landlordId : null;
   if (requestedLandlordId && !ObjectId.isValid(requestedLandlordId)) return jsonError("Invalid landlordId", 400);
-  const properties = await resolvePropertyScope(access, requestedLandlordId);
+  const properties = await resolvePropertyScope(access.db, requestedLandlordId);
   const allowedPropertyIds = new Set(properties.map((property: any) => String(property._id)));
   await ensurePaymentReconciliationIndexes(access.db);
   const results = [];
@@ -262,7 +213,7 @@ export async function POST(request: NextRequest) {
         db: access.db,
         client: access.client,
         tenantId: item.tenantId,
-        landlordId: property?.ownerId ? String(property.ownerId) : access.landlordId,
+        landlordId: property?.ownerId ? String(property.ownerId) : null,
         expectedPreviewHash: item.previewHash,
         idempotencyKey: `${body.idempotencyKey}:${item.tenantId}`,
         actorId: access.userId,
