@@ -12,7 +12,6 @@ import {
   CalendarCheck,
   ChevronDown,
   FileCheck,
-  GitCompareArrows,
   Headset,
   House,
   LayoutDashboard,
@@ -75,7 +74,6 @@ const NAV_SECTIONS: NavSection[] = [
     links: [
       { key: "payments", href: "/admin/payments", label: "Payments & Invoices", icon: Wallet, requiredPermission: "admin:payments:view" },
       { key: "tenant-invoices", href: "/admin/tenant-invoices", label: "Tenant Invoice Health", icon: FileCheck, requiredPermission: "admin:payments:view" },
-      { key: "payment-reconciliation", href: "/admin/payments/reconciliation", label: "Payment Reconciliation", icon: GitCompareArrows, requiredPermission: "admin:payments:view" },
       { key: "lifetime", href: "/admin/lifetime", label: "Lifetime Packages", icon: Award, requiredPermission: "admin:payments:view" },
       { key: "referrals", href: "/admin/referrals", label: "Referrals & Payouts", icon: Users, requiredPermission: "admin:referrals:view" },
     ],

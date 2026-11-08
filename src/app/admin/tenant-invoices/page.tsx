@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 type Health = {
@@ -47,7 +46,7 @@ export default function AdminTenantInvoicesPage() {
   return <main className="mx-auto max-w-7xl space-y-6 p-6">
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Billing operations</p><h1 className="mt-1 text-2xl font-semibold">Tenant invoice health</h1><p className="mt-1 text-sm text-muted-foreground">Generation, balances, and delivery failures across all properties.</p></div>
-      <div className="flex gap-2"><Link href="/admin/payments/reconciliation" className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted">Review reconciliation</Link><button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"><RefreshCw size={15} className={loading ? "animate-spin" : ""}/>Refresh</button></div>
+      <div className="flex gap-2"><button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"><RefreshCw size={15} className={loading ? "animate-spin" : ""}/>Refresh</button></div>
     </header>
     {error && <div role="alert" className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm"><AlertTriangle size={17}/>{error}</div>}
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
