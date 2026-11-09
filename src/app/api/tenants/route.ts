@@ -181,12 +181,7 @@ export async function GET(request: NextRequest) {
     const maxRentRaw = searchParams.get("maxRent");
     const minRent = minRentRaw ? Number(minRentRaw) : undefined;
     const maxRent = maxRentRaw ? Number(maxRentRaw) : undefined;
-    if (Number.isFinite(minRent) || Number.isFinite(maxRent)) {
-      filters.price = {
-        ...(Number.isFinite(minRent) ? { $gte: minRent } : {}),
-        ...(Number.isFinite(maxRent) ? { $lte: maxRent } : {}),
-      };
-    }
+    const hasRentRangeFilter = Number.isFinite(minRent) || Number.isFinite(maxRent);
 
     if (andFilters.length > 0) {
       filters.$and = andFilters;
@@ -222,22 +217,26 @@ export async function GET(request: NextRequest) {
 
     let total: number;
     let financialViews: TenantFinancialView[];
-    if (paymentStatusFilter) {
-      // The stored paymentStatus field is a derived cache. Calculate the
-      // financial status before filtering so stale cache values cannot hide
-      // current or overdue tenants from the owner list.
+    if (paymentStatusFilter || hasRentRangeFilter) {
+      // Status and rent range depend on current calculated dues/rent, so filter
+      // the financial views before pagination instead of relying on cached fields.
       const allTenants = await db.collection<Tenant>("tenants")
         .find(filters, { projection: tenantProjection })
         .toArray();
       const allViews = await calculateTenantFinancialViews(db, allTenants);
-      const requestedStatus = paymentStatusFilter.trim().toLowerCase();
-      const matchingViews = allViews.filter(({ state }) => {
+      const requestedStatus = paymentStatusFilter?.trim().toLowerCase();
+      const matchingViews = allViews.filter(({ state, expectedMonthlyRent }) => {
         const currentStatus = state.overdueAmount > 0
           ? "overdue"
           : state.totalOutstanding <= 0
             ? "paid"
             : "current";
-        return currentStatus === requestedStatus;
+        const matchesStatus = !requestedStatus || currentStatus === requestedStatus;
+        const matchesRent = !hasRentRangeFilter || (
+          (!Number.isFinite(minRent) || expectedMonthlyRent >= Number(minRent)) &&
+          (!Number.isFinite(maxRent) || expectedMonthlyRent <= Number(maxRent))
+        );
+        return matchesStatus && matchesRent;
       });
       total = matchingViews.length;
       financialViews = matchingViews.slice(skip, skip + limit);
@@ -281,6 +280,7 @@ export async function GET(request: NextRequest) {
         totalDepositPaid: t.totalDepositPaid,
         totalOtherPaid: t.totalOtherPaid,
         walletBalance: t.walletBalance,
+        expectedMonthlyRent: dues.expectedMonthlyRent,
         rentPaymentOverrides: t.rentPaymentOverrides,
         deliveryMethod: t.deliveryMethod,
         dues,

@@ -17,6 +17,7 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
   }
 
   const dues = tenant.dues;
+  const otherDues = Number(dues.otherDues || 0);
   const walletAppliedAllocation = dues.walletAppliedAllocation || { rent: 0, utilities: 0, deposit: 0, other: 0 };
   const walletApplications = [
     ["rent", walletAppliedAllocation.rent],
@@ -50,7 +51,7 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${otherDues > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
             {/* Rent Dues */}
             <div className="surface-card rounded-2xl p-4 border-l-4 border-amber-400">
               <p className="text-[11px] uppercase tracking-[0.3em] text-amber-700">Total rent + penalties</p>
@@ -89,6 +90,15 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
                 Ksh {dues.depositDues.toFixed(0)}
               </p>
             </div>
+
+            {otherDues > 0 && (
+              <div className="surface-card rounded-2xl p-4 border-l-4 border-slate-400">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-700">Other charges</p>
+                <p className="text-base sm:text-lg font-semibold text-slate-700 mt-2">
+                  Ksh {otherDues.toFixed(0)}
+                </p>
+              </div>
+            )}
 
             {/* Total Remaining */}
             <div className="glass-panel rounded-2xl p-4 border border-red-200 col-span-2 lg:col-span-1">

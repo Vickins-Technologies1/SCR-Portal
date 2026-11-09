@@ -123,13 +123,16 @@ export default function TenantsTable({
     return `${baseType} (Config ${configNumber})`;
   };
 
+  const getCurrentRent = (tenant: ResponseTenant) =>
+    tenant.dues?.expectedMonthlyRent ?? tenant.expectedMonthlyRent ?? tenant.price;
+
   const displayedTenants = useMemo(() => {
     return [...tenants].sort((a, b) => {
       const { key, direction } = sortConfig;
 
       if (key === "price" || key === "totalRentPaid" || key === "totalUtilityPaid" || key === "totalDepositPaid") {
-        const aVal = (a[key] ?? 0) as number;
-        const bVal = (b[key] ?? 0) as number;
+        const aVal = key === "price" ? getCurrentRent(a) : ((a[key] ?? 0) as number);
+        const bVal = key === "price" ? getCurrentRent(b) : ((b[key] ?? 0) as number);
         return direction === "asc" ? aVal - bVal : bVal - aVal;
       }
 
@@ -226,9 +229,10 @@ export default function TenantsTable({
   const getPaymentSnapshot = (tenant: ResponseTenant) => {
     const overdueBalance = Math.max(tenant.dues?.overdueAmount ?? 0, 0);
     const isOverdue = overdueBalance > 0;
+    const isPaid = !isOverdue && (tenant.dues?.totalRemainingDues ?? 0) <= 0;
     return {
       isOverdue,
-      label: isOverdue ? "Overdue" : "Up to date",
+      label: isOverdue ? "Overdue" : isPaid ? "Paid" : "Current",
       overdueBalance,
     };
   };
@@ -454,7 +458,7 @@ export default function TenantsTable({
                     { key: "email", label: "Email" },
                     { key: "propertyName", label: "Property" },
                     { key: "unitIdentifier", label: "Unit Type" },
-                    { key: "price", label: "Rent" },
+                    { key: "price", label: "Current Rent" },
                     { key: "houseNumber", label: "House No." },
                     { key: "paymentStatus", label: "Payment Status" },
                     { key: "overdueBalance", label: "Overdue Balance" },
@@ -510,7 +514,7 @@ export default function TenantsTable({
                           ))}
                         </div>
                       </td>
-                      <td className="text-gray-600">Ksh {tenant.price.toLocaleString()}</td>
+                      <td className="text-gray-600">Ksh {getCurrentRent(tenant).toLocaleString()}</td>
                       <td className="text-gray-600">
                         <div className="space-y-1">
                           {leaseUnits.map((unit, idx) => (

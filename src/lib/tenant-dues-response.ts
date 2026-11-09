@@ -20,6 +20,11 @@ export function buildTenantDuesResponse(
     return summary;
   }, { rent: 0, utilities: 0, deposit: 0, other: 0 });
   const walletRentEligibleBalance = state.walletRentEligibleBalance ?? state.walletBalance;
+  const paymentStatus = state.overdueAmount > 0
+    ? "overdue"
+    : state.totalOutstanding <= 0
+      ? "paid"
+      : "current";
 
   const dues = {
     rentDues: Math.max(0, state.rentOutstanding + state.penalties),
@@ -60,7 +65,7 @@ export function buildTenantDuesResponse(
       walletBalance: state.walletBalance,
       walletRentEligibleBalance,
       expectedMonthlyRent: effectiveMonthlyRent,
-      paymentStatus: state.overdueAmount > 0 ? "overdue" : "up-to-date",
+      paymentStatus,
       dues,
     },
     dues,

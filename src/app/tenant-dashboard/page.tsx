@@ -157,6 +157,7 @@ function InfoCard({
 function Badge({ status, children }: { status?: string; children: React.ReactNode }) {
   const styles: Record<string, string> = {
     paid: "bg-primary/10 text-primary border-primary/30",
+    current: "bg-primary/10 text-primary border-primary/30",
     overdue: "bg-red-100 text-red-800 border-red-200",
     pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
     Active: "bg-primary/10 text-primary border-primary/30",

@@ -154,9 +154,10 @@ export default function TenantDetailsPage() {
   const getPaymentSnapshot = (currentTenant: ResponseTenant) => {
     const overdueBalance = Math.max(currentTenant.dues?.overdueAmount ?? 0, 0);
     const isOverdue = overdueBalance > 0;
+    const isPaid = !isOverdue && (currentTenant.dues?.totalRemainingDues ?? 0) <= 0;
     return {
       isOverdue,
-      label: isOverdue ? "Overdue" : "Up to date",
+      label: isOverdue ? "Overdue" : isPaid ? "Paid" : "Current",
       overdueBalance,
     };
   };
