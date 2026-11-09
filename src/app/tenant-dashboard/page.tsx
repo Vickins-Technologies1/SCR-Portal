@@ -49,6 +49,8 @@ interface Tenant {
   updatedAt?: string;
   wallet?: number;
   walletBalance?: number;
+  walletRentEligibleBalance?: number;
+  expectedMonthlyRent?: number;
   leasedUnits?: Array<{
     unitIdentifier: string;
     unitType: string;
@@ -65,12 +67,17 @@ interface Tenant {
   dues?: {
     rentDues: number;
     rentOutstanding?: number;
+    rentCharged?: number;
+    rentPaid?: number;
+    rentCollectionRate?: number;
+    expectedMonthlyRent?: number;
     penaltyDues?: number;
     utilityDues: number;
     utilityCurrentDues?: number;
     utilityOverdueDues?: number;
     utilityStatus?: string;
     depositDues: number;
+    depositRequired?: number;
     otherDues?: number;
     totalRemainingDues: number;
     totalPaid?: number;
@@ -304,7 +311,6 @@ export default function TenantDashboardPage() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDuesLoading, setIsDuesLoading] = useState(false);
 
   const [csrfToken, setCsrfToken] = useState<string | null>(Cookies.get("csrf-token") || null);
   const requestInProgress = useRef(false);
@@ -337,60 +343,6 @@ export default function TenantDashboardPage() {
     }
     return null;
   }, [csrfToken]);
-
-  const fetchDues = useCallback(
-    async (token: string) => {
-      if (!userId || !token) return;
-      setIsDuesLoading(true);
-      try {
-        const impersonatingTenantId = Cookies.get("impersonatingTenantId");
-        const isImpersonating = Cookies.get("isImpersonating") === "true";
-        const res = await fetch("/api/tenants/check-dues", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-          credentials: "include",
-          body: JSON.stringify({
-            tenantId: isImpersonating ? impersonatingTenantId : userId,
-            userId,
-          }),
-        });
-
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "");
-          console.error("[Dues] request failed", {
-            status: res.status,
-            body: errText,
-          });
-          throw new Error("Failed to fetch dues");
-        }
-        const data = await res.json();
-
-        if (data.success) {
-          setTenant((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  dues: data.dues,
-                  monthsStayed: data.monthsStayed,
-                  totalRentPaid: data.tenant?.totalRentPaid,
-                  totalUtilityPaid: data.tenant?.totalUtilityPaid,
-                  totalDepositPaid: data.tenant?.totalDepositPaid,
-                  totalOtherPaid: data.tenant?.totalOtherPaid,
-                  walletBalance: data.tenant?.walletBalance ?? prev.walletBalance,
-                  wallet: data.tenant?.walletBalance ?? prev.wallet,
-                  paymentStatus: data.tenant?.paymentStatus,
-                }
-              : null
-          );
-        }
-      } catch (e) {
-        console.error("Dues fetch error:", e);
-      } finally {
-        setIsDuesLoading(false);
-      }
-    },
-    [userId]
-  );
 
   useEffect(() => {
     const uid = Cookies.get("userId");
@@ -487,7 +439,6 @@ export default function TenantDashboardPage() {
           }
         }
 
-        await fetchDues(token);
       } catch (err) {
         console.error("Dashboard load error:", err);
         setError(err instanceof Error ? err.message : "Failed to load dashboard");
@@ -497,7 +448,7 @@ export default function TenantDashboardPage() {
     };
 
     loadData();
-  }, [userId, csrfToken, fetchCsrfToken, fetchDues]);
+  }, [userId, csrfToken, fetchCsrfToken]);
 
 
   const paymentTrendData = (analytics?.monthlyPayments ?? []).map((item) => ({
@@ -542,6 +493,8 @@ export default function TenantDashboardPage() {
 
   const rentLabel = leaseUnits.length > 1 ? "Total Rent" : "Rent";
   const depositLabel = leaseUnits.length > 1 ? "Total Deposit" : "Deposit";
+  const expectedMonthlyRent = tenant?.dues?.expectedMonthlyRent ?? tenant?.expectedMonthlyRent ?? tenant?.price ?? 0;
+  const depositRequired = tenant?.dues?.depositRequired ?? tenant?.deposit ?? 0;
 
   const walletBalance = tenant?.dues?.walletRemaining ?? tenant?.walletBalance ?? tenant?.wallet ?? 0;
   const utilityDue = tenant?.dues?.utilityDues ?? 0;
@@ -737,10 +690,10 @@ export default function TenantDashboardPage() {
 
                     <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
                       <p>
-                        {rentLabel}: <span className="font-semibold text-foreground">Ksh {tenant.price.toLocaleString()}</span>
+                        {rentLabel}: <span className="font-semibold text-foreground">{formatCurrency(expectedMonthlyRent)}/mo</span>
                       </p>
                       <p>
-                        {depositLabel}: <span className="font-semibold text-foreground">Ksh {tenant.deposit.toLocaleString()}</span>
+                        {depositLabel}: <span className="font-semibold text-foreground">{formatCurrency(depositRequired)}</span>
                       </p>
                       <p>
                         Lease: <span className="font-semibold text-foreground">{fmt(tenant.leaseStartDate)} – {fmt(tenant.leaseEndDate)}</span>
@@ -807,7 +760,7 @@ export default function TenantDashboardPage() {
               {tenant ? (
                 <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
                   <p>
-                    Status: <Badge status={tenant.paymentStatus}>{isDuesLoading ? "Updating…" : tenant.paymentStatus || "?"}</Badge>
+                    Status: <Badge status={tenant.paymentStatus}>{tenant.paymentStatus || "?"}</Badge>
                   </p>
                   <p>
                     Rent paid: <span className="font-semibold text-foreground">{formatCurrency(tenant.totalRentPaid)}</span>

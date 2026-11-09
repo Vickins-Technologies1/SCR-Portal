@@ -59,6 +59,7 @@ export type TenantFinancialState = {
   overdueAmount: number;
   totalOutstanding: number;
   walletBalance: number;
+  walletRentEligibleBalance?: number;
   walletApplied: number;
   paymentAllocations: Map<string, PaymentAllocation>;
   rentObligations: Array<{ billingPeriod: string; amount: number; paid: number; outstanding: number; dueDate: Date; overdue: boolean }>;
@@ -348,6 +349,10 @@ export function allocatePaymentLedger(params: {
   }
 
   const wallet = money(walletLots.reduce((sum, lot) => sum + lot.remaining, 0));
+  const walletRentEligibleBalance = money(walletLots.reduce(
+    (sum, lot) => sum + (!lot.allowedFields || lot.allowedFields.includes("rent") ? lot.remaining : 0),
+    0,
+  ));
   const walletApplied = money([...allocations.values()].reduce((sum, allocation) => sum + amountOf(allocation.walletApplied), 0));
   return {
     depositPaid: money(paid.deposit),
@@ -355,6 +360,7 @@ export function allocatePaymentLedger(params: {
     utilitiesPaid: money(paid.utilities),
     otherPaid: money(paid.other),
     walletBalance: wallet,
+    walletRentEligibleBalance,
     walletApplied,
     allocations,
   };
@@ -454,6 +460,7 @@ export function deriveTenantFinancialState(params: {
     overdueAmount: money(overdueRent + overdueUtilities),
     totalOutstanding: money(depositOutstanding + rentOutstanding + utilitiesOutstanding + otherOutstanding + penalties),
     walletBalance: ledger.walletBalance,
+    walletRentEligibleBalance: ledger.walletRentEligibleBalance,
     walletApplied: ledger.walletApplied,
     paymentAllocations: ledger.allocations,
     rentObligations,

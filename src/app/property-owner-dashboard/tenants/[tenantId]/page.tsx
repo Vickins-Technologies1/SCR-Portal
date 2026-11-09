@@ -168,18 +168,8 @@ export default function TenantDetailsPage() {
   ): PaymentReport => {
     const unitSummary = getTenantUnitSummary(currentTenant);
     const snapshot = getPaymentSnapshot(currentTenant);
-    const totalPaid = currentTenant.dues?.totalPaid ?? (
-      (currentTenant.totalRentPaid || 0) +
-      (currentTenant.totalUtilityPaid || 0) +
-      (currentTenant.totalDepositPaid || 0) +
-      (currentTenant.totalOtherPaid || 0) +
-      (currentTenant.walletBalance || 0)
-    );
-    const totalOutstanding = currentTenant.dues?.totalRemainingDues ?? 0;
-    const collectionRate =
-      totalPaid + totalOutstanding > 0
-        ? Math.round((totalPaid / (totalPaid + totalOutstanding)) * 100)
-        : 100;
+    const totalPaid = currentTenant.dues?.totalPaid ?? 0;
+    const collectionRate = currentTenant.dues?.rentCollectionRate ?? 100;
     const leaseStart = new Date(currentTenant.leaseStartDate);
     const leaseEnd = new Date(currentTenant.leaseEndDate);
     const daysToLeaseEnd = Math.ceil((leaseEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -193,9 +183,9 @@ export default function TenantDetailsPage() {
     }
 
     if (collectionRate < 80) {
-      insights.push("Collection rate is below 80%. Review payment cadence and reconcile any gaps.");
+      insights.push("Rent collection rate is below 80%. Review payment cadence and reconcile any gaps.");
     } else if (collectionRate >= 95) {
-      insights.push("Collection rate is strong. Keep the current payment workflow.");
+      insights.push("Rent collection is on track. Keep the current payment workflow.");
     }
 
     if (Number.isFinite(daysToLeaseEnd)) {
@@ -229,7 +219,7 @@ export default function TenantDetailsPage() {
       `Payment status: ${snapshot.label}`,
       `Overdue balance: ${formatCurrency(snapshot.overdueBalance)}`,
       `Total paid: ${formatCurrency(totalPaid)}`,
-      `Collection rate: ${collectionRate}%`,
+      `Rent collection rate: ${collectionRate}%`,
       `Wallet balance: ${formatCurrency(currentTenant.walletBalance || 0)}`,
       "",
       "Insights",
@@ -251,7 +241,7 @@ export default function TenantDetailsPage() {
       totalPaid,
       collectionRate,
       walletBalance: currentTenant.walletBalance || 0,
-      rentPerMonth: currentTenant.price || 0,
+      rentPerMonth: currentTenant.dues?.expectedMonthlyRent ?? currentTenant.expectedMonthlyRent ?? currentTenant.price ?? 0,
       leaseRange,
       insights,
       statements,
@@ -440,6 +430,8 @@ export default function TenantDetailsPage() {
                 totalDepositPaid: data.tenant.totalDepositPaid,
                 totalUtilityPaid: data.tenant.totalUtilityPaid,
                 walletBalance: data.tenant.walletBalance ?? prev.walletBalance,
+                walletRentEligibleBalance: data.tenant.walletRentEligibleBalance ?? prev.walletRentEligibleBalance,
+                expectedMonthlyRent: data.tenant.expectedMonthlyRent ?? prev.expectedMonthlyRent,
                 paymentStatus: data.tenant.paymentStatus,
                 monthsStayed: data.monthsStayed,
               }
@@ -920,7 +912,7 @@ export default function TenantDetailsPage() {
                     <p className="text-xl font-bold mt-2">{formatCurrency(reportData.overdueBalance)}</p>
                   </div>
                   <div className="bg-white/10 rounded-xl p-4">
-                    <p className="text-xs uppercase text-slate-200">Collection Rate</p>
+                    <p className="text-xs uppercase text-slate-200">Rent Collection Rate</p>
                     <p className="text-xl font-bold mt-2">{reportData.collectionRate}%</p>
                   </div>
                   <div className="bg-white/10 rounded-xl p-4">

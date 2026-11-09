@@ -84,7 +84,7 @@ export async function generateTenantPaymentReportPdf(input: TenantPaymentReportI
   const metrics: Array<[string, string]> = [
     ["Overdue balance", formatPdfMoney(input.report.overdueBalance)],
     ["Total paid", formatPdfMoney(input.report.totalPaid)],
-    ["Collection rate", `${input.report.collectionRate}%`],
+    ["Rent collection rate", `${input.report.collectionRate}%`],
     ["Wallet balance", formatPdfMoney(input.report.walletBalance)],
   ];
   const cardGap = 10;

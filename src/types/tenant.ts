@@ -48,6 +48,8 @@ export interface Tenant {
   totalDepositPaid: number;
   totalOtherPaid?: number;
   walletBalance: number;
+  walletRentEligibleBalance?: number;
+  expectedMonthlyRent?: number;
   rentPaymentOverrides?: TenantRentPaymentOverride[];
   deliveryMethod: "sms" | "email" | "whatsapp" | "both" | "app";
 }
@@ -80,6 +82,8 @@ export interface ResponseTenant {
   totalDepositPaid: number;
   totalOtherPaid?: number;
   walletBalance: number;
+  walletRentEligibleBalance?: number;
+  expectedMonthlyRent?: number;
   rentPaymentOverrides?: TenantRentPaymentOverride[];
   deliveryMethod?: "sms" | "email" | "whatsapp" | "both" | "app";
   dues?: {
@@ -87,14 +91,26 @@ export interface ResponseTenant {
     rentOutstanding?: number;
     rentOverdueDues?: number;
     rentCurrentDues?: number;
+    rentCharged?: number;
+    rentPaid?: number;
+    rentCollectionRate?: number;
+    expectedMonthlyRent?: number;
     penaltyDues?: number;
+    depositRequired?: number;
     utilityDues: number;
     depositDues: number;
     totalRemainingDues: number;
     totalPaid?: number;
     overdueAmount?: number;
     walletApplied?: number;
+    walletAppliedAllocation?: {
+      rent: number;
+      utilities: number;
+      deposit: number;
+      other: number;
+    };
     walletRemaining?: number;
+    walletRentEligibleBalance?: number;
     walletCoverageMonths?: number;
     walletCoverageRemainder?: number;
   };

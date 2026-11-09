@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "../../../../lib/mongodb";
 import { Db, ObjectId } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../lib/csrf";
-import { resolveTenantMonthlyRentForDate } from "../../../../lib/utils";
-import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
-import { calculateTenantFinancialState } from "@/lib/tenant-payment-allocation";
+import { calculateTenantFinancialViews } from "@/lib/tenant-financial-view";
 import { getFinancialPaymentRows } from "@/lib/financial-reporting";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +45,8 @@ interface Tenant {
 async function getMonthlyPayments(
   db: Db,
   targetTenantId: string,
-  monthsStayed: number
+  monthsStayed: number,
+  propertyId?: string,
 ): Promise<Array<{
   month: string;
   rent: number;
@@ -67,7 +66,11 @@ async function getMonthlyPayments(
     const parts = monthFormatter.formatToParts(date);
     return `${parts.find((part) => part.type === "year")?.value}-${parts.find((part) => part.type === "month")?.value}`;
   };
-  const rows = await getFinancialPaymentRows({ db, tenantIds: [targetTenantId] });
+  const rows = await getFinancialPaymentRows({
+    db,
+    tenantIds: [targetTenantId],
+    ...(propertyId ? { propertyIds: [propertyId], tenantIdsForUnresolvedProperty: [targetTenantId] } : {}),
+  });
   rows.forEach(({ eventDate, netAmount, allocation }) => {
     if (!eventDate) return;
     const monthKey = monthKeyFor(eventDate);
@@ -118,7 +121,7 @@ async function getMonthlyPayments(
   }
 
   // Oldest to newest (left → right on chart)
-  return monthlyPayments;
+  return monthlyPayments.reverse();
 }
 
 export async function GET(request: NextRequest) {
@@ -136,7 +139,6 @@ export async function GET(request: NextRequest) {
     const { db }: { db: Db } = await connectToDatabase();
 
     let targetTenantId = userId;
-    let shouldCalculateDues = false;
 
     if (
       isImpersonating &&
@@ -159,7 +161,6 @@ export async function GET(request: NextRequest) {
       targetTenantId = impersonatingTenantId;
     } else if (role === "tenant") {
       targetTenantId = userId;
-      shouldCalculateDues = true;
     } else {
       return NextResponse.json({ success: false, message: "Invalid role" }, { status: 403 });
     }
@@ -193,75 +194,34 @@ export async function GET(request: NextRequest) {
     };
 
     let analytics = null;
-    const rentOverrideMap = await fetchActiveRentOverridesByPropertyIds(db, [tenantDoc.propertyId]);
-
-    if (shouldCalculateDues) {
-      const today = new Date();
-      const state = await calculateTenantFinancialState(db, tenantDoc, { asOf: today, rentOverrideMap });
-      const { monthsStayed } = state;
-
-      const rentPaid = state.rentPaid;
-      const depositPaid = state.depositPaid;
-      const utilityPaid = state.utilitiesPaid;
-      const updatedTotalRentPaid = rentPaid;
-      const updatedWalletBalance = state.walletBalance;
-      const otherPaid = state.otherPaid;
-      const penaltyDues = state.penalties;
-      const rentDues = state.rentOutstanding + penaltyDues;
-      const depositDues = state.depositOutstanding;
-      const utilityDues = state.utilitiesOutstanding;
-      const totalRemainingDues = state.totalOutstanding;
-      const totalPaid = Math.round((rentPaid + utilityPaid + depositPaid + otherPaid + updatedWalletBalance) * 100) / 100;
-
-      const paymentStatus = state.overdueAmount > 0 ? "overdue" : "up-to-date";
-
-      const monthlyPayments = await getMonthlyPayments(db, targetTenantId, monthsStayed);
-      const effectiveMonthlyRent = resolveTenantMonthlyRentForDate({
-        tenant: tenantDoc as any,
-        date: today,
-        rentOverrideMap,
-      });
+    const today = new Date();
+    const [view] = await calculateTenantFinancialViews(db, [tenantDoc], today);
+    if (view) {
+      const { state, monthsStayed } = view;
+      const monthlyPayments = await getMonthlyPayments(db, targetTenantId, monthsStayed, tenantDoc.propertyId);
 
       Object.assign(tenant, {
         monthsStayed,
-        totalRentPaid: updatedTotalRentPaid,
-        totalUtilityPaid: utilityPaid,
-        totalDepositPaid: depositPaid,
-        totalOtherPaid: otherPaid,
-        walletBalance: updatedWalletBalance,
-        wallet: updatedWalletBalance,
-        paymentStatus,
-        dues: {
-          rentDues,
-          rentOutstanding: state.rentOutstanding,
-          penaltyDues,
-          utilityDues,
-          utilityCurrentDues: state.utilitiesCurrentOutstanding,
-          utilityOverdueDues: state.utilitiesOverdueOutstanding,
-          utilityStatus: state.utilityStatus,
-          depositDues,
-          otherDues: 0,
-          totalRemainingDues,
-          totalPaid,
-          walletApplied: state.walletApplied,
-          walletRemaining: updatedWalletBalance,
-          walletCoverageMonths: effectiveMonthlyRent
-            ? Math.floor(updatedWalletBalance / effectiveMonthlyRent)
-            : 0,
-          walletCoverageRemainder: effectiveMonthlyRent
-            ? updatedWalletBalance % effectiveMonthlyRent
-            : updatedWalletBalance,
-        },
+        totalRentPaid: state.rentPaid,
+        totalUtilityPaid: state.utilitiesPaid,
+        totalDepositPaid: state.depositPaid,
+        totalOtherPaid: state.otherPaid,
+        walletBalance: state.walletBalance,
+        wallet: state.walletBalance,
+        walletRentEligibleBalance: state.walletRentEligibleBalance,
+        expectedMonthlyRent: view.expectedMonthlyRent,
+        paymentStatus: view.tenant.paymentStatus,
+        dues: view.dues,
       });
 
       analytics = {
         monthlyPayments,
         paymentBreakdown: [
-          { name: "Rent", value: rentPaid },
-          { name: "Utility", value: utilityPaid },
-          { name: "Deposit", value: depositPaid },
-          { name: "Other", value: otherPaid },
-          { name: "Wallet credit", value: updatedWalletBalance },
+          { name: "Rent", value: state.rentPaid },
+          { name: "Utility", value: state.utilitiesPaid },
+          { name: "Deposit", value: state.depositPaid },
+          { name: "Other", value: state.otherPaid },
+          { name: "Wallet credit", value: state.walletBalance },
         ],
       };
     }

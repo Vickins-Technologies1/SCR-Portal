@@ -43,7 +43,7 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     return new Date(dateStr).toLocaleDateString("en-GB");
   };
   const getWalletRunway = () => {
-    const walletBalance = tenant.walletBalance || 0;
+    const walletBalance = tenant.dues?.walletRentEligibleBalance ?? tenant.walletRentEligibleBalance ?? 0;
     const months = tenant.dues?.walletCoverageMonths ?? 0;
     const remainder = tenant.dues?.walletCoverageRemainder ?? 0;
 
@@ -64,9 +64,9 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
       case "paid":
-        return "text-primary font-semibold bg-primary/10 px-3 py-1 rounded-full text-[11px]";
       case "current":
-        return "text-primary font-semibold";
+      case "up-to-date":
+        return "text-primary font-semibold bg-primary/10 px-3 py-1 rounded-full text-[11px]";
       case "overdue":
         return "text-red-600 font-semibold bg-red-50 px-3 py-1 rounded-full text-[11px]";
       default:
@@ -94,8 +94,8 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     { label: "Property", value: property?.name || "Loading..." },
     { label: unitTypeLabelTitle, value: unitTypesLabel },
     { label: unitNumberLabelTitle, value: unitNumbersLabel },
-    { label: "Monthly Rent", value: formatCurrency(tenant.price) },
-    { label: "Security Deposit", value: formatCurrency(tenant.deposit) },
+    { label: "Monthly Rent", value: formatCurrency(tenant.dues?.expectedMonthlyRent ?? tenant.expectedMonthlyRent ?? tenant.price) },
+    { label: "Required Security Deposit", value: formatCurrency(tenant.dues?.depositRequired ?? tenant.deposit) },
 
     { label: "Lease Start", value: formatDate(tenant.leaseStartDate) },
     { label: "Lease End", value: formatDate(tenant.leaseEndDate) },
@@ -108,7 +108,8 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     {
       label: "Payment Status",
       value: tenant.paymentStatus === "paid" ? "Fully Paid" :
-             tenant.paymentStatus === "current" ? "Current" : "Overdue",
+             ["current", "up-to-date"].includes(tenant.paymentStatus) ? "Current" :
+             tenant.paymentStatus === "overdue" ? "Overdue" : "Unknown",
       className: getPaymentStatusColor(tenant.paymentStatus),
     },
 
@@ -141,22 +142,27 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
       className: "text-primary font-semibold",
     },
     {
-      label: "Wallet Runway",
+      label: "Rent Wallet Runway",
       value: getWalletRunway(),
-      className: tenant.walletBalance > 0 ? "text-primary font-semibold" : "text-muted-foreground",
-      note: tenant.walletBalance > 0 ? "Auto-applies to upcoming rent" : undefined,
+      className: (tenant.dues?.walletRentEligibleBalance ?? tenant.walletRentEligibleBalance ?? 0) > 0 ? "text-primary font-semibold" : "text-muted-foreground",
+      note: (tenant.dues?.walletRentEligibleBalance ?? tenant.walletRentEligibleBalance ?? 0) > 0 ? "Based on credit eligible for rent" : undefined,
     },
 
     // Dues — now 100% accurate because backend syncs from payments
     ...(tenant.dues
       ? [
           {
-            label: "Rent Arrears",
-            value: formatCurrency(tenant.dues.rentDues),
-            className: tenant.dues.rentDues > 0
+            label: "Rent Outstanding",
+            value: formatCurrency(tenant.dues.rentOutstanding ?? tenant.dues.rentDues),
+            className: (tenant.dues.rentOutstanding ?? tenant.dues.rentDues) > 0
               ? "text-red-600 font-semibold"
               : "text-primary font-semibold",
           },
+          ...((tenant.dues.penaltyDues ?? 0) > 0 ? [{
+            label: "Penalties Due",
+            value: formatCurrency(Number(tenant.dues.penaltyDues)),
+            className: "text-red-600 font-semibold",
+          }] : []),
           {
             label: "Deposit Due",
             value: formatCurrency(tenant.dues.depositDues),

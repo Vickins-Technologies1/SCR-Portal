@@ -17,6 +17,14 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
   }
 
   const dues = tenant.dues;
+  const walletAppliedAllocation = dues.walletAppliedAllocation || { rent: 0, utilities: 0, deposit: 0, other: 0 };
+  const walletApplications = [
+    ["rent", walletAppliedAllocation.rent],
+    ["utilities", walletAppliedAllocation.utilities],
+    ["deposit", walletAppliedAllocation.deposit],
+    ["other charges", walletAppliedAllocation.other],
+  ].filter(([, amount]) => Number(amount) > 0)
+    .map(([category, amount]) => `Ksh ${Number(amount).toFixed(0)} to ${category}`);
 
   return (
     <div className="mt-2">
@@ -95,14 +103,18 @@ export default function DuesSection({ tenant, isDuesLoading }: DuesSectionProps)
             <div className="surface-card rounded-2xl p-4 text-primary shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs sm:text-sm font-semibold">Wallet Auto-Apply</p>
-                <span className="text-[11px] font-medium text-primary">
-                  {dues.walletCoverageMonths ?? 0} month{(dues.walletCoverageMonths ?? 0) === 1 ? "" : "s"} runway
-                </span>
+                {(dues.walletRentEligibleBalance ?? 0) > 0 && (
+                  <span className="text-[11px] font-medium text-primary">
+                    {dues.walletCoverageMonths ?? 0} month{(dues.walletCoverageMonths ?? 0) === 1 ? "" : "s"} rent runway
+                  </span>
+                )}
               </div>
               <p className="mt-2 text-xs sm:text-sm">
                 {(dues.walletApplied ?? 0) > 0
-                  ? `Applied Ksh ${dues.walletApplied?.toFixed(0)} to rent this cycle.`
-                  : "Credit is ready for upcoming rent."}
+                  ? `Applied ${walletApplications.join(", ") || `Ksh ${dues.walletApplied?.toFixed(0)} to obligations`}.`
+                  : (dues.walletRentEligibleBalance ?? 0) > 0
+                    ? "Rent-eligible credit is ready for upcoming rent."
+                    : "Credit remains available for its eligible obligation categories."}
               </p>
               {(dues.walletRemaining ?? 0) > 0 && (
                 <p className="text-[11px] text-primary mt-1">
