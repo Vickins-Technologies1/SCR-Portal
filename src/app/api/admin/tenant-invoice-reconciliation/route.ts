@@ -5,6 +5,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/admin-auth";
 import { validateCsrfToken, buildInvalidCsrfResponse } from "@/lib/csrf";
 import { addInvoicePaymentStates } from "@/lib/tenant-invoices";
+import { isAutomaticTenantDuesInvoice } from "@/lib/tenant-invoice-ledger";
 import { calculateTenantInvoiceDues } from "@/lib/tenant-invoice-dues";
 import { generateTenantInvoicePdf } from "@/lib/tenant-invoice-pdf";
 import { sendInvoiceEmail } from "@/lib/email";
@@ -34,7 +35,7 @@ async function analyze(db: any) {
       const property = ObjectId.isValid(propertyId) ? await db.collection("properties").findOne({ _id: new ObjectId(propertyId) }) : null;
       if (!tenant || !property) classification = "needs_manual_review_missing_relationship";
       else {
-        const legacyAuto = invoice.invoiceBasis === "overdue_tenant_dues_v1" || /^DRAFT-/i.test(String(invoice.invoiceNumber || "")) && /^\d{4}-(0[1-9]|1[0-2])$/.test(String(invoice.billingPeriod || "")) || /^R-[A-Z0-9]+-\d{6}-/i.test(String(invoice.invoiceNumber || ""));
+        const legacyAuto = isAutomaticTenantDuesInvoice(invoice);
         if (!legacyAuto) { classification = invoice.status === "draft" ? "draft_requires_review" : "valid_outstanding"; }
         else {
         const dues = await calculateTenantInvoiceDues(db, tenant, property, new Date(), { excludeInvoiceIds: [String(invoice._id)] });

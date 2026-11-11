@@ -143,6 +143,7 @@ const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdA
 type AllocationField = "deposit" | "rent" | "utilities" | "other";
 
 const defaultAllocationPriority: AllocationField[] = ["deposit", "rent", "utilities", "other"];
+export const CURRENT_TENANT_ALLOCATION_POLICY_VERSION = "deposit-first-v3";
 
 /** Convert the shared financial projection to tenant-ledger inputs. */
 export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): LedgerPayment[] {
@@ -151,11 +152,11 @@ export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): L
     amount: row.netAmount,
     postedAmount: row.netAmount,
     // The financial projection already prorates a persisted allocation after
-    // reversals. Preserve the legacy policy fallback for old v1 rows that have
-    // no stored allocation, but do not reintroduce the unreversed snapshot.
+    // reversals. Versioned and combined receipts without a snapshot must go
+    // through the shared allocator instead of being treated as wallet credit.
     allocation: row.payment.allocation
       ? row.allocation
-      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.type === "RentAndUtility"
+      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.allocationPolicyVersion === CURRENT_TENANT_ALLOCATION_POLICY_VERSION || row.payment.type === "RentAndUtility"
         ? undefined
         : row.allocation,
   })) as LedgerPayment[];
@@ -167,6 +168,14 @@ export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): L
  */
 function allocationPriority(): AllocationField[] {
   return [...defaultAllocationPriority];
+}
+
+function selectedCategoryPriority(type?: PaymentCategory): AllocationField[] {
+  if (type === "Rent") return ["rent", "utilities", "other"];
+  if (type === "RentAndUtility") return ["rent", "utilities"];
+  if (type === "Utility") return ["utilities"];
+  if (type === "Other") return ["other"];
+  return [];
 }
 
 export function allocatePaymentLedger(params: {
@@ -202,33 +211,24 @@ export function allocatePaymentLedger(params: {
   };
 
   const applyTypedReceiptFunds = (payment: LedgerPayment, amount: number) => {
-    const legacyDepositFirst = payment.allocationPolicyVersion === "deposit-first-v1";
-    if (legacyDepositFirst || payment.type === "General" || !payment.type) {
-      return applyReceiptFunds(amount);
-    }
-    if (payment.type === "RentAndUtility") {
-      return applyReceiptFunds(amount, ["rent", "utilities"]);
-    }
-
-    const fieldByType: Partial<Record<PaymentCategory, AllocationField>> = {
-      Deposit: "deposit",
-      Rent: "rent",
-      Utility: "utilities",
-      Other: "other",
-    };
-    const field = fieldByType[payment.type];
-    if (!field) return applyReceiptFunds(amount, []);
-
     // A security-deposit receipt remains a deposit collection even when it
     // exceeds today's obligation. It must not be reclassified as rent or
     // utilities, and the outstanding deposit balance is capped separately.
-    if (field === "deposit") {
+    if (payment.type === "Deposit") {
       const appliedByField: Record<AllocationField, number> = { deposit: amountOf(amount), rent: 0, utilities: 0, other: 0 };
       paid.deposit = money(paid.deposit + appliedByField.deposit);
       return { appliedByField, remaining: 0 };
     }
 
-    return applyReceiptFunds(amount, [field]);
+    // Every receipt clears an outstanding security deposit before its
+    // selected category. Rent receipts then follow the normal obligation
+    // waterfall so a cleared rent balance can cascade into utilities and
+    // other dues before any excess is credited to the rent wallet.
+    const selectedPriority = selectedCategoryPriority(payment.type);
+    if (!selectedPriority.length) {
+      return applyReceiptFunds(amount);
+    }
+    return applyReceiptFunds(amount, ["deposit", ...selectedPriority]);
   };
 
   const applyWalletCredit = () => {
@@ -314,8 +314,13 @@ export function allocatePaymentLedger(params: {
       continue;
     }
 
-    const receiptResult = payment.tenantInvoiceId && payment.invoicePriority?.length
-      ? applyReceiptFunds(paymentAmount, [...payment.invoicePriority, ...allocationPriority().filter((field) => !payment.invoicePriority!.includes(field))])
+    const receiptResult = payment.type !== "Deposit" && payment.tenantInvoiceId && payment.invoicePriority?.length
+      ? applyReceiptFunds(paymentAmount, [
+          "deposit",
+          ...selectedCategoryPriority(payment.type),
+          ...payment.invoicePriority,
+          ...allocationPriority(),
+        ].filter((field, index, fields) => fields.indexOf(field) === index))
       : applyTypedReceiptFunds(payment, paymentAmount);
     receiptAllocation = receiptResult.appliedByField;
     walletCredit = receiptResult.remaining;

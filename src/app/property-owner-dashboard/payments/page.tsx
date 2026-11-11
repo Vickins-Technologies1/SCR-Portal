@@ -630,7 +630,7 @@ export default function PaymentsPage() {
           )}
           {isLoading ? (
             <div className="table-shell overflow-hidden" aria-busy="true" aria-label="Loading payments">
-              <TableRowsSkeleton rows={6} columns={6} />
+              <TableRowsSkeleton rows={6} columns={11} />
             </div>
           ) : payments.length === 0 ? (
             <div className="surface-card rounded-2xl p-6 text-muted-foreground text-center text-xs sm:text-sm">
@@ -648,6 +648,7 @@ export default function PaymentsPage() {
                     <th className="px-4 py-3 text-left">Property</th>
                     <th className="px-4 py-3 text-left">Unit Type</th>
                     <th className="px-4 py-3 text-left">Type</th>
+                    <th className="px-4 py-3 text-left">Allocation</th>
                     <th className="px-4 py-3 text-left">Amount (Ksh)</th>
                     <th className="px-4 py-3 text-left">Payment Date</th>
                     <th className="px-4 py-3 text-left">Status</th>
@@ -677,6 +678,15 @@ export default function PaymentsPage() {
                         </td>
                         <td className="px-4 py-3">{`${baseUnitType} (${payment.unitType})`}</td>
                         <td className="px-4 py-3">{payment.type === "RentAndUtility" ? "Rent + Utilities" : payment.type}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {payment.allocation ? ([
+                            Number(payment.allocation.deposit || 0) > 0 ? `Deposit ${Number(payment.allocation.deposit).toLocaleString()}` : null,
+                            Number(payment.allocation.rent || 0) > 0 ? `Rent ${Number(payment.allocation.rent).toLocaleString()}` : null,
+                            Number(payment.allocation.utilities || 0) > 0 ? `Utilities ${Number(payment.allocation.utilities).toLocaleString()}` : null,
+                            Number(payment.allocation.other || 0) > 0 ? `Other ${Number(payment.allocation.other).toLocaleString()}` : null,
+                            Number(payment.allocation.walletCredit || 0) > 0 ? `Wallet ${Number(payment.allocation.walletCredit).toLocaleString()}` : null,
+                          ].filter(Boolean).join(" · ") || "No dues applied") : "Pending allocation"}
+                        </td>
                         <td className="px-4 py-3">Ksh {payment.amount.toFixed(2)}</td>
                         <td className="px-4 py-3">
                           {formatPaymentDate(payment)}

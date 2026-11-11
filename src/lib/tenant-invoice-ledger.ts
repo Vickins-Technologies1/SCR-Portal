@@ -1,6 +1,6 @@
 import "server-only";
 import { Db, ObjectId } from "mongodb";
-import { identityValues } from "@/lib/payment-query";
+import { identityValues, paymentEventDate } from "@/lib/payment-query";
 import { businessDateKey } from "@/lib/business-time";
 import logger from "@/lib/logger";
 
@@ -16,6 +16,17 @@ const amountInDollars = (value: unknown) => Math.max(0, Math.round((Number(value
 const invoiceCategory = (value: unknown): InvoiceChargeCategory => invoiceCategories.includes(value as InvoiceChargeCategory) ? value as InvoiceChargeCategory : "rent";
 const ledgerCategoryFor = (value: InvoiceChargeCategory): InvoiceLedgerCategory => value === "penalty" ? "other" : value;
 const ledgerIndexPromises = new WeakMap<Db, Promise<void>>();
+
+/** Legacy monthly dues invoices predate the explicit invoiceBasis field. */
+export function isAutomaticTenantDuesInvoice(invoice: { invoiceBasis?: unknown; invoiceNumber?: unknown; billingPeriod?: unknown }) {
+  if (String(invoice.invoiceBasis || "") === "overdue_tenant_dues_v1") return true;
+  const invoiceNumber = String(invoice.invoiceNumber || "");
+  const billingPeriod = String(invoice.billingPeriod || "");
+  if (/^DRAFT-/i.test(invoiceNumber) && /^\d{4}-(0[1-9]|1[0-2])$/.test(billingPeriod)) return true;
+  // Accepted historical forms: R-YYYYMM-<id>, R-YYYYMMDD-<id>, and
+  // R-<owner-prefix>-YYYYMM-<id>.
+  return /^R-(?:[A-Z0-9]{1,8}-)?\d{6}(?:\d{2})?-[A-Z0-9]{24}$/i.test(invoiceNumber);
+}
 
 async function ensureLedgerIndexes(db: Db) {
   let pending = ledgerIndexPromises.get(db);
@@ -474,12 +485,28 @@ export async function recordTenantInvoicePaymentAllocations(db: Db, payment: any
   const allocation = payment.allocation || {};
   const pool = { rent: amountInDollars(allocation.rent), utilities: amountInDollars(allocation.utilities), deposit: amountInDollars(allocation.deposit), other: amountInDollars(allocation.other) };
   if (!Object.values(pool).some((amount) => amount > 0)) return 0;
-  const invoices = await invoiceSnapshot(db, String(payment.tenantId), String(payment.propertyId));
+  let invoices = await invoiceSnapshot(db, String(payment.tenantId), String(payment.propertyId));
+  if (!invoices.length) return 0;
+  const targetInvoiceId = payment.tenantInvoiceId ? String(payment.tenantInvoiceId) : "";
+  if (!targetInvoiceId) {
+    const paymentDate = paymentEventDate(payment);
+    if (paymentDate) {
+      invoices = invoices.filter((invoice: any) => {
+        if (!isAutomaticTenantDuesInvoice(invoice)) return true;
+        const invoiceDate = invoice.issueDate || invoice.createdAt;
+        const issuedAt = invoiceDate ? new Date(invoiceDate) : null;
+        // An automatic dues invoice is a snapshot of the balance at creation.
+        // A late posting must not retroactively pay a snapshot created after
+        // the receipt, because that receipt was already included in its total.
+        return !issuedAt || Number.isNaN(issuedAt.getTime()) || paymentDate >= issuedAt;
+      });
+    }
+  }
   if (!invoices.length) return 0;
   await ensureLedgerIndexes(db);
   return appendInvoiceAllocations(db, invoices, pool, {
     sourcePaymentId: String(payment._id), reference: payment.mpesaCode || payment.reference || payment.transactionId,
-    occurredAt: payment.postedAt || payment.paymentDate || new Date(), targetInvoiceId: payment.tenantInvoiceId ? String(payment.tenantInvoiceId) : undefined,
+    occurredAt: payment.postedAt || payment.paymentDate || new Date(), targetInvoiceId: targetInvoiceId || undefined,
     kind: "PAYMENT_ALLOCATION",
   });
 }
@@ -649,7 +676,10 @@ export async function getManualTenantInvoiceChargeTotals(db: Db, tenantId: strin
   }).toArray();
   const totals: Record<InvoiceChargeCategory, number> = { rent: 0, utilities: 0, deposit: 0, penalty: 0, other: 0 };
   const calculated = await addInvoicePaymentStates(db, rows);
-  for (const row of calculated) for (const category of invoiceCategories) totals[category] += positiveMinor(row.categoryTotalsMinor?.[category]);
+  for (const row of calculated) {
+    if (isAutomaticTenantDuesInvoice(row)) continue;
+    for (const category of invoiceCategories) totals[category] += positiveMinor(row.categoryTotalsMinor?.[category]);
+  }
   return totals;
 }
 
@@ -660,7 +690,7 @@ export async function getManualTenantInvoiceChargeObligations(db: Db, tenantId: 
     $or: [{ issueDate: { $lte: asOf } }, { issueDate: null }, { issueDate: { $exists: false } }],
   }).sort({ dueDate: 1, billingPeriod: 1, _id: 1 }).toArray();
   const calculated = await addInvoicePaymentStates(db, rows);
-  return calculated.map((invoice: any) => ({
+  return calculated.filter((invoice: any) => !isAutomaticTenantDuesInvoice(invoice)).map((invoice: any) => ({
     invoiceId: String(invoice._id),
     billingPeriod: String(invoice.billingPeriodLabel || invoice.billingPeriod || "Manual charge"),
     dueDate: invoice.dueDate ? new Date(invoice.dueDate) : asOf,

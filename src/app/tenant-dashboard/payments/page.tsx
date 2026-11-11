@@ -240,9 +240,10 @@ export default function PaymentsPage() {
   const getSuggestedAmount = useCallback(
     (type: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other", dues?: Tenant["dues"]): number => {
       if (!dues) return 0;
-      if (type === "Rent") return Number(dues.rentDues || 0);
-      if (type === "Utility") return Number(dues.utilityDues || 0);
-      if (type === "RentAndUtility") return Math.ceil(Number(dues.rentDues || 0) + Number(dues.utilityDues || 0));
+      const depositDues = Number(dues.depositDues || 0);
+      if (type === "Rent") return Number(dues.totalRemainingDues || 0);
+      if (type === "Utility") return depositDues + Number(dues.utilityDues || 0);
+      if (type === "RentAndUtility") return Math.ceil(depositDues + Number(dues.rentDues || 0) + Number(dues.utilityDues || 0));
       if (type === "Deposit") return Number(dues.depositDues || 0);
       return Number(dues.totalRemainingDues || 0);
     },
@@ -606,7 +607,10 @@ export default function PaymentsPage() {
                       />
                     </label>
 
-                    {tenantInvoiceId && <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs"><p className="font-semibold">Paying an invoice</p><p className="mt-1">Current invoice balance: KES {invoiceBalance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. The submitted payment will be allocated to that invoice first.</p></div>}
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-950">
+                      Payments first clear any outstanding security deposit. Rent payments then cover rent, utilities, and other dues before excess is kept as rent wallet credit.
+                    </div>
+                    {tenantInvoiceId && <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs"><p className="font-semibold">Paying an invoice</p><p className="mt-1">Current invoice balance: KES {invoiceBalance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. Any outstanding security deposit is cleared first. Remaining funds go to this invoice before other dues; increase the amount if you want to cover both balances.</p></div>}
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-900">
                       <p className="font-semibold">M-Pesa STK Push</p>
                       <p className="mt-1 text-emerald-800/90">

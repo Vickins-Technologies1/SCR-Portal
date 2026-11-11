@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Db, ObjectId } from "mongodb";
-import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import { CURRENT_TENANT_ALLOCATION_POLICY_VERSION, reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
 import { recordPostedPaymentLedger } from "@/lib/financial-ledger";
 import { calculateInvoiceFinancialState, reconcileInvoiceFinancialState } from "@/lib/financial-reporting";
 import { recordTenantInvoicePaymentAllocations, recordTenantInvoiceWalletAllocations } from "@/lib/tenant-invoices";
@@ -171,7 +171,7 @@ export async function postVerifiedPayment(params: {
         ...(providerTransactionId ? { providerTransactionId } : {}),
         ...(providerReceipt ? { mpesaCode: providerReceipt } : {}),
         financialPostingStatus: "processing",
-        allocationPolicyVersion: "category-directed-v2",
+        allocationPolicyVersion: CURRENT_TENANT_ALLOCATION_POLICY_VERSION,
         financialPostingClaim: claimToken,
         financialPostingClaimAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
