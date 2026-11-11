@@ -314,13 +314,16 @@ export function allocatePaymentLedger(params: {
       continue;
     }
 
+    const invoiceReceiptPriority: AllocationField[] = [];
+    invoiceReceiptPriority.push(
+      "deposit",
+      ...selectedCategoryPriority(payment.type),
+      ...(payment.invoicePriority || []),
+      ...allocationPriority(),
+    );
+    const uniqueInvoiceReceiptPriority = invoiceReceiptPriority.filter((field, index, fields) => fields.indexOf(field) === index);
     const receiptResult = payment.type !== "Deposit" && payment.tenantInvoiceId && payment.invoicePriority?.length
-      ? applyReceiptFunds(paymentAmount, [
-          "deposit",
-          ...selectedCategoryPriority(payment.type),
-          ...payment.invoicePriority,
-          ...allocationPriority(),
-        ].filter((field, index, fields) => fields.indexOf(field) === index))
+      ? applyReceiptFunds(paymentAmount, uniqueInvoiceReceiptPriority)
       : applyTypedReceiptFunds(payment, paymentAmount);
     receiptAllocation = receiptResult.appliedByField;
     walletCredit = receiptResult.remaining;
