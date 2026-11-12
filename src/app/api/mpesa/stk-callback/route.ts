@@ -16,6 +16,7 @@ import { DarajaCallbackSchema, claimDarajaCallback, markDarajaEffectsApplied } f
 import { postVerifiedPayment } from "@/lib/verified-payment-posting";
 import { activateLifetimeFromVerifiedPayment } from "@/lib/lifetime";
 import { qualifyReferralFromFirstPaidInvoice } from "@/lib/referrals";
+import { paymentTypeLabel } from "@/lib/payment-types";
 
 export async function POST(request: NextRequest) {
   let payload: unknown;
@@ -321,11 +322,11 @@ export async function POST(request: NextRequest) {
       day: "numeric",
       year: "numeric",
     });
-    const paymentTypeLabel = payment.type === "RentAndUtility" ? "Rent + Utilities" : payment.type || "Other";
+    const paymentTypeDisplayLabel = paymentTypeLabel(payment.type);
 
     const emailCommon = {
       amount,
-      paymentType: paymentTypeLabel,
+      paymentType: paymentTypeDisplayLabel,
       transactionId: callback.CheckoutRequestID,
       paymentDate: paymentDateFormatted,
       mpesaCode: metadata.receipt || undefined,
@@ -347,7 +348,7 @@ export async function POST(request: NextRequest) {
 
     if (tenant.phone) {
       try {
-        const smsText = `Payment of Ksh. ${amount} for ${property.name} (${paymentTypeLabel}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
+        const smsText = `Payment of Ksh. ${amount} for ${property.name} (${paymentTypeDisplayLabel}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
         await sendWelcomeSms({ phone: tenant.phone, message: smsText });
       } catch (smsError) {
         logger.error("Failed to send payment confirmation SMS to tenant", {
@@ -375,7 +376,7 @@ export async function POST(request: NextRequest) {
 
       if (owner.phone) {
         try {
-          const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${paymentTypeLabel}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
+          const smsText = `Payment of Ksh. ${amount} by ${tenant.name} for ${property.name} (${paymentTypeDisplayLabel}) confirmed on ${paymentDateFormatted}. Ref: ${metadata.receipt || callback.CheckoutRequestID}`;
           await sendWelcomeSms({ phone: owner.phone, message: smsText });
         } catch (smsError) {
           logger.error("Failed to send payment confirmation SMS to owner", {

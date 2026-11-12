@@ -6,12 +6,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download, Info, X } from "lucide-react";
 import PayWithMpesaButton from "@/components/PayWithMpesaButton";
 import { Toaster } from "react-hot-toast";
+import { paymentTypeLabel, type TenantPaymentType } from "@/lib/payment-types";
 
 interface Payment {
   _id: string;
   tenantId: string;
   propertyId: string;
-  type?: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
+  type?: TenantPaymentType;
   amount: number;
   phoneNumber: string;
   paymentDate: string;
@@ -33,6 +34,7 @@ interface Tenant {
     rentDues: number;
     utilityDues: number;
     depositDues: number;
+    otherDues?: number;
     totalRemainingDues: number;
   };
 }
@@ -56,7 +58,7 @@ export default function PaymentsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [paymentType, setPaymentType] = useState<"Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other">("Rent");
+  const [paymentType, setPaymentType] = useState<TenantPaymentType>("Rent");
   const [amount, setAmount] = useState<number>(0);
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
@@ -238,23 +240,29 @@ export default function PaymentsPage() {
   };
 
   const getSuggestedAmount = useCallback(
-    (type: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other", dues?: Tenant["dues"]): number => {
+    (type: TenantPaymentType, dues?: Tenant["dues"]): number => {
       if (!dues) return 0;
       const depositDues = Number(dues.depositDues || 0);
-      if (type === "Rent") return Number(dues.totalRemainingDues || 0);
-      if (type === "Utility") return depositDues + Number(dues.utilityDues || 0);
-      if (type === "RentAndUtility") return Math.ceil(depositDues + Number(dues.rentDues || 0) + Number(dues.utilityDues || 0));
-      if (type === "Deposit") return Number(dues.depositDues || 0);
-      return Number(dues.totalRemainingDues || 0);
+      const rentDues = Number(dues.rentDues || 0);
+      const utilityDues = Number(dues.utilityDues || 0);
+      const otherDues = Number(dues.otherDues || 0);
+      if (type === "AllDues") return Number(dues.totalRemainingDues || 0);
+      if (type === "Rent") return Math.ceil(depositDues + rentDues);
+      if (type === "RentAndUtility") return Math.ceil(depositDues + rentDues + utilityDues);
+      if (type === "Utility") return Math.ceil(depositDues + utilityDues);
+      if (type === "Deposit") return depositDues;
+      return Math.ceil(depositDues + otherDues);
     },
     []
   );
 
-  const suggestedAmount = paymentType === "Other" ? 0 : getSuggestedAmount(paymentType, tenant?.dues);
+  const suggestedAmount = tenantInvoiceId && invoiceBalance > 0 && paymentType !== "AllDues"
+    ? Math.ceil(invoiceBalance)
+    : getSuggestedAmount(paymentType, tenant?.dues);
 
   useEffect(() => {
-    if (!isModalOpen || paymentType === "Other") return;
-    setAmount(tenantInvoiceId && invoiceBalance > 0 ? Math.max(1, Math.ceil(invoiceBalance)) : getSuggestedAmount(paymentType, tenant?.dues));
+    if (!isModalOpen) return;
+    setAmount(tenantInvoiceId && invoiceBalance > 0 && paymentType !== "AllDues" ? Math.max(1, Math.ceil(invoiceBalance)) : getSuggestedAmount(paymentType, tenant?.dues));
   }, [isModalOpen, paymentType, tenant?.dues, getSuggestedAmount, tenantInvoiceId, invoiceBalance]);
 
   const handleOpenModal = () => {
@@ -421,7 +429,7 @@ export default function PaymentsPage() {
                       animate={{ opacity: 1 }}
                       className="hover:bg-primary/5 transition-colors text-xs sm:text-sm"
                     >
-                      <td className="px-4 py-4 font-semibold text-foreground">{p.type === "RentAndUtility" ? "Rent + Utilities" : p.type || "Other"}</td>
+                      <td className="px-4 py-4 font-semibold text-foreground">{paymentTypeLabel(p.type)}</td>
                       <td className="px-4 py-4">KES {p.amount.toLocaleString()}</td>
                       <td className="px-4 py-4 text-[11px] leading-5 text-gray-600">
                         {p.allocation ? (
@@ -569,11 +577,12 @@ export default function PaymentsPage() {
                       <select
                         className="mt-2 block w-full rounded-xl border border-gray-300 py-3 sm:py-3.5 px-4 focus:ring-4 focus:ring-primary/30 focus:border-primary bg-gray-50 text-sm"
                         value={paymentType}
-                        onChange={(e) => setPaymentType(e.target.value as any)}
+                        onChange={(e) => setPaymentType(e.target.value as TenantPaymentType)}
                       >
-                        <option value="Rent">Rent</option>
-                        <option value="Utility">Utility</option>
+                        <option value="AllDues">All outstanding dues</option>
                         <option value="RentAndUtility">Rent + Utilities</option>
+                        <option value="Rent">Rent</option>
+                        <option value="Utility">Utilities</option>
                         <option value="Deposit">Deposit</option>
                         <option value="Other">Other</option>
                       </select>
@@ -589,10 +598,14 @@ export default function PaymentsPage() {
                         onChange={(e) => setAmount(Number(e.target.value))}
                         placeholder="Minimum 1"
                       />
-                      {paymentType !== "Other" && (
-                        <p className="mt-2 text-[11px] text-primary">
-                          Suggested: KES {suggestedAmount.toLocaleString()}
-                        </p>
+                      {suggestedAmount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAmount(suggestedAmount)}
+                          className="mt-2 rounded-full border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
+                        >
+                          Use suggested amount · KES {suggestedAmount.toLocaleString("en-KE")}
+                        </button>
                       )}
                     </label>
 
@@ -607,16 +620,10 @@ export default function PaymentsPage() {
                       />
                     </label>
 
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-950">
-                      Payments first clear any outstanding security deposit. Rent payments then cover rent, utilities, and other dues before excess is kept as rent wallet credit.
-                    </div>
-                    {tenantInvoiceId && <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs"><p className="font-semibold">Paying an invoice</p><p className="mt-1">Current invoice balance: KES {invoiceBalance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}. Any outstanding security deposit is cleared first. Remaining funds go to this invoice before other dues; increase the amount if you want to cover both balances.</p></div>}
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-900">
-                      <p className="font-semibold">M-Pesa STK Push</p>
-                      <p className="mt-1 text-emerald-800/90">
-                        Tap Pay with M-Pesa below. You will get a prompt on your phone — enter your M-Pesa PIN to
-                        complete the payment to your landlord&apos;s account.
-                      </p>
+                    <div className="space-y-2 text-xs text-muted-foreground">
+                      <p>Security deposit is paid first, then the selected dues.</p>
+                      {tenantInvoiceId && <p>Invoice balance: KES {invoiceBalance.toLocaleString("en-KE", { minimumFractionDigits: 2 })}.</p>}
+                      <p>You&apos;ll receive an M-Pesa prompt on this phone.</p>
                     </div>
                   </div>
 

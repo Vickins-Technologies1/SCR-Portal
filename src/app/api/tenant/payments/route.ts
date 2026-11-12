@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
 import { resolveTenantContext } from "@/lib/impersonation";
+import { paymentTypeLabel, TENANT_PAYMENT_TYPES } from "@/lib/payment-types";
 import logger from "@/lib/logger";
 import { identityFilter, identityValues, isSuccessfulPaymentStatus, money } from "@/lib/payment-query";
 import { z } from "zod";
@@ -33,7 +34,7 @@ interface Payment {
   invoiceId?: string;
   status: "completed" | "pending" | "pending_stk" | "failed" | "cancelled";
   createdAt: string;
-  type?: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
+  type?: (typeof TENANT_PAYMENT_TYPES)[number];
   phoneNumber?: string;
   reference?: string;
   mpesaCode?: string | null;
@@ -102,7 +103,7 @@ const PaymentRequestSchema = z.object({
   amount: z.preprocess((v) => Number(v), z.number().int().positive()),
   propertyId: z.string().trim().min(1),
   userId: z.string().trim().min(1),
-  type: z.enum(["Rent", "Utility", "RentAndUtility", "Deposit", "Other"]),
+  type: z.enum(TENANT_PAYMENT_TYPES),
   phoneNumber: z.string().trim().min(1),
   reference: z.string().trim().min(1),
 });
@@ -293,7 +294,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { tenantId, amount, propertyId, userId: submittedUserId, type, phoneNumber, reference } = parsed.data;
-  const paymentTypeLabel = type === "RentAndUtility" ? "Rent + Utilities" : type;
+  const paymentTypeDisplayLabel = paymentTypeLabel(type);
 
   if (submittedUserId !== userId) {
     return NextResponse.json({ success: false, message: "User ID mismatch" }, { status: 400 });
@@ -404,7 +405,7 @@ export async function POST(request: NextRequest) {
       amount,
       phone: normalizedPhone,
       accountReference,
-      transactionDesc: `${paymentTypeLabel} Payment`,
+      transactionDesc: `${paymentTypeDisplayLabel} Payment`,
       callbackUrl,
     });
 

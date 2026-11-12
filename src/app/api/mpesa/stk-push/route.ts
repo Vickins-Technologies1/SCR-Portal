@@ -23,13 +23,14 @@ import { resolveAccountTier } from "@/lib/tier";
 import { expireStaleDarajaPendingPayments, resolveUnmatchedDarajaFailure } from "@/lib/daraja-callback";
 import { randomUUID } from "node:crypto";
 import { addInvoicePaymentStates } from "@/lib/tenant-invoices";
+import { paymentTypeLabel, TENANT_PAYMENT_TYPES } from "@/lib/payment-types";
 
 const StkPushSchema = z.object({
   amount: z.preprocess((v) => Number(v), z.number().int().positive()),
   phone: z.string().trim(),
   invoiceId: z.string().trim().optional().default(""),
   landlordId: z.string().trim().optional().default(""),
-  type: z.enum(["Rent", "Utility", "RentAndUtility", "Deposit", "Other"]).optional(),
+  type: z.enum(TENANT_PAYMENT_TYPES).optional(),
 });
 
 type RateLimitState = { count: number; resetAt: number };
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() }, { status: 400 });
   }
-  const paymentTypeLabel = parsed.data.type === "RentAndUtility" ? "Rent + Utilities" : parsed.data.type;
+  const paymentTypeDisplayLabel = parsed.data.type ? paymentTypeLabel(parsed.data.type) : undefined;
 
   try {
     const { db }: { db: Db } = await connectToDatabase();
@@ -432,7 +433,7 @@ export async function POST(request: NextRequest) {
           lastName,
           email: ownerEmail || ownerPhone || "",
           reference: invoiceReference,
-          notes: `${paymentTypeLabel || "Invoice"} payment ${invoiceReference}`,
+          notes: `${paymentTypeDisplayLabel || "Invoice"} payment ${invoiceReference}`,
           callbackUrl: `${appBaseUrl}/api/kopokopo/webhook`,
           customerId: parsed.data.invoiceId,
         });
@@ -547,7 +548,7 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-      const description = `${paymentTypeLabel || "Rent"} payment ${invoiceReference}`;
+      const description = `${paymentTypeDisplayLabel || "Rent"} payment ${invoiceReference}`;
       const incoming = await createTumaStkPush({
         amount: paymentAmount,
         phone: payerPhone,
@@ -671,7 +672,7 @@ export async function POST(request: NextRequest) {
       amount: paymentAmount,
       phone: payerPhone,
       accountReference: stkFields.accountReference,
-      transactionDesc: `${paymentTypeLabel || "Rent"} Payment`,
+      transactionDesc: `${paymentTypeDisplayLabel || "Rent"} Payment`,
       callbackUrl,
       transactionType: stkFields.transactionType,
       partyB: stkFields.partyB,
@@ -722,7 +723,7 @@ export async function POST(request: NextRequest) {
             paymentType === "till" ? "TILL" : paymentType === "bank" ? "BANK" : "PAYBILL",
           mpesaShortcode: stkFields.partyB,
           mpesaAccountReference: stkFields.accountReference,
-          transactionDesc: `${paymentTypeLabel || "Rent"} Payment`,
+          transactionDesc: `${paymentTypeDisplayLabel || "Rent"} Payment`,
           shortcode,
           resultCode: null,
           resultDesc: null,

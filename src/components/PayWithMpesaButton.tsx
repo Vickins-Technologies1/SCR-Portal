@@ -4,8 +4,9 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { readJsonResponse } from "@/lib/api-client";
+import type { TenantPaymentType } from "@/lib/payment-types";
 
-type PaymentType = "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
+type PaymentType = TenantPaymentType;
 type PaymentProgressPhase =
   | "initiating"
   | "waiting_for_pin"

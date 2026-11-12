@@ -4,6 +4,7 @@ import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { generateTenantPaymentReceiptPdf } from "@/lib/tenant-payment-receipt-pdf";
+import { paymentTypeLabel, type TenantPaymentType } from "@/lib/payment-types";
 
 interface Payment {
   _id: ObjectId;
@@ -14,7 +15,7 @@ interface Payment {
   transactionId: string;
   status: "completed" | "pending" | "pending_stk" | "failed";
   createdAt: string;
-  type?: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
+  type?: TenantPaymentType;
   phoneNumber?: string;
   reference?: string;
   mpesaCode?: string;
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
       payment: {
         receiptNumber: payment._id.toString(), amount: payment.amount, propertyId: payment.propertyId,
         paymentDate: payment.paymentDate, transactionId: payment.transactionId, status: payment.status,
-        type: payment.type === "RentAndUtility" ? "Rent + Utilities" : payment.type, phoneNumber: payment.phoneNumber, reference: payment.reference,
+        type: paymentTypeLabel(payment.type), phoneNumber: payment.phoneNumber, reference: payment.reference,
         mpesaCode: payment.mpesaCode, method: payment.method || payment.provider || (payment.mpesaCode ? "M-Pesa" : "Recorded payment"),
         remainingBalance: payment.remainingBalance,
       },

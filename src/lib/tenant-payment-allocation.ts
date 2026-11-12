@@ -21,7 +21,7 @@ export type PaymentAllocation = {
   utilityAllocations?: Array<{ utilityChargeId: string; billingPeriod: string; amount: number }>;
 };
 
-export type PaymentCategory = "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other" | "General";
+export type PaymentCategory = "AllDues" | "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other" | "General";
 
 export type LedgerPayment = {
   _id: ObjectId;
@@ -156,7 +156,7 @@ export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): L
     // through the shared allocator instead of being treated as wallet credit.
     allocation: row.payment.allocation
       ? row.allocation
-      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.allocationPolicyVersion === CURRENT_TENANT_ALLOCATION_POLICY_VERSION || row.payment.type === "RentAndUtility"
+      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.allocationPolicyVersion === CURRENT_TENANT_ALLOCATION_POLICY_VERSION || row.payment.type === "RentAndUtility" || row.payment.type === "AllDues"
         ? undefined
         : row.allocation,
   })) as LedgerPayment[];
@@ -318,7 +318,7 @@ export function allocatePaymentLedger(params: {
     invoiceReceiptPriority.push(
       "deposit",
       ...selectedCategoryPriority(payment.type),
-      ...(payment.invoicePriority || []),
+      ...(payment.type === "AllDues" ? [] : payment.invoicePriority || []),
       ...allocationPriority(),
     );
     const uniqueInvoiceReceiptPriority = invoiceReceiptPriority.filter((field, index, fields) => fields.indexOf(field) === index);
@@ -337,7 +337,7 @@ export function allocatePaymentLedger(params: {
       other: money(receiptAllocation.other),
       walletCredit,
       ...(walletCreditCategories ? { walletCreditCategories } : {}),
-      ...(walletCredit > 0 && !walletCreditCategories && payment.type && payment.type !== "General" && payment.type !== "Deposit"
+      ...(walletCredit > 0 && !walletCreditCategories && payment.type && payment.type !== "General" && payment.type !== "AllDues" && payment.type !== "Deposit"
         ? { walletCreditCategory: payment.type === "Utility" ? "utilities" : payment.type.toLowerCase() as AllocationField }
         : {}),
       walletApplied: 0,

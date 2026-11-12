@@ -7,6 +7,7 @@ import { fetchActiveRentOverridesByPropertyIds } from "@/lib/rent-overrides";
 import { appendOwnerActivity, resolveOwnerActivityActor } from "@/lib/owner-activity";
 import { calculateFixedUtilityDue, getPostedMeteredUtilityTotal } from "@/lib/property-utilities";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import type { TenantPaymentType } from "@/lib/payment-types";
 
 type Role = "propertyOwner" | "teamMember" | "admin";
 
@@ -22,7 +23,7 @@ type PaymentDoc = {
   status: "completed" | "pending" | "pending_stk" | "failed";
   financialPostingStatus?: string;
   financialEffectsApplied?: boolean;
-  type?: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
+  type?: TenantPaymentType;
 };
 
 type TenantDoc = {

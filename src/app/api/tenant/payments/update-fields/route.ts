@@ -5,6 +5,7 @@ import { ObjectId, Db } from "mongodb";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "../../../../../lib/csrf";
 import logger from "../../../../../lib/logger";
 import { reconcileTenantPaymentAllocation } from "@/lib/tenant-payment-allocation";
+import type { TenantPaymentType } from "@/lib/payment-types";
 
 interface Tenant {
   _id: ObjectId;
@@ -60,7 +61,7 @@ interface Payment {
   transactionId: string;
   status: "completed" | "pending" | "pending_stk" | "failed" | "cancelled";
   createdAt: string;
-  type: "Rent" | "Utility" | "RentAndUtility" | "Deposit" | "Other";
+  type: TenantPaymentType;
   phoneNumber?: string;
   reference: string;
 }
