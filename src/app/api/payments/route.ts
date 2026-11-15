@@ -43,7 +43,8 @@ interface PaymentDb {
   transactionId: string;
   status: string;
   createdAt: string;
-  type?: "Rent" | "Utility";
+  type?: string;
+  paymentRail?: string;
   phoneNumber?: string;
   reference?: string;
   date: string;
@@ -173,7 +174,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
   try {
     const { db }: { db: Db } = await connectToDatabase();
 
-    const query: Filter<PaymentDb> = {};
+    // Owner subscription invoice payments share the payments collection, but
+    // are not rent or tenant receipts. Keep them out of the rental payments API.
+    const query: Filter<PaymentDb> = {
+      type: { $ne: "property_owner_invoice" },
+      paymentRail: { $not: /^property_owner_invoice(?:_|$)/ },
+    };
 
     if (role === "propertyOwner" || role === "teamMember") {
       const propertyFilter: Filter<Property> = {
