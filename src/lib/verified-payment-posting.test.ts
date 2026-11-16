@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { postVerifiedPayment } from "./verified-payment-posting";
 
 vi.mock("./tenant-payment-allocation", () => ({
-  CURRENT_TENANT_ALLOCATION_POLICY_VERSION: "deposit-first-v3",
+  CURRENT_TENANT_ALLOCATION_POLICY_VERSION: "deposit-first-v4",
   reconcileTenantPaymentAllocation: vi.fn(async () => ({})),
 }));
 vi.mock("./financial-reporting", () => ({

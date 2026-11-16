@@ -120,17 +120,17 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ rent: 0, utilities: 2_000, walletCredit: 3_000, walletCreditCategory: "utilities" });
   });
 
-  it("keeps the full amount of an excess deposit receipt classified as deposit", () => {
+  it("applies a deposit receipt to the outstanding deposit then other outstanding dues", () => {
     const result = allocatePaymentLedger({
       depositDue: 2_000,
       rentDue: 10_000,
       utilityDue: 0,
       payments: [payment(5_000, new ObjectId(), "Deposit")],
     });
-    expect(result.depositPaid).toBe(5_000);
-    expect(result.rentPaid).toBe(0);
+    expect(result.depositPaid).toBe(2_000);
+    expect(result.rentPaid).toBe(3_000);
     expect(result.walletBalance).toBe(0);
-    expect(result.allocations.values().next().value).toMatchObject({ rent: 0, deposit: 5_000, walletCredit: 0 });
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 3_000, deposit: 2_000, walletCredit: 0 });
   });
 
   it("preserves the historical deposit-first-v1 allocation policy", () => {

@@ -143,7 +143,7 @@ const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdA
 type AllocationField = "deposit" | "rent" | "utilities" | "other";
 
 const defaultAllocationPriority: AllocationField[] = ["deposit", "rent", "utilities", "other"];
-export const CURRENT_TENANT_ALLOCATION_POLICY_VERSION = "deposit-first-v3";
+export const CURRENT_TENANT_ALLOCATION_POLICY_VERSION = "deposit-first-v4";
 
 /** Convert the shared financial projection to tenant-ledger inputs. */
 export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): LedgerPayment[] {
@@ -156,7 +156,7 @@ export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): L
     // through the shared allocator instead of being treated as wallet credit.
     allocation: row.payment.allocation
       ? row.allocation
-      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.allocationPolicyVersion === CURRENT_TENANT_ALLOCATION_POLICY_VERSION || row.payment.type === "RentAndUtility" || row.payment.type === "AllDues"
+      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "deposit-first-v3" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.allocationPolicyVersion === CURRENT_TENANT_ALLOCATION_POLICY_VERSION || row.payment.type === "RentAndUtility" || row.payment.type === "AllDues"
         ? undefined
         : row.allocation,
   })) as LedgerPayment[];
@@ -211,19 +211,11 @@ export function allocatePaymentLedger(params: {
   };
 
   const applyTypedReceiptFunds = (payment: LedgerPayment, amount: number) => {
-    // A security-deposit receipt remains a deposit collection even when it
-    // exceeds today's obligation. It must not be reclassified as rent or
-    // utilities, and the outstanding deposit balance is capped separately.
-    if (payment.type === "Deposit") {
-      const appliedByField: Record<AllocationField, number> = { deposit: amountOf(amount), rent: 0, utilities: 0, other: 0 };
-      paid.deposit = money(paid.deposit + appliedByField.deposit);
-      return { appliedByField, remaining: 0 };
-    }
-
-    // Every receipt clears an outstanding security deposit before its
-    // selected category. Rent receipts then follow the normal obligation
-    // waterfall so a cleared rent balance can cascade into utilities and
-    // other dues before any excess is credited to the rent wallet.
+    // Every receipt clears only the outstanding security deposit first.
+    // Once it is cleared, any remainder follows the selected category and
+    // then the normal dues waterfall. This also prevents Deposit receipts
+    // from inflating deposit paid when an earlier Rent/Utility receipt has
+    // already cleared some or all of the deposit.
     const selectedPriority = selectedCategoryPriority(payment.type);
     if (!selectedPriority.length) {
       return applyReceiptFunds(amount);
