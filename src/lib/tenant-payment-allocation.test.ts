@@ -52,7 +52,7 @@ describe("tenant payment allocation", () => {
     { type: "Rent", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
     { type: "RentAndUtility", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
     { type: "Utility", expected: { deposit: 500, rent: 0, utilities: 100, other: 0, walletCredit: 100 } },
-    { type: "Deposit", expected: { deposit: 700, rent: 0, utilities: 0, other: 0, walletCredit: 0 } },
+    { type: "Deposit", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
     { type: "Other", expected: { deposit: 500, rent: 0, utilities: 0, other: 0, walletCredit: 200 } },
     { type: "General", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
   ] as const)("clears deposit before routing $type receipts", ({ type, expected }) => {
@@ -471,7 +471,7 @@ describe("tenant payment allocation", () => {
     });
   });
 
-  it("keeps a deposit overpayment out of rent while classifying current utilities", () => {
+  it("routes deposit overpayment to outstanding rent", () => {
     const state = deriveTenantFinancialState({
       tenant: {},
       asOf: new Date("2026-10-11T00:00:00.000Z"),
@@ -483,16 +483,16 @@ describe("tenant payment allocation", () => {
     });
     expect(state).toMatchObject({
       monthsStayed: 2,
-      depositPaid: 12_000,
-      rentPaid: 0,
+      depositPaid: 10_000,
+      rentPaid: 2_000,
       utilitiesPaid: 0,
       depositOutstanding: 0,
-      rentOutstanding: 20_000,
+      rentOutstanding: 18_000,
       utilitiesOutstanding: 3_000,
       utilitiesCurrentOutstanding: 3_000,
       utilitiesOverdueOutstanding: 0,
       utilityStatus: "CURRENT",
-      totalOutstanding: 23_000,
+      totalOutstanding: 21_000,
       walletBalance: 0,
     });
   });
