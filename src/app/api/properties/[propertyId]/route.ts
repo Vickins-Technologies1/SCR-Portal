@@ -101,9 +101,9 @@ const getTenantStatus = (leaseStartDate: string, leaseEndDate: string): string =
   const start = leaseStartDate ? new Date(leaseStartDate) : null;
   const end = leaseEndDate ? new Date(leaseEndDate) : null;
 
-  if (!start || !end) return 'Unknown';
+  if (!start || !Number.isFinite(start.getTime()) || (end && !Number.isFinite(end.getTime()))) return 'Unknown';
   if (now < start) return 'Pending';
-  if (now >= start && now <= end) return 'Active';
+  if (!end || (now >= start && now <= end)) return 'Active';
   return 'Expired';
 };
 

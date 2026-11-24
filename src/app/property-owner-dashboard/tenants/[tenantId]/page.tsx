@@ -173,9 +173,11 @@ export default function TenantDetailsPage() {
     const totalPaid = currentTenant.dues?.totalPaid ?? 0;
     const collectionRate = currentTenant.dues?.rentCollectionRate ?? 100;
     const leaseStart = new Date(currentTenant.leaseStartDate);
-    const leaseEnd = new Date(currentTenant.leaseEndDate);
-    const daysToLeaseEnd = Math.ceil((leaseEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    const leaseRange = `${leaseStart.toLocaleDateString()} → ${leaseEnd.toLocaleDateString()}`;
+    const leaseEnd = currentTenant.leaseEndDate ? new Date(currentTenant.leaseEndDate) : null;
+    const daysToLeaseEnd = leaseEnd && Number.isFinite(leaseEnd.getTime())
+      ? Math.ceil((leaseEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : null;
+    const leaseRange = `${leaseStart.toLocaleDateString()} → ${leaseEnd && Number.isFinite(leaseEnd.getTime()) ? leaseEnd.toLocaleDateString() : "Open ended"}`;
 
     const insights: string[] = [];
     if (snapshot.isOverdue) {
@@ -190,7 +192,7 @@ export default function TenantDetailsPage() {
       insights.push("Rent collection is on track. Keep the current payment workflow.");
     }
 
-    if (Number.isFinite(daysToLeaseEnd)) {
+    if (daysToLeaseEnd !== null) {
       if (daysToLeaseEnd < 0) {
         insights.push(`Lease ended ${Math.abs(daysToLeaseEnd)} day(s) ago. Plan the next steps.`);
       } else if (daysToLeaseEnd <= 30) {
@@ -674,7 +676,7 @@ export default function TenantDetailsPage() {
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-1">
                     Lease {new Date(tenant.leaseStartDate).toLocaleDateString()} →{" "}
-                    {new Date(tenant.leaseEndDate).toLocaleDateString()}
+                    {tenant.leaseEndDate ? new Date(tenant.leaseEndDate).toLocaleDateString() : "Open ended"}
                   </p>
                 </div>
               </div>

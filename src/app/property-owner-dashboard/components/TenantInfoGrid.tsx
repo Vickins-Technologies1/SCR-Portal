@@ -39,8 +39,10 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     })}`;
   };
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-GB");
+  const formatDate = (dateStr?: string, emptyLabel = "—") => {
+    if (!dateStr) return emptyLabel;
+    const date = new Date(dateStr);
+    return Number.isFinite(date.getTime()) ? date.toLocaleDateString("en-GB") : "—";
   };
   const getWalletRunway = () => {
     const walletBalance = tenant.dues?.walletRentEligibleBalance ?? tenant.walletRentEligibleBalance ?? 0;
@@ -98,7 +100,7 @@ export default function TenantInfoGrid({ tenant, property }: TenantInfoGridProps
     { label: "Required Security Deposit", value: formatCurrency(tenant.dues?.depositRequired ?? tenant.deposit) },
 
     { label: "Lease Start", value: formatDate(tenant.leaseStartDate) },
-    { label: "Lease End", value: formatDate(tenant.leaseEndDate) },
+    { label: "Lease End", value: formatDate(tenant.leaseEndDate, "Open ended") },
 
     {
       label: "Tenant Status",

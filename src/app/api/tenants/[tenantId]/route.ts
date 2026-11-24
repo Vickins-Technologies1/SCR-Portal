@@ -190,13 +190,30 @@ export async function PUT(
 
     const updateData: any = { updatedAt: new Date() };
 
+    const hasLeaseStartDate = Object.prototype.hasOwnProperty.call(body, "leaseStartDate");
+    const hasLeaseEndDate = Object.prototype.hasOwnProperty.call(body, "leaseEndDate");
+    if (hasLeaseStartDate || hasLeaseEndDate) {
+      const leaseStartDate = new Date(body.leaseStartDate ?? tenant.leaseStartDate);
+      const nextLeaseEndDate = hasLeaseEndDate ? body.leaseEndDate?.trim() || "" : tenant.leaseEndDate;
+      const leaseEndDate = nextLeaseEndDate ? new Date(nextLeaseEndDate) : null;
+      if (
+        !Number.isFinite(leaseStartDate.getTime()) ||
+        (leaseEndDate && (!Number.isFinite(leaseEndDate.getTime()) || leaseEndDate <= leaseStartDate))
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Lease end date must be after start date" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Simple fields
     if (body.name) updateData.name = body.name.trim();
     if (body.email) updateData.email = body.email.trim();
     if (body.phone) updateData.phone = body.phone.trim();
     if (body.houseNumber) updateData.houseNumber = body.houseNumber.trim();
     if (body.leaseStartDate) updateData.leaseStartDate = body.leaseStartDate;
-    if (body.leaseEndDate) updateData.leaseEndDate = body.leaseEndDate;
+    if (hasLeaseEndDate) updateData.leaseEndDate = body.leaseEndDate?.trim() || "";
     if (body.password?.trim()) updateData.password = await bcrypt.hash(body.password.trim(), 10);
 
     const wantsLeaseUpdate = Boolean(

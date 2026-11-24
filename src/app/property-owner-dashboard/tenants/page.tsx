@@ -570,7 +570,7 @@ export default function TenantsPage() {
                       ? {
                           ...editingTenant,
                           leaseStartDate: editingTenant.leaseStartDate.split("T")[0],
-                          leaseEndDate: editingTenant.leaseEndDate.split("T")[0],
+                          leaseEndDate: editingTenant.leaseEndDate?.split("T")[0] || "",
                         }
                       : pendingTenantData || {}
                   }

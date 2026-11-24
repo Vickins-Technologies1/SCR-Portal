@@ -129,7 +129,7 @@ export interface TenantRequest {
     houseNumber: string;
   }>;
   leaseStartDate: string;
-  leaseEndDate: string;
+  leaseEndDate?: string;
   price?: number;
   deposit?: number;
 }

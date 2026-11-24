@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
         houseNumber: t.houseNumber,
         leasedUnits: t.leasedUnits,
         leaseStartDate: t.leaseStartDate,
-        leaseEndDate: t.leaseEndDate,
+        leaseEndDate: t.leaseEndDate || "",
         status: t.status,
         paymentStatus: t.paymentStatus,
         createdAt: toISO(t.createdAt)!,
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Required fields
-    const required = ["name", "email", "phone", "password", "propertyId", "leaseStartDate", "leaseEndDate"];
+    const required = ["name", "email", "phone", "password", "propertyId", "leaseStartDate"];
     const missing = required.filter(f => !body[f as keyof TenantRequest]);
     if (missing.length > 0) {
       return NextResponse.json({ success: false, message: `Missing fields: ${missing.join(", ")}` }, { status: 400 });
@@ -387,7 +387,13 @@ export async function POST(request: NextRequest) {
     if (!/^\+?\d{10,15}$/.test(body.phone)) {
       return NextResponse.json({ success: false, message: "Invalid phone number" }, { status: 400 });
     }
-    if (new Date(body.leaseEndDate) <= new Date(body.leaseStartDate)) {
+    const leaseStartDate = new Date(body.leaseStartDate);
+    const leaseEndDate = body.leaseEndDate?.trim() || "";
+    const leaseEnd = leaseEndDate ? new Date(leaseEndDate) : null;
+    if (
+      !Number.isFinite(leaseStartDate.getTime()) ||
+      (leaseEnd && (!Number.isFinite(leaseEnd.getTime()) || leaseEnd <= leaseStartDate))
+    ) {
       return NextResponse.json({ success: false, message: "Lease end date must be after start date" }, { status: 400 });
     }
     if (!ObjectId.isValid(body.propertyId)) {
@@ -554,7 +560,7 @@ export async function POST(request: NextRequest) {
       houseNumber: primaryLease.houseNumber,
       leasedUnits,
       leaseStartDate: body.leaseStartDate,
-      leaseEndDate: body.leaseEndDate,
+      leaseEndDate,
       status: "active",
       paymentStatus: "current",
       createdAt: new Date(),

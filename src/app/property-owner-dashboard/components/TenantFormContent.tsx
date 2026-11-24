@@ -188,8 +188,7 @@ export default function TenantFormContent({
       newErrors.leasedUnits = "House numbers must be unique for this tenant";
     }
     if (!formData.leaseStartDate) newErrors.leaseStartDate = "Start date required";
-    if (!formData.leaseEndDate) newErrors.leaseEndDate = "End date required";
-    if (new Date(formData.leaseEndDate) <= new Date(formData.leaseStartDate))
+    if (formData.leaseEndDate && new Date(formData.leaseEndDate) <= new Date(formData.leaseStartDate))
       newErrors.leaseEndDate = "End date must be after start date";
 
     setErrors(newErrors);
@@ -468,7 +467,7 @@ export default function TenantFormContent({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Lease End Date <span className="text-red-500">*</span>
+            Lease End Date <span className="text-gray-500">(optional)</span>
           </label>
           <input
             type="date"
@@ -479,6 +478,7 @@ export default function TenantFormContent({
             }`}
           />
           {errors.leaseEndDate && <p className="text-red-500 text-xs mt-1">{errors.leaseEndDate}</p>}
+          {!errors.leaseEndDate && <p className="text-gray-500 text-xs mt-1">Leave blank for an open-ended lease.</p>}
         </div>
       </div>
 

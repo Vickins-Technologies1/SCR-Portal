@@ -51,7 +51,6 @@ const buildActiveLeaseStages = (day: Date) => {
     {
       $match: {
         _leaseStart: { $ne: null },
-        _leaseEnd: { $ne: null },
       },
     },
     {
@@ -65,7 +64,12 @@ const buildActiveLeaseStages = (day: Date) => {
         $expr: {
           $and: [
             { $lte: ["$_leaseStartDay", dayStart] },
-            { $gte: ["$_leaseEndDay", dayStart] },
+            {
+              $or: [
+                { $eq: ["$_leaseEnd", null] },
+                { $gte: ["$_leaseEndDay", dayStart] },
+              ],
+            },
           ],
         },
       },
@@ -87,7 +91,6 @@ const buildOverlapStages = (rangeStart: Date, rangeEnd: Date) => {
     {
       $match: {
         _leaseStart: { $ne: null },
-        _leaseEnd: { $ne: null },
       },
     },
     {
@@ -101,7 +104,12 @@ const buildOverlapStages = (rangeStart: Date, rangeEnd: Date) => {
         $expr: {
           $and: [
             { $lte: ["$_leaseStartDay", endDay] },
-            { $gte: ["$_leaseEndDay", startDay] },
+            {
+              $or: [
+                { $eq: ["$_leaseEnd", null] },
+                { $gte: ["$_leaseEndDay", startDay] },
+              ],
+            },
           ],
         },
       },

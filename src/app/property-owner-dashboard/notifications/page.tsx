@@ -106,12 +106,12 @@ const INACTIVE_TENANT_STATUSES = new Set(["terminated", "inactive", "moved out",
 function isTenantActive(tenant: Tenant, today = new Date()) {
   if (INACTIVE_TENANT_STATUSES.has(String(tenant.status || "").trim().toLowerCase())) return false;
   const start = new Date(tenant.leaseStartDate);
-  const end = new Date(tenant.leaseEndDate);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return false;
+  const end = tenant.leaseEndDate ? new Date(tenant.leaseEndDate) : null;
+  if (!Number.isFinite(start.getTime()) || (end && !Number.isFinite(end.getTime()))) return false;
   const day = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
   const startDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
-  const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
-  return startDay <= day && endDay >= day;
+  const endDay = end ? Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()) : null;
+  return startDay <= day && (endDay === null || endDay >= day);
 }
 
 export default function NotificationsPage() {
