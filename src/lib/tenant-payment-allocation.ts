@@ -143,7 +143,7 @@ const paymentDateValue = (payment: Pick<LedgerPayment, "paymentDate" | "createdA
 type AllocationField = "deposit" | "rent" | "utilities" | "other";
 
 const defaultAllocationPriority: AllocationField[] = ["deposit", "rent", "utilities", "other"];
-export const CURRENT_TENANT_ALLOCATION_POLICY_VERSION = "deposit-first-v4";
+export const CURRENT_TENANT_ALLOCATION_POLICY_VERSION = "deposit-first-v5";
 
 /** Convert the shared financial projection to tenant-ledger inputs. */
 export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): LedgerPayment[] {
@@ -156,26 +156,19 @@ export function mapFinancialRowsToLedgerPayments(rows: FinancialPaymentRow[]): L
     // through the shared allocator instead of being treated as wallet credit.
     allocation: row.payment.allocation
       ? row.allocation
-      : row.payment.allocationPolicyVersion === "deposit-first-v1" || row.payment.allocationPolicyVersion === "deposit-first-v3" || row.payment.allocationPolicyVersion === "category-directed-v2" || row.payment.allocationPolicyVersion === CURRENT_TENANT_ALLOCATION_POLICY_VERSION || row.payment.type === "RentAndUtility" || row.payment.type === "AllDues"
+      : ["deposit-first-v1", "deposit-first-v3", "deposit-first-v4", "category-directed-v2", CURRENT_TENANT_ALLOCATION_POLICY_VERSION].includes(String(row.payment.allocationPolicyVersion || "")) || row.payment.type === "RentAndUtility" || row.payment.type === "AllDues"
         ? undefined
         : row.allocation,
   })) as LedgerPayment[];
 }
 
 /**
- * New receipts always clear obligations in deposit-first order. A declared
- * category does not override the deposit-first policy.
+ * All receipts clear obligations in the same sequence: deposit, rent,
+ * utilities, then other dues. The payment category identifies the receipt,
+ * but never changes which outstanding obligation is settled next.
  */
 function allocationPriority(): AllocationField[] {
   return [...defaultAllocationPriority];
-}
-
-function selectedCategoryPriority(type?: PaymentCategory): AllocationField[] {
-  if (type === "Rent") return ["rent", "utilities", "other"];
-  if (type === "RentAndUtility") return ["rent", "utilities"];
-  if (type === "Utility") return ["utilities"];
-  if (type === "Other") return ["other"];
-  return [];
 }
 
 export function allocatePaymentLedger(params: {
@@ -210,17 +203,10 @@ export function allocatePaymentLedger(params: {
     return { appliedByField, remaining };
   };
 
-  const applyTypedReceiptFunds = (payment: LedgerPayment, amount: number) => {
-    // Every receipt clears only the outstanding security deposit first.
-    // Once it is cleared, any remainder follows the selected category and
-    // then the normal dues waterfall. This also prevents Deposit receipts
-    // from inflating deposit paid when an earlier Rent/Utility receipt has
-    // already cleared some or all of the deposit.
-    const selectedPriority = selectedCategoryPriority(payment.type);
-    if (!selectedPriority.length) {
-      return applyReceiptFunds(amount);
-    }
-    return applyReceiptFunds(amount, ["deposit", ...selectedPriority]);
+  const applyTypedReceiptFunds = (amount: number) => {
+    // Payment categories do not bypass earlier outstanding balances. In
+    // particular, utility and other receipts cannot skip rent after deposit.
+    return applyReceiptFunds(amount);
   };
 
   const applyWalletCredit = () => {
@@ -306,17 +292,7 @@ export function allocatePaymentLedger(params: {
       continue;
     }
 
-    const invoiceReceiptPriority: AllocationField[] = [];
-    invoiceReceiptPriority.push(
-      "deposit",
-      ...selectedCategoryPriority(payment.type),
-      ...(payment.type === "AllDues" ? [] : payment.invoicePriority || []),
-      ...allocationPriority(),
-    );
-    const uniqueInvoiceReceiptPriority = invoiceReceiptPriority.filter((field, index, fields) => fields.indexOf(field) === index);
-    const receiptResult = payment.type !== "Deposit" && payment.tenantInvoiceId && payment.invoicePriority?.length
-      ? applyReceiptFunds(paymentAmount, uniqueInvoiceReceiptPriority)
-      : applyTypedReceiptFunds(payment, paymentAmount);
+    const receiptResult = applyTypedReceiptFunds(paymentAmount);
     receiptAllocation = receiptResult.appliedByField;
     walletCredit = receiptResult.remaining;
     const walletCreditCategories: AllocationField[] | undefined = walletCredit > 0 && payment.type === "RentAndUtility"

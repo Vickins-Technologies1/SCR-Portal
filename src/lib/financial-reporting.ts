@@ -153,6 +153,26 @@ export function projectFinancialPaymentRows(payments: any[], reversalRows: Array
           walletCredit: !payment.type || payment.type === "General" ? netAmount : 0,
         });
 
+    // Wallet applications remain linked to the source payment for reversal
+    // and audit purposes. Financial reports should show the applied category
+    // (deposit/rent/utilities/other), not count it again as unapplied credit.
+    if (storedAllocation && payment.allocation) {
+      const walletApplied = Math.min(
+        allocation.walletCredit,
+        money(Math.max(0, Number(payment.allocation.walletApplied) || 0) * (originalAmount > 0 ? netAmount / originalAmount : 0)),
+      );
+      const walletAllocation = payment.allocation.walletAllocation || {};
+      let remainingApplied = walletApplied;
+      for (const field of ["deposit", "rent", "utilities", "other"] as const) {
+        if (remainingApplied <= 0) break;
+        const requested = money(Math.max(0, Number(walletAllocation[field]) || 0) * (originalAmount > 0 ? netAmount / originalAmount : 0));
+        const applied = Math.min(requested, remainingApplied);
+        allocation[field] = money(allocation[field] + applied);
+        remainingApplied = money(remainingApplied - applied);
+      }
+      allocation.walletCredit = money(allocation.walletCredit - walletApplied);
+    }
+
     return {
       payment,
       eventDate: paymentEventDate(payment),

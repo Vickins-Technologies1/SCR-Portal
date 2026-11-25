@@ -48,12 +48,44 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ deposit: 13_000, rent: 0, utilities: 0, walletCredit: 0 });
   });
 
+  it("applies a deposit payment to deposit only when no other dues remain", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 1_000, rentDue: 0, utilityDue: 0, otherDue: 0,
+      payments: [payment(1_000, new ObjectId(), "Deposit")],
+    });
+    expect(result.depositPaid).toBe(1_000);
+    expect(result.rentPaid).toBe(0);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.walletBalance).toBe(0);
+  });
+
+  it("routes a payment past a settled deposit and rent to utilities", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 1_000, rentDue: 2_000, utilityDue: 500,
+      payments: [payment(3_500, new ObjectId(), "Deposit")],
+    });
+    expect(result.depositPaid).toBe(1_000);
+    expect(result.rentPaid).toBe(2_000);
+    expect(result.utilitiesPaid).toBe(500);
+    expect(result.walletBalance).toBe(0);
+  });
+
+  it("keeps a partial receipt entirely on the outstanding deposit", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 5_000, rentDue: 2_000, utilityDue: 500,
+      payments: [payment(1_200, new ObjectId(), "Utility")],
+    });
+    expect(result.depositPaid).toBe(1_200);
+    expect(result.rentPaid).toBe(0);
+    expect(result.utilitiesPaid).toBe(0);
+  });
+
   it.each([
     { type: "Rent", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
     { type: "RentAndUtility", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
-    { type: "Utility", expected: { deposit: 500, rent: 0, utilities: 100, other: 0, walletCredit: 100 } },
+    { type: "Utility", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
     { type: "Deposit", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
-    { type: "Other", expected: { deposit: 500, rent: 0, utilities: 0, other: 0, walletCredit: 200 } },
+    { type: "Other", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
     { type: "General", expected: { deposit: 500, rent: 200, utilities: 0, other: 0, walletCredit: 0 } },
   ] as const)("clears deposit before routing $type receipts", ({ type, expected }) => {
       const result = allocatePaymentLedger({
@@ -96,28 +128,56 @@ describe("tenant payment allocation", () => {
     expect(result.allocations.values().next().value).toMatchObject({ deposit: 500, rent: 200, utilities: 0, walletCredit: 0 });
   });
 
-  it("does not use utility receipts to reduce rent", () => {
+  it("uses utility receipts to clear rent before utilities", () => {
     const result = allocatePaymentLedger({
       rentDue: 20_000,
       utilityDue: 3_000,
       payments: [payment(2_000, new ObjectId(), "Utility")],
     });
-    expect(result.rentPaid).toBe(0);
-    expect(result.utilitiesPaid).toBe(2_000);
-    expect(result.allocations.values().next().value).toMatchObject({ rent: 0, utilities: 2_000 });
+    expect(result.rentPaid).toBe(2_000);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ rent: 2_000, utilities: 0 });
   });
 
-  it("keeps utility receipts in the utility category when rent is outstanding", () => {
+  it("routes utility-category receipts through deposit then rent", () => {
     const result = allocatePaymentLedger({
-      depositDue: 0,
+      depositDue: 2_000,
       rentDue: 10_000,
       utilityDue: 2_000,
       payments: [payment(5_000, new ObjectId(), "Utility")],
     });
-    expect(result.utilitiesPaid).toBe(2_000);
-    expect(result.rentPaid).toBe(0);
-    expect(result.walletBalance).toBe(3_000);
-    expect(result.allocations.values().next().value).toMatchObject({ rent: 0, utilities: 2_000, walletCredit: 3_000, walletCreditCategory: "utilities" });
+    expect(result.depositPaid).toBe(2_000);
+    expect(result.rentPaid).toBe(3_000);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.walletBalance).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ deposit: 2_000, rent: 3_000, utilities: 0, walletCredit: 0 });
+  });
+
+  it("keeps Susan James's receipt out of utilities until deposit and rent are cleared", () => {
+    const result = allocatePaymentLedger({
+      depositDue: 13_000,
+      rentDue: 12_000,
+      utilityDue: 200,
+      payments: [payment(25_000, new ObjectId(), "Rent")],
+    });
+    expect(result.depositPaid).toBe(13_000);
+    expect(result.rentPaid).toBe(12_000);
+    expect(result.utilitiesPaid).toBe(0);
+    expect(result.walletBalance).toBe(0);
+    expect(result.allocations.values().next().value).toMatchObject({ deposit: 13_000, rent: 12_000, utilities: 0, walletCredit: 0 });
+  });
+
+  it("reports wallet-applied amounts in their settled category instead of as unapplied credit", () => {
+    const rows = projectFinancialPaymentRows([{
+      _id: new ObjectId(), amount: 25_000, type: "Rent", status: "completed",
+      paymentDate: "2026-11-01T00:00:00.000Z",
+      allocation: {
+        deposit: 0, rent: 12_000, utilities: 0, other: 0,
+        walletCredit: 13_000, walletApplied: 13_000,
+        walletAllocation: { deposit: 13_000, rent: 0, utilities: 0, other: 0 },
+      },
+    }], []);
+    expect(rows[0].allocation).toMatchObject({ deposit: 13_000, rent: 12_000, utilities: 0, walletCredit: 0 });
   });
 
   it("applies a deposit receipt to the outstanding deposit then other outstanding dues", () => {
