@@ -239,6 +239,11 @@ export async function exchangeGoogleCodeForProfile(params: {
   const id = String(profileJson.id || profileJson.sub || "");
   const email = String(profileJson.email || "").trim().toLowerCase();
   const name = String(profileJson.name || profileJson.given_name || email || "Google User").trim();
+  const verifiedEmail =
+    profileJson.verified_email === true ||
+    profileJson.email_verified === true ||
+    String(profileJson.verified_email || "").toLowerCase() === "true" ||
+    String(profileJson.email_verified || "").toLowerCase() === "true";
 
   if (!id || !email) {
     throw new Error("Google profile is missing an email address.");
@@ -249,7 +254,7 @@ export async function exchangeGoogleCodeForProfile(params: {
     email,
     name,
     picture: typeof profileJson.picture === "string" ? profileJson.picture : undefined,
-    emailVerified: Boolean(profileJson.verified_email ?? profileJson.email_verified),
+    emailVerified: verifiedEmail,
   };
 }
 

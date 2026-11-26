@@ -112,6 +112,21 @@ export async function POST(request: Request) {
       );
     }
 
+    const isTeamMember = otp.collection === "teamMembers" || otp.isTeamMember === true;
+    if (isTeamMember) {
+      const ownerId = user.ownerId?.toString?.() ?? (typeof user.ownerId === "string" ? user.ownerId : "");
+      const owner = ObjectId.isValid(ownerId)
+        ? await db.collection("propertyOwners").findOne({ _id: new ObjectId(ownerId), role: "propertyOwner" }, { projection: { accountStatus: 1 } })
+        : null;
+      if (user.active !== true || user.role !== "teamMember" || !owner || owner.accountStatus === "suspended") {
+        await db.collection("otpChallenges").deleteOne({ _id: otpObjectId });
+        return NextResponse.json(
+          { success: false, code: "ACCOUNT_INACTIVE", message: "This team member account is inactive or no longer assigned to an active owner." },
+          { status: 403 }
+        );
+      }
+    }
+
     if (otp.role === "propertyOwner" && user.accountStatus === "suspended") {
       return NextResponse.json({
         success: false,
@@ -124,7 +139,6 @@ export async function POST(request: Request) {
 
     // Note: Property owners are no longer gated behind admin approval.
 
-    const isTeamMember = otp.collection === "teamMembers" || otp.isTeamMember;
     const isOwner = otp.collection === "propertyOwners" && otp.role === "propertyOwner";
     const isAdminTeamMember = otp.collection === "adminTeamMembers" || otp.role === "adminTeamMember";
 
@@ -165,7 +179,7 @@ export async function POST(request: Request) {
     if (otp.role === "propertyOwner") {
       finalPermissions = getDefaultPermissions("propertyOwner");
     } else if (isTeamMember) {
-      finalPermissions = Array.isArray(user.permissions) && user.permissions.length > 0
+      finalPermissions = Array.isArray(user.permissions)
         ? user.permissions
         : getDefaultPermissions(otp.role, true);
     } else if (isAdminTeamMember) {
@@ -212,14 +226,12 @@ export async function POST(request: Request) {
       path: "/",
     });
 
-    if (finalPermissions.length > 0) {
-      response.cookies.set("permissions", JSON.stringify(finalPermissions), {
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60,
-        path: "/",
-      });
-    }
+    response.cookies.set("permissions", JSON.stringify(finalPermissions), {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60,
+      path: "/",
+    });
 
     if (ownerManagementType) {
       response.cookies.set("managementType", ownerManagementType, {
@@ -246,7 +258,7 @@ export async function POST(request: Request) {
         maxAge: 7 * 24 * 60 * 60,
         path: "/",
       });
-    }
+    } else response.cookies.delete("ownerId");
 
     setCsrfCookie(response, generateCsrfToken());
 
