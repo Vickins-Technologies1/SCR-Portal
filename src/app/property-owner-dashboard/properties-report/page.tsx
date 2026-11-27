@@ -20,6 +20,7 @@ import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageContentSkeleton } from "@/components/ui/LoadingSkeletons";
+import { useThemePalette } from "@/hooks/useThemePalette";
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title);
 
@@ -96,6 +97,7 @@ function toneClasses(tone: PropertyReport["properties"][number]["statusTone"]) {
 }
 
 export default function PropertiesReportPage() {
+  const themePalette = useThemePalette();
   const router = useRouter();
   const perm = usePermissions();
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
@@ -239,20 +241,31 @@ export default function PropertiesReportPage() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { position: "bottom" as const },
+        legend: { position: "bottom" as const, labels: { color: themePalette.muted } },
         title: { display: false },
+        tooltip: {
+          backgroundColor: themePalette.tooltip,
+          titleColor: themePalette.tooltipForeground,
+          bodyColor: themePalette.tooltipForeground,
+          borderColor: themePalette.grid,
+          borderWidth: 1,
+        },
       },
+      color: themePalette.foreground,
       scales: {
         y: {
           beginAtZero: true,
           suggestedMax: 100,
+          grid: { color: themePalette.grid },
           ticks: {
+            color: themePalette.muted,
             callback: (value: string | number) => `${value}%`,
           },
         },
+        x: { grid: { color: themePalette.grid }, ticks: { color: themePalette.muted } },
       },
     }),
-    []
+    [themePalette]
   );
 
   return (

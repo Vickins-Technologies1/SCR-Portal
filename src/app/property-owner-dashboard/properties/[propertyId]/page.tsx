@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
+import { useThemePalette } from "@/hooks/useThemePalette";
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -99,6 +100,7 @@ const formatCurrency = (value: number) =>
   `Ksh ${Math.max(0, value).toLocaleString("en-US")}`;
 
 export default function PropertyDetailsPage() {
+  const themePalette = useThemePalette();
   const params = useParams();
   const router = useRouter();
   const propertyId = params?.propertyId as string | undefined;
@@ -228,21 +230,31 @@ export default function PropertyDetailsPage() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { position: "top" as const },
+        legend: { position: "top" as const, labels: { color: themePalette.muted } },
+        tooltip: {
+          backgroundColor: themePalette.tooltip,
+          titleColor: themePalette.tooltipForeground,
+          bodyColor: themePalette.tooltipForeground,
+          borderColor: themePalette.grid,
+          borderWidth: 1,
+        },
       },
+      color: themePalette.foreground,
       scales: {
         x: {
           grid: { display: false },
+          ticks: { color: themePalette.muted },
         },
         y: {
-          grid: { color: "rgba(148,163,184,0.2)" },
+          grid: { color: themePalette.grid },
           ticks: {
+            color: themePalette.muted,
             callback: (value: number | string) => `Ksh ${value}`,
           },
         },
       },
     }),
-    []
+    [themePalette]
   );
 
   return (

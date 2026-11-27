@@ -58,13 +58,13 @@ interface Report {
   type?: "Rent" | "Utility" | "Deposit" | "Other" | string;
 }
 
-const categoryConfig: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-  maintenance: { icon: Wrench, color: "#42c775", bg: "#ecfdf5" },
-  utilities: { icon: Lightbulb, color: "#3b82f6", bg: "#eff6ff" },
-  repairs: { icon: Hammer, color: "#ef4444", bg: "#fef2f2" },
-  taxes: { icon: FileText, color: "#8b5cf6", bg: "#f3e8ff" },
-  management: { icon: DollarSign, color: "#f59e0b", bg: "#fffbeb" },
-  other: { icon: Receipt, color: "#6b7280", bg: "#f9fafb" },
+const categoryConfig: Record<string, { icon: React.ElementType; color: string }> = {
+  maintenance: { icon: Wrench, color: "#42c775" },
+  utilities: { icon: Lightbulb, color: "#3b82f6" },
+  repairs: { icon: Hammer, color: "#ef4444" },
+  taxes: { icon: FileText, color: "#8b5cf6" },
+  management: { icon: DollarSign, color: "#f59e0b" },
+  other: { icon: Receipt, color: "#6b7280" },
 };
 
 function ExpensesPageInner() {
@@ -784,7 +784,7 @@ function ExpensesPageInner() {
                       return (
                         <div key={cat} className="group">
                           <div className="flex items-center gap-4 mb-2">
-                            <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110" style={{ background: cfg.bg }}>
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110" style={{ background: `color-mix(in srgb, ${cfg.color} 14%, var(--surface-elevated))` }}>
                               <Icon className="h-6 w-6 transition-colors" style={{ color: cfg.color }} />
                             </div>
                             <div className="flex-1">
@@ -847,7 +847,7 @@ function ExpensesPageInner() {
                           className="px-6 py-5 hover:bg-gray-50 transition-all duration-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
                         >
                           <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0">
-                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110" style={{ background: cfg.bg }}>
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110" style={{ background: `color-mix(in srgb, ${cfg.color} 14%, var(--surface-elevated))` }}>
                               <Icon className="h-5 w-5 transition-colors" style={{ color: cfg.color }} />
                             </div>
                             <div className="min-w-0">
@@ -1121,7 +1121,7 @@ function ExpensesPageInner() {
               {/* Header */}
               <div className="modal-header px-6 py-5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: categoryConfig[selectedExpense.category].bg }}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `color-mix(in srgb, ${categoryConfig[selectedExpense.category].color} 14%, var(--surface-elevated))` }}>
                     {React.createElement(categoryConfig[selectedExpense.category].icon, {
                       className: "h-5 w-5",
                       style: { color: categoryConfig[selectedExpense.category].color }

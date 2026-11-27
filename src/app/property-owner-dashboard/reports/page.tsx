@@ -13,6 +13,7 @@ import PremiumGate from "@/components/PremiumGate";
 import { addBusinessDays, businessDateKey, businessDateParts, businessMonthKey } from "@/lib/business-time";
 import { CardGridSkeleton, PageContentSkeleton, Skeleton, TableRowsSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Bar } from "react-chartjs-2";
+import { useThemePalette } from "@/hooks/useThemePalette";
 import {
   Chart as ChartJS,
   BarElement,
@@ -106,6 +107,7 @@ interface SortConfig<T> {
 }
 
 function ReportsAndInvoicesPageInner() {
+  const themePalette = useThemePalette();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -704,11 +706,30 @@ function ReportsAndInvoicesPageInner() {
   const barChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    color: themePalette.foreground,
     scales: {
-      x: { title: { display: true, text: "Month" } },
-      y: { title: { display: true, text: "Revenue (Ksh)" }, beginAtZero: true },
+      x: {
+        title: { display: true, text: "Month", color: themePalette.muted },
+        ticks: { color: themePalette.muted },
+        grid: { color: themePalette.grid },
+      },
+      y: {
+        title: { display: true, text: "Revenue (Ksh)", color: themePalette.muted },
+        ticks: { color: themePalette.muted },
+        grid: { color: themePalette.grid },
+        beginAtZero: true,
+      },
     },
-    plugins: { legend: { display: true } },
+    plugins: {
+      legend: { display: true, labels: { color: themePalette.muted } },
+      tooltip: {
+        backgroundColor: themePalette.tooltip,
+        titleColor: themePalette.tooltipForeground,
+        bodyColor: themePalette.tooltipForeground,
+        borderColor: themePalette.grid,
+        borderWidth: 1,
+      },
+    },
   };
 
   if (hasAccess === false) {

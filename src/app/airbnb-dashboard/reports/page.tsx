@@ -22,6 +22,7 @@ import PaymentModal from "@/app/property-owner-dashboard/components/PaymentModal
 import { useAccountTier } from "@/hooks/useAccountTier";
 import PremiumGate from "@/components/PremiumGate";
 import { Skeleton } from "@/components/ui/LoadingSkeletons";
+import { useThemePalette } from "@/hooks/useThemePalette";
 
 ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend);
 
@@ -64,6 +65,7 @@ type AirbnbListing = {
 };
 
 export default function AirbnbReportsPage() {
+  const themePalette = useThemePalette();
   const { hasAccess, ownerId, csrfToken } = useAirbnbAccess("reports:view");
   const { isFree } = useAccountTier();
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean } | null>(null);
@@ -579,8 +581,20 @@ export default function AirbnbReportsPage() {
                       options={{
                         responsive: true,
                         maintainAspectRatio: false,
+                        color: themePalette.foreground,
                         scales: {
-                          y: { beginAtZero: true },
+                          x: { ticks: { color: themePalette.muted }, grid: { color: themePalette.grid } },
+                          y: { beginAtZero: true, ticks: { color: themePalette.muted }, grid: { color: themePalette.grid } },
+                        },
+                        plugins: {
+                          legend: { labels: { color: themePalette.muted } },
+                          tooltip: {
+                            backgroundColor: themePalette.tooltip,
+                            titleColor: themePalette.tooltipForeground,
+                            bodyColor: themePalette.tooltipForeground,
+                            borderColor: themePalette.grid,
+                            borderWidth: 1,
+                          },
                         },
                       }}
                     />

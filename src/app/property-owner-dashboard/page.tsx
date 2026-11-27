@@ -40,6 +40,7 @@ import { OwnerStats } from "../../types/stats";
 import { usePermissions } from "@/hooks/usePermissions"; // ← import your permissions hook
 import PaymentModal from "./components/PaymentModal";
 import { useAccountTier } from "@/hooks/useAccountTier";
+import { useThemePalette } from "@/hooks/useThemePalette";
 
 ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement, ChartDataLabels);
 
@@ -54,6 +55,7 @@ interface ChartData {
 
 export default function PropertyOwnerDashboard() {
   const router = useRouter();
+  const themePalette = useThemePalette();
   const perm = usePermissions(); // ← use your permissions hook
   const { isFree } = useAccountTier();
 
@@ -807,16 +809,26 @@ export default function PropertyOwnerDashboard() {
                             options={{
                               responsive: true,
                               maintainAspectRatio: false,
+                              color: themePalette.foreground,
                               scales: {
+                                x: { ticks: { color: themePalette.muted }, grid: { color: themePalette.grid } },
                                 y: {
                                   beginAtZero: true,
                                   ticks: {
+                                    color: themePalette.muted,
                                     callback: (value) => `Ksh ${Number(value).toLocaleString("en-KE")}`,
                                   },
+                                  grid: { color: themePalette.grid },
                                 },
                               },
                               plugins: {
+                                legend: { labels: { color: themePalette.muted } },
                                 tooltip: {
+                                  backgroundColor: themePalette.tooltip,
+                                  titleColor: themePalette.tooltipForeground,
+                                  bodyColor: themePalette.tooltipForeground,
+                                  borderColor: themePalette.grid,
+                                  borderWidth: 1,
                                   callbacks: {
                                     label: (context) => `${context.dataset.label}: Ksh ${Number(context.raw).toLocaleString("en-KE")}`,
                                   },
@@ -827,7 +839,7 @@ export default function PropertyOwnerDashboard() {
                                   anchor: "end",
                                   align: "end",
                                   clamp: true,
-                                  color: "#334155",
+                                  color: themePalette.foreground,
                                   font: { size: 9, weight: 600 },
                                 },
                               },
@@ -838,7 +850,21 @@ export default function PropertyOwnerDashboard() {
                       <div className="surface-card rounded-3xl p-5 sm:p-6">
                         <h2 className="text-sm sm:text-base font-semibold mb-4 text-foreground">Tenant Payment Status</h2>
                         <div className="h-64 sm:h-72">
-                          <Pie data={pieData} options={{ responsive: true, maintainAspectRatio: false }} />
+                          <Pie data={pieData} options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            color: themePalette.foreground,
+                            plugins: {
+                              legend: { labels: { color: themePalette.muted } },
+                              tooltip: {
+                                backgroundColor: themePalette.tooltip,
+                                titleColor: themePalette.tooltipForeground,
+                                bodyColor: themePalette.tooltipForeground,
+                                borderColor: themePalette.grid,
+                                borderWidth: 1,
+                              },
+                            },
+                          }} />
                         </div>
                       </div>
                     </section>

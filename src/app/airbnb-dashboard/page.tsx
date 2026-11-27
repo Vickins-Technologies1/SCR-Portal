@@ -32,11 +32,13 @@ import { useAirbnbAccess } from "./components/useAirbnbAccess";
 import type { AirbnbOverview } from "@/types/airbnb";
 import { formatKes } from "@/lib/airbnb-metrics";
 import { useAccountTier } from "@/hooks/useAccountTier";
+import { useThemePalette } from "@/hooks/useThemePalette";
 
 ChartJS.register(BarElement, LinearScale, Title, CategoryScale, Tooltip, Legend, ArcElement);
 
 export default function AirbnbDashboard() {
   const router = useRouter();
+  const themePalette = useThemePalette();
   const { hasAccess, ownerId } = useAirbnbAccess("dashboard:view");
   const { isFree } = useAccountTier();
   const [dueStatus, setDueStatus] = useState<{ isDue: boolean } | null>(null);
@@ -409,8 +411,20 @@ export default function AirbnbDashboard() {
                           options={{
                             responsive: true,
                             maintainAspectRatio: false,
+                            color: themePalette.foreground,
                             scales: {
-                              y: { beginAtZero: true },
+                              x: { ticks: { color: themePalette.muted }, grid: { color: themePalette.grid } },
+                              y: { beginAtZero: true, ticks: { color: themePalette.muted }, grid: { color: themePalette.grid } },
+                            },
+                            plugins: {
+                              legend: { labels: { color: themePalette.muted } },
+                              tooltip: {
+                                backgroundColor: themePalette.tooltip,
+                                titleColor: themePalette.tooltipForeground,
+                                bodyColor: themePalette.tooltipForeground,
+                                borderColor: themePalette.grid,
+                                borderWidth: 1,
+                              },
                             },
                           }}
                         />
@@ -440,7 +454,21 @@ export default function AirbnbDashboard() {
                   ) : (
                     overview?.bookingSplit?.labels?.length ? (
                       <div className="h-64 sm:h-72">
-                        <Pie data={bookingSplitData} options={{ responsive: true, maintainAspectRatio: false }} />
+                        <Pie data={bookingSplitData} options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          color: themePalette.foreground,
+                          plugins: {
+                            legend: { labels: { color: themePalette.muted } },
+                            tooltip: {
+                              backgroundColor: themePalette.tooltip,
+                              titleColor: themePalette.tooltipForeground,
+                              bodyColor: themePalette.tooltipForeground,
+                              borderColor: themePalette.grid,
+                              borderWidth: 1,
+                            },
+                          },
+                        }} />
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-border bg-white/70 px-4 py-4 text-[11px] text-muted-foreground">

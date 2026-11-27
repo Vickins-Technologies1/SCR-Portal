@@ -216,25 +216,25 @@ function PaymentTrendChart({
                 <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.2} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#6b7280", fontSize: 11 }} dy={8} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--chart-label)", fontSize: 11 }} dy={8} />
             <YAxis
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "#6b7280", fontSize: 11 }}
+              tick={{ fill: "var(--chart-label)", fontSize: 11 }}
               tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "rgba(17,24,39,0.95)",
-                border: "none",
+                backgroundColor: "var(--chart-tooltip)",
+                border: "1px solid var(--border)",
                 borderRadius: "8px",
-                color: "white",
+                color: "var(--chart-tooltip-foreground)",
                 padding: "8px 12px",
                 fontSize: "0.8rem",
               }}
               formatter={(value: number | undefined) => [formatCurrency(value), null]}
-              labelStyle={{ color: "#e5e7eb", fontSize: "0.85rem", fontWeight: 500 }}
+              labelStyle={{ color: "var(--chart-tooltip-foreground)", fontSize: "0.85rem", fontWeight: 500 }}
             />
             <Legend wrapperStyle={{ fontSize: "0.8rem", paddingTop: 4 }} iconSize={8} />
             <Area type="monotone" dataKey="rent" name="Rent" stackId="1" stroke="#42c775" fill="url(#rentGradient)" strokeWidth={2} />
@@ -242,7 +242,7 @@ function PaymentTrendChart({
             <Area type="monotone" dataKey="deposit" name="Deposit" stackId="1" stroke="#f59e0b" fill="url(#depositGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="other" name="Other" stackId="1" stroke="#ec4899" fill="url(#otherGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="wallet" name="Wallet credit" stackId="1" stroke="#14b8a6" fill="url(#walletGradient)" strokeWidth={2} />
-            <Line type="monotone" dataKey="total" name="Total Paid" stroke="#111827" strokeWidth={2} dot={{ r: 2, strokeWidth: 2, fill: "white" }} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="total" name="Total Paid" stroke="var(--foreground)" strokeWidth={2} dot={{ r: 2, strokeWidth: 2, fill: "var(--surface-elevated)" }} activeDot={{ r: 4 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -262,12 +262,12 @@ function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string;
       <div className="h-52 sm:h-60 md:h-72 pt-4">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={breakdown} layout="vertical" margin={{ top: 6, right: 24, left: 10, bottom: 6 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" horizontal={false} />
             <XAxis
               type="number"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "#6b7280", fontSize: 11 }}
+              tick={{ fill: "var(--chart-label)", fontSize: 11 }}
               tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
             />
             <YAxis
@@ -275,21 +275,21 @@ function PaymentBreakdownChart({ breakdown }: { breakdown: Array<{ name: string;
               type="category"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "#6b7280", fontSize: 12 }}
+              tick={{ fill: "var(--chart-label)", fontSize: 12 }}
               width={70}
             />
             <Tooltip
               formatter={(value, name) => [formatCurrency(value), name]}
               contentStyle={{
-                backgroundColor: "rgba(17,24,39,0.95)",
-                border: "none",
+                backgroundColor: "var(--chart-tooltip)",
+                border: "1px solid var(--border)",
                 borderRadius: "8px",
-                color: "white",
+                color: "var(--chart-tooltip-foreground)",
                 padding: "8px 12px",
                 fontSize: "0.8rem",
               }}
             />
-            <Bar dataKey="value" name="Paid" radius={[6, 6, 6, 6]} fill="#1E3A8A" />
+            <Bar dataKey="value" name="Paid" radius={[6, 6, 6, 6]} fill="var(--primary)" />
           </BarChart>
         </ResponsiveContainer>
       </div>

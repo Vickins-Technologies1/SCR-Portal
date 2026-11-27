@@ -1,5 +1,5 @@
 export default function ThemeInitScript() {
-  const code = `(function(){try{var k="theme";var t=localStorage.getItem(k);t=(t==="light"||t==="dark")?t:"light";document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}catch(e){document.documentElement.dataset.theme="light";document.documentElement.style.colorScheme="light"}})();`;
+  const code = `(function(){var root=document.documentElement;var key="theme";function apply(){var preference="system";try{var saved=localStorage.getItem(key);if(saved==="light"||saved==="dark"||saved==="system")preference=saved}catch(e){}var theme=preference==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):preference;root.dataset.themePreference=preference;root.dataset.theme=theme;root.style.colorScheme=theme;var meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.content=theme==="dark"?"#000000":"#f6f8f7"}try{apply();var media=window.matchMedia("(prefers-color-scheme: dark)");media.addEventListener("change",function(){if(root.dataset.themePreference==="system")apply()});window.addEventListener("storage",function(event){if(event.key===key)apply()})}catch(e){root.dataset.themePreference="system";root.dataset.theme="light";root.style.colorScheme="light"}})();`;
 
   return <script dangerouslySetInnerHTML={{ __html: code }} />;
 }

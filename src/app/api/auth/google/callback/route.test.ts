@@ -36,7 +36,7 @@ function matchesValue(actual: any, expected: any): boolean {
 }
 
 function matches(doc: any, query: any): boolean {
-  return Object.entries(query).every(([key, expected]) => {
+  return (Object.entries(query) as [string, any][]).every(([key, expected]) => {
     if (key === "$or") return expected.some((clause: any) => matches(doc, clause));
     if (key === "$and") return expected.every((clause: any) => matches(doc, clause));
     return matchesValue(doc[key], expected);
@@ -267,7 +267,12 @@ describe("Google owner portal callback account resolution", () => {
   });
 
   it("rejects an unverified Google email before linking or creating an account", async () => {
-    const owner = { _id: new ObjectId(), role: "propertyOwner", email: "unverified@example.test", phone: "+254712345683" };
+    const owner: { _id: ObjectId; role: string; email: string; phone: string; googleId?: string } = {
+      _id: new ObjectId(),
+      role: "propertyOwner",
+      email: "unverified@example.test",
+      phone: "+254712345683",
+    };
     const { collections, db } = makeTestDb({ propertyOwners: [owner], teamMembers: [] });
     mocks.connect.mockResolvedValue({ db });
 

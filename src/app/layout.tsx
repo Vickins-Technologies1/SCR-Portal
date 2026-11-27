@@ -4,6 +4,7 @@ import NativeBootstrap from "@/components/native/NativeBootstrap";
 import ThemeInitScript from "@/components/theme/ThemeInitScript";
 import OfflineFallback from "@/components/network/OfflineFallback";
 import GlobalErrorMonitor from "@/components/GlobalErrorMonitor";
+import GlobalThemeControl from "@/components/theme/GlobalThemeControl";
 
 const siteUrl = "https://myaccuraterent.com";
 const siteName = "My Accurate Rent";
@@ -73,7 +74,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a",
+  themeColor: "#f6f8f7",
 };
 
 
@@ -91,6 +92,7 @@ export default function RootLayout({
         <GlobalErrorMonitor />
         <NativeBootstrap />
         <OfflineFallback>{children}</OfflineFallback>
+        <GlobalThemeControl />
       </body>
     </html>
   );

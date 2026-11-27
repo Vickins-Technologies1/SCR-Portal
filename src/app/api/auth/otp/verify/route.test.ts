@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
+import type { NextResponse } from "next/server";
 import { hashOtpCode } from "@/lib/otp";
 import { verifySessionToken } from "@/lib/session";
 
@@ -16,7 +17,7 @@ function matchesValue(actual: any, expected: any): boolean {
 }
 
 function matches(doc: any, query: any): boolean {
-  return Object.entries(query).every(([key, expected]) => {
+  return (Object.entries(query) as [string, any][]).every(([key, expected]) => {
     if (key === "$or") return expected.some((clause: any) => matches(doc, clause));
     return matchesValue(doc[key], expected);
   });
@@ -99,7 +100,7 @@ describe("team member OTP verification", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ otpId: otpId.toString(), code: "123456" }),
-    }));
+    })) as NextResponse;
     const result = await response.json();
     const session = await verifySessionToken(response.cookies.get("session")?.value ?? "");
 
@@ -125,7 +126,7 @@ describe("team member OTP verification", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ otpId: otpId.toString(), code: "123456" }),
-    }));
+    })) as NextResponse;
     const result = await response.json();
 
     expect(response.status).toBe(403);
