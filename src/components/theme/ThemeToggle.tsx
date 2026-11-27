@@ -37,6 +37,8 @@ function updateThemeColor(theme: Theme) {
 
 function setTheme(preference: ThemePreference, origin: HTMLElement | null) {
   const root = document.documentElement;
+  if (root.dataset.themeTransitioning === "true") return false;
+
   const nextTheme = resolveTheme(preference);
   const currentTheme = root.dataset.theme === "dark" ? "dark" : "light";
 
@@ -55,7 +57,7 @@ function setTheme(preference: ThemePreference, origin: HTMLElement | null) {
 
   if (currentTheme === nextTheme) {
     commit();
-    return;
+    return true;
   }
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -77,18 +79,30 @@ function setTheme(preference: ThemePreference, origin: HTMLElement | null) {
     root.style.setProperty("--theme-origin-x", `${x}px`);
     root.style.setProperty("--theme-origin-y", `${y}px`);
     root.style.setProperty("--theme-reveal-radius", `${radius}px`);
+    root.dataset.themeTransitioning = "true";
 
-    const transition = startViewTransition.call(document, commit);
     const cleanup = () => {
       root.style.removeProperty("--theme-origin-x");
       root.style.removeProperty("--theme-origin-y");
       root.style.removeProperty("--theme-reveal-radius");
+      delete root.dataset.themeTransitioning;
     };
+
+    let transition: ReturnType<NonNullable<typeof startViewTransition>>;
+    try {
+      transition = startViewTransition.call(document, commit);
+    } catch {
+      cleanup();
+      commit();
+      return true;
+    }
+
     void transition.finished.then(cleanup, cleanup);
-    return;
+    return true;
   }
 
   commit();
+  return true;
 }
 
 export default function ThemeToggle({ className = "", variant = "full", global = false }: ThemeToggleProps) {
@@ -219,7 +233,7 @@ export default function ThemeToggle({ className = "", variant = "full", global =
               role="menuitemradio"
               aria-checked={preference === value}
               onClick={() => {
-                setTheme(value, triggerRef.current);
+                if (!setTheme(value, triggerRef.current)) return;
                 setPreference(value);
                 setResolvedTheme(resolveTheme(value));
                 setOpen(false);
