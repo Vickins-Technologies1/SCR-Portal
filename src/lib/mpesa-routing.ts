@@ -17,7 +17,6 @@ export type ResolvedMpesaRouting = {
   routingKey?: string;
   label?: string;
   propertyIds?: string[];
-  propertySpecific?: boolean;
   isDefault?: boolean;
   paybillNumber?: string;
   paybillAccountNumber?: string;
@@ -36,7 +35,6 @@ type LandlordMpesaDoc = {
   routingKey?: string;
   label?: string;
   propertyIds?: string[];
-  propertySpecific?: boolean;
   enabled?: boolean;
   shortcode?: string;
   passkey?: string;
@@ -153,16 +151,11 @@ function mapOwnerDarajaSharedToRouting(shared: {
   };
 }
 
-/** Resolve explicit property destinations first, then the owner's existing shared/legacy route. */
+/** Resolve where tenant M-Pesa payments should land — owner Integrations first, never platform till. */
 export async function resolveOwnerTenantMpesaRouting(
   db: Db,
   input: { landlordId: string; propertyId?: string | null }
 ): Promise<ResolvedMpesaRouting> {
-  const propertyRouting = await resolvePropertySpecificLandlordMpesaRouting(input);
-  if (propertyRouting) {
-    return propertyRouting;
-  }
-
   const ownerDaraja = await getOwnerDarajaIntegrations(db, input.landlordId);
   const fromIntegrations = mapOwnerDarajaSharedToRouting(ownerDaraja.shared);
   if (fromIntegrations) {
@@ -177,76 +170,6 @@ export async function resolveOwnerTenantMpesaRouting(
   throw new Error(
     "Property owner has not configured M-Pesa receiving details. Ask the owner to set Till, Paybill, or Bank under Integrations → Mpesa."
   );
-}
-
-async function resolvePropertySpecificLandlordMpesaRouting(input: {
-  landlordId: string;
-  propertyId?: string | null;
-}): Promise<ResolvedMpesaRouting | null> {
-  const propertyId = String(input.propertyId || "").trim();
-  if (!propertyId) return null;
-
-  await connectMongoose();
-  const docs = (await LandlordMpesa.find({
-    landlord: input.landlordId,
-    propertySpecific: true,
-    propertyIds: propertyId,
-    enabled: { $ne: false },
-    status: { $ne: "disconnected" },
-    paymentType: { $in: ["paybill", "till", "bank"] },
-  })
-    .select({
-      shortcode: 1,
-      paymentType: 1,
-      paybillNumber: 1,
-      paybillAccountNumber: 1,
-      tillNumber: 1,
-      bankBranchRef: 1,
-      accountNumber: 1,
-      routingKey: 1,
-      label: 1,
-      propertyIds: 1,
-      propertySpecific: 1,
-      isDefault: 1,
-      status: 1,
-      updatedAt: 1,
-      createdAt: 1,
-    })
-    .lean<LandlordMpesaDoc[]>()
-    .exec()) as LandlordMpesaDoc[];
-
-  const selectedDoc = docs.sort(sortByPriority).find((doc) => matchesProperty(doc, propertyId));
-  if (!selectedDoc) return null;
-
-  let platformFallback: ReturnType<typeof resolveDarajaPlatformCredentials> | null = null;
-  try {
-    platformFallback = resolveDarajaPlatformCredentials();
-  } catch {
-    platformFallback = null;
-  }
-
-  const shortcode = resolveShortcodeFromDoc(selectedDoc) || platformFallback?.shortcode || "";
-  const passkey = platformFallback?.passkey || "";
-  if (!shortcode || !passkey) return null;
-
-  return {
-    source: "landlord",
-    shortcode,
-    passkey,
-    paymentType: normalizePaymentType(selectedDoc),
-    paymentAccountId: toDocId(selectedDoc._id),
-    routingKey: String(selectedDoc.routingKey || "").trim() || undefined,
-    label: String(selectedDoc.label || "").trim() || undefined,
-    propertyIds: Array.isArray(selectedDoc.propertyIds)
-      ? selectedDoc.propertyIds.map((id) => String(id).trim()).filter(Boolean)
-      : undefined,
-    isDefault: selectedDoc.isDefault === true,
-    paybillNumber: String(selectedDoc.paybillNumber || "").trim() || undefined,
-    paybillAccountNumber: String(selectedDoc.paybillAccountNumber || "").trim() || undefined,
-    tillNumber: String(selectedDoc.tillNumber || "").trim() || undefined,
-    bank: String(selectedDoc.bankBranchRef || "").trim() || undefined,
-    bankAccount: String(selectedDoc.accountNumber || "").trim() || undefined,
-  };
 }
 
 export async function resolveLandlordMpesaRouting(input: {
@@ -273,7 +196,6 @@ export async function resolveLandlordMpesaRouting(input: {
       routingKey: 1,
       label: 1,
       propertyIds: 1,
-      propertySpecific: 1,
       isDefault: 1,
       status: 1,
       updatedAt: 1,
@@ -284,10 +206,9 @@ export async function resolveLandlordMpesaRouting(input: {
 
   const sortedDocs = [...docs].sort(sortByPriority);
   const propertyMatch = sortedDocs.find((doc) => matchesProperty(doc, input.propertyId));
-  const fallbackDocs = sortedDocs.filter((doc) => doc.propertySpecific !== true);
   const paymentTypeMatch =
-    input.paymentType && fallbackDocs.find((doc) => normalizePaymentType(doc) === input.paymentType);
-  const selectedDoc = propertyMatch || paymentTypeMatch || fallbackDocs[0];
+    input.paymentType && sortedDocs.find((doc) => normalizePaymentType(doc) === input.paymentType);
+  const selectedDoc = propertyMatch || paymentTypeMatch || sortedDocs[0];
 
   if (selectedDoc) {
     let platformFallback: ReturnType<typeof resolveDarajaPlatformCredentials> | null = null;
@@ -369,7 +290,6 @@ export async function listLandlordMpesaConnections(input: {
       routingKey: String(doc.routingKey || "").trim() || undefined,
       label: String(doc.label || "").trim() || undefined,
       propertyIds: Array.isArray(doc.propertyIds) ? doc.propertyIds.map((id) => String(id).trim()).filter(Boolean) : undefined,
-      propertySpecific: doc.propertySpecific === true,
       isDefault: doc.isDefault === true,
       paybillNumber: String(doc.paybillNumber || "").trim() || undefined,
       paybillAccountNumber: String(doc.paybillAccountNumber || "").trim() || undefined,
