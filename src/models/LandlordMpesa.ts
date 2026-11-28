@@ -7,6 +7,7 @@ const LandlordMpesaSchema = new Schema(
     routingKey: { type: String, default: "default", index: true },
     label: { type: String, default: "" },
     propertyIds: { type: [String], default: [] },
+    propertySpecific: { type: Boolean, default: false },
     enabled: { type: Boolean, default: true },
     shortcode: { type: String, default: "" },
     passkey: { type: String, default: "" }, // encrypted (legacy)

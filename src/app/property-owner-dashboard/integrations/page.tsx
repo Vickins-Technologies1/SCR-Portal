@@ -12,6 +12,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAccountTier } from "@/hooks/useAccountTier";
 import PremiumGate from "@/components/PremiumGate";
 import OwnerWhatsAppIntegration from "./OwnerWhatsAppIntegration";
+import PropertyMpesaAccounts from "./PropertyMpesaAccounts";
 
 type IntegrationStatus = "connected" | "available" | "coming_soon";
 
@@ -1089,6 +1090,7 @@ export default function OwnerIntegrationsPage() {
             message="Connect payment providers, manage API keys, and automate collections with Premium."
           >
           <OwnerWhatsAppIntegration canManage={isOwnerRole} />
+          {isOwnerRole && <PropertyMpesaAccounts disabled={isReadOnly} />}
           <section className="surface-card rounded-3xl p-5 sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>

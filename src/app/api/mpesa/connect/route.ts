@@ -1,5 +1,7 @@
 // src/app/api/mpesa/connect/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
+import { connectToDatabase } from "@/lib/mongodb";
 import { connectMongoose } from "@/lib/mongoose";
 import { LandlordMpesa } from "@/models/LandlordMpesa";
 import { buildInvalidCsrfResponse, validateCsrfToken } from "@/lib/csrf";
@@ -78,6 +80,7 @@ export async function POST(request: NextRequest) {
     label?: string;
     routingKey?: string;
     propertyIds?: string[];
+    propertySpecific?: boolean;
   };
   let payload: Payload;
   try {
@@ -123,14 +126,36 @@ export async function POST(request: NextRequest) {
       ? Array.from(new Set(payload.propertyIds.map((id) => String(id).trim()).filter(Boolean)))
       : [];
 
+    const propertySpecific = payload.propertySpecific === true;
+    let propertyId = "";
+    if (propertySpecific) {
+      if (normalizedPropertyIds.length !== 1 || !ObjectId.isValid(normalizedPropertyIds[0])) {
+        return NextResponse.json({ success: false, message: "Choose one valid property for this payment account." }, { status: 400 });
+      }
+      if (!ObjectId.isValid(userId)) {
+        return NextResponse.json({ success: false, message: "Invalid property owner identity." }, { status: 400 });
+      }
+
+      propertyId = normalizedPropertyIds[0];
+      const { db } = await connectToDatabase();
+      const ownedProperty = await db.collection("properties").findOne({
+        _id: new ObjectId(propertyId),
+        ownerId: { $in: [userId, new ObjectId(userId)] },
+      }, { projection: { _id: 1 } });
+      if (!ownedProperty) {
+        return NextResponse.json({ success: false, message: "That property does not belong to this account." }, { status: 403 });
+      }
+    }
+
     await LandlordMpesa.findOneAndUpdate(
-      { landlord: userId, routingKey },
+      { landlord: userId, routingKey: propertySpecific ? `property:${propertyId}` : routingKey },
       {
         $set: {
           landlord: userId,
-          routingKey,
-          label: String(payload.label || "").trim(),
-          propertyIds: normalizedPropertyIds,
+          routingKey: propertySpecific ? `property:${propertyId}` : routingKey,
+          label: String(payload.label || "").trim().slice(0, 100),
+          propertyIds: propertySpecific ? [propertyId] : normalizedPropertyIds,
+          propertySpecific,
           enabled: true,
           paymentType,
           paybillNumber: paymentType === "paybill" ? payload.paybillNumber : "",
@@ -138,7 +163,7 @@ export async function POST(request: NextRequest) {
           tillNumber: paymentType === "till" ? payload.tillNumber : "",
           bankBranchRef: paymentType === "bank" ? payload.bankPaybillNumber : "",
           accountNumber: paymentType === "bank" ? payload.bankAccountNumber : "",
-          isDefault: payload.isDefault ?? true,
+          isDefault: propertySpecific ? false : payload.isDefault ?? true,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -151,5 +176,45 @@ export async function POST(request: NextRequest) {
       userId,
     });
     return NextResponse.json({ success: false, message: "Failed to connect M-Pesa" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const userId = request.cookies.get("userId")?.value;
+  const role = request.cookies.get("role")?.value;
+  const csrfToken = request.headers.get("x-csrf-token");
+
+  if (!userId || role !== "propertyOwner") {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+  if (!csrfToken || !(await validateCsrfToken(request, csrfToken))) {
+    return buildInvalidCsrfResponse(request, "Invalid or missing CSRF token");
+  }
+
+  let routingKey = "";
+  try {
+    const payload = await request.json();
+    routingKey = String(payload?.routingKey || "").trim();
+  } catch {
+    return NextResponse.json({ success: false, message: "Invalid JSON payload" }, { status: 400 });
+  }
+  const propertyId = routingKey.startsWith("property:") ? routingKey.slice("property:".length) : "";
+  if (!ObjectId.isValid(propertyId) || routingKey !== `property:${propertyId}`) {
+    return NextResponse.json({ success: false, message: "Invalid property payment account" }, { status: 400 });
+  }
+
+  try {
+    await connectMongoose();
+    const result = await LandlordMpesa.deleteOne({ landlord: userId, routingKey, propertySpecific: true });
+    if (!result.deletedCount) {
+      return NextResponse.json({ success: false, message: "Property payment account was not found." }, { status: 404 });
+    }
+    return NextResponse.json({ success: true, message: "Property payment account removed." });
+  } catch (error) {
+    logger.error("DELETE /api/mpesa/connect error", {
+      message: error instanceof Error ? error.message : String(error),
+      userId,
+    });
+    return NextResponse.json({ success: false, message: "Failed to remove property payment account" }, { status: 500 });
   }
 }
